@@ -47,6 +47,19 @@ When changing redteam generation, trace the full path before editing: `src/redte
 
 Evaluate generated cases for diversity, realism, coverage, and failure modes. For agent redteams, include coding-agent risks, connectors, sandboxing, traces, raw provider events, changed files, canaries, and sidecar evidence where available.
 
+## Public Documentation
+
+Redteam behavior is user-facing. When changing plugins, strategies, generated config,
+grading semantics, or report fields, update the matching pages under
+`site/docs/red-team/`.
+
+- Plugin behavior belongs in `site/docs/red-team/plugins/`.
+- Strategy behavior belongs in `site/docs/red-team/strategies/`.
+- Setup/configuration changes usually need `site/docs/red-team/configuration.md` or
+  `site/docs/red-team/quickstart.md`.
+- Result interpretation changes may need `site/docs/red-team/risk-scoring.md` or the
+  troubleshooting pages.
+
 ## Logging
 
 See `docs/logging.md` - especially important here since test content may contain harmful/sensitive data.

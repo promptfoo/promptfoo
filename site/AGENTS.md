@@ -74,6 +74,8 @@ SKIP_OG_GENERATION=true npm run build  # Faster builds
 ## Red Team Docs
 
 See `site/docs/red-team/AGENTS.md` for red-team specific documentation guidelines.
+When documenting plugin, strategy, config, or report behavior, keep the public docs
+aligned with `src/redteam/AGENTS.md`.
 
 ## Assertion Reference Docs
 
@@ -81,3 +83,9 @@ Assertion reference pages live in `site/docs/configuration/expected-outputs/`. W
 documenting assertion behavior, keep the public reference aligned with
 `src/assertions/AGENTS.md`: update the index table, the relevant deterministic or
 model-graded page, and `site/docs/tracing.md` for trace/trajectory assertions.
+
+## Code Scanning Docs
+
+Code scanning docs live in `site/docs/code-scanning/`. Keep CLI docs aligned with
+`src/codeScan/AGENTS.md`, and keep GitHub Action docs aligned with
+`code-scan-action/AGENTS.md` and `code-scan-action/README.md`.

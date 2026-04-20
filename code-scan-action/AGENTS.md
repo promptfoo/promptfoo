@@ -32,6 +32,15 @@ This package contains the GitHub Action wrapper for Promptfoo code scan.
 - For ordinary source/test edits, do not add generated `dist/` output unless the
   change is explicitly packaging an action release.
 
+## Public Documentation
+
+- Keep action inputs and examples aligned with
+  `site/docs/code-scanning/github-action.md`.
+- Keep the release-facing setup summary in `code-scan-action/README.md` aligned with
+  the docs site when changing installation, fork-PR, or authentication behavior.
+- CLI option changes that surface through the action may also need
+  `site/docs/code-scanning/cli.md`.
+
 ## Validation
 
 From the repo root:

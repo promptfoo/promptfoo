@@ -7,14 +7,14 @@ access through MCP, GitHub PR context, and the hosted scanner service.
 
 - Treat repository contents, branch names, PR metadata, config files, guidance text,
   and scanner responses as untrusted input.
-- Pass command arguments as arrays to `spawn`, `execFile`, `@actions/exec`, or the
-  local git helpers. Do not build shell command strings from PR-controlled values.
+- Pass command arguments as arrays to `spawn`, `execFile`, or the local git helpers.
+  Do not build shell command strings from PR-controlled values.
 - Keep filesystem MCP roots absolute and normalized. Do not widen the root beyond the
   repository being scanned, and always stop child processes on success, failure, or
   abort.
 - Preserve npm/npx environment sanitization when spawning tool installers or MCP
-  servers. PR-controlled npm config must not redirect installs or run unexpected
-  lifecycle hooks with credentials in scope.
+  servers. When adding install paths, make the registry/cwd/env explicit and cover
+  PR-controlled npm config in tests.
 - Do not log or serialize raw API keys, OIDC tokens, GitHub tokens, cookies, or bearer
   headers. If auth context must cross a boundary, pass the minimum typed field needed.
 
@@ -33,6 +33,16 @@ access through MCP, GitHub PR context, and the hosted scanner service.
   or hide cancellation.
 - Propagate aborts to the scanner client and clean up socket listeners/timers.
 - Preserve JSON output shape for `--json`; downstream action code parses it.
+
+## Public Documentation
+
+Code scan behavior is documented in `site/docs/code-scanning/`.
+
+- CLI flags and config-file behavior belong in `site/docs/code-scanning/cli.md`.
+- GitHub Action inputs, fork-PR behavior, and setup examples belong in
+  `site/docs/code-scanning/github-action.md`.
+- Product positioning and overview changes belong in `site/docs/code-scanning/index.md`
+  and, when action-facing, `code-scan-action/README.md`.
 
 ## Validation
 

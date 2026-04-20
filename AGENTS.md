@@ -11,6 +11,7 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 | Directory           | Purpose                         | Local Docs                   |
 | ------------------- | ------------------------------- | ---------------------------- |
 | `.agents/`          | Codex marketplace metadata      | `.agents/AGENTS.md`          |
+| `.github/`          | GitHub Actions and workflows    | `.github/AGENTS.md`          |
 | `code-scan-action/` | Code scan GitHub Action wrapper | `code-scan-action/AGENTS.md` |
 | `docs/agents/`      | Reusable coding-agent docs      | `docs/agents/AGENTS.md`      |
 | `plugins/`          | Agent plugin bundles            | `plugins/AGENTS.md`          |
@@ -23,6 +24,7 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 | `src/providers/`    | LLM providers                   | `src/providers/AGENTS.md`    |
 | `src/redteam/`      | Security testing                | `src/redteam/AGENTS.md`      |
 | `src/server/`       | Backend server                  | `src/server/AGENTS.md`       |
+| `src/ui/`           | Terminal UI components          | `src/ui/AGENTS.md`           |
 | `test/`             | Tests (Vitest)                  | `test/AGENTS.md`             |
 | `site/`             | Docs site (Docusaurus)          | `site/AGENTS.md`             |
 | `examples/`         | Example configs                 | `examples/AGENTS.md`         |
@@ -116,7 +118,7 @@ PROMPTFOO_DISABLE_REMOTE_GENERATION=true npm run local -- eval -c config.yaml
 **Always use `--no-cache` during development** to ensure fresh results:
 
 ```bash
-npm run local -- eval -c examples/my-example/promptfooconfig.yaml --env-file .env --no-cache
+npm run local -- eval -c examples/my-example/promptfooconfig.yaml --no-cache
 ```
 
 **Export and inspect results** to verify pass/fail/errors:
@@ -192,7 +194,9 @@ npm run local -- eval -c config.yaml --no-cache
 
 **View results in web UI:** First check if the Web UI is running on port 3000, then ask user before starting. Use `npm run dev` for localhost:3000.
 
-**Cache:** Located at `~/.cache/promptfoo`. **NEVER delete or clear the cache without explicit permission.** Use `--no-cache` flag instead.
+**Cache:** Located at `~/.promptfoo/cache` by default, unless overridden with
+`PROMPTFOO_CACHE_PATH` or `PROMPTFOO_CONFIG_DIR`. **NEVER delete or clear the cache
+without explicit permission.** Use `--no-cache` flag instead.
 
 **Database:** Located at `~/.promptfoo/promptfoo.db` (SQLite). You may read from it but **NEVER delete it**.
 
@@ -374,14 +378,21 @@ Read these when relevant to your task:
 
 | Document                               | When to Read                              |
 | -------------------------------------- | ----------------------------------------- |
+| `docs/agents/AGENTS.md`                | Editing agent-facing docs                 |
 | `docs/agents/pr-conventions.md`        | Creating pull requests                    |
 | `docs/agents/git-workflow.md`          | Git operations                            |
 | `docs/agents/dependency-management.md` | Updating packages                         |
 | `docs/agents/logging.md`               | Adding logging to code                    |
 | `docs/agents/python.md`                | Python providers/scripts                  |
 | `docs/agents/database-security.md`     | Writing database queries                  |
+| `code-scan-action/AGENTS.md`           | Code scan GitHub Action wrapper           |
 | `src/app/AGENTS.md`                    | Frontend React development                |
+| `src/assertions/AGENTS.md`             | Assertion handlers and docs               |
+| `src/codeScan/AGENTS.md`               | Code scan scanner and CLI                 |
 | `src/providers/AGENTS.md`              | Adding/modifying LLM providers            |
+| `src/redteam/AGENTS.md`                | Redteam generation and plugins            |
+| `src/ui/AGENTS.md`                     | Terminal UI components                    |
 | `test/AGENTS.md`                       | Writing tests                             |
 | `site/AGENTS.md`                       | Documentation site changes                |
+| `site/docs/red-team/AGENTS.md`         | Redteam documentation                     |
 | `.github/AGENTS.md`                    | GitHub Actions / release workflow changes |
