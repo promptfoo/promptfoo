@@ -600,7 +600,7 @@ To cancel your subscription:
 3. Click "Cancel Subscription"
 4. Confirm cancellation
 
-Your access continues until the end of your billing period.
+After you confirm, the subscription is canceled.
 ```
 
 **Judge response**:
@@ -715,7 +715,18 @@ npx promptfoo eval -c eval/promptfooconfig.yaml -o results.json --no-cache
 npx promptfoo view
 ```
 
-Compare `expected_label` in metadata against actual judge results. Refine rubric wording until agreement is >90%.
+Inspect the exported JSON to compare human labels against judge results:
+
+```bash
+jq -r '.results.results[] | [.metadata.expected_label, (if .success then "pass" else "fail" end)] | @tsv' results.json
+```
+
+```text
+fail    fail
+pass    pass
+```
+
+Refine rubric wording until agreement is >90%.
 
 ### Step 5: Validate on the holdout set
 
@@ -1058,11 +1069,11 @@ paths, TTLs, and explicit cache clearing.
 
 ### Grader model selection
 
-| Provider ID                   | Reliability | Cost   | Use for                     |
-| ----------------------------- | ----------- | ------ | --------------------------- |
-| `openai:responses:gpt-5.4`    | High        | Higher | Production, complex rubrics |
-| `openai:responses:gpt-5-mini` | Medium      | Low    | Development, simple checks  |
-| `claude-sonnet-4-5-20250929`  | High        | Medium | Production                  |
+| Provider ID                                     | Reliability | Cost   | Use for                     |
+| ----------------------------------------------- | ----------- | ------ | --------------------------- |
+| `openai:responses:gpt-5.4`                      | High        | Higher | Production, complex rubrics |
+| `openai:responses:gpt-5-mini`                   | Medium      | Low    | Development, simple checks  |
+| `anthropic:messages:claude-sonnet-4-5-20250929` | High        | Medium | Production                  |
 
 Override via CLI:
 
@@ -1099,7 +1110,7 @@ judge to treat candidate output as untrusted data. See [LLM judge prompt templat
 
 ### What is the best LLM judge model?
 
-`openai:responses:gpt-5.4` and `claude-sonnet-4-5-20250929` are reliable for production. Use `openai:responses:gpt-5-mini` for development. The judge should be at least as capable as the system under test.
+`openai:responses:gpt-5.4` and `anthropic:messages:claude-sonnet-4-5-20250929` are reliable for production. Use `openai:responses:gpt-5-mini` for development. The judge should be at least as capable as the system under test.
 
 ### How do you do majority vote LLM judging?
 
