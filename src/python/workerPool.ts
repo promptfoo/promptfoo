@@ -19,6 +19,7 @@ export class PythonWorkerPool {
     private workerCount: number = 1,
     private pythonPath?: string,
     private timeout?: number,
+    private envOverrides?: Record<string, string>,
   ) {}
 
   async initialize(): Promise<void> {
@@ -52,6 +53,7 @@ export class PythonWorkerPool {
         this.pythonPath,
         this.timeout,
         () => this.processQueue(), // Resume queue processing when worker becomes ready
+        this.envOverrides,
       );
       initPromises.push(worker.initialize());
       this.workers.push(worker);

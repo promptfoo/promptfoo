@@ -28,6 +28,7 @@ export class PythonWorker {
     private pythonPath?: string,
     private timeout: number = REQUEST_TIMEOUT_MS,
     private onReady?: () => void,
+    private envOverrides?: Record<string, string>,
   ) {}
 
   async initialize(): Promise<void> {
@@ -43,11 +44,25 @@ export class PythonWorker {
       typeof this.pythonPath === 'string',
     );
 
+    // python-shell expects a plain object; keep only defined env vars and apply overrides.
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (typeof value === 'string') {
+        env[key] = value;
+      }
+    }
+    if (this.envOverrides) {
+      for (const [key, value] of Object.entries(this.envOverrides)) {
+        env[key] = value;
+      }
+    }
+
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
       pythonPath: resolvedPythonPath,
       args: [this.scriptPath, this.functionName],
       stdio: ['pipe', 'pipe', 'pipe'],
+      env,
     });
 
     // Listen for READY signal
@@ -90,9 +105,48 @@ export class PythonWorker {
       });
 
       this.process!.stderr?.on('data', (data) => {
-        logger.error(`Python worker stderr: ${data.toString()}`);
+        this.handleStderr(data);
       });
     });
+  }
+
+  private handleStderr(data: unknown): void {
+    const message = String(data).trimEnd();
+    if (!message) {
+      return;
+    }
+
+    for (const line of message.split(/\r?\n/)) {
+      this.logStderrLine(line);
+    }
+  }
+
+  private logStderrLine(message: string): void {
+    if (!message) {
+      return;
+    }
+
+    const logMessage = `Python worker stderr: ${message}`;
+    if (message.startsWith('[PythonProvider] OpenTelemetry tracing enabled')) {
+      logger.debug(logMessage);
+      return;
+    }
+
+    if (
+      message.startsWith('[PythonProvider] OpenTelemetry packages not installed') ||
+      message.startsWith('[PythonProvider] Failed to initialize tracing') ||
+      message.startsWith('[PythonProvider] Tracing error')
+    ) {
+      logger.warn(logMessage);
+      return;
+    }
+
+    if (isPythonWarningStderr(message)) {
+      logger.warn(logMessage);
+      return;
+    }
+
+    logger.error(logMessage);
   }
 
   async call(functionName: string, args: unknown[]): Promise<unknown> {
@@ -283,4 +337,10 @@ export class PythonWorker {
       this.shuttingDown = false;
     }
   }
+}
+
+function isPythonWarningStderr(message: string): boolean {
+  return (
+    /\b(?:\w+Warning|Warning):/.test(message) || message.trimStart().startsWith('warnings.warn(')
+  );
 }

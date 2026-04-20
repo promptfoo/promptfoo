@@ -60,6 +60,50 @@ def call_api(prompt, options, context):
     TEST_TIMEOUT,
   );
 
+  it(
+    'should pass environment overrides to every worker',
+    async () => {
+      const envPath = path.join(__dirname, 'fixtures', 'pool_env_provider.py');
+      fs.writeFileSync(
+        envPath,
+        `
+import os
+
+def call_api(prompt, options, context):
+    return {
+        "output": prompt,
+        "otel_enabled": os.getenv("PROMPTFOO_ENABLE_OTEL"),
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    }
+`,
+      );
+
+      try {
+        pool = new PythonWorkerPool(envPath, 'call_api', 2, undefined, undefined, {
+          PROMPTFOO_ENABLE_OTEL: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector.local:4318',
+        });
+        await pool.initialize();
+
+        const results = (await Promise.all([
+          pool.execute('call_api', ['first', {}, {}]),
+          pool.execute('call_api', ['second', {}, {}]),
+        ])) as Array<{ otel_enabled: string; otlp_endpoint: string }>;
+
+        expect(results).toHaveLength(2);
+        for (const result of results) {
+          expect(result.otel_enabled).toBe('true');
+          expect(result.otlp_endpoint).toBe('http://collector.local:4318');
+        }
+      } finally {
+        if (fs.existsSync(envPath)) {
+          fs.unlinkSync(envPath);
+        }
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
   it('should reject invalid worker counts', async () => {
     // Test zero workers
     pool = new PythonWorkerPool(testScriptPath, 'call_api', 0);

@@ -4,8 +4,11 @@ import {
   generateTraceContextIfNeeded,
   generateTraceId,
   generateTraceparent,
+  getLocalOtlpHttpEndpoint,
   isOtlpReceiverStarted,
   isTracingEnabled,
+  resetTracingState,
+  startOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
@@ -20,6 +23,13 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
+const otlpReceiverMocks = vi.hoisted(() => ({
+  startOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+  stopOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/tracing/otlpReceiver', () => otlpReceiverMocks);
+
 // Mock the trace store
 vi.mock('../../src/tracing/store', () => ({
   getTraceStore: vi.fn(() => ({
@@ -30,6 +40,9 @@ vi.mock('../../src/tracing/store', () => ({
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetTracingState();
+    otlpReceiverMocks.startOTLPReceiver.mockResolvedValue(undefined);
+    otlpReceiverMocks.stopOTLPReceiver.mockResolvedValue(undefined);
     // Reset environment variables
     delete process.env.PROMPTFOO_OTEL_ENABLED;
   });
@@ -200,9 +213,128 @@ describe('evaluatorTracing', () => {
     });
   });
 
+  describe('getLocalOtlpHttpEndpoint', () => {
+    it('should return the default local HTTP receiver endpoint', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://127.0.0.1:4318');
+    });
+
+    it('should convert wildcard bind hosts into a connectable loopback endpoint', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44329,
+              host: '0.0.0.0',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://127.0.0.1:44329');
+    });
+
+    it('should bracket IPv6 receiver hosts for endpoint URLs', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44330,
+              host: '::1',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://[::1]:44330');
+    });
+
+    it('should convert IPv6 wildcard bind hosts into IPv6 loopback endpoints', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44331,
+              host: '::',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBe('http://[::1]:44331');
+    });
+
+    it('should return undefined when the local HTTP receiver is disabled', () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: false,
+              port: 4318,
+              host: '127.0.0.1',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      expect(getLocalOtlpHttpEndpoint(testSuite)).toBeUndefined();
+    });
+  });
+
   describe('isOtlpReceiverStarted', () => {
     it('should return false initially', () => {
       expect(isOtlpReceiverStarted()).toBe(false);
+    });
+
+    it('should start the OTLP receiver when a test enables tracing via metadata', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tests: [
+          {
+            vars: {},
+            metadata: { tracingEnabled: true },
+          },
+        ],
+        tracing: {
+          otlp: {
+            http: {
+              enabled: true,
+              port: 44329,
+              host: '127.0.0.1',
+              acceptFormats: ['json'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(otlpReceiverMocks.startOTLPReceiver).toHaveBeenCalledWith(44329, '127.0.0.1');
+      expect(isOtlpReceiverStarted()).toBe(true);
     });
   });
 });
