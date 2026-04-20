@@ -220,7 +220,7 @@
     'Noto Sans',
     sans-serif;
 
-  /* Promptfoo brand tokens (mirrors design2/design-system.html) */
+  /* Promptfoo brand tokens */
   --pf-red: #e53a3a;
   --pf-red-dark: #cb3434;
   --pf-red-darker: #b32e2e;
@@ -415,8 +415,7 @@ input[type='search']::-webkit-search-decoration {
 }
 
 @media print {
-  /* Promptfoo brand tokens (mirrors design2/design-system.html).
-   * Scoped to @media print so they only apply to the PDF export. */
+  /* Scoped to @media print so they only apply to the PDF export. */
   :root {
     --pf-red: #e53a3a;
     --pf-red-dark: #cb3434;
@@ -503,7 +502,7 @@ input[type='search']::-webkit-search-decoration {
     line-height: 1.6;
   }
 
-  /* Brand typography — mirrors design2/report-template.html */
+  /* Brand typography */
   h1,
   h2,
   h3,
@@ -544,7 +543,6 @@ input[type='search']::-webkit-search-decoration {
     text-decoration: none;
   }
 
-  /* Red list markers */
   ul,
   ol {
     margin: 0 0 12pt;
@@ -558,7 +556,6 @@ input[type='search']::-webkit-search-decoration {
     color: var(--pf-red);
   }
 
-  /* Blockquote — design2 callout treatment */
   blockquote {
     margin: 14pt 0;
     padding: 12pt 16pt;
@@ -571,7 +568,6 @@ input[type='search']::-webkit-search-decoration {
     break-inside: avoid;
   }
 
-  /* Inline and block code */
   code {
     font-family: var(--pf-font-mono) !important;
     font-size: 9pt;
