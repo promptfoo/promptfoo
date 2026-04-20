@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { processStreamingResponse } from '../../src/util/fetch';
+import {
+  estimateStreamingTokensPerSecond,
+  MIN_MEANINGFUL_STREAM_WINDOW_MS,
+  processStreamingResponse,
+} from '../../src/util/fetch';
 
 describe('processStreamingResponse', () => {
   describe('TTFT correctness', () => {
@@ -241,6 +245,70 @@ describe('processStreamingResponse', () => {
 
       // Verify lock was released despite error
       expect(mockReader.releaseLock).toHaveBeenCalled();
+    });
+  });
+
+  describe('tokensPerSecond derivation', () => {
+    it('should not be set by processStreamingResponse (raw SSE inflates the number)', async () => {
+      const requestStartTime = Date.now();
+
+      // Simulate SSE frames: 4 chunks totalling ~200 chars of wire bytes
+      // but only ~20 chars of actual content.
+      const chunks = [
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" there"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":" friend"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ].map((s) => new TextEncoder().encode(s));
+
+      let i = 0;
+      const mockReader = {
+        read: vi.fn(async () => {
+          if (i < chunks.length) {
+            await new Promise((r) => setTimeout(r, 20));
+            return { done: false, value: chunks[i++] };
+          }
+          return { done: true, value: undefined };
+        }),
+        releaseLock: vi.fn(),
+      };
+
+      const result = await processStreamingResponse(
+        { body: { getReader: () => mockReader } } as unknown as Response,
+        requestStartTime,
+      );
+
+      // The util deliberately leaves tps unpopulated — callers compute it
+      // on the parsed completion text, not the raw SSE buffer.
+      expect(result.streamingMetrics.tokensPerSecond).toBeUndefined();
+      expect(result.streamingMetrics.totalStreamTime).toBeGreaterThan(0);
+    });
+  });
+
+  describe('estimateStreamingTokensPerSecond', () => {
+    it('should compute chars/4 per second over the streamed window', () => {
+      // 400 chars / 4 = 100 tokens, over 1000ms => 100 tps
+      expect(estimateStreamingTokensPerSecond(400, 1000)).toBe(100);
+    });
+
+    it('should return undefined when the stream window is below the floor', () => {
+      expect(
+        estimateStreamingTokensPerSecond(400, MIN_MEANINGFUL_STREAM_WINDOW_MS - 1),
+      ).toBeUndefined();
+      expect(estimateStreamingTokensPerSecond(400, 0)).toBeUndefined();
+      expect(estimateStreamingTokensPerSecond(400, undefined)).toBeUndefined();
+    });
+
+    it('should return undefined for empty completions', () => {
+      expect(estimateStreamingTokensPerSecond(0, 500)).toBeUndefined();
+      expect(estimateStreamingTokensPerSecond(-1, 500)).toBeUndefined();
+    });
+
+    it('should populate at the window floor', () => {
+      // At exactly the floor, we still emit a value (the floor is inclusive).
+      expect(
+        estimateStreamingTokensPerSecond(200, MIN_MEANINGFUL_STREAM_WINDOW_MS),
+      ).toBeGreaterThan(0);
     });
   });
 });

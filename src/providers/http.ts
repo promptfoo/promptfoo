@@ -13,7 +13,12 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { fetchWithRetries, processStreamingResponse, type StreamingMetrics } from '../util/fetch';
+import {
+  estimateStreamingTokensPerSecond,
+  fetchWithRetries,
+  processStreamingResponse,
+  type StreamingMetrics,
+} from '../util/fetch';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
@@ -2563,6 +2568,17 @@ export class HttpProvider implements ApiProvider {
     const parsedOutput = (await this.transformResponse)(parsedData, rawText, {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
+
+    // Populate streaming throughput now that we know the actual completion text.
+    // Computing this in processStreamingResponse would overcount by 20-60x
+    // because the stream buffer includes SSE frame wrappers.
+    if (streamingMetrics) {
+      const completionText = this.getCompletionText(parsedOutput, rawText);
+      streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
+        completionText.length,
+        streamingMetrics.totalStreamTime,
+      );
+    }
 
     return this.processResponseWithTokenEstimation(
       ret,

@@ -435,13 +435,18 @@ export async function fetchWithRetries(
 /**
  * Timing metrics captured while consuming a streaming HTTP response.
  *
- * Applies to text modalities only. Values are milliseconds except
- * `tokensPerSecond` (approximate, character-based).
+ * Applies to text modalities only. Timing values are milliseconds.
+ *
+ * `tokensPerSecond` is populated by the caller (e.g. the HTTP provider)
+ * after `transformResponse` has produced the final content string. It is
+ * intentionally not computed here because the raw stream buffer contains
+ * SSE frame wrappers (`data: {...}\n\n`) that inflate the character count
+ * by 20x-60x versus the actual output.
  */
 export interface StreamingMetrics {
   /** Milliseconds from request start to the first non-whitespace chunk. */
   timeToFirstToken?: number;
-  /** Rough throughput estimate (chars/4 per second). */
+  /** Rough throughput estimate (completion chars / 4) per second. */
   tokensPerSecond?: number;
   /** Milliseconds from the first byte read to stream close. */
   totalStreamTime?: number;
@@ -450,12 +455,10 @@ export interface StreamingMetrics {
 }
 
 /**
- * Consume a streaming HTTP response and collect TTFT + throughput metrics.
+ * Consume a streaming HTTP response and collect timing metrics.
  *
  * `timeToFirstToken` is measured from `requestStartTime` so it captures
  * connection setup and server processing, not just stream-read latency.
- * Token counts are estimated as `chars / 4`; integrate a tokenizer upstream
- * if you need exact throughput numbers.
  *
  * @param response - The Response object to process as a stream
  * @param requestStartTime - The timestamp when the request was initiated (ms since epoch)
@@ -501,19 +504,40 @@ export async function processStreamingResponse(
     reader.releaseLock();
   }
 
-  const text = chunks.join('');
-  const totalStreamTime = Date.now() - streamStart;
-  const tokensPerSecond =
-    totalStreamTime > 0 ? (Math.ceil(text.length / 4) / totalStreamTime) * 1000 : 0;
-
   return {
-    text,
+    text: chunks.join(''),
     streamingMetrics: {
       // Left undefined on all-whitespace streams so the ttft assertion reports "could not measure".
       timeToFirstToken: firstTokenTime,
-      tokensPerSecond,
-      totalStreamTime,
+      totalStreamTime: Date.now() - streamStart,
       isActuallyStreaming: chunkCount > 1,
     },
   };
+}
+
+/**
+ * Minimum streamed window, in milliseconds, below which throughput numbers
+ * become unstable (single-chunk bursts divide by near-zero). Callers should
+ * skip populating `tokensPerSecond` when the window is shorter than this.
+ */
+export const MIN_MEANINGFUL_STREAM_WINDOW_MS = 50;
+
+/**
+ * Compute tokens-per-second using content chars (chars/4 heuristic) over the
+ * streamed window. Returns `undefined` when the window is too short or
+ * content is empty — in those cases the number would be misleading (or
+ * infinite) rather than informative.
+ */
+export function estimateStreamingTokensPerSecond(
+  completionChars: number,
+  streamWindowMs: number | undefined,
+): number | undefined {
+  if (
+    completionChars <= 0 ||
+    streamWindowMs === undefined ||
+    streamWindowMs < MIN_MEANINGFUL_STREAM_WINDOW_MS
+  ) {
+    return undefined;
+  }
+  return (Math.ceil(completionChars / 4) / streamWindowMs) * 1000;
 }
