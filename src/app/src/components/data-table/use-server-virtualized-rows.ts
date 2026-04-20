@@ -47,6 +47,22 @@ function indexedRowsEqual<TData>(indexedRows: Map<number, TData>, rows: TData[] 
   return true;
 }
 
+function findFirstChangedIndex<TData>(previousRows: TData[] = [], nextRows: TData[] = []) {
+  const sharedLength = Math.min(previousRows.length, nextRows.length);
+
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (previousRows[index] !== nextRows[index]) {
+      return index;
+    }
+  }
+
+  if (previousRows.length !== nextRows.length) {
+    return sharedLength;
+  }
+
+  return -1;
+}
+
 export function useServerVirtualizedRows<TData>({
   initialRows = EMPTY_INITIAL_ROWS,
   rowCount,
@@ -65,6 +81,7 @@ export function useServerVirtualizedRows<TData>({
   const loadingIndexesRef = React.useRef(loadingIndexes);
   loadingIndexesRef.current = loadingIndexes;
   const hasMountedRef = React.useRef(false);
+  const initialRowsRef = React.useRef(initialRows);
   const resetKeyRef = React.useRef(resetKey);
   const requestIdRef = React.useRef(0);
   const resetGenerationRef = React.useRef(0);
@@ -87,12 +104,51 @@ export function useServerVirtualizedRows<TData>({
   }, [resetKey]);
 
   React.useLayoutEffect(() => {
-    setRowsByIndex((prev) => {
-      if (prev.size > 0) {
+    const previousInitialRows = initialRowsRef.current;
+    initialRowsRef.current = initialRows;
+
+    if (rowsByIndexRef.current.size === 0) {
+      setRowsByIndex((prev) =>
+        indexedRowsEqual(prev, initialRows) ? prev : indexRows(initialRows),
+      );
+      return;
+    }
+
+    const firstChangedIndex = findFirstChangedIndex(previousInitialRows, initialRows);
+    if (firstChangedIndex === -1) {
+      return;
+    }
+
+    resetGenerationRef.current += 1;
+    setLoadingIndexes((prev) => {
+      if (prev.size === 0) {
         return prev;
       }
 
-      return indexedRowsEqual(prev, initialRows) ? prev : indexRows(initialRows);
+      const next = new Map<number, number>();
+      for (const [index, requestId] of prev) {
+        if (index < firstChangedIndex) {
+          next.set(index, requestId);
+        }
+      }
+      return next.size === prev.size ? prev : next;
+    });
+
+    setRowsByIndex((prev) => {
+      if (prev.size === 0) {
+        return indexedRowsEqual(prev, initialRows) ? prev : indexRows(initialRows);
+      }
+
+      const next = new Map<number, TData>();
+      for (const [index, row] of prev) {
+        if (index < firstChangedIndex) {
+          next.set(index, row);
+        }
+      }
+      initialRows.forEach((row, index) => {
+        next.set(index, row);
+      });
+      return next;
     });
   }, [initialRows]);
 

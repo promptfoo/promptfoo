@@ -178,7 +178,7 @@ describe('useServerVirtualizedRows', () => {
     expect(result.current.serverVirtualization.getRow(0)).toBeUndefined();
   });
 
-  it('does not clobber fetched rows when initialRows changes after bootstrapping', async () => {
+  it('does not clobber fetched rows when initialRows rerenders with the same rows', async () => {
     const fetchRows = vi.fn().mockResolvedValue({ rows: [{ id: 'loaded-25' }], offset: 25 });
     const initialRows = createRows(0, 2);
     const { result, rerender } = renderHook(
@@ -202,12 +202,59 @@ describe('useServerVirtualizedRows', () => {
 
     expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
 
-    rerender({ rows: createRows(100, 2) });
+    rerender({ rows: [...initialRows] });
 
     expect(result.current.serverVirtualization.getRow(0)).toEqual({ id: 'row-0' });
     expect(result.current.serverVirtualization.getRow(1)).toEqual({ id: 'row-1' });
     expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
     expect(result.current.loadedRowCount).toBe(3);
+  });
+
+  it('rehydrates the seeded prefix and invalidates later cached rows when initialRows change', async () => {
+    const fetchRows = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ id: 'loaded-25' }], offset: 25 })
+      .mockResolvedValueOnce({ rows: [{ id: 'reloaded-25' }], offset: 25 });
+    const initialRows = createRows(0, 2);
+    const updatedRows = [initialRows[1]];
+    const { result, rerender } = renderHook(
+      ({ rows }) =>
+        useServerVirtualizedRows<TestRow>({
+          initialRows: rows,
+          rowCount: 100,
+          pageSize: 25,
+          fetchRows,
+        }),
+      { initialProps: { rows: initialRows } },
+    );
+
+    await act(async () => {
+      await result.current.serverVirtualization.loadRows({
+        startIndex: 25,
+        endIndex: 25,
+        signal: new AbortController().signal,
+      });
+    });
+
+    expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
+
+    rerender({ rows: updatedRows });
+
+    expect(result.current.serverVirtualization.getRow(0)).toEqual(initialRows[1]);
+    expect(result.current.serverVirtualization.getRow(1)).toBeUndefined();
+    expect(result.current.serverVirtualization.getRow(25)).toBeUndefined();
+    expect(result.current.loadedRowCount).toBe(1);
+
+    await act(async () => {
+      await result.current.serverVirtualization.loadRows({
+        startIndex: 25,
+        endIndex: 25,
+        signal: new AbortController().signal,
+      });
+    });
+
+    expect(fetchRows).toHaveBeenCalledTimes(2);
+    expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'reloaded-25' });
   });
 
   it('prunes rows outside the configured surrounding page window', async () => {
