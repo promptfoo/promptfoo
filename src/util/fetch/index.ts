@@ -505,13 +505,12 @@ export async function processStreamingResponse(
 
   const totalStreamTime = Date.now() - streamStart;
   const tokensPerSecond = totalStreamTime > 0 ? (tokenCount / totalStreamTime) * 1000 : 0;
-  // Fallback: whitespace-only stream never triggered the first-token branch.
-  const timeToFirstToken = firstTokenTime ?? Date.now() - requestStartTime;
 
   return {
     text,
     streamingMetrics: {
-      timeToFirstToken,
+      // Left undefined on all-whitespace streams so the ttft assertion reports "could not measure".
+      timeToFirstToken: firstTokenTime,
       tokensPerSecond,
       totalStreamTime,
       isActuallyStreaming: chunkCount > 1,

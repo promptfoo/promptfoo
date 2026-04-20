@@ -1588,11 +1588,7 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  /**
-   * Fetch a response, branching on whether the caller requested a streamed
-   * transport. Streaming bypasses the cache so TTFT reflects a live call;
-   * non-streaming reuses the standard cached fetch path.
-   */
+  // Streaming bypasses the cache so TTFT reflects a live call.
   private async fetchResponse(
     url: string,
     fetchOptions: RequestInit,
@@ -2474,7 +2470,7 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider]: Using custom HTTPS agent for TLS connection');
     }
 
-    // Detect streaming from rendered body (supports dynamic/templated stream flags)
+    // Read from rendered body so templated `stream` values are honored.
     const isStreaming =
       typeof renderedConfig.body === 'object' &&
       renderedConfig.body !== null &&

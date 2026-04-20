@@ -199,6 +199,38 @@ describe('processStreamingResponse', () => {
       // But not too much more (allow 100ms margin for test execution)
       expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(650);
     });
+
+    it('should leave timeToFirstToken undefined when no non-whitespace chunk arrives', async () => {
+      const requestStartTime = Date.now();
+
+      const chunks = [
+        new TextEncoder().encode(''),
+        new TextEncoder().encode('   '),
+        new TextEncoder().encode('\n\n'),
+      ];
+
+      let chunkIndex = 0;
+      const mockReader = {
+        read: vi.fn(async () => {
+          if (chunkIndex < chunks.length) {
+            return { done: false, value: chunks[chunkIndex++] };
+          }
+          return { done: true, value: undefined };
+        }),
+        releaseLock: vi.fn(),
+      };
+
+      const mockResponse = {
+        body: { getReader: () => mockReader },
+      } as unknown as Response;
+
+      const result = await processStreamingResponse(mockResponse, requestStartTime);
+
+      // No real content ever arrived: downstream ttft assertion should see
+      // undefined and report a clear error instead of comparing total
+      // latency against the threshold.
+      expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
+    });
   });
 
   describe('Error handling', () => {
