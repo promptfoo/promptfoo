@@ -103,10 +103,21 @@ export type ScanRequest = z.infer<typeof ScanRequestSchema>;
 // GET /api/model-audit/scans
 // ---------------------------------------------------------------------------
 
+export const MODEL_AUDIT_SORT_FIELDS = [
+  'createdAt',
+  'failedChecks',
+  'hasErrors',
+  'id',
+  'modelPath',
+  'name',
+  'passedChecks',
+  'totalChecks',
+] as const;
+
 export const ListScansQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(100),
   offset: z.coerce.number().int().min(0).optional().default(0),
-  sort: z.enum(['createdAt', 'name', 'modelPath']).optional().default('createdAt'),
+  sort: z.enum(MODEL_AUDIT_SORT_FIELDS).optional().default('createdAt'),
   order: z.enum(['asc', 'desc']).optional().default('desc'),
   search: z.string().optional(),
 });
