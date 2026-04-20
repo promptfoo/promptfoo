@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider setup local Python wrapper smoke
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: file://provider.py:invoice_agent_provider
+    label: provider-setup-local-python-wrapper
+    config:
+      workers: 1
+      timeout: 30000
+      defaultUserId: qa-py-config
+      defaultInvoiceId: inv-py-config
+
+tests:
+  - description: local Python wrapper reaches static app code
+    vars:
+      user_id: qa-static
+      invoice_id: inv-123
+      message: Say exactly PONG.
+    assert:
+      - type: contains
+        value: PONG
+      - type: contains
+        value: inv-123
+  - description: local Python wrapper uses provider config defaults
+    vars:
+      message: Say exactly PONG.
+    assert:
+      - type: contains
+        value: PONG python wrapper for qa-py-config/inv-py-config
