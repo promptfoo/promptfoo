@@ -437,45 +437,107 @@ export async function fetchWithRetries(
  *
  * Applies to text modalities only. Timing values are milliseconds.
  *
- * `tokensPerSecond` is populated by the caller (e.g. the HTTP provider)
- * after `transformResponse` has produced the final content string. It is
- * intentionally not computed here because the raw stream buffer contains
- * SSE frame wrappers (`data: {...}\n\n`) that inflate the character count
- * by 20x-60x versus the actual output.
+ * ## Precise field definitions
+ *
+ * `timeToFirstToken` is the wall time from request dispatch (when the
+ * HTTP request is sent) to a detection event on the response body. The
+ * default detection event is "first non-whitespace byte of the response
+ * body" — a format-agnostic proxy for TTFT. For SSE streams this fires
+ * on the first `data: ...` frame, which often carries framing metadata
+ * (e.g. OpenAI's `{"delta":{"role":"assistant"}}`) rather than the first
+ * model-generated content token. Empirical measurement against OpenAI
+ * gpt-4o-mini shows this framing overhead averages ~17ms (max ~48ms).
+ *
+ * For canonical TTFT as defined in ML benchmarking literature (vLLM,
+ * MLPerf, OpenAI performance docs) — "time from request dispatch to the
+ * first model-generated output token" — pass a `firstTokenDetector` that
+ * inspects the accumulated stream text and returns true when the first
+ * content token has arrived. For OpenAI Chat Completions SSE:
+ *
+ *   firstTokenDetector: (buf) => /"delta":\s*\{[^}]*"content":"[^"]/.test(buf)
+ *
+ * `totalStreamTime` is from the first read of the response body to stream
+ * close — it excludes the TTFT window.
+ *
+ * `isActuallyStreaming` is true when the transport delivered more than
+ * one network chunk (`ReadableStream.getReader().read()` call), NOT
+ * whether the upstream model emitted multiple tokens. A server that
+ * flushes every SSE event in one TCP write reports `false`. A server
+ * that buffers and flushes in bursts reports `true`. The name is
+ * historical; `multiChunkDelivery` would be more precise.
+ *
+ * `tokensPerSecond` is populated by the caller (the HTTP provider) after
+ * `transformResponse` produces the final content string. It uses a
+ * `chars / 4` heuristic that is a standard English-prose proxy but
+ * underestimates token counts for CJK text, code, and base64. It is
+ * intentionally NOT computed from the raw stream buffer here because SSE
+ * frame wrappers inflate character counts by 20x-60x.
  */
 export interface StreamingMetrics {
-  /** Milliseconds from request start to the first non-whitespace chunk. */
+  /**
+   * Milliseconds from request dispatch to the first detected "token event".
+   * See interface JSDoc for the precise definition and detector semantics.
+   */
   timeToFirstToken?: number;
-  /** Rough throughput estimate (completion chars / 4) per second. */
+  /** Rough throughput estimate (completion chars / 4) per second. See interface doc for caveats. */
   tokensPerSecond?: number;
-  /** Milliseconds from the first byte read to stream close. */
+  /** Milliseconds from the first body read to stream close (excludes TTFT window). */
   totalStreamTime?: number;
   /** True when the transport delivered more than one network chunk. */
   isActuallyStreaming?: boolean;
 }
 
 /**
+ * Predicate called after each chunk is appended. When it returns true,
+ * `timeToFirstToken` is stamped. Receives the accumulated raw response
+ * text (across all chunks so far) so patterns can safely span chunk
+ * boundaries.
+ */
+export type FirstTokenDetector = (accumulatedText: string) => boolean;
+
+/**
+ * Default detector: fires on the first non-whitespace byte in the new chunk.
+ * Exported for callers that want to explicitly opt into the format-agnostic
+ * wire-level proxy rather than a format-specific content detector.
+ */
+export const firstNonWhitespaceByteDetector: FirstTokenDetector = (accumulatedText) => {
+  for (let i = 0; i < accumulatedText.length; i++) {
+    if (accumulatedText.charCodeAt(i) > 32) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/**
  * Consume a streaming HTTP response and collect timing metrics.
  *
  * `timeToFirstToken` is measured from `requestStartTime` so it captures
  * connection setup and server processing, not just stream-read latency.
+ * Pass a `firstTokenDetector` to customize when TTFT fires (see
+ * `StreamingMetrics` JSDoc for canonical-TTFT examples).
  *
  * @param response - The Response object to process as a stream
  * @param requestStartTime - The timestamp when the request was initiated (ms since epoch)
+ * @param opts.firstTokenDetector - Predicate that decides when TTFT fires. Defaults
+ *   to `firstNonWhitespaceByteDetector` (first non-whitespace body byte).
  */
 export async function processStreamingResponse(
   response: Response,
   requestStartTime: number,
+  opts?: { firstTokenDetector?: FirstTokenDetector },
 ): Promise<{ text: string; streamingMetrics: StreamingMetrics }> {
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error(`Response has no readable body (status ${response.status})`);
   }
 
+  const detector = opts?.firstTokenDetector ?? firstNonWhitespaceByteDetector;
   const streamStart = Date.now();
   const decoder = new TextDecoder();
   const chunks: string[] = [];
   let firstTokenTime: number | undefined;
+  let accumulatedText = '';
   let chunkCount = 0;
 
   try {
@@ -487,17 +549,13 @@ export async function processStreamingResponse(
 
       const chunk = decoder.decode(value, { stream: true });
       chunks.push(chunk);
+      accumulatedText += chunk;
       chunkCount++;
 
-      // Scan for the first non-whitespace byte without allocating a trimmed copy.
-      // Measure from request start so network overhead (TCP/TLS/headers) is included.
-      if (firstTokenTime === undefined) {
-        for (let i = 0; i < chunk.length; i++) {
-          if (chunk.charCodeAt(i) > 32) {
-            firstTokenTime = Date.now() - requestStartTime;
-            break;
-          }
-        }
+      // Stamp TTFT on the first chunk whose arrival causes the detector to pass.
+      // Measure from requestStartTime so network overhead (TCP/TLS/headers) is included.
+      if (firstTokenTime === undefined && detector(accumulatedText)) {
+        firstTokenTime = Date.now() - requestStartTime;
       }
     }
   } finally {

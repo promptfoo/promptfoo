@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   estimateStreamingTokensPerSecond,
+  firstNonWhitespaceByteDetector,
   MIN_MEANINGFUL_STREAM_WINDOW_MS,
   processStreamingResponse,
 } from '../../src/util/fetch';
@@ -107,6 +108,44 @@ describe('processStreamingResponse', () => {
       expect(result.text).toBe('Complete response in one chunk');
       // TTFT should still be measured from request start
       expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(10);
+    });
+
+    it('should trigger TTFT on OpenAI role-prefix SSE frame (documented semantics)', async () => {
+      // Pins current behavior: TTFT measures "first non-whitespace wire byte",
+      // not "first content token". OpenAI's SSE stream opens with a role frame:
+      //   data: {"choices":[{"delta":{"role":"assistant"}}]}
+      // which carries no content but is non-whitespace. TTFT fires on it.
+      // The delay between this frame and the first content delta is usually
+      // sub-millisecond; callers needing strict "first content token" should
+      // parse the stream in transformResponse.
+      const requestStartTime = Date.now();
+
+      const chunks = [
+        new TextEncoder().encode('data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n'),
+        new TextEncoder().encode('data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'),
+        new TextEncoder().encode('data: [DONE]\n\n'),
+      ];
+
+      let i = 0;
+      const mockReader = {
+        read: vi.fn(async () => {
+          if (i < chunks.length) {
+            await new Promise((r) => setTimeout(r, 20));
+            return { done: false, value: chunks[i++] };
+          }
+          return { done: true, value: undefined };
+        }),
+        releaseLock: vi.fn(),
+      };
+
+      const result = await processStreamingResponse(
+        { body: { getReader: () => mockReader } } as unknown as Response,
+        requestStartTime,
+      );
+
+      // TTFT fires on the very first SSE frame (~20ms), not on the content delta (~40ms).
+      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(15);
+      expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(40);
     });
 
     it('should handle empty chunks and wait for first non-empty chunk', async () => {
@@ -309,6 +348,76 @@ describe('processStreamingResponse', () => {
       expect(
         estimateStreamingTokensPerSecond(200, MIN_MEANINGFUL_STREAM_WINDOW_MS),
       ).toBeGreaterThan(0);
+    });
+  });
+
+  describe('firstTokenDetector option', () => {
+    function mockStream(frames: string[], perChunkDelayMs = 20) {
+      let i = 0;
+      return {
+        body: {
+          getReader: () => ({
+            read: vi.fn(async () => {
+              if (i < frames.length) {
+                await new Promise((r) => setTimeout(r, perChunkDelayMs));
+                return { done: false, value: new TextEncoder().encode(frames[i++]) };
+              }
+              return { done: true, value: undefined };
+            }),
+            releaseLock: vi.fn(),
+          }),
+        },
+      } as unknown as Response;
+    }
+
+    it('should use canonical TTFT when detector targets content deltas', async () => {
+      // Simulates OpenAI: role frame first, content frame second, separated by ~20ms.
+      const frames = [
+        'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+      const response = mockStream(frames, 20);
+      const requestStartTime = Date.now();
+
+      const contentPattern = /"delta":\s*\{[^}]*"content":"[^"]/;
+      const result = await processStreamingResponse(response, requestStartTime, {
+        firstTokenDetector: (buf) => contentPattern.test(buf),
+      });
+
+      // TTFT fires on the second frame (~40ms), not on the role frame (~20ms).
+      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(35);
+      expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(80);
+    });
+
+    it('should fall back to default detector when no opts provided', async () => {
+      const frames = [
+        'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+      ];
+      const requestStartTime = Date.now();
+      const result = await processStreamingResponse(mockStream(frames, 20), requestStartTime);
+
+      // Default fires on the first frame (~20ms).
+      expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(15);
+      expect(result.streamingMetrics.timeToFirstToken).toBeLessThan(40);
+    });
+
+    it('should leave TTFT undefined when detector never fires', async () => {
+      const frames = ['data: {"only":"metadata"}\n\n', 'data: [DONE]\n\n'];
+      const requestStartTime = Date.now();
+
+      const result = await processStreamingResponse(mockStream(frames, 10), requestStartTime, {
+        firstTokenDetector: (buf) => /"content":/.test(buf),
+      });
+
+      expect(result.streamingMetrics.timeToFirstToken).toBeUndefined();
+    });
+
+    it('exports firstNonWhitespaceByteDetector for explicit opt-in', () => {
+      expect(firstNonWhitespaceByteDetector('')).toBe(false);
+      expect(firstNonWhitespaceByteDetector('   \n\t  ')).toBe(false);
+      expect(firstNonWhitespaceByteDetector('  data: x')).toBe(true);
     });
   });
 });
