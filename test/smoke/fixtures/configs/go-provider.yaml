@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test 10.5.1: Go provider works after ESM migration
+# Bug #6506: Go provider wrapper failed in 0.120.0
+description: 'Regression test - Go provider'
+
+providers:
+  - file://../providers/echo-go.go
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: GoTest
+    assert:
+      - type: contains
+        value: 'Go Echo:'
+      - type: contains
+        value: GoTest

@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
-import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+
+import type { Message } from '../../../../src/redteam/providers/shared';
 
 // Hoisted mocks for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -15,6 +17,11 @@ const mockApplyRuntimeTransforms = vi.hoisted(() =>
     image: undefined,
   })),
 );
+
+vi.mock('../../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
 
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
@@ -108,28 +115,20 @@ describe('MemorySystem', () => {
 
 describe('CustomProvider', () => {
   let customProvider: CustomProvider;
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Create fresh mocks for each test
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     customProvider = new CustomProvider({
       injectVar: 'objective',
@@ -144,7 +143,11 @@ describe('CustomProvider', () => {
     vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
-      if (options.provider && typeof options.provider === 'object') {
+      if (
+        options.provider &&
+        typeof options.provider === 'object' &&
+        'callApi' in options.provider
+      ) {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;
@@ -219,6 +222,20 @@ describe('CustomProvider', () => {
     expect((provider as any).maxBacktracks).toBe(10); // DEFAULT_MAX_BACKTRACKS
     expect((provider as any).stateful).toBe(false); // Default false
     expect(provider.config.continueAfterSuccess).toBe(false); // Default false
+  });
+
+  it('should preserve explicit zero values for maxTurns and maxBacktracks', () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Custom strategy',
+      maxTurns: 0,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: false,
+    });
+
+    expect((provider as any).maxTurns).toBe(0);
+    expect((provider as any).maxBacktracks).toBe(0);
   });
 
   it('should include sessionId from context vars when response is missing it', async () => {
@@ -897,11 +914,14 @@ describe('CustomProvider', () => {
       tokensUsed: { total: 15, prompt: 8, completion: 7 },
     };
 
+    const testRubric = 'Test grading rubric';
+
     // Mock grader to fail (jailbreak success)
     mockGetGraderById.mockImplementation(function () {
       return {
         getResult: vi.fn(async () => ({
           grade: mockGraderResult,
+          rubric: testRubric,
         })),
       } as any;
     });
@@ -950,8 +970,11 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Verify storedGraderResult is included in metadata
-    expect(result.metadata?.storedGraderResult).toEqual(mockGraderResult);
+    // Verify storedGraderResult is included in metadata (with assertion.value set to rubric)
+    expect(result.metadata?.storedGraderResult).toEqual({
+      ...mockGraderResult,
+      assertion: { type: 'mock-grader', value: testRubric },
+    });
     expect(result.metadata?.stopReason).toBe('Grader failed');
     // Verify it's actually a successful attack
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
@@ -968,6 +991,8 @@ describe('CustomProvider', () => {
       strategyText: 'Test strategy',
     });
 
+    const testRubric = 'Test grading rubric';
+
     // Mock grader to pass (no jailbreak)
     mockGetGraderById.mockImplementation(function () {
       return {
@@ -977,6 +1002,7 @@ describe('CustomProvider', () => {
             score: 1,
             reason: 'No jailbreak detected',
           },
+          rubric: testRubric,
         })),
       } as any;
     });
@@ -1030,6 +1056,7 @@ describe('CustomProvider', () => {
       pass: true,
       score: 1,
       reason: 'No jailbreak detected',
+      assertion: { type: 'mock-grader', value: testRubric },
     });
   });
 
@@ -1056,11 +1083,13 @@ describe('CustomProvider', () => {
       reason: 'No jailbreak on second turn',
     };
 
+    const testRubric = 'Test grading rubric';
+
     // Create the mock getResult function outside mockImplementation so it persists across calls
     const mockGetResult = vi
       .fn()
-      .mockResolvedValueOnce({ grade: firstGraderResult })
-      .mockResolvedValueOnce({ grade: secondGraderResult });
+      .mockResolvedValueOnce({ grade: firstGraderResult, rubric: testRubric })
+      .mockResolvedValueOnce({ grade: secondGraderResult, rubric: testRubric });
 
     // Mock grader to fail on first turn, pass on second
     mockGetGraderById.mockImplementation(function () {
@@ -1103,8 +1132,11 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should continue to max turns and store the LAST grader result
-    expect(result.metadata?.storedGraderResult).toEqual(secondGraderResult);
+    // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
+    expect(result.metadata?.storedGraderResult).toEqual({
+      ...secondGraderResult,
+      assertion: { type: 'mock-grader', value: testRubric },
+    });
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);

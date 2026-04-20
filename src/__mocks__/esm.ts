@@ -1,4 +1,5 @@
 import * as path from 'path';
+
 import { vi } from 'vitest';
 
 export function getDirectory() {

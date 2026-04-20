@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Use vi.hoisted() to create mock functions and classes that are available in the vi.mock() factory
 const mocks = vi.hoisted(() => {
@@ -182,7 +182,7 @@ describe('langfuse integration', () => {
       mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
 
       const { getPrompt } = await import('../../src/integrations/langfuse');
-      const vars = { name: 'John', age: 30, city: 'New York' };
+      const vars = { name: 'John', age: '30', city: 'New York' };
       const result = await getPrompt('test-prompt', vars, 'text', 1);
 
       expect(mockPrompt.compile).toHaveBeenCalledWith(vars);
@@ -273,6 +273,33 @@ describe('langfuse integration', () => {
         type: 'text',
       });
       expect(result).toBe('Staging content');
+    });
+
+    it('should convert non-string variables to strings for Langfuse compile()', async () => {
+      const mockPrompt = {
+        compile: vi.fn().mockReturnValue('Result with converted vars'),
+      };
+      mocks.mockGetPrompt.mockResolvedValue(mockPrompt);
+
+      const { getPrompt } = await import('../../src/integrations/langfuse');
+      const vars = {
+        name: 'John',
+        age: 30,
+        active: true,
+        metadata: { key: 'value' },
+        tags: ['a', 'b'],
+      };
+      const result = await getPrompt('test-prompt', vars, 'text', 1);
+
+      // Langfuse compile() expects Record<string, string>, so non-strings should be JSON stringified
+      expect(mockPrompt.compile).toHaveBeenCalledWith({
+        name: 'John',
+        age: '30',
+        active: 'true',
+        metadata: '{"key":"value"}',
+        tags: '["a","b"]',
+      });
+      expect(result).toBe('Result with converted vars');
     });
   });
 });

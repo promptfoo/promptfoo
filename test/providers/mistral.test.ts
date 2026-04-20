@@ -4,6 +4,7 @@ import {
   MistralChatCompletionProvider,
   MistralEmbeddingProvider,
 } from '../../src/providers/mistral';
+import { maybeLoadToolsFromExternalFile } from '../../src/util';
 
 vi.mock('../../src/cache', async () => ({
   ...(await vi.importActual('../../src/cache')),
@@ -12,12 +13,16 @@ vi.mock('../../src/cache', async () => ({
   isCacheEnabled: vi.fn(),
 }));
 
-vi.mock('../../src/util');
+vi.mock('../../src/util', async () => ({
+  ...(await vi.importActual('../../src/util')),
+  maybeLoadToolsFromExternalFile: vi.fn(),
+}));
 
 describe('Mistral', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(maybeLoadToolsFromExternalFile).mockImplementation(async (tools) => tools);
     vi.mocked(isCacheEnabled).mockReturnValue(false);
     vi.mocked(getCache).mockReturnValue({
       get: vi.fn().mockResolvedValue(null),
@@ -137,9 +142,85 @@ describe('Mistral', () => {
           total: 10,
           prompt: 5,
           completion: 5,
+          numRequests: 1,
         },
         cached: false,
         cost: expect.any(Number),
+      });
+    });
+
+    it('should preserve explicit zero for top_p, random_seed, and max_tokens', async () => {
+      const zeroProvider = new MistralChatCompletionProvider('mistral-tiny', {
+        config: { top_p: 0, random_seed: 0, max_tokens: 0 },
+      });
+      vi.spyOn(zeroProvider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      const mockResponse = {
+        choices: [{ message: { content: 'Test output' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await zeroProvider.callApi('Test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse((callArgs[1] as RequestInit).body as string);
+      expect(body.top_p).toBe(0);
+      expect(body.random_seed).toBe(0);
+      expect(body.max_tokens).toBe(0);
+    });
+
+    it('should include tools configuration in the request body', async () => {
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'calculate',
+            description: 'Perform basic math',
+            parameters: {
+              type: 'object',
+              properties: {
+                a: { type: 'number' },
+                b: { type: 'number' },
+              },
+              required: ['a', 'b'],
+            },
+          },
+        },
+      ];
+      const customProvider = new MistralChatCompletionProvider('mistral-medium', {
+        config: {
+          tools,
+          tool_choice: 'any',
+          parallel_tool_calls: false,
+        },
+      });
+      vi.spyOn(customProvider, 'getApiKey').mockReturnValue('fake-api-key');
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: null, tool_calls: tools } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await customProvider.callApi('Test prompt');
+
+      expect(vi.mocked(maybeLoadToolsFromExternalFile)).toHaveBeenCalledWith(tools, undefined);
+      const requestInit = vi.mocked(fetchWithCache).mock.calls[0]?.[1];
+      expect(requestInit).toBeDefined();
+      const requestBody = JSON.parse((requestInit as RequestInit).body as string);
+      expect(requestBody).toMatchObject({
+        tools,
+        tool_choice: 'any',
+        parallel_tool_calls: false,
       });
     });
 
@@ -171,7 +252,6 @@ describe('Mistral', () => {
         get: vi.fn().mockResolvedValue({
           output: 'Cached output',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-          cached: true,
           cost: 0.000005,
         }),
         set: vi.fn(),
@@ -194,6 +274,7 @@ describe('Mistral', () => {
       } as any);
       const result = await provider.callApi('Test prompt');
 
+      expect(result.cached).toBe(true);
       expect(result).toEqual({
         output: 'Cached output',
         tokenUsage: {
@@ -231,6 +312,7 @@ describe('Mistral', () => {
           total: 10,
           prompt: 5,
           completion: 5,
+          numRequests: 1,
         },
         cached: false,
         cost: expect.any(Number),
@@ -305,6 +387,78 @@ describe('Mistral', () => {
         expect.any(Number),
       );
     });
+
+    it('should return tool_calls as output when content is null (tool call response)', async () => {
+      const mockToolCalls = [
+        {
+          id: 'call_123',
+          type: 'function',
+          function: { name: 'get_weather', arguments: '{"location":"Tokyo"}' },
+        },
+      ];
+      const mockResponse = {
+        choices: [{ message: { content: null, tool_calls: mockToolCalls } }],
+        usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toEqual(mockToolCalls);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return full message when both content and tool_calls are present', async () => {
+      const mockToolCalls = [
+        {
+          id: 'call_456',
+          type: 'function',
+          function: { name: 'search', arguments: '{"query":"test"}' },
+        },
+      ];
+      const mockMessage = {
+        content: 'I will search for that.',
+        tool_calls: mockToolCalls,
+      };
+      const mockResponse = {
+        choices: [{ message: mockMessage }],
+        usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toEqual(mockMessage);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return content when tool_calls is an empty array', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'Test output', tool_calls: [] } }],
+        usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('Test output');
+      expect(result.error).toBeUndefined();
+    });
   });
 
   describe('MistralEmbeddingProvider', () => {
@@ -354,6 +508,7 @@ describe('Mistral', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
         cost: expect.closeTo(0.0000005, 0.0000001), // Approximately 5 tokens * 0.1 / 1000000
       });
@@ -383,7 +538,9 @@ describe('Mistral', () => {
           total: 5,
           completion: 0,
           cached: 5,
+          numRequests: 1,
         },
+        cost: expect.closeTo(0.0000005, 0.0000001),
       });
       expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
         expect.stringContaining('/embeddings'),
@@ -416,6 +573,7 @@ describe('Mistral', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
         cost: expect.any(Number),
       });

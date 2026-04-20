@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK session-level permission rules'
+
+prompts:
+  - 'Summarize in one sentence what provider_id is configured in the local promptfooconfig.yaml.'
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      working_dir: ../basic
+      # Exercise both simple and pattern-based permission shapes.
+      # Promptfoo converts these into the ruleset the OpenCode v2 API expects.
+      permission:
+        read: allow
+        grep: allow
+        glob: allow
+        list: allow
+        edit: deny
+        bash:
+          'git status': allow
+          '*': deny
+        webfetch: deny
+        external_directory: deny
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: openai

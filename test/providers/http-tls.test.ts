@@ -1,6 +1,6 @@
-import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { HttpProvider } from '../../src/providers/http';
 
@@ -46,6 +46,7 @@ describe('HttpProvider with TLS Configuration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadFileSync.mockReset();
 
     // Setup default mock response
     mockFetchWithCache.mockResolvedValue({

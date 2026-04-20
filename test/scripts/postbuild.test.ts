@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
-import path from 'node:path';
 import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // We need to test the postbuild module, but it runs on import
 // So we'll test the exported function after mocking
@@ -179,6 +180,45 @@ describe('postbuild integration', () => {
 
     // Verify ruby wrapper exists
     expect(fs.existsSync(path.join(srcDir, 'ruby', 'wrapper.rb'))).toBe(true);
+  });
+
+  it('should copy wrapper files to both CLI and server directories after build', () => {
+    const projectRoot = path.resolve(__dirname, '../../');
+    const distDir = path.join(projectRoot, 'dist', 'src');
+    const serverDir = path.join(distDir, 'server');
+
+    // Skip if dist doesn't exist or wrapper files haven't been copied yet (postbuild incomplete)
+    // Check for one representative wrapper file to determine if postbuild has run
+    if (!fs.existsSync(distDir) || !fs.existsSync(path.join(serverDir, 'python', 'wrapper.py'))) {
+      return;
+    }
+
+    // Wrapper files should exist at dist/src/{type}/ for CLI builds
+    // These paths are used when import.meta.url points to dist/src/main.js or entrypoint.js
+    const cliWrapperPaths = [
+      path.join(distDir, 'python', 'wrapper.py'),
+      path.join(distDir, 'python', 'persistent_wrapper.py'),
+      path.join(distDir, 'ruby', 'wrapper.rb'),
+      path.join(distDir, 'golang', 'wrapper.go'),
+    ];
+
+    for (const wrapperPath of cliWrapperPaths) {
+      expect(fs.existsSync(wrapperPath)).toBe(true);
+    }
+
+    // Wrapper files should also exist at dist/src/server/{type}/ for bundled server builds
+    // These paths are used when import.meta.url points to dist/src/server/index.js (Docker)
+    // See: https://github.com/promptfoo/promptfoo/issues/7139
+    const serverWrapperPaths = [
+      path.join(serverDir, 'python', 'wrapper.py'),
+      path.join(serverDir, 'python', 'persistent_wrapper.py'),
+      path.join(serverDir, 'ruby', 'wrapper.rb'),
+      path.join(serverDir, 'golang', 'wrapper.go'),
+    ];
+
+    for (const wrapperPath of serverWrapperPaths) {
+      expect(fs.existsSync(wrapperPath)).toBe(true);
+    }
   });
 
   it('should verify the actual project has HTML files', () => {

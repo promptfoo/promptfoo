@@ -1,3 +1,5 @@
+import { matchesPattern } from './traceUtils';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
@@ -7,19 +9,12 @@ interface TraceErrorSpansValue {
   pattern?: string;
 }
 
-function matchesPattern(spanName: string, pattern: string): boolean {
-  // Convert glob-like pattern to regex
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-    .replace(/\*/g, '.*') // Convert * to .*
-    .replace(/\?/g, '.'); // Convert ? to .
-
-  const regex = new RegExp(`^${regexPattern}$`, 'i');
-  return regex.test(spanName);
-}
-
 function isErrorSpan(span: TraceSpan): boolean {
   // Check various ways a span might indicate an error
+  if (span.statusCode === 2) {
+    return true;
+  }
+
   if (span.statusCode && span.statusCode >= 400) {
     return true;
   }
@@ -38,9 +33,13 @@ function isErrorSpan(span: TraceSpan): boolean {
       }
     }
 
-    // Check for HTTP status codes in attributes
-    if (span.attributes['http.status_code'] && span.attributes['http.status_code'] >= 400) {
-      return true;
+    // Check for HTTP status codes in attributes (handle both string and number types)
+    const httpStatusCode = span.attributes['http.status_code'];
+    if (httpStatusCode !== undefined && httpStatusCode !== null) {
+      const statusCodeNum = Number(httpStatusCode);
+      if (!isNaN(statusCodeNum) && statusCodeNum >= 400) {
+        return true;
+      }
     }
 
     // Check for OTEL standard error attributes

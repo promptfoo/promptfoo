@@ -1,16 +1,21 @@
-import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import path from 'path';
 
 import * as yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
+import { PartialGenerationError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
+import { initVerboseToggle } from '../../src/util/verboseToggle';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
 
 vi.mock('../../src/redteam/commands/generate');
+vi.mock('../../src/util/verboseToggle', () => ({
+  initVerboseToggle: vi.fn(),
+}));
 vi.mock('../../src/commands/eval', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -325,6 +330,131 @@ describe('doRedteamRun', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith(`Using live config from ${expectedPath}`);
       expect(mockLogger.debug).toHaveBeenCalledWith(
         `Live config: ${JSON.stringify(mockConfig, null, 2)}`,
+      );
+    });
+  });
+
+  describe('verbose toggle integration', () => {
+    it('should initialize verbose toggle when logCallback is not provided', async () => {
+      await doRedteamRun({});
+
+      expect(initVerboseToggle).toHaveBeenCalled();
+    });
+
+    it('should NOT initialize verbose toggle when logCallback is provided', async () => {
+      const mockLogCallback = vi.fn();
+
+      await doRedteamRun({
+        logCallback: mockLogCallback,
+      });
+
+      expect(initVerboseToggle).not.toHaveBeenCalled();
+    });
+
+    it('should call cleanup function on successful completion', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+
+      await doRedteamRun({});
+
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should call cleanup function when no test cases are generated', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      vi.mocked(doGenerateRedteam).mockResolvedValue(null);
+
+      await doRedteamRun({});
+
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should handle null cleanup function gracefully', async () => {
+      vi.mocked(initVerboseToggle).mockReturnValue(null);
+
+      // Should not throw
+      await expect(doRedteamRun({})).resolves.not.toThrow();
+    });
+
+    it('should not call cleanup when initVerboseToggle returns null', async () => {
+      vi.mocked(initVerboseToggle).mockReturnValue(null);
+
+      await doRedteamRun({});
+
+      // Just verifying no errors - cleanup should be handled gracefully
+      expect(initVerboseToggle).toHaveBeenCalled();
+    });
+  });
+
+  describe('PartialGenerationError handling', () => {
+    it('should re-throw PartialGenerationError after logging when strict mode causes error', async () => {
+      const failedPlugins = [
+        { pluginId: 'pii', requested: 5 },
+        { pluginId: 'harmful:hate', requested: 3 },
+      ];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      // This happens when strict mode is enabled and doGenerateRedteam throws
+      await expect(doRedteamRun({ strict: true })).rejects.toThrow(PartialGenerationError);
+    });
+
+    it('should log error message before re-throwing PartialGenerationError', async () => {
+      const mockLogger = (await import('../../src/logger')).default;
+      const failedPlugins = [{ pluginId: 'pii', requested: 5 }];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      try {
+        await doRedteamRun({ strict: true });
+      } catch {
+        // Expected to throw
+      }
+
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('should call cleanup function when PartialGenerationError is thrown', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      const failedPlugins = [{ pluginId: 'pii', requested: 5 }];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      try {
+        await doRedteamRun({ strict: true });
+      } catch {
+        // Expected to throw
+      }
+
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should re-throw other errors without special handling', async () => {
+      const genericError = new Error('Some other error');
+      vi.mocked(doGenerateRedteam).mockRejectedValue(genericError);
+
+      await expect(doRedteamRun({})).rejects.toThrow('Some other error');
+    });
+
+    it('should pass strict option through to doGenerateRedteam', async () => {
+      await doRedteamRun({ strict: true });
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.objectContaining({
+          strict: true,
+        }),
+      );
+    });
+
+    it('should not pass strict option when not specified', async () => {
+      await doRedteamRun({});
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          strict: true,
+        }),
       );
     });
   });

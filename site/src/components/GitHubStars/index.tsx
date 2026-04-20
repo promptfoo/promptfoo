@@ -1,5 +1,6 @@
-// biome-ignore lint/correctness/noUnusedImports: React is required for JSX
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './styles.module.css';
 
 const CACHE_KEY = 'github_stars_cache_promptfoo';
@@ -45,7 +46,9 @@ function setCachedStars(stars: string): void {
 }
 
 export default function GitHubStars(): React.ReactElement {
-  const [stars, setStars] = useState<string>(() => getCachedStars() || '9k');
+  const [stars, setStars] = useState<string>(
+    () => getCachedStars() || SITE_CONSTANTS.GITHUB_STARS_DISPLAY,
+  );
 
   useEffect(() => {
     // Skip fetch if we have cached data
@@ -56,7 +59,6 @@ export default function GitHubStars(): React.ReactElement {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-    // biome-ignore lint/style/noRestrictedGlobals: Browser fetch is appropriate for client-side component
     fetch('https://api.github.com/repos/promptfoo/promptfoo', {
       signal: controller.signal,
     })
@@ -83,7 +85,7 @@ export default function GitHubStars(): React.ReactElement {
 
   return (
     <a
-      href="https://github.com/promptfoo/promptfoo"
+      href="https://github.com/promptfoo/promptfoo#readme"
       target="_blank"
       rel="noopener noreferrer"
       className={styles.githubStars}

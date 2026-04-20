@@ -1,5 +1,6 @@
-import http from 'node:http';
 import { EventEmitter } from 'node:events';
+import http from 'node:http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
@@ -36,10 +37,10 @@ vi.mock('../../src/models/eval', () => ({
   getEvalSummaries: vi.fn().mockResolvedValue([]),
 }));
 
-// Import after mocks are set up
-import { startServer, handleServerError } from '../../src/server/server';
 import { setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
+// Import after mocks are set up
+import { handleServerError, startServer } from '../../src/server/server';
 
 describe('server', () => {
   describe('handleServerError', () => {
@@ -78,10 +79,13 @@ describe('server', () => {
   });
 
   describe('startServer shutdown behavior', () => {
-    let mockHttpServer: EventEmitter & {
+    type MockHttpServer = EventEmitter & {
       listen: ReturnType<typeof vi.fn>;
       close: ReturnType<typeof vi.fn>;
+      listening: boolean;
     };
+
+    let mockHttpServer: MockHttpServer;
     let originalCreateServer: typeof http.createServer;
     let signalHandlers: Map<string | symbol, ((...args: unknown[]) => void)[]>;
 
@@ -105,16 +109,22 @@ describe('server', () => {
 
       // Create mock HTTP server
       mockHttpServer = Object.assign(new EventEmitter(), {
+        listening: false,
         listen: vi.fn().mockImplementation(function (
-          this: EventEmitter,
+          this: MockHttpServer,
           _port: number,
           callback: () => void,
         ) {
-          // Simulate async listen
+          // Simulate async listen - server is now listening
+          this.listening = true;
           setImmediate(() => callback());
           return this;
         }),
-        close: vi.fn().mockImplementation(function (callback?: (err?: Error) => void) {
+        close: vi.fn().mockImplementation(function (
+          this: MockHttpServer,
+          callback?: (err?: Error) => void,
+        ) {
+          this.listening = false;
           setImmediate(() => callback?.());
         }),
       });
@@ -204,6 +214,10 @@ describe('server', () => {
       expect(logger.info).toHaveBeenCalledWith('Server closed');
     });
 
+    // Note: Testing the case where socket.io already closed the HTTP server would require
+    // mocking socket.io at the module level. The fix (checking httpServer.listening) handles
+    // this case in production where io.close() closes the underlying server.
+    //
     // Note: Testing the 5-second force shutdown timeout requires mocking socket.io
     // at the module level, which is complex. The timeout exists as a safety measure
     // and the core shutdown logic is tested by the other tests.

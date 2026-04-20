@@ -6,13 +6,14 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-responses
+cd openai-responses
 ```
 
 ## Examples
 
 ### Basic Responses API (`promptfooconfig.yaml`)
 
-Basic example showing how to use the Responses API with different models and configurations.
+Basic example showing how to use the Responses API with the GPT-5.4 family (`gpt-5.4`, `gpt-5.4-mini`, `gpt-5.4-nano`) and a GPT-4.1 comparison model.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
@@ -57,6 +58,14 @@ Example demonstrating GPT-5.1's key features including:
 - **Verbosity control**: Adjustable output length (`low`, `medium`, `high`)
 - **Reasoning effort levels**: Compare `none`, `medium`, and `high` reasoning modes
 - **Coding tasks**: Optimized for coding and problem-solving workflows
+
+### GPT-5.2 (`promptfooconfig.gpt-5.2.yaml`)
+
+Example comparing GPT-5.2 with different reasoning effort levels:
+
+- **none**: No reasoning tokens for fastest responses
+- **medium**: Balanced reasoning for most tasks
+- **high**: Maximum reasoning for complex problem-solving
 
 ### Image Processing (`promptfooconfig.image.yaml`)
 
@@ -106,6 +115,10 @@ npx promptfoo eval -c promptfooconfig.reasoning.yaml
 
 # GPT-5.1 example
 npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
+
+# GPT-5.2 example
+npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
+
 ```
 
 ## Prerequisites
