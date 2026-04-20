@@ -1,33 +1,28 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import LockIcon from '@mui/icons-material/Lock';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
-import Chip from '@mui/material/Chip';
-import Collapse from '@mui/material/Collapse';
-import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import { alpha, useTheme } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
+import { Checkbox } from '@app/components/ui/checkbox';
+import { Collapsible, CollapsibleContent } from '@app/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useApiHealth } from '@app/hooks/useApiHealth';
+import { cn } from '@app/lib/utils';
 import {
   displayNameOverrides,
   riskCategorySeverityMap,
   Severity,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import type { Plugin } from '@promptfoo/redteam/constants';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import { TestCaseGenerateButton } from './TestCaseDialog';
-import { useTestCaseGeneration } from './TestCaseGenerationProvider';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { ChevronDown, HelpCircle, Lock, Settings } from 'lucide-react';
+import { requiresPluginConfig } from '../constants';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
+import { TestCaseGenerateButton } from './TestCaseDialog';
+import { useTestCaseGeneration } from './TestCaseGenerationProvider';
+import type { Plugin } from '@promptfoo/redteam/constants';
 
 interface PluginGroup {
   name: string;
@@ -51,6 +46,7 @@ interface VerticalSuiteCardProps {
   suite: VerticalSuite;
   selectedPlugins: Set<Plugin>;
   onPluginToggle: (plugin: Plugin) => void;
+  setSelectedPlugins: (plugins: Set<Plugin>) => void;
   onConfigClick: (plugin: Plugin) => void;
   onGenerateTestCase: (plugin: Plugin) => void;
   isPluginConfigured: (plugin: Plugin) => boolean;
@@ -59,12 +55,11 @@ interface VerticalSuiteCardProps {
   onUpgradeClick?: () => void;
 }
 
-const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
-
 export default function VerticalSuiteCard({
   suite,
   selectedPlugins,
   onPluginToggle,
+  setSelectedPlugins,
   onConfigClick,
   onGenerateTestCase,
   isPluginConfigured,
@@ -72,7 +67,6 @@ export default function VerticalSuiteCard({
   hasEnterpriseAccess,
   onUpgradeClick,
 }: VerticalSuiteCardProps) {
-  const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
   const {
     data: { status: apiHealthStatus },
@@ -92,11 +86,12 @@ export default function VerticalSuiteCard({
   const someSelected = selectedCount > 0 && !allSelected;
 
   const severityCounts = useMemo(() => {
-    const counts = {
+    const counts: Record<Severity, number> = {
       [Severity.Critical]: 0,
       [Severity.High]: 0,
       [Severity.Medium]: 0,
       [Severity.Low]: 0,
+      [Severity.Informational]: 0,
     };
     suite.plugins.forEach((plugin) => {
       const severity = riskCategorySeverityMap[plugin];
@@ -113,19 +108,19 @@ export default function VerticalSuiteCard({
       if (isLocked) {
         return;
       }
-      suite.plugins.forEach((plugin) => {
-        if (allSelected) {
-          if (selectedPlugins.has(plugin)) {
-            onPluginToggle(plugin);
-          }
-        } else {
-          if (!selectedPlugins.has(plugin)) {
-            onPluginToggle(plugin);
-          }
-        }
-      });
+      // Batch update: toggle all suite plugins in a single state update
+      // This prevents infinite render loops caused by calling onPluginToggle in a forEach loop
+      const newSelection = new Set(selectedPlugins);
+      if (allSelected) {
+        // Remove all suite plugins from selection
+        suite.plugins.forEach((plugin) => newSelection.delete(plugin));
+      } else {
+        // Add all suite plugins to selection
+        suite.plugins.forEach((plugin) => newSelection.add(plugin));
+      }
+      setSelectedPlugins(newSelection);
     },
-    [suite.plugins, allSelected, selectedPlugins, onPluginToggle, isLocked],
+    [suite.plugins, allSelected, selectedPlugins, setSelectedPlugins, isLocked],
   );
 
   const handleExpandClick = useCallback(() => {
@@ -145,518 +140,376 @@ export default function VerticalSuiteCard({
   );
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        border: '2px solid',
-        borderColor: isLocked
-          ? alpha(theme.palette.warning.main, 0.3)
+    <Card
+      className={cn(
+        'overflow-hidden rounded-lg border-2 transition-all',
+        isLocked
+          ? 'border-amber-500/30 hover:border-amber-500/50'
           : allSelected
-            ? 'primary.main'
+            ? 'border-primary hover:border-primary'
             : someSelected
-              ? alpha(theme.palette.primary.main, 0.3)
-              : theme.palette.divider,
-        borderRadius: 2,
-        overflow: 'hidden',
-        transition: 'all 0.2s ease-in-out',
-        backgroundColor: isLocked
-          ? `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.03)} 0%, ${alpha(theme.palette.background.paper, 1)} 100%)`
-          : 'background.paper',
-        backgroundImage: isLocked
-          ? `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.03)} 0%, transparent 50%)`
-          : 'none',
-        position: 'relative',
-        '&:hover': {
-          borderColor: isLocked
-            ? alpha(theme.palette.warning.main, 0.5)
-            : allSelected
-              ? 'primary.main'
-              : someSelected
-                ? alpha(theme.palette.primary.main, 0.5)
-                : alpha(theme.palette.primary.main, 0.2),
-          boxShadow: isLocked
-            ? `0 4px 16px ${alpha(theme.palette.warning.main, 0.15)}`
-            : allSelected
-              ? `0 4px 20px ${alpha(theme.palette.primary.main, 0.15)}`
-              : `0 2px 8px ${alpha(theme.palette.action.hover, 0.1)}`,
-        },
-      }}
+              ? 'border-primary/30 hover:border-primary/50'
+              : 'border-border hover:border-primary/20',
+        isLocked ? 'bg-gradient-to-br from-amber-500/[0.03] to-transparent' : 'bg-background',
+        isLocked
+          ? 'hover:shadow-amber-500/15'
+          : allSelected
+            ? 'hover:shadow-primary/15'
+            : 'hover:shadow-sm',
+      )}
     >
       {/* Header */}
-      <Box
-        sx={{
-          p: 3,
-          backgroundColor: isLocked
-            ? alpha(theme.palette.warning.main, 0.04)
-            : alpha(theme.palette.primary.main, 0.02),
-          borderBottom: expanded ? `1px solid ${theme.palette.divider}` : 'none',
-        }}
+      <div
+        className={cn(
+          'p-6',
+          isLocked ? 'bg-amber-500/[0.04]' : 'bg-primary/[0.02]',
+          expanded && 'border-b border-border',
+        )}
       >
-        <Stack direction="row" alignItems="flex-start" spacing={2}>
+        <div className="flex items-start gap-4">
           {/* Icon */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'primary.main',
-              opacity: 0.85,
-              mt: 0.25,
-              fontSize: '2rem',
-            }}
-          >
+          <div className="mt-0.5 flex items-center justify-center text-3xl text-primary opacity-85">
             {suite.icon}
-          </Box>
+          </div>
 
           {/* Content */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.125rem' }}>
-                {suite.name}
-              </Typography>
+          <div className="min-w-0 flex-1">
+            <div className="mb-1.5 flex items-center gap-2">
+              <h3 className="text-lg font-semibold">{suite.name}</h3>
               {isLocked && (
-                <Tooltip title="This feature is only available in Promptfoo Enterprise">
-                  <Chip
-                    icon={<LockIcon sx={{ fontSize: '0.875rem !important' }} />}
-                    label="ENTERPRISE"
-                    size="small"
-                    sx={{
-                      height: 24,
-                      fontSize: '0.65rem',
-                      fontWeight: 700,
-                      letterSpacing: '0.5px',
-                      bgcolor: 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)',
-                      background: 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)',
-                      color: '#fff',
-                      border: 'none',
-                      boxShadow: `0 2px 8px ${alpha(theme.palette.warning.main, 0.3)}`,
-                      '& .MuiChip-icon': {
-                        color: '#fff',
-                      },
-                      '& .MuiChip-label': {
-                        px: 1,
-                      },
-                    }}
-                  />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge className="h-6 gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-[0.65rem] font-bold tracking-wider text-white shadow-md">
+                      <Lock className="size-3" />
+                      ENTERPRISE
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    This feature is only available in Promptfoo Enterprise
+                  </TooltipContent>
                 </Tooltip>
               )}
-              <Chip
-                label={`${suite.plugins.length} tests`}
-                size="small"
-                sx={{
-                  height: 20,
-                  fontSize: '0.7rem',
-                  fontWeight: 600,
-                  bgcolor: alpha(theme.palette.primary.main, 0.08),
-                  color: 'text.secondary',
-                  border: `1px solid ${alpha(theme.palette.primary.main, 0.12)}`,
-                }}
-              />
-            </Stack>
+              <Badge
+                variant="outline"
+                className="h-5 border-primary/10 bg-primary/[0.08] text-[0.7rem] font-semibold text-muted-foreground"
+              >
+                {suite.plugins.length} tests
+              </Badge>
+            </div>
 
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2, lineHeight: 1.5 }}>
+            <p className="mb-4 leading-relaxed text-sm text-muted-foreground">
               {suite.description}
-            </Typography>
+            </p>
 
             {/* Compliance frameworks */}
             {suite.complianceFrameworks && suite.complianceFrameworks.length > 0 && (
-              <Stack direction="row" spacing={0.75} sx={{ mb: 2, flexWrap: 'wrap', gap: 0.5 }}>
+              <div className="mb-4 flex flex-wrap gap-1.5">
                 {suite.complianceFrameworks.map((framework) => (
-                  <Chip
+                  <Badge
                     key={framework}
-                    label={framework}
-                    size="small"
-                    sx={{
-                      height: 22,
-                      fontSize: '0.7rem',
-                      fontWeight: 500,
-                      bgcolor: 'background.default',
-                      color: 'text.secondary',
-                      border: `1px solid ${theme.palette.divider}`,
-                      '& .MuiChip-label': {
-                        px: 1,
-                      },
-                    }}
-                  />
+                    variant="outline"
+                    className="h-5.5 border-border bg-background text-[0.7rem] font-medium text-muted-foreground"
+                  >
+                    {framework}
+                  </Badge>
                 ))}
-              </Stack>
+              </div>
             )}
 
             {/* Severity distribution */}
-            <Stack direction="row" spacing={2.5} sx={{ mb: 2.5 }}>
+            <div className="mb-5 flex gap-5">
               {severityCounts[Severity.Critical] > 0 && (
-                <Tooltip title="Critical severity">
-                  <Stack direction="row" spacing={0.75} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        bgcolor: theme.palette.error.main,
-                      }}
-                    />
-                    <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
-                      {severityCounts[Severity.Critical]} Critical
-                    </Typography>
-                  </Stack>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-1.5 rounded-full bg-red-500" />
+                      <span className="text-xs font-medium">
+                        {severityCounts[Severity.Critical]} Critical
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Critical severity</TooltipContent>
                 </Tooltip>
               )}
               {severityCounts[Severity.High] > 0 && (
-                <Tooltip title="High severity">
-                  <Stack direction="row" spacing={0.75} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        bgcolor: theme.palette.warning.main,
-                      }}
-                    />
-                    <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
-                      {severityCounts[Severity.High]} High
-                    </Typography>
-                  </Stack>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-1.5 rounded-full bg-amber-500" />
+                      <span className="text-xs font-medium">
+                        {severityCounts[Severity.High]} High
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>High severity</TooltipContent>
                 </Tooltip>
               )}
               {severityCounts[Severity.Medium] > 0 && (
-                <Tooltip title="Medium severity">
-                  <Stack direction="row" spacing={0.75} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        bgcolor: theme.palette.info.main,
-                      }}
-                    />
-                    <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
-                      {severityCounts[Severity.Medium]} Medium
-                    </Typography>
-                  </Stack>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-1.5 rounded-full bg-blue-500" />
+                      <span className="text-xs font-medium">
+                        {severityCounts[Severity.Medium]} Medium
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Medium severity</TooltipContent>
                 </Tooltip>
               )}
               {severityCounts[Severity.Low] > 0 && (
-                <Tooltip title="Low severity">
-                  <Stack direction="row" spacing={0.75} alignItems="center">
-                    <Box
-                      sx={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        bgcolor: theme.palette.success.main,
-                      }}
-                    />
-                    <Typography variant="caption" sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
-                      {severityCounts[Severity.Low]} Low
-                    </Typography>
-                  </Stack>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-1.5 rounded-full bg-green-500" />
+                      <span className="text-xs font-medium">
+                        {severityCounts[Severity.Low]} Low
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Low severity</TooltipContent>
                 </Tooltip>
               )}
-            </Stack>
+              {severityCounts[Severity.Informational] > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      <div className="size-1.5 rounded-full bg-blue-400" />
+                      <span className="text-xs font-medium">
+                        {severityCounts[Severity.Informational]} Info
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Informational</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
 
             {/* Actions */}
-            <Stack direction="row" spacing={1.5}>
+            <div className="flex gap-3">
               {isLocked ? (
                 <>
-                  <Tooltip title="View pricing and features">
-                    <Button
-                      variant="contained"
-                      size="medium"
-                      onClick={handleUpgradeClick}
-                      startIcon={<LockIcon sx={{ fontSize: '1.1rem' }} />}
-                      sx={{
-                        fontWeight: 600,
-                        textTransform: 'none',
-                        px: 3,
-                        py: 1,
-                        fontSize: '0.875rem',
-                        background: 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)',
-                        color: '#fff',
-                        boxShadow: `0 4px 12px ${alpha(theme.palette.warning.main, 0.4)}`,
-                        border: 'none',
-                        '&:hover': {
-                          background: 'linear-gradient(135deg, #FB8C00 0%, #F57C00 100%)',
-                          boxShadow: `0 6px 16px ${alpha(theme.palette.warning.main, 0.5)}`,
-                          transform: 'translateY(-1px)',
-                        },
-                        transition: 'all 0.2s ease-in-out',
-                      }}
-                    >
-                      Upgrade to Enterprise
-                    </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={handleUpgradeClick}
+                        className="gap-2 bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2 font-semibold text-white shadow-md hover:from-amber-600 hover:to-amber-700 hover:shadow-lg"
+                      >
+                        <Lock className="size-4" />
+                        Upgrade to Enterprise
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>View pricing and features</TooltipContent>
                   </Tooltip>
                   <Button
-                    variant="text"
-                    size="small"
-                    endIcon={
-                      <ExpandMoreIcon
-                        sx={{
-                          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                          transition: 'transform 0.2s',
-                          fontSize: '1.25rem',
-                        }}
-                      />
-                    }
+                    variant="ghost"
+                    size="sm"
                     onClick={handleExpandClick}
-                    sx={{
-                      color: 'text.secondary',
-                      fontWeight: 500,
-                      textTransform: 'none',
-                      px: 1.5,
-                    }}
+                    className="gap-1 font-medium text-muted-foreground"
                   >
                     {expanded ? 'Collapse' : 'View Details'}
+                    <ChevronDown
+                      className={cn('size-5 transition-transform', expanded && 'rotate-180')}
+                    />
                   </Button>
                 </>
               ) : (
                 <>
                   <Button
-                    variant={allSelected ? 'outlined' : 'contained'}
-                    size="small"
+                    variant={allSelected ? 'outline' : 'default'}
+                    size="sm"
                     onClick={handleToggleAll}
-                    sx={{
-                      fontWeight: 500,
-                      textTransform: 'none',
-                      px: 2,
-                    }}
+                    className="px-4 font-medium"
                   >
                     {allSelected ? 'Deselect All' : `Select All ${suite.plugins.length} Tests`}
                   </Button>
                   <Button
-                    variant="text"
-                    size="small"
-                    endIcon={
-                      <ExpandMoreIcon
-                        sx={{
-                          transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                          transition: 'transform 0.2s',
-                          fontSize: '1.25rem',
-                        }}
-                      />
-                    }
+                    variant="ghost"
+                    size="sm"
                     onClick={handleExpandClick}
-                    sx={{
-                      color: 'text.secondary',
-                      fontWeight: 500,
-                      textTransform: 'none',
-                      px: 1.5,
-                    }}
+                    className="gap-1 font-medium text-muted-foreground"
                   >
                     {expanded ? 'Collapse' : 'Expand'}
+                    <ChevronDown
+                      className={cn('size-5 transition-transform', expanded && 'rotate-180')}
+                    />
                   </Button>
                 </>
               )}
-            </Stack>
-          </Box>
-        </Stack>
-      </Box>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Expanded content */}
-      <Collapse in={expanded}>
-        <Box sx={{ p: 3, bgcolor: 'background.paper' }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, lineHeight: 1.6 }}>
-            {suite.longDescription}
-          </Typography>
+      <Collapsible open={expanded}>
+        <CollapsibleContent>
+          <div className="bg-background p-6">
+            <p className="mb-6 leading-relaxed text-sm text-muted-foreground">
+              {suite.longDescription}
+            </p>
 
-          <Stack spacing={3}>
-            {suite.pluginGroups.map((group) => (
-              <Box key={group.name}>
-                <Typography
-                  variant="subtitle2"
-                  sx={{
-                    mb: 1.5,
-                    fontWeight: 600,
-                    color: 'text.primary',
-                    fontSize: '0.8125rem',
-                    letterSpacing: '0.01em',
-                  }}
-                >
-                  {group.name}
-                </Typography>
-                <Stack spacing={1}>
-                  {group.plugins.map((plugin) => {
-                    const isSelected = selectedPlugins.has(plugin);
-                    const pluginDisabled = isPluginDisabled(plugin);
-                    const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
-                    const hasError = requiresConfig && !isPluginConfigured(plugin);
-                    const severity = riskCategorySeverityMap[plugin];
+            <div className="space-y-6">
+              {suite.pluginGroups.map((group) => (
+                <div key={group.name}>
+                  <h4 className="mb-3 text-[0.8125rem] font-semibold tracking-[0.01em] text-foreground">
+                    {group.name}
+                  </h4>
+                  <div className="space-y-2">
+                    {group.plugins.map((plugin) => {
+                      const isSelected = selectedPlugins.has(plugin);
+                      const pluginDisabled = isPluginDisabled(plugin);
+                      const requiresConfig = requiresPluginConfig(plugin);
+                      const hasError = requiresConfig && !isPluginConfigured(plugin);
+                      const severity = riskCategorySeverityMap[plugin];
 
-                    return (
-                      <Paper
-                        key={plugin}
-                        variant="outlined"
-                        onClick={() => {
-                          if (!pluginDisabled && !isLocked) {
-                            onPluginToggle(plugin);
-                          }
-                        }}
-                        sx={{
-                          p: 1.5,
-                          cursor: pluginDisabled || isLocked ? 'not-allowed' : 'pointer',
-                          opacity: pluginDisabled ? 0.5 : isLocked ? 0.85 : 1,
-                          borderColor: isSelected
-                            ? hasError
-                              ? 'error.main'
-                              : 'primary.main'
-                            : 'divider',
-                          bgcolor: isSelected
-                            ? hasError
-                              ? alpha(theme.palette.error.main, 0.04)
-                              : alpha(theme.palette.primary.main, 0.04)
-                            : 'transparent',
-                          transition: 'all 0.15s ease-in-out',
-                          '&:hover': {
-                            borderColor:
-                              pluginDisabled || isLocked
-                                ? isLocked
-                                  ? alpha(theme.palette.warning.main, 0.2)
-                                  : 'divider'
-                                : isSelected
-                                  ? hasError
-                                    ? 'error.main'
-                                    : 'primary.main'
-                                  : alpha(theme.palette.primary.main, 0.3),
-                            bgcolor:
-                              pluginDisabled || isLocked
-                                ? isLocked
-                                  ? alpha(theme.palette.warning.main, 0.04)
-                                  : 'transparent'
-                                : isSelected
-                                  ? hasError
-                                    ? alpha(theme.palette.error.main, 0.06)
-                                    : alpha(theme.palette.primary.main, 0.06)
-                                  : alpha(theme.palette.action.hover, 0.03),
-                          },
-                        }}
-                      >
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Checkbox
-                            checked={isSelected}
-                            disabled={pluginDisabled || isLocked}
-                            size="small"
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={() => onPluginToggle(plugin)}
-                            color={hasError ? 'error' : 'primary'}
-                          />
-
-                          <TestCaseGenerateButton
-                            onClick={() => onGenerateTestCase(plugin)}
-                            disabled={
-                              pluginDisabled ||
-                              isLocked ||
-                              apiHealthStatus !== 'connected' ||
-                              (generatingTestCase && generatingPlugin === plugin)
+                      return (
+                        <Card
+                          key={plugin}
+                          onClick={() => {
+                            if (!pluginDisabled && !isLocked) {
+                              onPluginToggle(plugin);
                             }
-                            isGenerating={generatingTestCase && generatingPlugin === plugin}
-                            tooltipTitle={
-                              isLocked
-                                ? 'This feature requires Promptfoo Enterprise'
-                                : pluginDisabled
-                                  ? 'This plugin requires remote generation'
-                                  : apiHealthStatus === 'connected'
-                                    ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
-                                    : 'Promptfoo Cloud connection is required for test generation'
-                            }
-                          />
-
-                          {isSelected && !isLocked && (
-                            <Tooltip title={`Configure ${displayNameOverrides[plugin] || plugin}`}>
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onConfigClick(plugin);
-                                }}
-                                sx={{
-                                  color:
-                                    requiresConfig && !isPluginConfigured(plugin)
-                                      ? 'error.main'
-                                      : 'text.secondary',
-                                }}
-                              >
-                                <SettingsOutlinedIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
+                          }}
+                          className={cn(
+                            'cursor-pointer border p-3 transition-all',
+                            pluginDisabled || isLocked ? 'cursor-not-allowed' : 'hover:bg-muted/30',
+                            pluginDisabled && 'opacity-50',
+                            isLocked && 'opacity-85',
+                            isSelected
+                              ? hasError
+                                ? 'border-destructive bg-destructive/[0.04] hover:bg-destructive/[0.06]'
+                                : 'border-primary bg-primary/[0.04] hover:bg-primary/[0.06]'
+                              : 'border-border',
+                            isLocked && 'hover:border-amber-500/20 hover:bg-amber-500/[0.04]',
                           )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Checkbox
+                              checked={isSelected}
+                              disabled={pluginDisabled || isLocked}
+                              onClick={(e) => e.stopPropagation()}
+                              onCheckedChange={() => onPluginToggle(plugin)}
+                              className={
+                                hasError
+                                  ? 'border-destructive data-[state=checked]:bg-destructive'
+                                  : ''
+                              }
+                            />
 
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Stack direction="row" alignItems="center" spacing={1}>
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  fontWeight: 500,
-                                  color: hasError ? 'error.main' : 'text.primary',
-                                }}
-                              >
-                                {displayNameOverrides[plugin] || plugin}
-                              </Typography>
-                              {severity && (
-                                <Chip
-                                  label={severity}
-                                  size="small"
-                                  sx={{
-                                    height: 18,
-                                    fontSize: '0.65rem',
-                                    fontWeight: 600,
-                                    textTransform: 'capitalize',
-                                    bgcolor:
-                                      severity === Severity.Critical
-                                        ? alpha(theme.palette.error.main, 0.1)
-                                        : severity === Severity.High
-                                          ? alpha(theme.palette.warning.main, 0.1)
-                                          : severity === Severity.Medium
-                                            ? alpha(theme.palette.info.main, 0.1)
-                                            : alpha(theme.palette.success.main, 0.1),
-                                    color:
-                                      severity === Severity.Critical
-                                        ? theme.palette.error.main
-                                        : severity === Severity.High
-                                          ? theme.palette.warning.main
-                                          : severity === Severity.Medium
-                                            ? theme.palette.info.main
-                                            : theme.palette.success.main,
-                                  }}
-                                />
-                              )}
-                            </Stack>
-                            {subCategoryDescriptions[plugin] && (
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{
-                                  display: 'block',
-                                  mt: 0.5,
-                                  lineHeight: 1.4,
-                                }}
-                              >
-                                {subCategoryDescriptions[plugin]}
-                              </Typography>
+                            <TestCaseGenerateButton
+                              onClick={() => onGenerateTestCase(plugin)}
+                              disabled={
+                                pluginDisabled ||
+                                isLocked ||
+                                apiHealthStatus !== 'connected' ||
+                                (generatingTestCase && generatingPlugin === plugin)
+                              }
+                              isGenerating={generatingTestCase && generatingPlugin === plugin}
+                              tooltipTitle={
+                                isLocked
+                                  ? 'This feature requires Promptfoo Enterprise'
+                                  : pluginDisabled
+                                    ? 'This plugin requires remote generation'
+                                    : apiHealthStatus === 'connected'
+                                      ? `Generate a test case for ${displayNameOverrides[plugin] || plugin}`
+                                      : 'Promptfoo Cloud connection is required for test generation'
+                              }
+                            />
+
+                            {isSelected && !isLocked && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className={cn(
+                                      'size-8',
+                                      requiresConfig && !isPluginConfigured(plugin)
+                                        ? 'text-destructive'
+                                        : 'text-muted-foreground',
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onConfigClick(plugin);
+                                    }}
+                                  >
+                                    <Settings className="size-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Configure {displayNameOverrides[plugin] || plugin}
+                                </TooltipContent>
+                              </Tooltip>
                             )}
-                          </Box>
 
-                          {hasSpecificPluginDocumentation(plugin) && (
-                            <Tooltip title="View documentation">
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(getPluginDocumentationUrl(plugin), '_blank');
-                                }}
-                              >
-                                <HelpOutlineIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          )}
-                        </Stack>
-                      </Paper>
-                    );
-                  })}
-                </Stack>
-              </Box>
-            ))}
-          </Stack>
-        </Box>
-      </Collapse>
-    </Paper>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={cn(
+                                    'text-sm font-medium',
+                                    hasError ? 'text-destructive' : 'text-foreground',
+                                  )}
+                                >
+                                  {displayNameOverrides[plugin] || plugin}
+                                </span>
+                                {severity && (
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      'h-4.5 text-[0.65rem] font-semibold capitalize',
+                                      severity === Severity.Critical &&
+                                        'border-red-200 bg-red-500/10 text-red-600 dark:border-red-800 dark:text-red-400',
+                                      severity === Severity.High &&
+                                        'border-amber-200 bg-amber-500/10 text-amber-600 dark:border-amber-800 dark:text-amber-400',
+                                      severity === Severity.Medium &&
+                                        'border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800 dark:text-blue-400',
+                                      severity === Severity.Low &&
+                                        'border-green-200 bg-green-500/10 text-green-600 dark:border-green-800 dark:text-green-400',
+                                      severity === Severity.Informational &&
+                                        'border-sky-200 bg-sky-500/10 text-sky-600 dark:border-sky-800 dark:text-sky-400',
+                                    )}
+                                  >
+                                    {severity}
+                                  </Badge>
+                                )}
+                              </div>
+                              {subCategoryDescriptions[plugin] && (
+                                <p className="mt-1 text-xs leading-snug text-muted-foreground">
+                                  {subCategoryDescriptions[plugin]}
+                                </p>
+                              )}
+                            </div>
+
+                            {hasSpecificPluginDocumentation(plugin) && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-8 text-muted-foreground"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(getPluginDocumentationUrl(plugin), '_blank');
+                                    }}
+                                  >
+                                    <HelpCircle className="size-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>View documentation</TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </Card>
   );
 }

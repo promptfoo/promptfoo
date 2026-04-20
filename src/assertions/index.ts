@@ -8,21 +8,21 @@ import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
+import { matchesClassification } from '../matchers/classification';
+import { matchesSelectBest } from '../matchers/comparison';
+import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matchers/llmGrading';
+import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
-  matchesClassification,
-  matchesClosedQa,
   matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-  matchesFactuality,
-  matchesLlmRubric,
-  matchesModeration,
-  matchesSelectBest,
-  matchesSimilarity,
-} from '../matchers';
+} from '../matchers/rag';
+import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
@@ -32,10 +32,13 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  type TraceData,
+  type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -65,7 +68,6 @@ import { handleJavascript } from './javascript';
 import { handleContainsJson, handleIsJson } from './json';
 import { handleLatency } from './latency';
 import { handleLevenshtein } from './levenshtein';
-import { handleTtft } from './ttft';
 import { handleLlmRubric } from './llmRubric';
 import { handleModelGradedClosedQa } from './modelGradedClosedQa';
 import { handleModeration } from './moderation';
@@ -78,19 +80,30 @@ import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
 import { handleRuby } from './ruby';
+import { handleSearchRubric } from './searchRubric';
 import { handleSimilar } from './similar';
+import { handleSkillUsed } from './skill';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
 import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
+import {
+  handleTrajectoryGoalSuccess,
+  handleTrajectoryStepCount,
+  handleTrajectoryToolArgsMatch,
+  handleTrajectoryToolSequence,
+  handleTrajectoryToolUsed,
+} from './trajectory';
+import { handleTtft } from './ttft';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
-import { handleSearchRubric } from './searchRubric';
+import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
 
 import type {
+  AssertionOrSet,
   AssertionParams,
   AssertionValueFunctionContext,
   BaseAssertionTypes,
@@ -99,6 +112,12 @@ import type {
 } from '../types/index';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
+const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
+const DEFAULT_TRACE_FETCH_RETRY_DELAY_MS = 250;
+const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
+const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
+const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
+const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -110,7 +129,98 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-closedqa',
   'model-graded-factuality',
   'search-rubric',
+  'trajectory:goal-success',
 ]);
+
+const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
+  'javascript',
+  'python',
+  'ruby',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
+  'trajectory:goal-success',
+  'trajectory:step-count',
+  'trajectory:tool-args-match',
+  'trajectory:tool-sequence',
+  'trajectory:tool-used',
+]);
+
+export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionUsesTrace);
+  }
+
+  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+}
+
+function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+  if (assertionUsesTrace(assertion)) {
+    return true;
+  }
+
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionMayNeedTraceContext);
+  }
+
+  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+    return true;
+  }
+
+  return typeof assertion.value === 'string'
+    ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
+    : false;
+}
+
+export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
+  return Boolean(assertions?.some(assertionMayNeedTraceContext));
+}
+
+async function loadTraceData(traceId: string): Promise<TraceData | null> {
+  const traceStore = getTraceStore();
+  const maxAttempts = Math.min(
+    MAX_TRACE_FETCH_MAX_ATTEMPTS,
+    Math.max(1, getEnvInt('PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS', DEFAULT_TRACE_FETCH_MAX_ATTEMPTS)),
+  );
+  const retryDelayMs = Math.min(
+    MAX_TRACE_FETCH_RETRY_DELAY_MS,
+    Math.max(
+      0,
+      getEnvInt('PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS', DEFAULT_TRACE_FETCH_RETRY_DELAY_MS),
+    ),
+  );
+  const stablePolls = Math.min(
+    MAX_TRACE_FETCH_STABLE_POLLS,
+    Math.max(1, getEnvInt('PROMPTFOO_TRACE_FETCH_STABLE_POLLS', DEFAULT_TRACE_FETCH_STABLE_POLLS)),
+  );
+
+  let lastSpanCount = -1;
+  let stableObservations = 0;
+  let latestTrace: TraceData | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
+
+    const spanCount = latestTrace?.spans?.length ?? 0;
+    if (spanCount > 0) {
+      stableObservations = spanCount === lastSpanCount ? stableObservations + 1 : 1;
+      lastSpanCount = spanCount;
+
+      if (stableObservations >= stablePolls || attempt === maxAttempts - 1) {
+        return latestTrace;
+      }
+    } else {
+      stableObservations = 0;
+      lastSpanCount = spanCount;
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await sleep(retryDelayMs);
+    }
+  }
+
+  return latestTrace;
+}
 
 const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,
@@ -184,20 +294,54 @@ const ASSERTION_HANDLERS: Record<
   ruby: handleRuby,
   'rouge-n': handleRougeScore,
   'search-rubric': handleSearchRubric,
+  'skill-used': handleSkillUsed,
   similar: handleSimilar,
   'similar:cosine': handleSimilar,
   'similar:dot': handleSimilar,
   'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
   'tool-call-f1': handleToolCallF1,
+  'trajectory:goal-success': handleTrajectoryGoalSuccess,
+  'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
+  'trajectory:step-count': handleTrajectoryStepCount,
+  'trajectory:tool-sequence': handleTrajectoryToolSequence,
+  'trajectory:tool-used': handleTrajectoryToolUsed,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
   ttft: handleTtft,
   webhook: handleWebhook,
+  'word-count': handleWordCount,
 };
 
 const nunjucks = getNunjucksEngine();
+
+/**
+ * Renders a metric name template with test variables.
+ * @param metric - The metric name, possibly containing Nunjucks template syntax
+ * @param vars - The test variables to use for rendering
+ * @returns The rendered metric name, or the original if rendering fails
+ */
+export function renderMetricName(
+  metric: string | undefined,
+  vars: Record<string, unknown>,
+): string | undefined {
+  if (!metric) {
+    return metric;
+  }
+  try {
+    const rendered = nunjucks.renderString(metric, vars);
+    if (rendered === '' && metric !== '') {
+      logger.debug(`Metric template "${metric}" rendered to empty string`);
+    }
+    return rendered;
+  } catch (error) {
+    logger.warn(
+      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
+    );
+    return metric;
+  }
+}
 
 /**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
@@ -225,19 +369,26 @@ export async function runAssertion({
   provider,
   assertion,
   test,
+  vars,
   latencyMs,
   providerResponse,
   traceId,
+  traceData,
 }: {
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
+  traceData?: TraceData | null;
 }): Promise<GradingResult> {
+  // Use resolved vars if provided, otherwise fall back to test.vars
+  const resolvedVars = vars || test.vars || {};
+
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
@@ -245,7 +396,7 @@ export async function runAssertion({
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
-      vars: test.vars,
+      vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
@@ -253,7 +404,7 @@ export async function runAssertion({
 
   const context: AssertionValueFunctionContext = {
     prompt,
-    vars: test.vars || {},
+    vars: resolvedVars,
     test,
     logProbs,
     provider,
@@ -262,17 +413,16 @@ export async function runAssertion({
   };
 
   // Add trace data if traceId is available
-  if (traceId) {
+  if (traceId && assertionMayNeedTraceContext(assertion)) {
     try {
-      const traceStore = getTraceStore();
-      const traceData = await traceStore.getTrace(traceId);
-      if (traceData) {
+      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      if (resolvedTraceData) {
         context.trace = {
-          traceId: traceData.traceId,
-          evaluationId: traceData.evaluationId,
-          testCaseId: traceData.testCaseId,
-          metadata: traceData.metadata,
-          spans: traceData.spans || [],
+          traceId: resolvedTraceData.traceId,
+          evaluationId: resolvedTraceData.evaluationId,
+          testCaseId: resolvedTraceData.testCaseId,
+          metadata: resolvedTraceData.metadata,
+          spans: resolvedTraceData.spans || [],
         };
       }
     } catch (error) {
@@ -281,8 +431,9 @@ export async function runAssertion({
   }
 
   // Render assertion values
+  type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
-  let valueFromScript: string | boolean | number | GradingResult | object | undefined;
+  let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -291,9 +442,9 @@ export async function runAssertion({
       let functionName: string | undefined;
 
       if (fileRef.includes(':')) {
-        const [pathPart, funcPart] = fileRef.split(':');
-        filePath = pathPart;
-        functionName = funcPart;
+        const colonIndex = fileRef.indexOf(':');
+        filePath = fileRef.slice(0, colonIndex);
+        functionName = fileRef.slice(colonIndex + 1);
       }
 
       filePath = path.resolve(basePath, filePath);
@@ -303,10 +454,11 @@ export async function runAssertion({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py')) {
         try {
-          const pythonScriptOutput = await runPython(filePath, functionName || 'get_assert', [
-            output,
-            context,
-          ]);
+          const pythonScriptOutput = await runPython<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
           valueFromScript = pythonScriptOutput;
           logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
@@ -320,10 +472,11 @@ export async function runAssertion({
       } else if (filePath.endsWith('.rb')) {
         try {
           const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
-            output,
-            context,
-          ]);
+          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
+            filePath,
+            functionName || 'get_assert',
+            [output, context],
+          );
           valueFromScript = rubyScriptOutput;
           logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
@@ -349,7 +502,7 @@ export async function runAssertion({
       valueFromScript = await Promise.resolve(requiredModule(output, context));
     } else {
       // It's a normal string value
-      renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
@@ -358,7 +511,7 @@ export async function runAssertion({
         if (v.startsWith('file://')) {
           return processFileReference(v);
         }
-        return nunjucks.renderString(v, test.vars || {});
+        return nunjucks.renderString(v, resolvedVars);
       }
       return v;
     });
@@ -410,11 +563,14 @@ export async function runAssertion({
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  // Generate traceparent for grader calls to link them to the main trace
+  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
-        vars: test.vars || {},
+        vars: resolvedVars,
+        ...(graderTraceparent && { traceparent: graderTraceparent }),
       }
     : undefined;
 
@@ -478,6 +634,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  vars,
   traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
@@ -486,6 +643,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
   traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
@@ -526,34 +684,50 @@ export async function runAssertions({
     })
     .flat();
 
-  await async.forEachOfLimit(
-    asserts,
-    ASSERTIONS_MAX_CONCURRENCY,
-    async ({ assertion, assertResult, index }) => {
-      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-        // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
-        return;
-      }
+  const shouldPreloadTrace =
+    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+  let preloadedTraceData: TraceData | null | undefined;
+  if (shouldPreloadTrace && traceId) {
+    try {
+      preloadedTraceData = await loadTraceData(traceId);
+    } catch (error) {
+      logger.debug(`Failed to preload trace data for assertions: ${error}`);
+      preloadedTraceData = null;
+    }
+  }
 
-      const result = await runAssertion({
-        prompt,
-        provider,
-        providerResponse,
-        assertion,
-        test,
-        latencyMs,
-        assertIndex: index,
-        traceId,
-      });
+  // Serialize when the grouping queue is active: concurrent dispatch can
+  // reorder provider enqueues and split same-judge groups.
+  const concurrency = getProviderCallExecutionContext()?.providerCallQueue
+    ? 1
+    : ASSERTIONS_MAX_CONCURRENCY;
 
-      assertResult.addResult({
-        index,
-        result,
-        metric: assertion.metric,
-        weight: assertion.weight,
-      });
-    },
-  );
+  await async.forEachOfLimit(asserts, concurrency, async ({ assertion, assertResult, index }) => {
+    if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
+      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+      return;
+    }
+
+    const result = await runAssertion({
+      prompt,
+      provider,
+      providerResponse,
+      assertion,
+      test,
+      vars,
+      latencyMs,
+      assertIndex: index,
+      traceId,
+      traceData: preloadedTraceData,
+    });
+
+    assertResult.addResult({
+      index,
+      result,
+      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+      weight: assertion.weight,
+    });
+  });
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
@@ -565,7 +739,7 @@ export async function runAssertions({
     mainAssertResult.addResult({
       index,
       result,
-      metric,
+      metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });
   });

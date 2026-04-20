@@ -1,4 +1,5 @@
 import type { ModelAuditCheck } from '@promptfoo/types/modelAudit';
+
 import type { ModelAuditScanResults } from '../../../../types/modelAudit';
 
 /**
@@ -43,7 +44,17 @@ export interface ScanOptions {
   progress?: boolean;
   sbom?: string;
   output?: string;
+  scanners?: string[];
+  excludeScanner?: string[];
   author?: string;
+}
+
+export interface ScannerCatalogEntry {
+  id: string;
+  class: string;
+  description: string;
+  extensions: string[];
+  dependencies: string[];
 }
 
 export interface ScanIssue {

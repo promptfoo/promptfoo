@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SingleBar } from 'cli-progress';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage';
 

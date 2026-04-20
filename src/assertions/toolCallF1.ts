@@ -1,5 +1,6 @@
-import type { AssertionParams, GradingResult } from '../types/index';
 import invariant from '../util/invariant';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Extracts tool names from various output formats.

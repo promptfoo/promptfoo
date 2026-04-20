@@ -1,8 +1,8 @@
 import { getDefaultPort } from '../constants';
 import logger from '../logger';
 import { startServer } from '../server/server';
-import { setupEnv } from '../util/index';
 import { setConfigDirectoryPath } from '../util/config/manage';
+import { setupEnv } from '../util/index';
 import { BrowserBehavior } from '../util/server';
 import type { Command } from 'commander';
 

@@ -165,7 +165,7 @@ describe('assertion generation', () => {
           defaultConfig: {},
           defaultConfigPath: undefined,
         }),
-      ).rejects.toThrow('Could not find config file');
+      ).rejects.toThrow('Could not find a config file');
     });
 
     it('should handle output without file extension', async () => {

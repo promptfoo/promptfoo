@@ -58,6 +58,36 @@ npm link && promptfoo mycommand --help
 npm run local -- mycommand --verbose
 ```
 
+## Interactive UI Support
+
+Commands that display lists or interactive content can support the Ink-based terminal UI. Interactive mode is **opt-in** via environment variable.
+
+**Adding interactive support to a command:**
+
+```typescript
+.action(async (cmdObj) => {
+  // Check if interactive UI should be used (via PROMPTFOO_ENABLE_INTERACTIVE_UI env var)
+  if (shouldUseInkList()) {
+    // Use Ink-based UI
+    const result = await runInkList({ resourceType: 'evals', items });
+    // Handle selection...
+    return;
+  }
+
+  // Fall back to table output
+  logger.info(wrapTable(tableData, columnWidths));
+});
+```
+
+**Key principles:**
+
+- Always provide non-interactive fallback (table output)
+- Use `shouldUseInkList()` or `shouldUseInkUI()` to check
+- Users enable via `PROMPTFOO_ENABLE_INTERACTIVE_UI=true`
+- Show rich details when user selects an item
+
+See `src/ui/AGENTS.md` for detailed interactive UI guidelines.
+
 ## Do / Don't
 
 **Do:** Use logger, track telemetry, validate with Zod, set exitCode on errors

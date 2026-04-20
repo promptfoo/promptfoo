@@ -1,16 +1,17 @@
 import dedent from 'dedent';
-
 import { VERSION } from '../../constants';
+import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   type MultiTurnStrategy,
   type Plugin,
 } from '../../redteam/constants';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
-import type { ConversationMessage } from '../../redteam/types';
 import { sha256 } from '../../util/createHash';
-import { fetchWithProxy } from '../../util/fetch/index';
+import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
+
+import type { ConversationMessage } from '../../redteam/types';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -116,7 +117,6 @@ const MULTI_TURN_HANDLERS: Record<MultiTurnStrategy, MultiTurnHandler> = {
   'mischievous-user': handleMischievousUserStrategy,
   crescendo: handleCrescendoLikeStrategy,
   custom: handleCrescendoLikeStrategy,
-  simba: handleCrescendoLikeStrategy,
   'jailbreak:hydra': handleHydraStrategy,
 };
 
@@ -259,13 +259,17 @@ async function handleGoatStrategy(
     modifiers: ctx.baseMetadata['modifiers'],
   };
 
-  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithRetries(
+    getRemoteGenerationUrl(),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(goatBody),
     },
-    body: JSON.stringify(goatBody),
-  });
+    REQUEST_TIMEOUT_MS,
+  );
 
   if (!response.ok) {
     throw new Error(`GOAT task failed with status ${response.status}: ${await response.text()}`);
@@ -311,13 +315,17 @@ async function handleMischievousUserStrategy(
     history: ctx.conversationHistory,
   };
 
-  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithRetries(
+    getRemoteGenerationUrl(),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(mischievousBody),
     },
-    body: JSON.stringify(mischievousBody),
-  });
+    REQUEST_TIMEOUT_MS,
+  );
 
   if (!response.ok) {
     throw new Error(
@@ -421,13 +429,17 @@ async function handleHydraStrategy(
     email: ctx.email,
   };
 
-  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithRetries(
+    getRemoteGenerationUrl(),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(hydraBody),
     },
-    body: JSON.stringify(hydraBody),
-  });
+    REQUEST_TIMEOUT_MS,
+  );
 
   if (!response.ok) {
     throw new Error(`Hydra task failed with status ${response.status}: ${await response.text()}`);
@@ -504,13 +516,17 @@ async function handleCrescendoLikeStrategy(
     step: `round-${roundNumber}`,
   };
 
-  const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
+  const response = await fetchWithRetries(
+    getRemoteGenerationUrl(),
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(providerRequest),
     },
-    body: JSON.stringify(providerRequest),
-  });
+    REQUEST_TIMEOUT_MS,
+  );
 
   if (!response.ok) {
     throw new Error(

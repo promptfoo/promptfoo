@@ -1,14 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
-import WarningIcon from '@mui/icons-material/Warning';
-import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { useEffect, useRef, useState } from 'react';
+
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Spinner } from '@app/components/ui/spinner';
+import { cn } from '@app/lib/utils';
+import { isInputComposing } from '@app/utils/keyboard';
+import { AlertTriangle } from 'lucide-react';
 
 interface ConfirmEvalNameDialogProps {
   open: boolean;
@@ -87,70 +93,79 @@ export const ConfirmEvalNameDialog = ({
     }
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isInputComposing(e)) {
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       handleConfirm();
     }
   };
 
+  const displayHelperText =
+    error ||
+    (isLoading && itemCount
+      ? `Processing ${itemCount.toLocaleString()} ${itemLabel}...`
+      : helperText || `Enter a ${label.toLowerCase()} for this evaluation`);
+
   return (
-    <Dialog open={open} onClose={isLoading ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent>
-        {isLargeOperation && (
-          <Alert
-            severity={isVeryLargeOperation ? 'warning' : 'info'}
-            icon={isVeryLargeOperation ? <WarningIcon /> : undefined}
-            sx={{ mb: 2 }}
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !isLoading && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          {isLargeOperation && (
+            <Alert variant={isVeryLargeOperation ? 'warning' : 'info'}>
+              {isVeryLargeOperation && <AlertTriangle className="size-4" />}
+              <AlertContent>
+                <AlertDescription>
+                  <strong>
+                    This evaluation has {itemCount?.toLocaleString()} {itemLabel}.
+                  </strong>{' '}
+                  {isVeryLargeOperation
+                    ? 'This operation may take several minutes. Please be patient.'
+                    : 'This operation may take up to a minute.'}
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="eval-name">{label}</Label>
+            <Input
+              id="eval-name"
+              ref={inputRef}
+              autoFocus
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value);
+                setError(null);
+              }}
+              onKeyDown={handleKeyDown}
+              disabled={isLoading}
+              className={cn(error && 'border-destructive')}
+            />
+            <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>
+              {displayHelperText}
+            </p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={onClose} disabled={isLoading} variant="outline">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={
+              isLoading || !name.trim() || (name.trim() === currentName && itemCount === undefined)
+            }
           >
-            <Typography variant="body2">
-              <strong>
-                This evaluation has {itemCount?.toLocaleString()} {itemLabel}.
-              </strong>
-              {isVeryLargeOperation
-                ? ' This operation may take several minutes. Please be patient.'
-                : ' This operation may take up to a minute.'}
-            </Typography>
-          </Alert>
-        )}
-        <TextField
-          inputRef={inputRef}
-          autoFocus
-          fullWidth
-          label={label}
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            setError(null);
-          }}
-          onKeyDown={handleKeyDown}
-          margin="normal"
-          error={!!error}
-          helperText={
-            error ||
-            (isLoading && itemCount
-              ? `Processing ${itemCount.toLocaleString()} ${itemLabel}...`
-              : helperText || `Enter a ${label.toLowerCase()} for this evaluation`)
-          }
-          disabled={isLoading}
-        />
+            {isLoading && <Spinner size="sm" className="mr-2" />}
+            {isLoading ? 'Processing...' : actionButtonText}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={isLoading}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleConfirm}
-          variant="contained"
-          disabled={
-            isLoading || !name.trim() || (name.trim() === currentName && itemCount === undefined)
-          }
-          startIcon={isLoading ? <CircularProgress size={20} /> : null}
-        >
-          {isLoading ? 'Processing...' : actionButtonText}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 };

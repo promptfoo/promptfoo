@@ -1,0 +1,12 @@
+%% Source diagram for attack-chain.svg (rendered as hand-crafted SVG)
+flowchart LR
+  A[Untrusted web page<br/>hidden instructions] --> B
+
+  subgraph boundary [Agent Trust Boundary]
+    B[Phase 1: Capability discovery<br/>file ops · shell · session · memory] --> C
+    C[Phase 2: Local access & artifact creation<br/>reads internal docs · writes attacker-useful files] --> D
+    D[Phase 3: Unauthorized outbound actions]
+    D --> D1[SMS]
+    D --> D2[Email]
+    D --> D3[Social]
+  end

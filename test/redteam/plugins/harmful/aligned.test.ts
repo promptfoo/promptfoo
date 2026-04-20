@@ -2,20 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/redteam/constants';
 import { categoryAliases } from '../../../../src/redteam/constants/metadata';
 import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned';
-import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider, CallApiFunction } from '../../../../src/types/index';
+import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+
+import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
 
 describe('AlignedHarmfulPlugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
   let plugin: AlignedHarmfulPlugin;
   let harmCategory: keyof typeof HARM_PLUGINS;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: vi.fn() as CallApiFunction,
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    mockProvider = createMockProvider();
 
     // Find a harm category that isn't in unaligned providers
     harmCategory = Object.keys(HARM_PLUGINS).find(
@@ -96,7 +94,7 @@ describe('AlignedHarmfulPlugin', () => {
   });
 
   describe('test case generation', () => {
-    const mockPrompts = [{ prompt: 'Test prompt 1' }, { prompt: 'Test prompt 2' }];
+    const mockPrompts = [{ __prompt: 'Test prompt 1' }, { __prompt: 'Test prompt 2' }];
 
     it('should create properly structured test cases', () => {
       const testCases = plugin['promptsToTestCases'](mockPrompts);

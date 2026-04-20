@@ -8,23 +8,25 @@
  * - Language detection and specification
  */
 
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-import logger from '../../../logger';
+
 import { getCache, isCacheEnabled } from '../../../cache';
-import type {
-  ApiProvider,
-  ProviderResponse,
-  ProviderOptions,
-  CallApiContextParams,
-} from '../../../types/providers';
-import type { EnvOverrides } from '../../../types/env';
 import { getEnvString } from '../../../envars';
+import logger from '../../../logger';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
-import type { ElevenLabsSTTConfig, STTResponse, WERResult } from './types';
 import { calculateWER } from './wer';
+
+import type { EnvOverrides } from '../../../types/env';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from '../../../types/providers';
+import type { ElevenLabsSTTConfig, STTResponse, WERResult } from './types';
 
 interface STTCallContext {
   originalProvider?: string;
@@ -58,7 +60,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       calculateWER: config?.calculateWER || false,
       baseUrl: config?.baseUrl || 'https://api.elevenlabs.io/v1',
       timeout: config?.timeout || 120000,
-      retries: config?.retries || 3,
+      retries: config?.retries ?? 3,
       label: options.label || config?.label,
       apiKey: config?.apiKey,
       apiKeyEnvar: config?.apiKeyEnvar,
