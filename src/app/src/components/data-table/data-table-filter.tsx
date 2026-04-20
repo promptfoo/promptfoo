@@ -510,9 +510,7 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
           aria-label={`Filter ${columnHeader}`}
           className={cn(
             'h-6 w-6 p-0',
-            hasActiveFilter
-              ? 'text-blue-700 dark:text-blue-100'
-              : 'text-zinc-400 dark:text-zinc-500',
+            hasActiveFilter ? 'text-primary' : 'text-zinc-400 dark:text-zinc-500',
           )}
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}

@@ -209,7 +209,33 @@
 }
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Ubuntu,
+    Cantarell,
+    'Noto Sans',
+    sans-serif;
+
+  /* Promptfoo brand tokens (mirrors design2/design-system.html) */
+  --pf-red: #e53a3a;
+  --pf-red-dark: #cb3434;
+  --pf-red-darker: #b32e2e;
+  --pf-red-darkest: #991515;
+  --pf-red-light: #ff7a7a;
+  --pf-red-lighter: #ffa0a0;
+  --pf-red-lightest: #ffc6c6;
+  --pf-red-bg: #ffe8e8;
+  --pf-logo-orange: #fe2c06;
+  --pf-logo-maroon: #8a0a1c;
+  --pf-blue-accent: #3578e5;
+  --pf-ink: #10191c;
+  --pf-ink-soft: #525860;
+  --pf-font-base: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --pf-font-mono: 'JetBrains Mono', 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* Z-index scale for layered components
    * Banner < AppBar < Modal < Dropdown ensures proper stacking:
@@ -227,14 +253,14 @@
   /* Layout dimensions */
   --nav-height: 3.5rem; /* Navigation bar height (h-14 = 56px) */
 
-  /* Design tokens - Light mode (aligned with MUI theme) */
+  /* Design tokens - Light mode (Promptfoo brand, red primary) */
   --background: 210 40% 98%; /* #f8fafc - slate-50 */
   --foreground: 222.2 47.4% 11.2%; /* #0f172a - slate-900 */
   --card: 0 0% 100%; /* #ffffff */
   --card-foreground: 222.2 47.4% 11.2%;
   --popover: 0 0% 100%; /* #ffffff */
   --popover-foreground: 222.2 47.4% 11.2%;
-  --primary: 217.2 91.2% 52.9%; /* #2563eb - blue-600 */
+  --primary: 0 77% 56%; /* #e53a3a - pf-red */
   --primary-foreground: 0 0% 100%; /* #ffffff */
   --secondary: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
   --secondary-foreground: 222.2 47.4% 11.2%; /* slate-900 */
@@ -246,7 +272,7 @@
   --destructive-foreground: 0 0% 100%;
   --border: 214.3 31.8% 91.4%; /* #e2e8f0 - slate-200 */
   --input: 214.3 31.8% 91.4%;
-  --ring: 217.2 91.2% 52.9%;
+  --ring: 0 77% 56%; /* match primary */
   --radius: 0.5rem;
 
   /* Severity colors */
@@ -267,7 +293,7 @@
   /* Light mode colors */
   --background-color: #f5f5f5;
   --text-color: #404040;
-  --link-color: #2e6585;
+  --link-color: #b32e2e; /* pf-red-darker */
   --border-color: lightgray;
   --table-border-color: lightgray;
   --pass-color: green;
@@ -298,7 +324,7 @@
   --card-foreground: 210 40% 98%;
   --popover: 222.2 20% 10%;
   --popover-foreground: 210 40% 98%;
-  --primary: 217.2 91.2% 59.8%; /* #3b82f6 - blue-500 */
+  --primary: 0 100% 74%; /* #ff7a7a - pf-red-light for dark mode contrast */
   --primary-foreground: 0 0% 100%;
   --secondary: 217.2 20% 20%; /* slate-800 equivalent */
   --secondary-foreground: 210 40% 98%; /* off-white */
@@ -310,7 +336,7 @@
   --destructive-foreground: 0 0% 100%;
   --border: 217.2 15% 22%; /* Softer, blue-tinted border - NOT pure black */
   --input: 217.2 15% 22%;
-  --ring: 217.2 91.2% 59.8%;
+  --ring: 0 100% 74%; /* match primary */
 
   /* Severity colors - Dark mode */
   --severity-informational: 217 91% 60%;
@@ -318,7 +344,7 @@
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;
   --text-color: #f0f0f0;
-  --link-color: #6fcaff;
+  --link-color: #ff7a7a; /* pf-red-light */
   --border-color: #444444;
   --table-border-color: #444444;
   --pass-color: #b1e9b3;
@@ -638,7 +664,7 @@ input[type='search']::-webkit-search-decoration {
     --card-foreground: 222.2 47.4% 11.2%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 47.4% 11.2%;
-    --primary: 217.2 91.2% 52.9%;
+    --primary: 0 77% 56%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -650,7 +676,7 @@ input[type='search']::-webkit-search-decoration {
     --destructive-foreground: 0 0% 100%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 217.2 91.2% 52.9%;
+    --ring: 0 77% 56%;
     --severity-informational: 217 91% 46%;
 
     --background-color: #f5f5f5;

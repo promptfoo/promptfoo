@@ -57,7 +57,7 @@ function renderDataTableHeaderSortButton({
       size="sm"
       className={cn(
         'h-6 w-6 p-0',
-        sortDirection ? 'text-blue-700 dark:text-blue-100' : 'text-zinc-400 dark:text-zinc-500',
+        sortDirection ? 'text-primary' : 'text-zinc-400 dark:text-zinc-500',
       )}
       onClick={(e) => {
         e.stopPropagation();

@@ -24,7 +24,7 @@
 }
 
 .metric-chip.filterable:hover {
-  color: #2563eb;
+  color: hsl(var(--primary));
   cursor: pointer;
 }
 
@@ -63,18 +63,18 @@
   border-radius: 6px;
   font-size: 0.8125rem;
   font-weight: 500;
-  color: var(--link-color, #007bff);
+  color: hsl(var(--primary));
   background-color: transparent;
-  border: 1px solid var(--link-color, #007bff);
+  border: 1px solid hsl(var(--primary));
   transition: all 0.2s ease-in-out;
   cursor: pointer;
 }
 
 .show-more-toggle:hover {
-  background-color: var(--link-color, #007bff);
+  background-color: hsl(var(--primary));
   color: white;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px -2px rgba(0, 123, 255, 0.25);
+  box-shadow: 0 2px 8px -2px hsl(var(--primary) / 0.25);
 }
 
 /* Dark theme support */
@@ -85,19 +85,19 @@
 }
 
 [data-theme='dark'] .metric-chip:hover {
-  background-color: var(--primary-color, #4299e1);
-  border-color: var(--primary-color, #4299e1);
-  box-shadow: 0 4px 12px -2px rgba(66, 153, 225, 0.25);
+  background-color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  box-shadow: 0 4px 12px -2px hsl(var(--primary) / 0.25);
 }
 
 [data-theme='dark'] .show-more-toggle {
-  color: var(--link-color, #4299e1);
-  border-color: var(--link-color, #4299e1);
+  color: hsl(var(--primary));
+  border-color: hsl(var(--primary));
 }
 
 [data-theme='dark'] .show-more-toggle:hover {
-  background-color: var(--link-color, #4299e1);
-  box-shadow: 0 2px 8px -2px rgba(66, 153, 225, 0.25);
+  background-color: hsl(var(--primary));
+  box-shadow: 0 2px 8px -2px hsl(var(--primary) / 0.25);
 }
 
 /* Responsive design */

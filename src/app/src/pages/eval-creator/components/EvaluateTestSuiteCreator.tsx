@@ -365,7 +365,7 @@ const EvaluateTestSuiteCreator = () => {
                       'hover:bg-muted/50',
                       activeStep === 4 && 'ring-2 ring-primary',
                       config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
-                        ? 'bg-blue-50 dark:bg-blue-950/30'
+                        ? 'bg-red-50 dark:bg-red-950/30'
                         : 'bg-background',
                     )}
                   >
@@ -374,12 +374,12 @@ const EvaluateTestSuiteCreator = () => {
                         className={cn(
                           'flex items-center justify-center size-8 rounded-full border-2 shrink-0',
                           config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency
-                            ? 'bg-blue-100 border-blue-600 dark:bg-blue-950/30 dark:border-blue-400'
+                            ? 'bg-red-100 border-red-600 dark:bg-red-950/30 dark:border-red-400'
                             : 'bg-background border-border',
                         )}
                       >
                         {config.evaluateOptions?.delay || config.evaluateOptions?.maxConcurrency ? (
-                          <Check className="size-4 text-blue-600 dark:text-blue-400" />
+                          <Check className="size-4 text-red-600 dark:text-red-400" />
                         ) : (
                           <span className="text-sm font-bold text-muted-foreground">4</span>
                         )}
