@@ -257,6 +257,52 @@ describe('useServerVirtualizedRows', () => {
     expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'reloaded-25' });
   });
 
+  it('invalidates cached rows beyond the seeded prefix when rowCount changes', async () => {
+    const fetchRows = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ id: 'loaded-25' }], offset: 25 })
+      .mockResolvedValueOnce({ rows: [{ id: 'shifted-25' }], offset: 25 });
+    const initialRows = createRows(0, 2);
+    const { result, rerender } = renderHook(
+      ({ rows, count }) =>
+        useServerVirtualizedRows<TestRow>({
+          initialRows: rows,
+          rowCount: count,
+          pageSize: 25,
+          fetchRows,
+        }),
+      { initialProps: { rows: initialRows, count: 100 } },
+    );
+
+    await act(async () => {
+      await result.current.serverVirtualization.loadRows({
+        startIndex: 25,
+        endIndex: 25,
+        signal: new AbortController().signal,
+      });
+    });
+
+    expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'loaded-25' });
+
+    rerender({ rows: [...initialRows], count: 99 });
+
+    expect(result.current.serverVirtualization.getRow(0)).toEqual(initialRows[0]);
+    expect(result.current.serverVirtualization.getRow(1)).toEqual(initialRows[1]);
+    expect(result.current.serverVirtualization.getRow(25)).toBeUndefined();
+    expect(result.current.loadedRowCount).toBe(2);
+
+    await act(async () => {
+      await result.current.serverVirtualization.loadRows({
+        startIndex: 25,
+        endIndex: 25,
+        signal: new AbortController().signal,
+      });
+    });
+
+    expect(fetchRows).toHaveBeenCalledTimes(2);
+    expect(result.current.serverVirtualization.getRow(25)).toEqual({ id: 'shifted-25' });
+  });
+
   it('prunes rows outside the configured surrounding page window', async () => {
     const fetchRows = vi.fn().mockResolvedValue({ rows: [{ id: 'loaded-75' }], offset: 75 });
     const seededRows = createRows(0, 50);

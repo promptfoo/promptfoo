@@ -82,6 +82,7 @@ export function useServerVirtualizedRows<TData>({
   loadingIndexesRef.current = loadingIndexes;
   const hasMountedRef = React.useRef(false);
   const initialRowsRef = React.useRef(initialRows);
+  const rowCountRef = React.useRef(rowCount);
   const resetKeyRef = React.useRef(resetKey);
   const requestIdRef = React.useRef(0);
   const resetGenerationRef = React.useRef(0);
@@ -105,7 +106,9 @@ export function useServerVirtualizedRows<TData>({
 
   React.useLayoutEffect(() => {
     const previousInitialRows = initialRowsRef.current;
+    const previousRowCount = rowCountRef.current;
     initialRowsRef.current = initialRows;
+    rowCountRef.current = rowCount;
 
     if (rowsByIndexRef.current.size === 0) {
       setRowsByIndex((prev) =>
@@ -115,9 +118,11 @@ export function useServerVirtualizedRows<TData>({
     }
 
     const firstChangedIndex = findFirstChangedIndex(previousInitialRows, initialRows);
-    if (firstChangedIndex === -1) {
+    const rowCountChanged = previousRowCount !== rowCount;
+    if (firstChangedIndex === -1 && !rowCountChanged) {
       return;
     }
+    const invalidationIndex = firstChangedIndex === -1 ? initialRows.length : firstChangedIndex;
 
     resetGenerationRef.current += 1;
     setLoadingIndexes((prev) => {
@@ -127,7 +132,7 @@ export function useServerVirtualizedRows<TData>({
 
       const next = new Map<number, number>();
       for (const [index, requestId] of prev) {
-        if (index < firstChangedIndex) {
+        if (index < invalidationIndex) {
           next.set(index, requestId);
         }
       }
@@ -141,7 +146,7 @@ export function useServerVirtualizedRows<TData>({
 
       const next = new Map<number, TData>();
       for (const [index, row] of prev) {
-        if (index < firstChangedIndex) {
+        if (index < invalidationIndex) {
           next.set(index, row);
         }
       }
@@ -150,7 +155,7 @@ export function useServerVirtualizedRows<TData>({
       });
       return next;
     });
-  }, [initialRows]);
+  }, [initialRows, rowCount]);
 
   const loadRows = React.useCallback(
     async ({ startIndex, endIndex, signal }: ServerVirtualizedRowsRange) => {
