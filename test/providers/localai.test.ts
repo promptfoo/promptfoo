@@ -29,6 +29,27 @@ describe('LocalAI temperature handling', () => {
     expect(callBody.temperature).toBe(0);
   });
 
+  it('should separate OpenAI-compatible reasoning fields from chat output', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        choices: [
+          {
+            message: {
+              content: 'Final answer.',
+              reasoning_content: 'Private reasoning.',
+            },
+          },
+        ],
+      },
+    } as any);
+
+    const provider = new LocalAiChatProvider('test-model');
+    const result = await provider.callApi('Test prompt');
+
+    expect(result.output).toBe('Final answer.');
+    expect(result.reasoning).toEqual([{ type: 'reasoning', content: 'Private reasoning.' }]);
+  });
+
   it('should send temperature: 0 to the API when explicitly configured (completion)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { choices: [{ text: 'Test output' }] },

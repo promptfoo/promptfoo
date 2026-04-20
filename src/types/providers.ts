@@ -195,6 +195,8 @@ export type ReasoningContent =
       type: 'thought';
       /** The thought content */
       thought: string;
+      /** Opaque thought signature for multi-turn continuity */
+      signature?: string;
     }
   | {
       /** Meta Llama-Nemotron (extracted from <think> tags) */

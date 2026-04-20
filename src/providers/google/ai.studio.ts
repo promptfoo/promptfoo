@@ -10,6 +10,7 @@ import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
   createAuthCacheDiscriminator,
+  extractGeminiReasoningFromCandidate,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -522,9 +523,14 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             data.usageMetadata?.promptTokenCount,
             completionForCost,
           );
+      const reasoning = extractGeminiReasoningFromCandidate(
+        candidate,
+        config.showThinking !== false,
+      );
 
       return {
         output,
+        ...(reasoning && { reasoning }),
         tokenUsage,
         cost,
         raw: data,

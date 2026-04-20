@@ -1634,6 +1634,41 @@ describe('AIStudioChatProvider', () => {
     });
 
     describe('thinking token tracking', () => {
+      it('should separate Gemini thought parts into the reasoning field', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: { apiKey: 'test-key' },
+        });
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { text: 'Let me reason briefly.', thought: true, thoughtSignature: 'sig123' },
+                    { text: 'Final answer.' },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 3,
+              totalTokenCount: 20,
+              thoughtsTokenCount: 7,
+            },
+          },
+          cached: false,
+        } as any);
+
+        const response = await provider.callApi('test prompt');
+
+        expect(response.output).toBe('Final answer.');
+        expect(response.reasoning).toEqual([
+          { type: 'thought', thought: 'Let me reason briefly.', signature: 'sig123' },
+        ]);
+      });
+
       it('should track thinking tokens when present in response', async () => {
         const provider = new AIStudioChatProvider('gemini-2.5-flash', {
           config: {

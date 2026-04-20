@@ -24,6 +24,7 @@ import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
   createAuthCacheDiscriminator,
+  extractGeminiReasoningFromCandidate,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -447,6 +448,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
       const dataWithResponse = normalizedData as GeminiResponseData[];
       let output;
+      const reasoningBlocks: NonNullable<ProviderResponse['reasoning']> = [];
 
       for (const datum of dataWithResponse) {
         // Check for blockReason first
@@ -487,6 +489,13 @@ export class GoogleProvider extends GoogleGenericProvider {
         }
 
         const candidate = getCandidate(datum);
+        const reasoning = extractGeminiReasoningFromCandidate(
+          candidate,
+          config.showThinking !== false,
+        );
+        if (reasoning) {
+          reasoningBlocks.push(...reasoning);
+        }
         const safetyFinishReasons = [
           'SAFETY',
           'PROHIBITED_CONTENT',
@@ -592,6 +601,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
       const response: ProviderResponse = {
         output,
+        ...(reasoningBlocks.length > 0 && { reasoning: reasoningBlocks }),
         tokenUsage,
         cost,
         raw: data,

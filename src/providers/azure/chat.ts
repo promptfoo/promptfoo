@@ -18,7 +18,12 @@ import { isClaudeOpus47Model } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from '../shared';
+import {
+  extractReasoningFromOpenAiCompatibleMessage,
+  parseChatPrompt,
+  REQUEST_TIMEOUT_MS,
+  transformTools,
+} from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -386,6 +391,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let output = '';
     let logProbs: any;
     let finishReason: string;
+    let reasoning: ProviderResponse['reasoning'];
 
     try {
       if (data.error) {
@@ -409,6 +415,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           : data.choices[0];
 
         const message = choice?.message;
+        reasoning = extractReasoningFromOpenAiCompatibleMessage(
+          message,
+          config.showThinking !== false,
+        );
 
         // NOTE: The `n` parameter is currently (250709) not supported; if and when it is, `finish_reason` must be
         // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
@@ -473,6 +483,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
 
       return {
         output,
+        ...(reasoning && { reasoning }),
         tokenUsage: cached
           ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
           : {

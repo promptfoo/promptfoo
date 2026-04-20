@@ -21,8 +21,10 @@ import {
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import {
+  extractReasoningFromOpenAiCompatibleMessage,
   parseChatPrompt,
   REQUEST_TIMEOUT_MS,
+  stripOpenAiCompatibleReasoningFields,
   transformToolChoice,
   transformTools,
 } from '../shared';
@@ -35,7 +37,6 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-  ReasoningContent,
 } from '../../types/index';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
@@ -599,18 +600,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
 
-      // Collect reasoning content into separate field (not prepended to output)
-      const reasoningBlocks: ReasoningContent[] = [];
+      const reasoning = extractReasoningFromOpenAiCompatibleMessage(
+        message,
+        config.showThinking !== false,
+      );
       let output: string | object = '';
 
       if (message.reasoning) {
-        reasoningBlocks.push({ type: 'reasoning', content: message.reasoning });
         output = message.content || '';
       } else if (message.content && (message.function_call || message.tool_calls)) {
         if (Array.isArray(message.tool_calls) && message.tool_calls.length === 0) {
           output = message.content;
         } else {
-          output = message;
+          output = stripOpenAiCompatibleReasoningFields(message);
         }
       } else if (
         message.content === null ||
@@ -620,11 +622,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output = message.function_call || message.tool_calls || '';
       } else {
         output = message.content;
-      }
-
-      // Handle DeepSeek reasoning model's reasoning_content
-      if (message.reasoning_content && typeof message.reasoning_content === 'string') {
-        reasoningBlocks.push({ type: 'reasoning', content: message.reasoning_content });
       }
 
       const logProbs = data.choices[0].logprobs?.content?.map(
@@ -639,10 +636,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           logger.error(`Failed to parse JSON output: ${error}`);
         }
       }
-
-      // Build reasoning field (only if we have reasoning content and showThinking is not false)
-      const reasoning =
-        reasoningBlocks.length > 0 && config.showThinking !== false ? reasoningBlocks : undefined;
 
       // Handle function tool callbacks
       const functionCalls: any = message.function_call

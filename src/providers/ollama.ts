@@ -3,7 +3,12 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from './shared';
+import {
+  extractReasoningFromOpenAiCompatibleMessage,
+  parseChatPrompt,
+  REQUEST_TIMEOUT_MS,
+  transformTools,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -50,6 +55,7 @@ interface OllamaCompletionOptions {
   num_thread?: number;
   tools?: any[]; // Support for function calling/tools
   think?: boolean; // Top-level parameter for thinking/reasoning
+  showThinking?: boolean;
   passthrough?: Record<string, any>; // Pass arbitrary fields to the API
 }
 
@@ -89,6 +95,7 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'num_thread',
   'tools',
   'think',
+  'showThinking',
   'passthrough',
 ]);
 
@@ -96,6 +103,7 @@ interface OllamaCompletionJsonL {
   model: string;
   created_at: string;
   response?: string;
+  thinking?: string;
   done: boolean;
   context?: number[];
 
@@ -115,6 +123,7 @@ interface OllamaChatJsonL {
   message?: {
     role: string;
     content: string;
+    thinking?: string;
     images: null;
     tool_calls?: Array<{
       function: {
@@ -198,6 +207,7 @@ export class OllamaCompletionProvider implements ApiProvider {
           OllamaCompletionOptionKeys.has(optionName) &&
           optionName !== 'think' &&
           optionName !== 'tools' &&
+          optionName !== 'showThinking' &&
           optionName !== 'passthrough'
         ) {
           options[optionName] = this.config[optionName];
@@ -258,6 +268,14 @@ export class OllamaCompletionProvider implements ApiProvider {
         })
         .filter((s: string | null) => s !== null)
         .join('');
+      const thinking = lines
+        .map((parsed: OllamaCompletionJsonL) => parsed.thinking || null)
+        .filter((s: string | null) => s !== null)
+        .join('');
+      const reasoning = extractReasoningFromOpenAiCompatibleMessage(
+        { thinking },
+        this.config.showThinking !== false,
+      );
 
       // Extract token usage from the final chunk (where done: true)
       const finalChunk = lines.find((chunk: OllamaCompletionJsonL) => chunk.done);
@@ -278,6 +296,7 @@ export class OllamaCompletionProvider implements ApiProvider {
 
       return {
         output,
+        ...(reasoning && { reasoning }),
         ...(tokenUsage && { tokenUsage }),
       };
     } catch (err) {
@@ -351,7 +370,13 @@ export class OllamaChatProvider implements ApiProvider {
       messages,
       options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
         const optionName = key as keyof OllamaCompletionOptions;
-        if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
+        if (
+          OllamaCompletionOptionKeys.has(optionName) &&
+          optionName !== 'tools' &&
+          optionName !== 'think' &&
+          optionName !== 'showThinking' &&
+          optionName !== 'passthrough'
+        ) {
           options[optionName] = this.config[optionName];
         }
         return options;
@@ -425,6 +450,14 @@ export class OllamaChatProvider implements ApiProvider {
         .filter((s: string | null) => s !== null);
 
       const content = contentParts.join('');
+      const thinking = lines
+        .map((parsed: OllamaChatJsonL) => parsed.message?.thinking || null)
+        .filter((s: string | null) => s !== null)
+        .join('');
+      const reasoning = extractReasoningFromOpenAiCompatibleMessage(
+        { thinking },
+        this.config.showThinking !== false,
+      );
 
       // Find tool_calls from any chunk (they may appear before done: true)
       const chunkWithToolCalls = lines.find(
@@ -484,6 +517,7 @@ export class OllamaChatProvider implements ApiProvider {
 
       return {
         output,
+        ...(reasoning && { reasoning }),
         ...(tokenUsage && { tokenUsage }),
       };
     } catch (err) {

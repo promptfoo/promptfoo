@@ -930,6 +930,49 @@ describe('VertexChatProvider.callGeminiApi', () => {
   });
 
   describe('thinking token tracking', () => {
+    it('should separate Gemini thought parts into the reasoning field', async () => {
+      const provider = new VertexChatProvider('gemini-2.5-flash');
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { text: 'Private Gemini thought.', thought: true, thoughtSignature: 'sig123' },
+                    { text: 'Public answer.' },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 4,
+              totalTokenCount: 25,
+              thoughtsTokenCount: 11,
+            },
+          },
+        ],
+      };
+
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.output).toBe('Public answer.');
+      expect(response.reasoning).toEqual([
+        { type: 'thought', thought: 'Private Gemini thought.', signature: 'sig123' },
+      ]);
+    });
+
     it('should track thinking tokens when present in response', async () => {
       const provider = new VertexChatProvider('gemini-2.5-flash', {
         config: {

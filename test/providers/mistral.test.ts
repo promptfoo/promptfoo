@@ -149,6 +149,117 @@ describe('Mistral', () => {
       });
     });
 
+    it('should separate Magistral thinking content chunks from output', async () => {
+      const mockResponse = {
+        choices: [
+          {
+            message: {
+              content: [
+                { type: 'thinking', thinking: 'I should reason privately.' },
+                { type: 'text', text: 'Final answer.' },
+              ],
+            },
+          },
+        ],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('Final answer.');
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'I should reason privately.' },
+      ]);
+    });
+
+    it('should strip reasoning fields from structured tool-call output', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                content: [
+                  { type: 'thinking', thinking: 'Private tool reasoning.' },
+                  { type: 'text', text: 'Calling tool.' },
+                ],
+                reasoning_content: 'Model-level private reasoning.',
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"query":"weather"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toEqual({
+        content: 'Calling tool.',
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"weather"}' },
+          },
+        ],
+      });
+      expect(JSON.stringify(result.output).toLowerCase()).not.toContain('private');
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Model-level private reasoning.' },
+        { type: 'reasoning', content: 'Private tool reasoning.' },
+      ]);
+    });
+
+    it('should pass Mistral reasoning controls without leaking hidden chunks', async () => {
+      const reasoningProvider = new MistralChatCompletionProvider('mistral-small-latest', {
+        config: { prompt_mode: 'reasoning', reasoning_effort: 'high', showThinking: false },
+      });
+      vi.spyOn(reasoningProvider, 'getApiKey').mockReturnValue('fake-api-key');
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                content: [
+                  { type: 'reasoning', content: 'hidden reasoning' },
+                  { type: 'text', text: 'visible output' },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await reasoningProvider.callApi('Test prompt');
+      const requestBody = JSON.parse(
+        (vi.mocked(fetchWithCache).mock.calls[0][1] as RequestInit).body as string,
+      );
+
+      expect(requestBody).toMatchObject({ prompt_mode: 'reasoning', reasoning_effort: 'high' });
+      expect(result.output).toBe('visible output');
+      expect(result.reasoning).toBeUndefined();
+    });
+
     it('should preserve explicit zero for top_p, random_seed, and max_tokens', async () => {
       const zeroProvider = new MistralChatCompletionProvider('mistral-tiny', {
         config: { top_p: 0, random_seed: 0, max_tokens: 0 },

@@ -703,6 +703,7 @@ These properties can be set under the provider `config` key:
 | isReasoningModel      | Set to `true` if your Azure deployment uses a reasoning model (o1, o3, o3-mini, o4-mini). **Required for reasoning models**                     |
 | max_completion_tokens | Maximum tokens to generate for reasoning models. Only used when `isReasoningModel` is `true`                                                    |
 | reasoning_effort      | Controls reasoning depth: 'low', 'medium', or 'high'. Only used when `isReasoningModel` is `true`                                               |
+| showThinking          | Whether to return provider reasoning content in the response `reasoning` field. Set to `false` to omit it.                                      |
 | temperature           | Controls randomness (0-2). Not supported for reasoning models                                                                                   |
 | max_tokens            | Maximum tokens to generate. Not supported for reasoning models                                                                                  |
 | top_p                 | Controls nucleus sampling (0-1)                                                                                                                 |

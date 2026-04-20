@@ -1356,4 +1356,83 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.output).toBe('15');
     });
   });
+
+  describe('reasoning output', () => {
+    it('should separate Azure reasoning_content from the visible output', async () => {
+      const provider = new AzureChatCompletionProvider('deepseek-r1', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+        },
+      });
+      setAuthHeaders(provider);
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Final answer.',
+                reasoning_content: 'Private reasoning.',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Final answer.');
+      expect(result.reasoning).toEqual([{ type: 'reasoning', content: 'Private reasoning.' }]);
+    });
+
+    it('should suppress Azure reasoning output when showThinking is false', async () => {
+      const provider = new AzureChatCompletionProvider('deepseek-r1', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          showThinking: false,
+        },
+      });
+      setAuthHeaders(provider);
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Final answer.',
+                reasoning: 'Private reasoning.',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Final answer.');
+      expect(result.reasoning).toBeUndefined();
+    });
+  });
 });

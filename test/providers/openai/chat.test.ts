@@ -598,6 +598,53 @@ describe('OpenAI Provider', () => {
       expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
+    it('should strip reasoning fields from raw tool-call message output', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                content: 'I will call a tool.',
+                reasoning_content: 'Private tool selection reasoning.',
+                tool_calls: [
+                  {
+                    id: 'call_1',
+                    type: 'function',
+                    function: { name: 'lookup', arguments: '{"query":"weather"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('deepseek-reasoner');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Weather?' }]),
+      );
+
+      expect(result.output).toEqual({
+        content: 'I will call a tool.',
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'lookup', arguments: '{"query":"weather"}' },
+          },
+        ],
+      });
+      expect(JSON.stringify(result.output)).not.toContain('Private tool selection reasoning');
+      expect(result.reasoning).toEqual([
+        { type: 'reasoning', content: 'Private tool selection reasoning.' },
+      ]);
+    });
+
     it('should hide reasoning content when showThinking is false', async () => {
       const mockResponse = {
         data: {

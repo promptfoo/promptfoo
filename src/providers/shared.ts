@@ -1,7 +1,7 @@
 import yaml from 'js-yaml';
 import { getEnvBool, getEnvInt } from '../envars';
 
-import type { ApiProvider } from '../types/index';
+import type { ApiProvider, ReasoningContent } from '../types/index';
 
 /**
  * The default timeout for API requests in milliseconds.
@@ -148,6 +148,95 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
       return defaultValue;
     }
   }
+}
+
+type OpenAiCompatibleReasoningMessage = {
+  reasoning?: unknown;
+  reasoning_content?: unknown;
+  thinking?: unknown;
+};
+
+export function extractReasoningFromOpenAiCompatibleMessage(
+  message: OpenAiCompatibleReasoningMessage | null | undefined,
+  showThinking: boolean = true,
+): ReasoningContent[] | undefined {
+  if (!showThinking || !message) {
+    return undefined;
+  }
+
+  const reasoning: ReasoningContent[] = [];
+  for (const value of [message.reasoning, message.reasoning_content, message.thinking]) {
+    if (typeof value === 'string' && value.trim()) {
+      reasoning.push({ type: 'reasoning', content: value });
+    }
+  }
+  return reasoning.length > 0 ? reasoning : undefined;
+}
+
+export function stripOpenAiCompatibleReasoningFields<T extends object>(
+  message: T,
+): Omit<T, 'reasoning' | 'reasoning_content' | 'thinking'> {
+  const {
+    reasoning: _reasoning,
+    reasoning_content: _reasoningContent,
+    thinking: _thinking,
+    ...rest
+  } = message as T & OpenAiCompatibleReasoningMessage;
+  return rest as Omit<T, 'reasoning' | 'reasoning_content' | 'thinking'>;
+}
+
+function getStringField(record: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+export function splitReasoningFromContentParts(
+  content: unknown,
+  showThinking: boolean = true,
+): { output: unknown; reasoning?: ReasoningContent[] } {
+  if (!Array.isArray(content)) {
+    return { output: content };
+  }
+
+  const outputParts: unknown[] = [];
+  const outputText: string[] = [];
+  const reasoning: ReasoningContent[] = [];
+  let hasStructuredOutput = false;
+
+  for (const part of content) {
+    if (part && typeof part === 'object') {
+      const record = part as Record<string, unknown>;
+      if (record.type === 'thinking' || record.type === 'reasoning') {
+        const content = getStringField(record, ['thinking', 'content', 'text', 'reasoning']);
+        if (showThinking && content) {
+          reasoning.push({ type: 'reasoning', content });
+        }
+        continue;
+      }
+      if (record.type === 'text' && typeof record.text === 'string') {
+        outputText.push(record.text);
+        outputParts.push(part);
+        continue;
+      }
+      hasStructuredOutput = true;
+    } else if (typeof part === 'string') {
+      outputText.push(part);
+      outputParts.push(part);
+      continue;
+    }
+
+    outputParts.push(part);
+  }
+
+  return {
+    output: hasStructuredOutput ? outputParts : outputText.join(''),
+    reasoning: reasoning.length > 0 ? reasoning : undefined,
+  };
 }
 
 /**

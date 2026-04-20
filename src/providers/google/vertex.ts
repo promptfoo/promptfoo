@@ -23,6 +23,7 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
   calculateGoogleCost,
+  extractGeminiReasoningFromCandidate,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
@@ -596,6 +597,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
         const dataWithResponse = normalizedData as GeminiResponseData[];
         let output;
+        const reasoningBlocks: NonNullable<ProviderResponse['reasoning']> = [];
         for (const datum of dataWithResponse) {
           // Check for blockReason first (before getCandidate) since blocked responses have no candidates
           if (datum.promptFeedback?.blockReason) {
@@ -641,6 +643,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
           }
 
           const candidate = getCandidate(datum);
+          const reasoning = extractGeminiReasoningFromCandidate(
+            candidate,
+            config.showThinking !== false,
+          );
+          if (reasoning) {
+            reasoningBlocks.push(...reasoning);
+          }
           const safetyFinishReasons = [
             'SAFETY',
             'PROHIBITED_CONTENT',
@@ -727,6 +736,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         response = {
           cached: false,
           output,
+          ...(reasoningBlocks.length > 0 && { reasoning: reasoningBlocks }),
           tokenUsage,
           cost,
           metadata: {},

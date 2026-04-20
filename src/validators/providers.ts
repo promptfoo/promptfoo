@@ -66,6 +66,7 @@ export const ReasoningContentSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('thought'),
     thought: z.string(),
+    signature: z.string().optional(),
   }),
   z.object({
     type: z.literal('think'),

@@ -1,6 +1,10 @@
 import { fetchWithCache } from '../cache';
 import { getEnvFloat, getEnvString } from '../envars';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import {
+  extractReasoningFromOpenAiCompatibleMessage,
+  parseChatPrompt,
+  REQUEST_TIMEOUT_MS,
+} from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
@@ -16,6 +20,7 @@ function parseEnvFloat(value: string | undefined): number | undefined {
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
   temperature?: number;
+  showThinking?: boolean;
 }
 
 class LocalAiGenericProvider implements ApiProvider {
@@ -87,8 +92,14 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     }
 
     try {
+      const message = data.choices[0].message;
+      const reasoning = extractReasoningFromOpenAiCompatibleMessage(
+        message,
+        this.config.showThinking !== false,
+      );
       return {
-        output: data.choices[0].message.content,
+        output: message.content,
+        ...(reasoning && { reasoning }),
       };
     } catch (err) {
       return {

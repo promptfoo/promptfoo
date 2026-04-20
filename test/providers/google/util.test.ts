@@ -16,6 +16,8 @@ import logger from '../../../src/logger';
 import {
   calculateGoogleCost,
   clearCachedAuth,
+  extractGeminiReasoningFromCandidate,
+  formatCandidateContents,
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
@@ -1036,6 +1038,35 @@ describe('util', () => {
 
       const result = await hasGoogleDefaultCredentials();
       expect(result).toBe(true);
+    });
+  });
+
+  describe('Gemini thought parts', () => {
+    it('should remove thought parts from output and expose them as reasoning', () => {
+      const candidate = {
+        content: {
+          parts: [
+            { text: 'I should compare both numbers.', thought: true, thoughtSignature: 'sig123' },
+            { text: '9.11 is greater.' },
+          ],
+        },
+        safetyRatings: [],
+      } as any;
+
+      expect(formatCandidateContents(candidate)).toBe('9.11 is greater.');
+      expect(extractGeminiReasoningFromCandidate(candidate)).toEqual([
+        { type: 'thought', thought: 'I should compare both numbers.', signature: 'sig123' },
+      ]);
+    });
+
+    it('should suppress Gemini thought reasoning when showThinking is false', () => {
+      const candidate = {
+        content: { parts: [{ text: 'private thought', thought: true }, { text: 'final' }] },
+        safetyRatings: [],
+      } as any;
+
+      expect(formatCandidateContents(candidate)).toBe('final');
+      expect(extractGeminiReasoningFromCandidate(candidate, false)).toBeUndefined();
     });
   });
 

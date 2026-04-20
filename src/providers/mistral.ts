@@ -3,7 +3,14 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util';
-import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import {
+  calculateCost,
+  extractReasoningFromOpenAiCompatibleMessage,
+  parseChatPrompt,
+  REQUEST_TIMEOUT_MS,
+  splitReasoningFromContentParts,
+  stripOpenAiCompatibleReasoningFields,
+} from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -160,6 +167,9 @@ interface MistralChatCompletionOptions {
   safe_prompt?: boolean;
   random_seed?: number;
   response_format?: { type: 'json_object' };
+  prompt_mode?: 'reasoning';
+  reasoning_effort?: 'high' | 'none';
+  showThinking?: boolean;
   cost?: number;
   inputCost?: number;
   outputCost?: number;
@@ -333,6 +343,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
       ...('parallel_tool_calls' in config
         ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
         : {}),
+      ...(config?.prompt_mode ? { prompt_mode: config.prompt_mode } : {}),
+      ...(config?.reasoning_effort ? { reasoning_effort: config.reasoning_effort } : {}),
       ...(config?.response_format ? { response_format: config.response_format } : {}),
     };
 
@@ -394,17 +406,27 @@ export class MistralChatCompletionProvider implements ApiProvider {
     }
 
     const message = data.choices[0].message;
+    const contentResult = splitReasoningFromContentParts(
+      message.content,
+      config.showThinking !== false,
+    );
+    const reasoning = [
+      ...(extractReasoningFromOpenAiCompatibleMessage(message, config.showThinking !== false) ??
+        []),
+      ...(contentResult.reasoning ?? []),
+    ];
     let output: string | object;
     if (message.content && message.tool_calls?.length) {
-      output = message;
+      output = stripOpenAiCompatibleReasoningFields({ ...message, content: contentResult.output });
     } else if (message.tool_calls?.length) {
       output = message.tool_calls;
     } else {
-      output = message.content;
+      output = contentResult.output as string | object;
     }
 
     const result: ProviderResponse = {
       output,
+      ...(reasoning.length > 0 && { reasoning }),
       tokenUsage: getTokenUsage(data, cached),
       cached,
       cost: calculateMistralCost(

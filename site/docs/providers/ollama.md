@@ -60,7 +60,10 @@ providers:
       temperature: 0.7
       top_p: 0.9
       think: true # Enable thinking/reasoning mode (top-level API parameter)
+      showThinking: true # Return native thinking in the response reasoning field
 ```
+
+When Ollama returns native `thinking` content, promptfoo keeps it out of the main `output` and stores it in the response `reasoning` field. Set `showThinking: false` to omit it from results.
 
 You can also pass arbitrary fields directly to the Ollama API using the `passthrough` option:
 

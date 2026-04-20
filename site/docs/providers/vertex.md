@@ -968,7 +968,8 @@ When using `thinkingBudget`:
 
 - The budget must be at least 1024 tokens
 - The budget is counted towards your total token usage
-- The model will show its reasoning process in the response
+- Thought parts are returned in the response `reasoning` field, separate from the main `output`
+- Set `showThinking: false` to omit thought content from results
 
 **Note:** You cannot use both `thinkingLevel` and `thinkingBudget` in the same request.
 

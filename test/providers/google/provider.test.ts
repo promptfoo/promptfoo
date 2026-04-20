@@ -574,6 +574,39 @@ describe('GoogleProvider', () => {
 
       expect(result.tokenUsage?.completionDetails?.reasoning).toBe(100);
     });
+
+    it('should separate Gemini thought parts into the reasoning field', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: 'Private thought.', thought: true, thoughtSignature: 'sig123' },
+                  { text: 'Visible answer.' },
+                ],
+              },
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 30,
+            thoughtsTokenCount: 15,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.output).toBe('Visible answer.');
+      expect(result.reasoning).toEqual([
+        { type: 'thought', thought: 'Private thought.', signature: 'sig123' },
+      ]);
+    });
   });
 
   describe('cost calculation', () => {

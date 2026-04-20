@@ -121,6 +121,9 @@ providers:
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960 # Full context for reasoning
+      prompt_mode: reasoning
+      reasoning_effort: high
+      showThinking: true # Return reasoning chunks in the response reasoning field
 
   # Code generation with FIM support
   - id: mistral:codestral-latest
@@ -136,6 +139,8 @@ providers:
       max_tokens: 2000
       # Image processing options handled automatically
 ````
+
+For Magistral and other Mistral reasoning responses, promptfoo separates reasoning chunks from the final answer. The final answer stays in `output`; reasoning traces are returned in the response `reasoning` field unless `showThinking: false` is set.
 
 ### Environment Variables Reference
 
