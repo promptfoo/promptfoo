@@ -199,7 +199,6 @@ npm run local -- eval -c config.yaml --no-cache
 - **NEVER** comment on GitHub issues - only create PRs to address them
 - **ALWAYS create new commits** - never amend, squash, or rebase unless explicitly asked
 - All changes go through pull requests
-- Create draft PRs by default, but if the user or automation explicitly says "full PR", "not draft", or "ready for review", open or convert the PR to ready-for-review.
 
 **Standard workflow:**
 
@@ -221,9 +220,10 @@ See `docs/agents/pr-conventions.md` for PR title format and scope selection (esp
 
 ## Pull Request Creation
 
-- **Default to draft PRs.** Use `--draft` with `gh pr create` unless the user or
-  automation explicitly asks for a full, non-draft, or ready-for-review PR. Convert an
-  existing draft before finishing when the request calls for a ready PR.
+- **Default to full (non-draft) PRs.** Omit `--draft` from `gh pr create` unless the
+  user explicitly asks for a draft, or the PR is for an unpublished security advisory
+  (see "Security-Sensitive PRs" below). `docs/agents/pr-conventions.md` lists the full
+  set of draft exceptions.
 - **Never attribute commits or PR bodies to Claude / Claude Code.** No
   `Co-Authored-By: Claude…` trailers, no "Generated with Claude Code" footers. Use
   your configured git identity only.

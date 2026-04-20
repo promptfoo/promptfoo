@@ -179,15 +179,21 @@ site: update guides                 # Should be docs(site):
 feat(webui): minor styling update   # Minor = chore, not feat
 ```
 
-## Draft Mode
+## Draft vs Ready
 
-Open PRs in draft mode by default. Use the `--draft` flag unless the user or automation explicitly asks for a full, non-draft, or ready-for-review PR:
+Open PRs **ready for review** by default:
 
 ```bash
-gh pr create --draft --title "feat(scope): description"
+gh pr create --title "feat(scope): description" --body "..."
 ```
 
-If the user says "full PR", "not draft", or "ready for review", open the PR ready for review or convert an existing draft before finishing.
+Use `--draft` only when:
+
+- The user explicitly asks for a draft
+- The work is an intentional WIP parked for a hand-off
+- The PR blocks on an external dependency that must land first
+- The PR addresses an unpublished security advisory (see root `AGENTS.md`
+  "Security-Sensitive PRs")
 
 ## Commit & PR Attribution
 
@@ -209,5 +215,5 @@ If the user says "full PR", "not draft", or "ready for review", open the PR read
 3. Choose correct scope using priority order
 4. Breaking change? Add `!` after scope
 5. Run `npm run l && npm run f`
-6. Open the PR in draft mode unless the user or automation explicitly asks for a full, non-draft, or ready-for-review PR
+6. Open ready-for-review (omit `--draft`) unless one of the exceptions above applies
 7. Do **not** add Claude attribution trailers or footers
