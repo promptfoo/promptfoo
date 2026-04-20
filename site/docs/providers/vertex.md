@@ -139,13 +139,13 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 ### Embedding Models
 
-Use the `vertex:embedding:` prefix for embedding models:
+Reference Vertex embedding models with the `vertex:embedding:` prefix:
 
 - `vertex:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
 - `vertex:embedding:text-embedding-005` - English and code, up to 768 dimensions, 2,048 input-token limit
 - `vertex:embedding:text-multilingual-embedding-002` - Multilingual, up to 768 dimensions, 2,048 input-token limit
 
-Pass `autoTruncate: true` in `config` to silently truncate inputs that exceed the token limit instead of erroring:
+Pass `autoTruncate: true` in `config` to let Vertex truncate oversize inputs on the server instead of returning an error:
 
 ```yaml
 defaultTest:
