@@ -66,9 +66,10 @@ Renovate force-pushes its branches whenever `main` changes or someone comments
 - Push fixes quickly and expect them to survive only until the next Renovate rebase.
 - For non-trivial manual work on a Renovate-managed dependency, create a sibling
   branch off the Renovate branch and open a separate PR that Renovate will not touch.
-- On a major-version renovate PR, read the upstream changelog, run GAP analysis on
+- On a major-version Renovate PR, read the upstream changelog, run gap analysis on
   our matching provider/integration and its docs, then test end-to-end with real evals
-  (`npm run local -- eval -c <example>.yaml --env-file .env --no-cache -o output.json`)
+  (`npm run local -- eval -c <example>.yaml --no-cache -o output.json`, adding
+  `--env-file .env` when credentials are needed and the file exists)
   before deciding whether the upgrade needs code changes.
 
 ## Useful Commands

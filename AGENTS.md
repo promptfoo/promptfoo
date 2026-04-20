@@ -118,15 +118,19 @@ npm run local -- eval -c examples/my-example/promptfooconfig.yaml --env-file .en
 **Export and inspect results** to verify pass/fail/errors:
 
 ```bash
-npm run local -- eval -c path/to/config.yaml -o output.json --no-cache --env-file .env
+npm run local -- eval -c path/to/config.yaml -o output.json --no-cache
 ```
 
-Review the output file for `success`, `score`, and `error` fields. **A zero CLI exit
-code does not mean every test case passed — always inspect the JSON.** This is the
-standard command for verifying a PR end-to-end.
+Add `--env-file .env` or another explicit env file only when the eval needs local
+secrets and the file exists.
 
-Keep secrets in the repo's `.env` (or another path the user points at with
-`--env-file`); never echo them into logs or commit messages.
+Review the output file for `success`, `score`, and `error` fields. With the default
+pass-rate threshold, exit code 0 means the eval met the threshold; still inspect the
+JSON for per-test failures, errors, and scores, especially when the threshold has been
+lowered. This is the standard command for verifying a PR end-to-end.
+
+Keep local secrets in the repo's gitignored `.env` (or another path the user points at
+with `--env-file`); never echo them into logs or commit messages.
 
 ## Debugging & Troubleshooting
 
