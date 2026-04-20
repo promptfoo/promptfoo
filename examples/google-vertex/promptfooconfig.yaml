@@ -21,9 +21,9 @@ providers:
 defaultTest:
   options:
     provider:
-      # Use gemini-pro for model-graded evals (e.g. assertions such as llm-rubric)
-      text: vertex:chat:gemini-pro
-      # Use Vertex embeddings for similarity and answer-relevance
+      # Text model used by model-graded assertions such as llm-rubric and factuality
+      text: vertex:gemini-2.5-pro
+      # Embedding model used by similar/answer-relevance assertions
       embedding: vertex:embedding:gemini-embedding-001
 
 tests:
