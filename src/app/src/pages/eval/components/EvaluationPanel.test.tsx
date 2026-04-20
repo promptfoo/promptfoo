@@ -79,7 +79,7 @@ describe('EvaluationPanel', () => {
     expect(screen.queryByText('Grading Prompts')).not.toBeInTheDocument();
   });
 
-  it('renders judge reply inline when judgeResponse metadata is present', () => {
+  it('renders grader output inline when graderOutputs metadata is present', () => {
     const gradingResults: GradingResult[] = [
       {
         pass: true,
@@ -90,14 +90,16 @@ describe('EvaluationPanel', () => {
           value: 'test context',
         },
         metadata: {
-          judgeResponse: 'Paris is the capital of France.\nFrance is in Europe.',
+          graderOutputs: {
+            final: 'Paris is the capital of France.\nFrance is in Europe.',
+          },
         },
       },
     ];
 
     render(<EvaluationPanel gradingResults={gradingResults} />);
 
-    expect(screen.getByText('Judge reply')).toBeInTheDocument();
+    expect(screen.getByText('Grader output')).toBeInTheDocument();
     expect(screen.getByText(/Paris is the capital of France\./)).toBeInTheDocument();
     expect(screen.getByText(/France is in Europe\./)).toBeInTheDocument();
   });

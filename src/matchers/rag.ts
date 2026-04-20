@@ -288,7 +288,9 @@ export async function matchesContextRelevance(
   const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {
-    judgeResponse: resp.output,
+    graderOutputs: {
+      final: resp.output,
+    },
     extractedSentences: relevantSentences,
     totalContextUnits,
     totalContextSentences: totalContextUnits, // Backward compatibility
