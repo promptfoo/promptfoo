@@ -25,6 +25,7 @@ export interface ModelAuditRecord {
   totalChecks?: number | null;
   passedChecks?: number | null;
   failedChecks?: number | null;
+  // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata?: Record<string, any> | null;
   // Revision tracking fields for deduplication
   modelId?: string | null;
@@ -50,6 +51,7 @@ export default class ModelAudit {
   totalChecks?: number | null;
   passedChecks?: number | null;
   failedChecks?: number | null;
+  // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata?: Record<string, any> | null;
   // Revision tracking fields for deduplication
   modelId?: string | null;
@@ -78,15 +80,15 @@ export default class ModelAudit {
     const resultsHasErrors = data.results?.has_errors ?? false;
 
     // If hasErrors is explicitly provided, use it; otherwise compute from results and issues
-    if (data.hasErrors !== undefined) {
-      this.hasErrors = data.hasErrors;
-    } else {
+    if (data.hasErrors === undefined) {
       const hasActualErrors =
         resultsHasErrors ||
         (issues &&
           issues.some((issue) => issue.severity === 'critical' || issue.severity === 'error')) ||
         false;
       this.hasErrors = hasActualErrors;
+    } else {
+      this.hasErrors = data.hasErrors;
     }
 
     this.totalChecks = data.totalChecks;
@@ -109,6 +111,7 @@ export default class ModelAudit {
     modelPath: string;
     modelType?: string;
     results: ModelAuditScanResults;
+    // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
     metadata?: Record<string, any>;
     // Revision tracking fields
     modelId?: string;
@@ -424,9 +427,12 @@ export default class ModelAudit {
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       name: this.name,
+      author: this.author,
       modelPath: this.modelPath,
       modelType: this.modelType,
       results: this.results,
+      checks: this.checks,
+      issues: this.issues,
       hasErrors: this.hasErrors,
       totalChecks: this.totalChecks,
       passedChecks: this.passedChecks,

@@ -1,16 +1,17 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleConversationRelevance } from '../../src/external/assertions/deepeval';
-import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { ConversationRelevancyTemplate } from '../../src/external/matchers/conversationRelevancyTemplate';
+import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { getDefaultProviders } from '../../src/providers/defaults';
+
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 vi.mock('../../src/providers/defaults', () => ({
   getDefaultProviders: vi.fn(),
 }));
 
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual('../../src/matchers');
+vi.mock('../../src/matchers/providers', async () => {
+  const actual = await vi.importActual('../../src/matchers/providers');
   return {
     ...actual,
     getAndCheckProvider: vi.fn().mockImplementation(async (_type, provider, defaultProvider) => {

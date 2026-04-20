@@ -4,21 +4,22 @@
  * Test and evaluate voice AI agents with LLM backends
  */
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../types/providers';
-import type { EnvOverrides } from '../../../types/env';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
-import { ElevenLabsClient } from '../client';
 import { ElevenLabsCache } from '../cache';
+import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
-import type { ElevenLabsAgentsConfig, AgentSimulationResponse } from './types';
-import { parseConversation, buildSimulationRequest } from './conversation';
+import { buildSimulationRequest, parseConversation } from './conversation';
 import {
-  processEvaluationResults,
   calculateOverallScore,
   generateEvaluationSummary,
+  processEvaluationResults,
 } from './evaluation';
-import { extractToolCalls, analyzeToolUsage, generateToolUsageSummary } from './tools';
+import { analyzeToolUsage, extractToolCalls, generateToolUsageSummary } from './tools';
+
+import type { EnvOverrides } from '../../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../../types/providers';
+import type { AgentSimulationResponse, ElevenLabsAgentsConfig } from './types';
 
 /**
  * ElevenLabs Agents Provider Implementation
@@ -110,7 +111,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for initialization
-    if (this.initPromise) {
+    if (this.initPromise != null) {
       await this.initPromise;
       this.initPromise = null;
     }
@@ -138,7 +139,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       );
 
       // Add new_turns_limit (API field name)
-      simulationRequest.new_turns_limit = this.config.maxTurns || 10;
+      simulationRequest.new_turns_limit = this.config.maxTurns ?? 10;
 
       // Debug: Log the request being sent
       logger.debug('[ElevenLabs Agents] Request payload', {
@@ -342,7 +343,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       timeout: config?.timeout || 180000,
       cache: config?.cache,
       cacheTTL: config?.cacheTTL,
-      retries: config?.retries || 3,
+      retries: config?.retries ?? 3,
 
       // Agent-specific config
       agentId: config?.agentId,
@@ -350,7 +351,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
       simulatedUser: config?.simulatedUser,
       evaluationCriteria: config?.evaluationCriteria,
       toolMockConfig: config?.toolMockConfig,
-      maxTurns: config?.maxTurns || 10,
+      maxTurns: config?.maxTurns ?? 10,
       label: options.label || options.id,
     };
   }

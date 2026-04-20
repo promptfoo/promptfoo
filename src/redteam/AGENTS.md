@@ -54,6 +54,18 @@ See `docs/logging.md` - especially important here since test content may contain
 
 See `src/redteam/plugins/pii.ts` for reference pattern.
 
+## Plugin/Grader Standards
+
+**CRITICAL:** All graders must use standardized tags per `.claude/skills/redteam-plugin-development/skill.md`
+
+Quick reference:
+
+- User prompt: `<UserQuery>{{prompt}}</UserQuery>` (NOT `<UserPrompt>`, `<UserInput>`, or `<prompt>`)
+- Purpose: `<purpose>{{purpose}}</purpose>`
+- Entities: `<AllowedEntities>` with `<Entity>` children
+
+See `src/redteam/plugins/harmful/graders.ts` for reference implementation.
+
 ## Risk Scoring
 
 Results include severity levels:

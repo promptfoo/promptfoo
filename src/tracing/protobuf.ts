@@ -6,6 +6,7 @@
  */
 
 import path from 'path';
+
 import protobuf from 'protobufjs';
 import { getDirectory } from '../esm';
 import logger from '../logger';

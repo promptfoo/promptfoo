@@ -30,11 +30,15 @@ export class WebhookProvider implements ApiProvider {
       params.config = this.config;
     }
 
+    interface WebhookResponse {
+      output?: string;
+    }
+
     let data,
       cached = false,
       latencyMs: number | undefined;
     try {
-      ({ data, cached, latencyMs } = await fetchWithCache(
+      ({ data, cached, latencyMs } = await fetchWithCache<WebhookResponse>(
         this.webhookUrl,
         {
           method: 'POST',

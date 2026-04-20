@@ -1,6 +1,6 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import readline from 'readline';
 
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReadlineInterface, promptUser, promptYesNo } from '../../src/util/readline';
 
 vi.mock('readline');

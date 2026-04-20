@@ -1,10 +1,13 @@
-import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockFetchWithProxy = vi.fn<any>();
+const mockFetchWithProxy = vi.fn();
 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),
@@ -28,9 +31,7 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
 
 describe('AuthoritativeMarkupInjectionProvider', () => {
   let AuthoritativeMarkupInjectionProvider: typeof import('../../../src/redteam/providers/authoritativeMarkupInjection').default;
-  let mockTargetProvider: ApiProvider;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockCallApi: Mock<any>;
+  let mockTargetProvider: MockApiProvider;
 
   const createMockContext = (targetProvider: ApiProvider): CallApiContextParams => ({
     originalProvider: targetProvider,
@@ -45,16 +46,9 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     const module = await import('../../../src/redteam/providers/authoritativeMarkupInjection');
     AuthoritativeMarkupInjectionProvider = module.default;
 
-    mockCallApi = vi.fn();
-    mockCallApi.mockResolvedValue({
-      output: 'target response',
+    mockTargetProvider = createMockProvider({
+      response: createProviderResponse({ output: 'target response' }),
     });
-
-    mockTargetProvider = {
-      id: () => 'test-provider',
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      callApi: mockCallApi as any,
-    };
 
     // Mock successful response from remote API
     mockFetchWithProxy.mockResolvedValue({
@@ -97,12 +91,16 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     await provider.callApi('test prompt', context, options);
 
     // The target provider should be called with the options
-    expect(mockCallApi).toHaveBeenCalledWith(expect.any(String), expect.any(Object), options);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Object),
+      options,
+    );
   });
 
   describe('Token Usage Tracking', () => {
     it('should accumulate token usage from target provider', async () => {
-      mockCallApi.mockResolvedValue({
+      mockTargetProvider.callApi.mockResolvedValue({
         output: 'target response',
         tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
       });
@@ -122,7 +120,7 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     });
 
     it('should return token usage even when target provider returns error', async () => {
-      mockCallApi.mockResolvedValue({
+      mockTargetProvider.callApi.mockResolvedValue({
         output: '',
         error: 'Target provider error',
         tokenUsage: { prompt: 10, completion: 0, total: 10, numRequests: 1 },
@@ -141,7 +139,7 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     });
 
     it('should handle target provider with no token usage', async () => {
-      mockCallApi.mockResolvedValue({
+      mockTargetProvider.callApi.mockResolvedValue({
         output: 'response without token usage',
       });
 
@@ -158,7 +156,7 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
     });
 
     it('should include metadata with redteamFinalPrompt', async () => {
-      mockCallApi.mockResolvedValue({
+      mockTargetProvider.callApi.mockResolvedValue({
         output: 'target response',
         tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
       });

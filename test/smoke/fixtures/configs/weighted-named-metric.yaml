@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing weighted named metric aggregation
+description: 'Smoke test - weighted named metric aggregation'
+
+providers:
+  - echo
+
+prompts:
+  - 'critical only'
+
+tests:
+  - threshold: 0.75
+    assert:
+      - type: contains
+        value: critical
+        metric: weightedMetric
+        weight: 3
+      - type: contains
+        value: missing
+        metric: weightedMetric
+        weight: 1
