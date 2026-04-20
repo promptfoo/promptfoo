@@ -93,6 +93,42 @@ describe('Model Audit Routes', () => {
       expect(response.body.error).toContain('ModelAudit is not installed');
       expect(mockedSpawn).not.toHaveBeenCalled();
     });
+
+    it('should return 500 when scanner listing exits non-zero', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 2,
+            stderrData: 'scanner lookup failed',
+          }),
+        ),
+      );
+
+      const response = await request(app).get('/api/model-audit/scanners');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Failed to list ModelAudit scanners');
+    });
+
+    it('should return 500 when scanner output is invalid JSON', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: 'not json',
+          }),
+        ),
+      );
+
+      const response = await request(app).get('/api/model-audit/scanners');
+
+      expect(response.status).toBe(500);
+      expect(response.body.error).toContain('Failed to list ModelAudit scanners');
+    });
   });
 
   describe('POST /api/model-audit/scan', () => {
