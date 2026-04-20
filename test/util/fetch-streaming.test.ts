@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  detectorForStreamFormat,
   estimateStreamingTokensPerSecond,
   firstNonWhitespaceByteDetector,
   MIN_MEANINGFUL_STREAM_WINDOW_MS,
   processStreamingResponse,
+  STREAM_FORMAT_PATTERNS,
 } from '../../src/util/fetch';
 
 describe('processStreamingResponse', () => {
@@ -48,7 +50,7 @@ describe('processStreamingResponse', () => {
       expect(result.streamingMetrics.timeToFirstToken).toBeLessThanOrEqual(totalLatency);
     });
 
-    it('should set isActuallyStreaming=true for multi-chunk responses', async () => {
+    it('should set multiChunkDelivery=true for multi-chunk responses', async () => {
       const requestStartTime = Date.now();
 
       const chunks = [
@@ -76,11 +78,11 @@ describe('processStreamingResponse', () => {
 
       const result = await processStreamingResponse(mockResponse, requestStartTime);
 
-      expect(result.streamingMetrics.isActuallyStreaming).toBe(true);
+      expect(result.streamingMetrics.multiChunkDelivery).toBe(true);
       expect(result.text).toBe('Chunk 1Chunk 2Chunk 3');
     });
 
-    it('should set isActuallyStreaming=false for single-chunk responses', async () => {
+    it('should set multiChunkDelivery=false for single-chunk responses', async () => {
       const requestStartTime = Date.now() - 10; // Small delay to avoid 0ms TTFT
 
       const chunks = [new TextEncoder().encode('Complete response in one chunk')];
@@ -104,7 +106,7 @@ describe('processStreamingResponse', () => {
 
       const result = await processStreamingResponse(mockResponse, requestStartTime);
 
-      expect(result.streamingMetrics.isActuallyStreaming).toBe(false);
+      expect(result.streamingMetrics.multiChunkDelivery).toBe(false);
       expect(result.text).toBe('Complete response in one chunk');
       // TTFT should still be measured from request start
       expect(result.streamingMetrics.timeToFirstToken).toBeGreaterThanOrEqual(10);
@@ -418,6 +420,120 @@ describe('processStreamingResponse', () => {
       expect(firstNonWhitespaceByteDetector('')).toBe(false);
       expect(firstNonWhitespaceByteDetector('   \n\t  ')).toBe(false);
       expect(firstNonWhitespaceByteDetector('  data: x')).toBe(true);
+    });
+  });
+
+  describe('streamFormat presets', () => {
+    describe('openai-chat preset', () => {
+      const detector = detectorForStreamFormat('openai-chat');
+
+      it('does not fire on the role framing frame', () => {
+        const buf = 'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('fires on the first content delta', () => {
+        const buf =
+          'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n' +
+          'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n';
+        expect(detector(buf)).toBe(true);
+      });
+
+      it('does not fire on empty content (tool-call framing)', () => {
+        const buf =
+          'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"x"}}]}}]}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+    });
+
+    describe('openai-responses preset', () => {
+      const detector = detectorForStreamFormat('openai-responses');
+
+      it('does not fire on response.created', () => {
+        expect(detector('data: {"type":"response.created","response":{"id":"r_1"}}\n\n')).toBe(
+          false,
+        );
+      });
+
+      it('fires on the first output_text.delta', () => {
+        const buf =
+          'data: {"type":"response.created","response":{"id":"r_1"}}\n\n' +
+          'data: {"type":"response.output_text.delta","delta":"The"}\n\n';
+        expect(detector(buf)).toBe(true);
+      });
+    });
+
+    describe('anthropic-messages preset', () => {
+      const detector = detectorForStreamFormat('anthropic-messages');
+
+      it('does not fire on message_start / content_block_start', () => {
+        const buf =
+          'event: message_start\ndata: {"type":"message_start"}\n\n' +
+          'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n';
+        expect(detector(buf)).toBe(false);
+      });
+
+      it('fires on the first text_delta', () => {
+        const buf =
+          'event: content_block_delta\n' +
+          'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}\n\n';
+        expect(detector(buf)).toBe(true);
+      });
+    });
+
+    it('closes the framing gap on a mocked OpenAI Chat stream', async () => {
+      // Same-stream comparison: role frame at ~20ms, content delta at ~40ms.
+      // Default detector fires on the role frame; openai-chat preset fires on
+      // the content delta. Both measurements come from the *same* mocked
+      // stream, so the gap is attributable to the detector, not network noise.
+      const frames = [
+        'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      const buildResponse = () => {
+        let i = 0;
+        return {
+          body: {
+            getReader: () => ({
+              read: vi.fn(async () => {
+                if (i < frames.length) {
+                  await new Promise((r) => setTimeout(r, 20));
+                  return { done: false, value: new TextEncoder().encode(frames[i++]) };
+                }
+                return { done: true, value: undefined };
+              }),
+              releaseLock: vi.fn(),
+            }),
+          },
+        } as unknown as Response;
+      };
+
+      const t0 = Date.now();
+      const defaultResult = await processStreamingResponse(buildResponse(), t0);
+      const presetResult = await processStreamingResponse(buildResponse(), t0, {
+        firstTokenDetector: detectorForStreamFormat('openai-chat'),
+      });
+
+      const defaultTtft = defaultResult.streamingMetrics.timeToFirstToken!;
+      const presetTtft = presetResult.streamingMetrics.timeToFirstToken!;
+
+      // Both are measured from the same t0 so their difference reflects the
+      // frame-delay built into the mock stream (~20ms per frame). The preset
+      // should stamp LATER than the default because it skips the role frame.
+      expect(presetTtft).toBeGreaterThan(defaultTtft);
+
+      // Absolute bounds: default ~20ms (first frame), preset ~40ms (second).
+      // Two streams + setTimeout jitter — allow generous windows but enforce ordering.
+      expect(defaultTtft).toBeLessThan(80);
+      expect(presetTtft).toBeGreaterThan(35);
+    });
+
+    it('exports STREAM_FORMAT_PATTERNS as a regex map', () => {
+      expect(STREAM_FORMAT_PATTERNS['openai-chat']).toBeInstanceOf(RegExp);
+      expect(STREAM_FORMAT_PATTERNS['openai-responses']).toBeInstanceOf(RegExp);
+      expect(STREAM_FORMAT_PATTERNS['anthropic-messages']).toBeInstanceOf(RegExp);
     });
   });
 });

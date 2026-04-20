@@ -71,7 +71,7 @@ describe('HttpProvider streaming integration', () => {
       expect(result.streamingMetrics).toBeDefined();
       expect(result.streamingMetrics?.timeToFirstToken).toBeDefined();
       expect(result.streamingMetrics?.totalStreamTime).toBeDefined();
-      expect(result.streamingMetrics?.isActuallyStreaming).toBe(true);
+      expect(result.streamingMetrics?.multiChunkDelivery).toBe(true);
 
       // TTFT should be less than total latency
       expect(result.streamingMetrics?.timeToFirstToken).toBeLessThanOrEqual(result.latencyMs!);
@@ -171,8 +171,8 @@ describe('HttpProvider streaming integration', () => {
       // Should have streaming metrics
       expect(result.streamingMetrics).toBeDefined();
 
-      // But isActuallyStreaming should be false (single chunk)
-      expect(result.streamingMetrics?.isActuallyStreaming).toBe(false);
+      // But multiChunkDelivery should be false (single chunk)
+      expect(result.streamingMetrics?.multiChunkDelivery).toBe(false);
 
       // TTFT and latencyMs should be similar for single-chunk
       expect(Math.abs(result.streamingMetrics!.timeToFirstToken! - result.latencyMs!)).toBeLessThan(

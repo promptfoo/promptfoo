@@ -148,10 +148,10 @@ describe('TTFT End-to-End Integration', () => {
     expect(result.streamingMetrics?.timeToFirstToken).toBeDefined();
     expect(result.streamingMetrics?.totalStreamTime).toBeDefined();
     expect(result.streamingMetrics?.tokensPerSecond).toBeDefined();
-    expect(result.streamingMetrics?.isActuallyStreaming).toBeDefined();
+    expect(result.streamingMetrics?.multiChunkDelivery).toBeDefined();
 
-    // Verify isActuallyStreaming is true (6 chunks)
-    expect(result.streamingMetrics?.isActuallyStreaming).toBe(true);
+    // Verify multiChunkDelivery is true (6 chunks)
+    expect(result.streamingMetrics?.multiChunkDelivery).toBe(true);
 
     // Verify TTFT is reasonable
     const ttft = result.streamingMetrics!.timeToFirstToken!;
@@ -184,7 +184,7 @@ describe('TTFT End-to-End Integration', () => {
     console.log(`   TTFT: ${ttft}ms`);
     console.log(`   Total Latency: ${result.latencyMs}ms`);
     console.log(`   Streaming Efficiency: ${(streamingEfficiency * 100).toFixed(1)}%`);
-    console.log(`   Is Actually Streaming: ${result.streamingMetrics?.isActuallyStreaming}`);
+    console.log(`   Multi-chunk delivery: ${result.streamingMetrics?.multiChunkDelivery}`);
     console.log(`   Tokens/Second: ${result.streamingMetrics?.tokensPerSecond?.toFixed(1)}`);
   }, 10000);
 

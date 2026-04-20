@@ -14,9 +14,12 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import {
+  detectorForStreamFormat,
   estimateStreamingTokensPerSecond,
+  type FirstTokenDetector,
   fetchWithRetries,
   processStreamingResponse,
+  type StreamFormat,
   type StreamingMetrics,
 } from '../util/fetch';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
@@ -894,14 +897,24 @@ export const HttpProviderConfigSchema = z.object({
   transformRequest: z.union([z.string(), z.function()]).optional(),
   transformResponse: z.union([z.string(), z.function()]).optional(),
   /**
-   * Optional regex (as a JS regex source string) that identifies the first
-   * model-generated content token in the streamed response. When set, TTFT
-   * is stamped the first time the accumulated stream buffer matches this
-   * pattern, giving canonical "time to first token" semantics instead of
-   * the default "time to first non-whitespace byte" (which for SSE APIs
-   * fires on the framing/role frame and overshoots by ~10-20ms on typical
-   * OpenAI streams). Example for OpenAI Chat Completions:
-   *   streamFirstTokenPattern: '"delta":\\\\s*\\\\{[^}]*"content":"[^"]'
+   * Select a built-in content-token detector for TTFT measurement. When set,
+   * TTFT stamps the first time a content token (not framing metadata) arrives
+   * on the stream, matching the "time to first token" definition used by ML
+   * benchmarking literature (vLLM, MLPerf, OpenAI perf docs).
+   *
+   * - `openai-chat`: OpenAI `/v1/chat/completions` SSE
+   * - `openai-responses`: OpenAI `/v1/responses` SSE
+   * - `anthropic-messages`: Anthropic `/v1/messages` SSE
+   *
+   * If not set, TTFT falls back to "time to first non-whitespace body byte"
+   * (the format-agnostic wire-level proxy). `streamFirstTokenPattern`
+   * takes precedence when both are specified.
+   */
+  streamFormat: z.enum(['openai-chat', 'openai-responses', 'anthropic-messages']).optional(),
+  /**
+   * Advanced override: a regex source string used to identify the first
+   * content token when `streamFormat` doesn't cover your endpoint. Takes
+   * precedence over `streamFormat`.
    */
   streamFirstTokenPattern: z.string().optional(),
   url: z.string().optional(),
@@ -1537,6 +1550,20 @@ function requestsStreamingTransport(body: unknown): boolean {
   );
 }
 
+function buildFirstTokenDetector(
+  customPattern: string | undefined,
+  format: StreamFormat | undefined,
+): FirstTokenDetector | undefined {
+  if (customPattern) {
+    const regex = new RegExp(customPattern);
+    return (accumulatedText) => regex.test(accumulatedText);
+  }
+  if (format) {
+    return detectorForStreamFormat(format);
+  }
+  return undefined;
+}
+
 export class HttpProvider implements ApiProvider {
   url: string;
   config: HttpProviderConfig;
@@ -1585,11 +1612,12 @@ export class HttpProvider implements ApiProvider {
     );
     this.validateStatus = createValidateStatus(this.config.validateStatus);
 
-    // Compile the canonical-TTFT content detector once, failing fast on bad regex.
-    if (this.config.streamFirstTokenPattern) {
-      const regex = new RegExp(this.config.streamFirstTokenPattern);
-      this.firstTokenDetector = (accumulatedText) => regex.test(accumulatedText);
-    }
+    // Build the canonical-TTFT content detector once. A custom regex pattern
+    // always wins over a named preset so users can override ad hoc.
+    this.firstTokenDetector = buildFirstTokenDetector(
+      this.config.streamFirstTokenPattern,
+      this.config.streamFormat,
+    );
 
     // Initialize session endpoint parser if session config is provided
     if (this.config.session) {
@@ -2588,10 +2616,12 @@ export class HttpProvider implements ApiProvider {
       response: { data, status, statusText, headers: responseHeaders, cached, latencyMs },
     });
 
-    // Populate streaming throughput now that we know the actual completion text.
-    // Computing this in processStreamingResponse would overcount by 20-60x
-    // because the stream buffer includes SSE frame wrappers.
-    if (streamingMetrics) {
+    // Populate streaming throughput now that we know the completion text.
+    // Skipped when the response arrived in a single chunk (no meaningful
+    // rate to report — the apparent rate is network buffering, not model
+    // throughput). Computing this in processStreamingResponse would
+    // overcount by 20-60x because the stream buffer includes SSE framing.
+    if (streamingMetrics?.multiChunkDelivery) {
       const completionText = this.getCompletionText(parsedOutput, rawText);
       streamingMetrics.tokensPerSecond = estimateStreamingTokensPerSecond(
         completionText.length,

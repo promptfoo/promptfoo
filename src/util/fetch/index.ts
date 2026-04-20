@@ -459,12 +459,13 @@ export async function fetchWithRetries(
  * `totalStreamTime` is from the first read of the response body to stream
  * close — it excludes the TTFT window.
  *
- * `isActuallyStreaming` is true when the transport delivered more than
- * one network chunk (`ReadableStream.getReader().read()` call), NOT
- * whether the upstream model emitted multiple tokens. A server that
+ * `multiChunkDelivery` is true when the transport delivered more than
+ * one network chunk (`ReadableStream.getReader().read()` call). It does
+ * NOT mean the upstream model emitted multiple tokens. A server that
  * flushes every SSE event in one TCP write reports `false`. A server
- * that buffers and flushes in bursts reports `true`. The name is
- * historical; `multiChunkDelivery` would be more precise.
+ * that buffers and flushes in bursts reports `true`. Use this to detect
+ * whether the stream actually progressed incrementally versus arrived
+ * in a single burst (in which case `tokensPerSecond` is omitted).
  *
  * `tokensPerSecond` is populated by the caller (the HTTP provider) after
  * `transformResponse` produces the final content string. It uses a
@@ -484,7 +485,7 @@ export interface StreamingMetrics {
   /** Milliseconds from the first body read to stream close (excludes TTFT window). */
   totalStreamTime?: number;
   /** True when the transport delivered more than one network chunk. */
-  isActuallyStreaming?: boolean;
+  multiChunkDelivery?: boolean;
 }
 
 /**
@@ -508,6 +509,48 @@ export const firstNonWhitespaceByteDetector: FirstTokenDetector = (accumulatedTe
   }
   return false;
 };
+
+/**
+ * Supported streaming response formats. Selects a built-in content-token
+ * detector so callers do not have to reverse-engineer the SSE shape.
+ *
+ * - `openai-chat`: OpenAI Chat Completions (`/v1/chat/completions`). Fires on
+ *   the first delta with a non-empty `content` string. Skips the leading
+ *   `{"delta":{"role":"assistant"}}` framing frame.
+ * - `openai-responses`: OpenAI Responses API (`/v1/responses`). Fires on the
+ *   first `response.output_text.delta` event with a non-empty `delta`.
+ * - `anthropic-messages`: Anthropic Messages API (`/v1/messages`). Fires on
+ *   the first `content_block_delta` event with a non-empty `text_delta`.
+ *
+ * If your endpoint is not one of these, use `streamFirstTokenPattern` with a
+ * custom regex or omit it entirely to get the default wire-level proxy.
+ */
+export type StreamFormat = 'openai-chat' | 'openai-responses' | 'anthropic-messages';
+
+/**
+ * Built-in regex patterns for `StreamFormat`. Each pattern matches the first
+ * emission of a non-empty content token in the respective SSE protocol.
+ *
+ * The patterns are deliberately conservative: they require the `"content"` /
+ * `"delta"` / `"text"` field to be followed by at least one non-quote byte,
+ * so they do not fire on empty-delta framing events (e.g. Anthropic's
+ * `{"type":"content_block_start"}`).
+ */
+export const STREAM_FORMAT_PATTERNS: Record<StreamFormat, RegExp> = {
+  'openai-chat': /"delta":\s*\{[^}]*"content":"[^"]/,
+  'openai-responses': /"type":\s*"response\.output_text\.delta"[\s\S]*?"delta":"[^"]/,
+  'anthropic-messages': /"type":\s*"text_delta"[\s\S]*?"text":"[^"]/,
+};
+
+/**
+ * Build a first-token detector for a known streaming format.
+ * Returns `undefined` for unknown formats so callers can fall back to the
+ * wire-level default.
+ */
+export function detectorForStreamFormat(format: StreamFormat): FirstTokenDetector {
+  const pattern = STREAM_FORMAT_PATTERNS[format];
+  return (accumulatedText) => pattern.test(accumulatedText);
+}
 
 /**
  * Consume a streaming HTTP response and collect timing metrics.
@@ -568,7 +611,7 @@ export async function processStreamingResponse(
       // Left undefined on all-whitespace streams so the ttft assertion reports "could not measure".
       timeToFirstToken: firstTokenTime,
       totalStreamTime: Date.now() - streamStart,
-      isActuallyStreaming: chunkCount > 1,
+      multiChunkDelivery: chunkCount > 1,
     },
   };
 }

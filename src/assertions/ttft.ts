@@ -15,9 +15,14 @@ export const handleTtft = ({ assertion, providerResponse }: AssertionParams): Gr
 
   const ttft = streamingMetrics.timeToFirstToken;
   if (typeof ttft !== 'number') {
-    // Reached when the stream closed without emitting any non-whitespace chunk.
+    // Reached either when (a) the stream closed without emitting any
+    // non-whitespace content, or (b) a configured streamFormat /
+    // streamFirstTokenPattern never matched in the stream. Mention both
+    // so the user can narrow the cause from their config.
     throw new Error(
-      'TTFT could not be measured: the stream closed before emitting any non-whitespace content. Check that the endpoint returns SSE/chunked output when stream: true is set.',
+      'TTFT could not be measured: no matching content was detected in the stream. ' +
+        'If streamFormat or streamFirstTokenPattern is configured, verify the pattern matches your endpoint. ' +
+        'Otherwise confirm that the endpoint returns SSE/chunked output when stream: true is set.',
     );
   }
 

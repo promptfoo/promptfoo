@@ -264,7 +264,7 @@ describe('ttft assertion', () => {
       };
 
       expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT could not be measured: the stream closed before emitting any non-whitespace content. Check that the endpoint returns SSE/chunked output when stream: true is set.',
+        /TTFT could not be measured: no matching content was detected in the stream/,
       );
     });
 
@@ -277,7 +277,7 @@ describe('ttft assertion', () => {
       };
 
       expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT could not be measured: the stream closed before emitting any non-whitespace content. Check that the endpoint returns SSE/chunked output when stream: true is set.',
+        /TTFT could not be measured: no matching content was detected in the stream/,
       );
     });
 
@@ -290,7 +290,7 @@ describe('ttft assertion', () => {
       };
 
       expect(() => handleTtft(params as AssertionParams)).toThrow(
-        'TTFT could not be measured: the stream closed before emitting any non-whitespace content. Check that the endpoint returns SSE/chunked output when stream: true is set.',
+        /TTFT could not be measured: no matching content was detected in the stream/,
       );
     });
   });

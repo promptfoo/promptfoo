@@ -52,27 +52,30 @@ OPENAI_API_KEY=your-openai-api-key
 
 ### TTFT Measurement
 
-This example uses `stream: true` in the request body to measure Time to First Token:
+This example uses `stream: true` in the request body to enable TTFT measurement, and `streamFormat: openai-chat` to pin TTFT to the first model-emitted content token (canonical TTFT per vLLM / MLPerf / OpenAI perf docs) rather than the first SSE framing frame:
 
 ```yaml
 providers:
   - id: https://api.openai.com/v1/chat/completions
     config:
-      # TTFT measurement is automatically enabled when stream: true
-      stream: true # Enable streaming from API
+      body:
+        stream: true # Enable streaming (required for TTFT)
+      streamFormat: openai-chat # Canonical "first content token" TTFT
 ```
+
+Supported `streamFormat` values: `openai-chat`, `openai-responses`, `anthropic-messages`. If your endpoint is not one of these, use `streamFirstTokenPattern` with a custom regex, or omit both and TTFT falls back to "first non-whitespace response byte" (a format-agnostic wire-level proxy that is typically 10-50ms earlier than canonical TTFT on SSE APIs).
 
 ### Performance Assertions
 
 The configuration includes three types of performance tests:
 
 - **Content Quality**: Ensures meaningful output (> 10 characters)
-- **TTFT Performance**: Measures time to first token (< 3000ms)
+- **TTFT Performance**: Measures time to first content token (< 3000ms)
 - **Total Latency**: Measures end-to-end response time (< 10000ms)
 
 ### Expected Results
 
-- **TTFT**: Typically 250-600ms for `gpt-4o-mini` over SSE
+- **TTFT**: Typically 300-700ms for `gpt-4o-mini` over SSE (with `streamFormat: openai-chat`)
 - **Total Latency**: 0.5-2 seconds for short prompts
 - **Streaming Efficiency**: TTFT is usually 30-50% of total latency
 

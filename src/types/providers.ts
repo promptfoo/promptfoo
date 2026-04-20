@@ -249,7 +249,7 @@ export interface ProviderResponse {
     timeToFirstToken?: number;
     tokensPerSecond?: number;
     totalStreamTime?: number;
-    isActuallyStreaming?: boolean;
+    multiChunkDelivery?: boolean;
   };
 }
 
