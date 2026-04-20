@@ -187,7 +187,9 @@
       "nursery": {
         "noFloatingPromises": "error",
         "noMisusedPromises": "error",
-        "noUselessTypeConversion": "error"
+        "noUselessTypeConversion": "error",
+        "noIdenticalTestTitle": "error",
+        "useReduceTypeParameter": "warn"
       }
     }
   },
