@@ -74,3 +74,10 @@ SKIP_OG_GENERATION=true npm run build  # Faster builds
 ## Red Team Docs
 
 See `site/docs/red-team/AGENTS.md` for red-team specific documentation guidelines.
+
+## Assertion Reference Docs
+
+Assertion reference pages live in `site/docs/configuration/expected-outputs/`. When
+documenting assertion behavior, keep the public reference aligned with
+`src/assertions/AGENTS.md`: update the index table, the relevant deterministic or
+model-graded page, and `site/docs/tracing.md` for trace/trajectory assertions.

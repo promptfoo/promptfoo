@@ -26,6 +26,23 @@ Promptfoo pass/fail scores.
 - Redteam guardrail assertions have special aggregation behavior in
   `AssertionsResult`; do not change it without focused redteam tests.
 
+## Public Documentation
+
+Assertion behavior is user-facing. When adding an assertion type or changing accepted
+values, scoring, thresholds, output shape, provider requirements, or examples, update
+the matching docs under `site/docs/configuration/expected-outputs/`.
+
+- Add or update the reference row in `site/docs/configuration/expected-outputs/index.md`.
+- Deterministic assertions usually belong in
+  `site/docs/configuration/expected-outputs/deterministic.md`.
+- Model-graded assertions need
+  `site/docs/configuration/expected-outputs/model-graded/index.md` plus a dedicated
+  page in that directory when the behavior is substantial.
+- Script/custom assertions should stay aligned with `javascript.md`, `python.md`, or
+  `ruby.md`; provider-specific assertions may also need `moderation.md`, `similar.md`,
+  `guardrails.md`, or a provider guide.
+- If trace or trajectory behavior changes, update `site/docs/tracing.md` as well.
+
 ## Testing
 
 Run the assertion and matcher tests that cover the changed handler:
