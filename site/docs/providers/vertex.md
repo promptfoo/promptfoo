@@ -139,14 +139,11 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 ### Embedding Models
 
-- `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
-- `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
-- `vertex:textembedding-gecko@003` - Text embeddings (2,048 tokens, 768d)
-- `vertex:text-embedding-004` - Text embeddings (2,048 tokens, ≤768d)
-- `vertex:text-embedding-005` - Text embeddings (2,048 tokens, ≤768d)
-- `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
-- `vertex:text-multilingual-embedding-002` - Multilingual embeddings (2,048 tokens, ≤768d)
-- `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
+Use the `vertex:embedding:` prefix for embedding models:
+
+- `vertex:embedding:gemini-embedding-001` - Recommended default for new configs; best overall performance across English, multilingual, and code tasks (up to 3,072d)
+- `vertex:embedding:text-embedding-005` - Specialized for English and code tasks (up to 768d)
+- `vertex:embedding:text-multilingual-embedding-002` - Specialized for multilingual tasks (up to 768d)
 
 ### Image Generation Models
 
@@ -627,8 +624,8 @@ defaultTest:
     provider:
       # For llm-rubric and factuality assertions
       text: vertex:gemini-2.5-pro
-      # For similarity comparisons
-      embedding: vertex:embedding:text-embedding-004
+      # For similarity and answer-relevance assertions
+      embedding: vertex:embedding:gemini-embedding-001
 ```
 
 ### Configuration Reference
