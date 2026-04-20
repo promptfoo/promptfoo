@@ -57,6 +57,25 @@ describe('useEvalOperations', () => {
       verifyApiCall();
     });
 
+    it('should return replay reasoning when the API response includes reasoning blocks', async () => {
+      const reasoning = [{ type: 'reasoning' as const, content: 'Replay reasoning' }];
+      setupApiMock({
+        ok: true,
+        json: async () => ({
+          output: 'Final answer',
+          response: { reasoning },
+        }),
+      });
+
+      let replayResult;
+      await act(async () => {
+        replayResult = await result.current.replayEvaluation(params);
+      });
+
+      expect(replayResult).toEqual({ output: 'Final answer', reasoning });
+      verifyApiCall();
+    });
+
     it('should return an object with the error property formatted as "Provider error: [error message]" when the API returns a successful response but the data contains an error field', async () => {
       const mockErrorMessage = 'Failed to process the request.';
       setupApiMock({

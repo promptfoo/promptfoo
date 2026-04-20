@@ -34,7 +34,14 @@ export function useEvalOperations() {
           return { error: `Provider error: ${data.error}` };
         }
 
-        return { output: data.output || undefined, reasoning: data.response?.reasoning };
+        const reasoning = Array.isArray(data.response?.reasoning)
+          ? data.response.reasoning
+          : undefined;
+
+        return {
+          output: data.output || undefined,
+          ...(reasoning?.length ? { reasoning } : {}),
+        };
       } catch (error) {
         return { error: error instanceof Error ? error.message : 'An error occurred' };
       }
