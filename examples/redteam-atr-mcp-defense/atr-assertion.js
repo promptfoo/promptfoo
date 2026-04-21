@@ -12,10 +12,23 @@
 // Cache engine across test cases to avoid reloading 108 rules on every assertion.
 let enginePromise = null;
 
+/**
+ * Lazy-load the ATR rules engine. Caches the promise so rules are read once
+ * per test run. Throws a friendly error if the optional dependency is missing.
+ *
+ * @returns {Promise<import('agent-threat-rules').ATREngine>}
+ */
 function getEngine() {
   if (!enginePromise) {
     enginePromise = (async () => {
-      const { ATREngine } = await import('agent-threat-rules');
+      let ATREngine;
+      try {
+        ({ ATREngine } = await import('agent-threat-rules'));
+      } catch (err) {
+        throw new Error(
+          'agent-threat-rules not installed. Run: npm install agent-threat-rules',
+        );
+      }
       const engine = new ATREngine();
       await engine.loadRules();
       return engine;
@@ -24,6 +37,13 @@ function getEngine() {
   return enginePromise;
 }
 
+/**
+ * Promptfoo assertion callback. Evaluates the model output against ATR rules
+ * and fails the test if any high/critical-severity rule matches.
+ *
+ * @param {{ output: string }} args
+ * @returns {Promise<{ pass: boolean, score: number, reason: string }>}
+ */
 module.exports = async function ({ output }) {
   const engine = await getEngine();
 
