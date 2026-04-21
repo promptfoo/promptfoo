@@ -1,7 +1,8 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { useToast } from '@app/hooks/useToast';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
@@ -31,17 +32,24 @@ const mockUpdateConfig = vi.fn();
 const mockShowToast = vi.fn();
 
 const renderComponent = () => {
-  const theme = createTheme();
   const redTeamConfig = (useRedTeamConfig as unknown as Mock)();
   return render(
-    <ThemeProvider theme={theme}>
+    <TooltipProvider>
       <ToastProvider>
         <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
           <CustomPoliciesSection />
         </TestCaseGenerationProvider>
       </ToastProvider>
-    </ThemeProvider>,
+    </TooltipProvider>,
   );
+};
+
+const getUploadInputForLabel = (label: HTMLElement) => {
+  const fileInput = label.closest('label')?.querySelector<HTMLInputElement>('input[type="file"]');
+  if (!fileInput) {
+    throw new Error('CSV upload input not found');
+  }
+  return fileInput;
 };
 
 describe('CustomPoliciesSection', () => {
@@ -134,13 +142,13 @@ describe('CustomPoliciesSection', () => {
       });
 
       rerender(
-        <ThemeProvider theme={createTheme()}>
+        <TooltipProvider>
           <ToastProvider>
             <TestCaseGenerationProvider redTeamConfig={(mockUseRedTeamConfig as unknown as Mock)()}>
               <CustomPoliciesSection />
             </TestCaseGenerationProvider>
           </ToastProvider>
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       // Verify policies are reset and empty state message is shown
@@ -159,12 +167,11 @@ describe('CustomPoliciesSection', () => {
 
   describe('CSV Upload', () => {
     it('should append new policies and show a success toast for a valid CSV upload', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
-      // Wait for component to be ready
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /upload csv/i })).toBeInTheDocument();
-      });
+      // Wait for component to be ready - use findByText since it's a label with asChild
+      const uploadButton = await screen.findByText(/upload csv/i);
 
       const csvContent = 'policy_text\n"Policy from CSV 1"\n"Policy from CSV 2"';
       const file = new File([csvContent], 'policies.csv', { type: 'text/csv' });
@@ -172,13 +179,9 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
+      const fileInput = getUploadInputForLabel(uploadButton);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalled();
@@ -191,31 +194,42 @@ describe('CustomPoliciesSection', () => {
     });
 
     it('should disable the "Upload CSV" button and display "Uploading..." while processing, then re-enable and restore label', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       const csvContent = 'policy_text\n"Policy from CSV 1"';
       const file = new File([csvContent], 'policies.csv', { type: 'text/csv' });
+      let resolveFileText!: (value: string) => void;
       Object.defineProperty(file, 'text', {
-        value: () => Promise.resolve(csvContent),
+        value: () =>
+          new Promise<string>((resolve) => {
+            resolveFileText = resolve;
+          }),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
+      // Wait for component to be ready
+      const uploadLabel = await screen.findByText(/upload csv/i);
+      const uploadButton = uploadLabel.closest('label');
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      const uploadPromise = user.upload(fileInput, file);
 
-      expect(uploadButton).toHaveAttribute('aria-disabled', 'true');
-      expect(uploadButton).toHaveTextContent('Uploading...');
-
+      // Wait for the "Uploading..." state to appear
       await waitFor(() => {
-        expect(uploadButton).not.toHaveAttribute('aria-disabled');
+        expect(uploadButton).toHaveTextContent('Uploading...');
+      });
+
+      resolveFileText(csvContent);
+      await uploadPromise;
+
+      // Then wait for it to return to normal
+      await waitFor(() => {
         expect(uploadButton).toHaveTextContent('Upload CSV');
       });
     });
 
     it('should show a warning toast when no valid policies are found in the CSV', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       const csvContent = 'policy_text\n\n\n';
@@ -224,13 +238,11 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
-      expect(fileInput).not.toBeNull();
+      // Wait for component to be ready
+      const uploadLabel = await screen.findByText(/upload csv/i);
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -241,6 +253,7 @@ describe('CustomPoliciesSection', () => {
     });
 
     it('should show an error toast when a non-CSV file is uploaded with a .csv extension', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       const csvContent = 'This is not a CSV file. <?xml version="1.0"?>';
@@ -249,12 +262,11 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.resolve(csvContent),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
+      // Wait for component to be ready
+      const uploadLabel = await screen.findByText(/upload csv/i);
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -265,6 +277,7 @@ describe('CustomPoliciesSection', () => {
     });
 
     it('should show an error toast when a file cannot be read as text', async () => {
+      const user = userEvent.setup();
       renderComponent();
 
       const file = new File([''], 'test.csv', { type: 'text/csv' });
@@ -272,12 +285,11 @@ describe('CustomPoliciesSection', () => {
         value: () => Promise.reject(new Error('File could not be read')),
       });
 
-      const uploadButton = screen.getByRole('button', { name: /upload csv/i });
-      const fileInput = uploadButton.querySelector('input[type="file"]');
+      // Wait for component to be ready
+      const uploadLabel = await screen.findByText(/upload csv/i);
+      const fileInput = getUploadInputForLabel(uploadLabel);
 
-      fireEvent.change(fileInput!, {
-        target: { files: [file] },
-      });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -538,13 +550,13 @@ describe('CustomPoliciesSection', () => {
       });
 
       rerender(
-        <ThemeProvider theme={createTheme()}>
+        <TooltipProvider>
           <ToastProvider>
             <TestCaseGenerationProvider redTeamConfig={(mockUseRedTeamConfig as unknown as Mock)()}>
               <CustomPoliciesSection />
             </TestCaseGenerationProvider>
           </ToastProvider>
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       // Policies should still be displayed correctly despite reordering

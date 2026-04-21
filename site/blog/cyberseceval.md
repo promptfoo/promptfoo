@@ -32,7 +32,7 @@ The end result is a report that shows you how well your model is able to defend 
 
 :::info
 
-To jump straight to the code, [click here](https://github.com/promptfoo/promptfoo/tree/main/examples/cyberseceval).
+To jump straight to the code, [click here](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-cyberseceval).
 
 :::
 
@@ -50,7 +50,7 @@ CyberSecEval is a benchmark suite designed by Meta to assess cybersecurity vulne
 
 Before starting, make sure you have:
 
-- **Node.js**: Version 20 or later ([download](https://nodejs.org/))
+- **Node.js**: 20+ ([download](https://nodejs.org/))
 - **Promptfoo**: We'll use `npx` to run commands, so no separate installation is needed
 - **Model Access**: API keys or local setup for the models you want to test
 
@@ -93,7 +93,7 @@ We'll set up a basic prompt file `prompt.json` that just passes through each pro
 ]
 ```
 
-And lastly, we'll [download the CyberSecEval test cases](https://github.com/promptfoo/promptfoo/blob/main/examples/cyberseceval/prompt_injection.json) and place them in the same directory as `prompt_injection.json`.
+And lastly, we'll [download the CyberSecEval test cases](https://github.com/promptfoo/promptfoo/blob/main/examples/redteam-cyberseceval/prompt_injection.json) and place them in the same directory as `prompt_injection.json`.
 
 ## Testing Different Models
 

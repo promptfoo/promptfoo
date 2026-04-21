@@ -1,4 +1,4 @@
-import { matchesContextRecall } from '../matchers';
+import { matchesContextRecall } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 

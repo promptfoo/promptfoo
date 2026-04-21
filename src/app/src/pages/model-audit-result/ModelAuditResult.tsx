@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import {
@@ -133,12 +133,14 @@ export default function ModelAuditResult() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
         <div className="container max-w-2xl mx-auto px-4">
           <Alert variant="destructive" className="mb-6">
-            <AlertDescription>{error || 'Scan not found'}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{error || 'Scan not found'}</AlertDescription>
+            </AlertContent>
           </Alert>
           <div className="flex gap-3">
             <Button asChild>
               <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>
-                <ArrowBackIcon className="h-4 w-4 mr-2" />
+                <ArrowBackIcon className="size-4 mr-2" />
                 Back to History
               </RouterLink>
             </Button>
@@ -155,7 +157,7 @@ export default function ModelAuditResult() {
     <div className="flex items-center justify-between">
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         <RouterLink to={MODEL_AUDIT_ROUTES.LIST}>
-          <ArrowBackIcon className="h-4 w-4 mr-2" />
+          <ArrowBackIcon className="size-4 mr-2" />
           Back to History
         </RouterLink>
       </Button>
@@ -164,12 +166,12 @@ export default function ModelAuditResult() {
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
             Actions
-            <MoreVertIcon className="h-4 w-4 ml-2" />
+            <MoreVertIcon className="size-4 ml-2" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={handleDownload}>
-            <DownloadIcon className="h-4 w-4 mr-2" />
+            <DownloadIcon className="size-4 mr-2" />
             Download JSON
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -177,7 +179,7 @@ export default function ModelAuditResult() {
             onClick={() => setDeleteDialogOpen(true)}
             className="text-destructive focus:text-destructive"
           >
-            <DeleteIcon className="h-4 w-4 mr-2" />
+            <DeleteIcon className="size-4 mr-2" />
             Delete Scan
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -253,7 +255,7 @@ export default function ModelAuditResult() {
                   </>
                 ) : (
                   <>
-                    <DeleteIcon className="h-4 w-4 mr-2" />
+                    <DeleteIcon className="size-4 mr-2" />
                     Delete
                   </>
                 )}

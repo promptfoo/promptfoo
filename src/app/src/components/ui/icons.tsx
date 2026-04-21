@@ -8,6 +8,7 @@
 
 export {
   AlertCircle as AlertCircleIcon,
+  AlertTriangle as AlertTriangleIcon,
   AlertTriangle as WarningIcon,
   ArrowLeft as ArrowBackIcon,
   ArrowRight as ArrowForwardIcon,
@@ -39,7 +40,7 @@ export {
   Filter as FilterIcon,
   Folder as FolderIcon,
   FolderOpen as FolderOpenIcon,
-  Github as GitHubIcon,
+  GitBranch as GitHubIcon,
   Globe as GlobeIcon,
   Globe as LanguageIcon,
   HardDrive as HardDriveIcon,

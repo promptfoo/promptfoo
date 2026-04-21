@@ -10,17 +10,17 @@ keywords: [authentication, login, logout, promptfoo enterprise, promptfoo app, s
 
 ## Setting Up SSO
 
-Promptfoo supports both basic authentication and SSO through SAML 2.0 and OIDC. To configure SSO with Promptfoo Enterprise, reach out to the support team with your IdP information and the Promptfoo team will configure it. The authentication endpoint is `auth.promptfoo.app`.
+[Promptfoo Enterprise](/docs/enterprise/) supports both basic authentication and SSO through SAML 2.0 and OIDC. To configure SSO with Promptfoo Enterprise, reach out to the support team with your IdP information and the Promptfoo team will configure it. The authentication endpoint is `auth.promptfoo.app`.
 
 ## Basic Authentication
 
-Promptfoo supports basic authentication into the application through `auth.promptfoo.app`. When an organization is created, the global admin will receive an email from Promptfoo to log in. Users, teams, and roles will be created in the Organization Settings of the Promptfoo application, which is detailed further in the [Teams documentation](./teams.md).
+Promptfoo Enterprise supports basic authentication into the application through `auth.promptfoo.app`. When an organization is created, the global admin will receive an email from Promptfoo Enterprise to log in. Users, teams, and roles will be created in the Organization Settings of the Promptfoo Enterprise application, which is detailed further in the [Teams documentation](./teams.md).
 
 You can also authenticate into the application using a magic link. To do this, navigate to `auth.promptfoo.app` and click the "Login with a magic link" button. You will receive an email with a link to log in. If you do not receive an email, please be sure to check your spam folder.
 
-## Authenticating the CLI
+## Authenticating Into the CLI
 
-Connect the Promptfoo CLI to your Enterprise account to share evaluations and run red team scans.
+Connect the Promptfoo CLI to your Enterprise account to share evals and run red team scans.
 
 ### Browser-Based Login (Recommended)
 
@@ -76,10 +76,10 @@ promptfoo auth logout
 ```
 
 :::tip
-All evaluations are stored locally until you share them. Run `promptfoo share` to upload existing local evaluations to your Enterprise organization.
+All evals are stored locally until you share them. Run `promptfoo share` to upload existing local evals to your Enterprise organization.
 :::
 
-Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your evaluation results are only visible to members of your organization.
+Authenticating with your organization's account enables [team-based sharing](/docs/usage/sharing#enterprise-sharing), ensuring your eval results are only visible to members of your organization.
 
 ## Working with Multiple Teams
 

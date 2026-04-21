@@ -1,17 +1,16 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import { CopyButton } from '@app/components/ui/copy-button';
-import { CancelIcon, SaveIcon, UploadIcon } from '@app/components/ui/icons';
+import { CancelIcon, DownloadIcon, SaveIcon, TerminalIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import yaml from 'js-yaml';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 import type { UnifiedConfig } from '@promptfoo/types';
-import 'prismjs/components/prism-yaml';
 import 'prismjs/themes/prism.css';
 
 interface YamlEditorProps {
@@ -23,6 +22,8 @@ interface YamlEditorProps {
 // Schema comment that should always be at the top of the YAML file
 const YAML_SCHEMA_COMMENT =
   '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json';
+const YAML_DOWNLOAD_FILE_NAME = 'promptfooconfig.yaml';
+const EVAL_CLI_COMMAND = `promptfoo eval -c ${YAML_DOWNLOAD_FILE_NAME}`;
 
 // Ensure the schema comment is at the top of YAML content
 const ensureSchemaComment = (yamlContent: string): string => {
@@ -75,27 +76,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        if (content) {
-          setCode(ensureSchemaComment(content));
-          setHasUnsavedChanges(true);
-          showToast('File loaded into editor', 'info');
-        }
-      };
-      reader.onerror = () => {
-        showToast('Failed to read file', 'error');
-      };
-      reader.readAsText(file);
-    }
-    // Reset the input
-    event.target.value = '';
-  };
-
   const handleSave = () => {
     const success = parseAndUpdateStore(code);
     if (success) {
@@ -111,7 +91,19 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     showToast('Changes discarded', 'info');
   };
 
+  const handleDownload = () => {
+    const blob = new Blob([code], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = YAML_DOWNLOAD_FILE_NAME;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast(`Downloaded ${YAML_DOWNLOAD_FILE_NAME}`, 'success');
+  };
+
   // Initial load effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     if (initialYaml) {
       const formattedCode = ensureSchemaComment(initialYaml);
@@ -136,28 +128,28 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   }, [code, originalCode]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {/* Action bar */}
       {!readOnly && (
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={handleSave} disabled={!hasUnsavedChanges}>
-              <SaveIcon className="h-4 w-4 mr-2" />
+              <SaveIcon className="size-4 mr-2" />
               Save
             </Button>
-            <Button variant="outline" size="sm" onClick={handleCancel}>
-              <CancelIcon className="h-4 w-4 mr-2" />
-              Reset to UI State
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancel}
+              disabled={!hasUnsavedChanges}
+            >
+              <CancelIcon className="size-4 mr-2" />
+              Discard Changes
             </Button>
-            <label>
-              <Button variant="ghost" size="sm" asChild>
-                <span className="cursor-pointer">
-                  <UploadIcon className="h-4 w-4 mr-2" />
-                  Upload File
-                </span>
-              </Button>
-              <input type="file" hidden accept=".yaml,.yml" onChange={handleFileUpload} />
-            </label>
+            <Button variant="outline" size="sm" onClick={handleDownload}>
+              <DownloadIcon className="size-4 mr-2" />
+              Download YAML
+            </Button>
           </div>
           {hasUnsavedChanges && (
             <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
@@ -167,18 +159,42 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
         </div>
       )}
 
+      {!readOnly && (
+        <Alert variant="info" className="items-start">
+          <TerminalIcon className="size-4 mt-0.5" />
+          <AlertContent className="space-y-2">
+            <p className="font-medium text-sm">Run in CLI</p>
+            <AlertDescription>
+              Download this file as <code>{YAML_DOWNLOAD_FILE_NAME}</code>, then run:
+            </AlertDescription>
+            <div className="relative">
+              <code className="block rounded bg-background/70 px-3 py-2 pr-12 text-sm font-mono">
+                {EVAL_CLI_COMMAND}
+              </code>
+              <CopyButton
+                value={EVAL_CLI_COMMAND}
+                className="absolute right-2 top-1.5"
+                aria-label="Copy CLI command"
+              />
+            </div>
+          </AlertContent>
+        </Alert>
+      )}
+
       {/* Error display */}
       {parseError && (
         <Alert variant="destructive">
-          <AlertDescription>{parseError}</AlertDescription>
+          <AlertContent>
+            <AlertDescription>{parseError}</AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 
       {/* Editor Container */}
-      <div className="relative">
+      <div className="relative min-w-0">
         <div
           className={cn(
-            'rounded-lg overflow-hidden',
+            'rounded-lg overflow-auto max-h-[60vh]',
             'border-2 transition-all',
             hasUnsavedChanges ? 'border-primary' : 'border-border',
           )}
@@ -187,6 +203,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
             autoCapitalize="off"
             value={code}
             onValueChange={(newCode) => {
+              if (readOnly) {
+                return;
+              }
               setCode(newCode);
               if (parseError) {
                 setParseError(null);
@@ -205,14 +224,15 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
-              minHeight: '400px',
+              minHeight: '300px',
             }}
-            className="bg-background"
+            className={cn('bg-background', readOnly && 'cursor-default select-text')}
+            disabled={readOnly}
           />
         </div>
 
-        {/* Copy button */}
-        <div className="absolute top-2 right-2">
+        {/* Copy button - offset to avoid scrollbar */}
+        <div className="absolute top-2 right-5">
           <CopyButton value={code} />
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { matchesAnswerRelevance } from '../matchers';
+import { matchesAnswerRelevance } from '../matchers/rag';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';

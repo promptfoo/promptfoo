@@ -2,108 +2,336 @@ import input from '@inquirer/input';
 import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
+import opener from 'opener';
 import ora from 'ora';
 import { isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { CLOUD_API_HOST, cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import {
   canCreateTargets,
-  getDefaultTeam,
   getUserTeams,
   resolveTeamFromIdentifier,
   resolveTeamId,
 } from '../util/cloud';
-import { fetchWithProxy } from '../util/fetch/index';
+import { fetchWithProxy, fetchWithTimeout } from '../util/fetch/index';
 import type { Command } from 'commander';
 
-// Device code flow types
-interface DeviceCodeResponse {
+type LoginCommandOptions = {
+  org?: string;
+  host?: string;
+  apiKey?: string;
+  team?: string;
+};
+
+type UserTeam = Awaited<ReturnType<typeof getUserTeams>>[number];
+
+type DeviceCodeResponse = {
   device_code: string;
   user_code: string;
   verification_uri: string;
   verification_uri_complete: string;
   expires_in: number;
   interval: number;
-}
+};
 
-interface DeviceTokenSuccessResponse {
+type DeviceTokenSuccessResponse = {
   access_token: string;
-  token_type: string;
-  user: {
-    id: string;
-    email: string;
-    name: string;
-  };
-  organization: {
-    id: string;
-    name: string;
-  };
-}
+  token_type?: string;
+};
 
-interface DeviceTokenErrorResponse {
-  error: 'authorization_pending' | 'slow_down' | 'expired_token' | 'access_denied';
-  error_description: string;
-}
+type DeviceTokenErrorResponse = {
+  error: 'authorization_pending' | 'slow_down' | 'expired_token' | 'access_denied' | string;
+  error_description?: string;
+};
 
 type DeviceTokenResponse = DeviceTokenSuccessResponse | DeviceTokenErrorResponse;
 
-/**
- * Request a device code for CLI authentication
- */
+const DEVICE_CLIENT_ID = 'promptfoo-cli';
+const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
+const DEVICE_AUTH_REQUEST_TIMEOUT_MS = REQUEST_TIMEOUT_MS ?? 300_000;
+
+function getOrganizationTeams(
+  teams: UserTeam[],
+  requestedOrganizationId: string | undefined,
+  fallbackOrganizationId: string,
+): { organizationId: string; teams: UserTeam[] } {
+  if (requestedOrganizationId) {
+    const organizationTeams = teams.filter(
+      (team) => team.organizationId === requestedOrganizationId,
+    );
+
+    if (
+      organizationTeams.length > 0 ||
+      (teams.length === 0 && requestedOrganizationId === fallbackOrganizationId)
+    ) {
+      return {
+        organizationId: requestedOrganizationId,
+        teams: organizationTeams,
+      };
+    }
+
+    const organizationIds = [
+      ...new Set([fallbackOrganizationId, ...teams.map((team) => team.organizationId)]),
+    ].join(', ');
+    throw new Error(
+      `Organization '${requestedOrganizationId}' not found in your accessible teams. Available organizations: ${organizationIds}`,
+    );
+  }
+
+  const fallbackOrganizationTeams = teams.filter(
+    (team) => team.organizationId === fallbackOrganizationId,
+  );
+
+  if (fallbackOrganizationTeams.length > 0 || teams.length === 0) {
+    return {
+      organizationId: fallbackOrganizationId,
+      teams: fallbackOrganizationTeams,
+    };
+  }
+
+  const defaultTeam = getOldestTeam(teams);
+  return {
+    organizationId: defaultTeam.organizationId,
+    teams: teams.filter((team) => team.organizationId === defaultTeam.organizationId),
+  };
+}
+
+function getOldestTeam(teams: UserTeam[]): UserTeam {
+  return [...teams].sort(
+    (teamA, teamB) => new Date(teamA.createdAt).getTime() - new Date(teamB.createdAt).getTime(),
+  )[0];
+}
+
+function resolveTeamFromOrganizationTeams(
+  teams: UserTeam[],
+  teamIdentifier: string,
+  organizationId: string,
+): UserTeam {
+  const selectedTeam =
+    teams.find((team) => team.id === teamIdentifier) ||
+    teams.find((team) => team.name.toLowerCase() === teamIdentifier.toLowerCase()) ||
+    teams.find((team) => team.slug === teamIdentifier);
+
+  if (selectedTeam) {
+    return selectedTeam;
+  }
+
+  const availableTeams = teams.map((team) => team.name).join(', ');
+  throw new Error(
+    `Team '${teamIdentifier}' not found in organization '${organizationId}'. Available teams: ${availableTeams}`,
+  );
+}
+
+function resolveTeamFromTeams(teams: UserTeam[], teamIdentifier: string): UserTeam {
+  const selectedTeam = teams.find((team) => team.id === teamIdentifier);
+  if (selectedTeam) {
+    return selectedTeam;
+  }
+
+  const nameMatch = teams.find((team) => team.name.toLowerCase() === teamIdentifier.toLowerCase());
+  if (nameMatch) {
+    return nameMatch;
+  }
+
+  const slugMatch = teams.find((team) => team.slug === teamIdentifier);
+  if (slugMatch) {
+    return slugMatch;
+  }
+
+  const availableTeams = teams.map((team) => team.name).join(', ');
+  throw new Error(`Team '${teamIdentifier}' not found. Available teams: ${availableTeams}`);
+}
+
+async function setupTeamContext(
+  cmdObj: LoginCommandOptions,
+  organizationId: string,
+  teams?: UserTeam[],
+): Promise<string> {
+  try {
+    let currentOrganizationId = organizationId;
+    let organizationTeams = teams;
+
+    if (!organizationTeams) {
+      const resolvedOrganizationTeams = getOrganizationTeams(
+        await getUserTeams(),
+        undefined,
+        organizationId,
+      );
+      currentOrganizationId = resolvedOrganizationTeams.organizationId;
+      organizationTeams = resolvedOrganizationTeams.teams;
+    }
+
+    cloudConfig.setCurrentOrganization(currentOrganizationId);
+    cloudConfig.cacheTeams(organizationTeams, currentOrganizationId);
+
+    let selectedTeam;
+    let teamLabelSuffix = '';
+
+    if (cmdObj.team) {
+      selectedTeam = resolveTeamFromOrganizationTeams(
+        organizationTeams,
+        cmdObj.team,
+        currentOrganizationId,
+      );
+    } else if (organizationTeams.length === 1) {
+      selectedTeam = organizationTeams[0];
+    } else if (organizationTeams.length > 1) {
+      if (isNonInteractive()) {
+        selectedTeam = getOldestTeam(organizationTeams);
+        logger.warn(
+          chalk.yellow(
+            `\n⚠️  You have access to ${organizationTeams.length} teams. Using '${selectedTeam.name}'.`,
+          ),
+        );
+        logger.info(chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`));
+      } else {
+        logger.info('');
+        try {
+          const answer = await select({
+            message: 'Select a team to use:',
+            choices: organizationTeams.map((team) => ({
+              name: team.name,
+              value: team.id,
+              description: team.slug,
+            })),
+          });
+          selectedTeam = organizationTeams.find((team) => team.id === answer);
+        } catch {
+          selectedTeam = getOldestTeam(organizationTeams);
+          teamLabelSuffix = ` ${chalk.dim('(default)')}`;
+        }
+      }
+    }
+
+    if (selectedTeam) {
+      cloudConfig.setCurrentTeamId(selectedTeam.id, currentOrganizationId);
+      logger.info(`Team: ${chalk.cyan(selectedTeam.name)}${teamLabelSuffix}`);
+    }
+
+    return currentOrganizationId;
+  } catch (teamError) {
+    if (cmdObj.org || cmdObj.team) {
+      throw teamError;
+    }
+    logger.warn(
+      `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
+    );
+    return organizationId;
+  }
+}
+
+async function completeCloudLogin(
+  cmdObj: LoginCommandOptions,
+  token: string,
+  apiHost: string,
+): Promise<void> {
+  const { user, organization, app, hasActiveLicense } = await cloudConfig.validateApiToken(
+    token,
+    apiHost,
+  );
+
+  const existingEmail = getUserEmail();
+  let organizationId = organization.id;
+  let organizationTeams: UserTeam[] | undefined;
+
+  if (cmdObj.org || cmdObj.team) {
+    const allTeams = await getUserTeams(apiHost, token);
+    const resolvedOrganizationTeams = getOrganizationTeams(allTeams, cmdObj.org, organization.id);
+    organizationId = resolvedOrganizationTeams.organizationId;
+    organizationTeams = resolvedOrganizationTeams.teams;
+
+    if (cmdObj.team && !cmdObj.org) {
+      const selectedTeam = resolveTeamFromTeams(allTeams, cmdObj.team);
+      organizationId = selectedTeam.organizationId;
+      organizationTeams = allTeams.filter((team) => team.organizationId === organizationId);
+    }
+
+    if (cmdObj.team) {
+      resolveTeamFromOrganizationTeams(organizationTeams, cmdObj.team, organizationId);
+    }
+  }
+
+  cloudConfig.saveValidatedApiToken(token, apiHost, user, app, hasActiveLicense);
+  if (existingEmail && existingEmail !== user.email) {
+    logger.info(
+      chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
+    );
+  }
+  setUserEmail(user.email);
+  cloudConfig.setCurrentOrganization(organizationId);
+
+  organizationId = await setupTeamContext(cmdObj, organizationId, organizationTeams);
+
+  logger.info(chalk.green.bold('Successfully logged in'));
+  logger.info(`User: ${chalk.cyan(user.email)}`);
+  logger.info(
+    `Organization: ${chalk.cyan(organizationId === organization.id ? organization.name : organizationId)}`,
+  );
+  logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
+}
+
+async function loginWithApiKey(cmdObj: LoginCommandOptions, apiHost: string): Promise<void> {
+  await completeCloudLogin(cmdObj, cmdObj.apiKey!, apiHost);
+}
+
 async function requestDeviceCode(apiHost: string): Promise<DeviceCodeResponse> {
-  const response = await fetchWithProxy(`${apiHost}/api/v1/auth/device/code`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ client_id: 'promptfoo-cli' }),
-  });
+  const response = await fetchWithTimeout(
+    `${apiHost}/api/v1/auth/device/code`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: DEVICE_CLIENT_ID }),
+    },
+    DEVICE_AUTH_REQUEST_TIMEOUT_MS,
+  );
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Failed to request device code: ${error}`);
+    throw new Error(`Failed to request device code: ${error || response.statusText}`);
   }
 
   return response.json();
 }
 
-/**
- * Poll for device authorization
- */
-async function pollForToken(
+async function pollForDeviceToken(
   apiHost: string,
   deviceCode: string,
-  interval: number,
-  expiresIn: number,
+  intervalSeconds: number,
+  expiresInSeconds: number,
 ): Promise<DeviceTokenSuccessResponse> {
-  const startTime = Date.now();
-  const expiresAtMs = startTime + expiresIn * 1000;
-  let pollInterval = interval * 1000;
+  const expiresAtMs = Date.now() + expiresInSeconds * 1000;
+  let pollIntervalMs = intervalSeconds * 1000;
 
   while (Date.now() < expiresAtMs) {
-    await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
 
-    const response = await fetchWithProxy(`${apiHost}/api/v1/auth/device/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        device_code: deviceCode,
-        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      }),
-    });
+    const response = await fetchWithTimeout(
+      `${apiHost}/api/v1/auth/device/token`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          device_code: deviceCode,
+          grant_type: DEVICE_GRANT_TYPE,
+        }),
+      },
+      DEVICE_AUTH_REQUEST_TIMEOUT_MS,
+    );
 
-    const data: DeviceTokenResponse = await response.json();
+    const data = (await response.json()) as DeviceTokenResponse;
 
     if ('access_token' in data) {
       return data;
     }
 
-    if (data.error === 'slow_down') {
-      // Increase interval by 5 seconds as per OAuth spec
-      pollInterval += 5000;
+    if (data.error === 'authorization_pending') {
       continue;
     }
 
-    if (data.error === 'authorization_pending') {
+    if (data.error === 'slow_down') {
+      pollIntervalMs += 5000;
       continue;
     }
 
@@ -114,21 +342,122 @@ async function pollForToken(
     if (data.error === 'access_denied') {
       throw new Error('Authorization was denied.');
     }
+
+    throw new Error(
+      data.error_description ||
+        `Device authorization failed: ${response.status} ${response.statusText}`,
+    );
   }
 
   throw new Error('Device code expired. Please try again.');
 }
 
-/**
- * Open browser to device verification URL
- */
 async function openDeviceVerificationUrl(url: string): Promise<void> {
   try {
-    const open = (await import('open')).default;
-    await open(url);
-  } catch {
-    // If opening browser fails, user can manually navigate
+    logger.info(`Opening ${url} in your browser...`);
+    await opener(url);
+  } catch (error) {
+    logger.debug(`Failed to open browser automatically: ${String(error)}`);
   }
+}
+
+function validateHttpUrl(value: string): true | string {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      return 'Please enter an HTTP or HTTPS URL';
+    }
+    return true;
+  } catch {
+    return 'Please enter a valid URL (e.g., https://promptfoo.yourcompany.com)';
+  }
+}
+
+async function resolveDeviceAuthApiHost(cmdObj: LoginCommandOptions): Promise<string> {
+  if (cmdObj.host) {
+    const url = new URL(cmdObj.host);
+    return url.origin;
+  }
+
+  const instanceType = await select({
+    message: 'Where would you like to log in?',
+    choices: [
+      {
+        name: 'Promptfoo Cloud',
+        value: 'cloud',
+        description: 'promptfoo.app',
+      },
+      {
+        name: 'Enterprise / Self-hosted',
+        value: 'enterprise',
+        description: "Your organization's Promptfoo instance",
+      },
+    ],
+  });
+
+  if (instanceType === 'cloud') {
+    return CLOUD_API_HOST;
+  }
+
+  const enterpriseUrl = await input({
+    message: 'Enter your Promptfoo instance URL:',
+    validate: validateHttpUrl,
+  });
+
+  return new URL(enterpriseUrl).origin;
+}
+
+async function loginWithDeviceCode(cmdObj: LoginCommandOptions): Promise<void> {
+  if (isNonInteractive()) {
+    logger.error(
+      'Authentication required. Please set PROMPTFOO_API_KEY environment variable or use --api-key flag.',
+    );
+    logger.info(chalk.dim('Example: promptfoo auth login --api-key <your-api-key>'));
+    process.exitCode = 1;
+    return;
+  }
+
+  const apiHost = await resolveDeviceAuthApiHost(cmdObj);
+
+  logger.info('');
+  const requestingSpinner = ora({ text: 'Requesting device code...', spinner: 'dots' }).start();
+
+  let deviceCode: DeviceCodeResponse;
+  try {
+    deviceCode = await requestDeviceCode(apiHost);
+    requestingSpinner.succeed('Device code received');
+  } catch (error) {
+    requestingSpinner.fail('Failed to request device code');
+    throw error;
+  }
+
+  logger.info('');
+  logger.info(chalk.bold('To complete login, visit:'));
+  logger.info(chalk.cyan.bold(`  ${deviceCode.verification_uri_complete}`));
+  logger.info('');
+  logger.info(`Or go to ${chalk.cyan(deviceCode.verification_uri)} and enter code:`);
+  logger.info(chalk.yellow.bold(`  ${deviceCode.user_code}`));
+  logger.info('');
+
+  await openDeviceVerificationUrl(deviceCode.verification_uri_complete);
+
+  const pollingSpinner = ora({ text: 'Waiting for authorization...', spinner: 'dots' }).start();
+
+  let tokenResponse: DeviceTokenSuccessResponse;
+  try {
+    tokenResponse = await pollForDeviceToken(
+      apiHost,
+      deviceCode.device_code,
+      deviceCode.interval,
+      deviceCode.expires_in,
+    );
+    pollingSpinner.succeed('Authorization complete');
+  } catch (error) {
+    pollingSpinner.fail('Authorization failed');
+    throw error;
+  }
+
+  await completeCloudLogin(cmdObj, tokenResponse.access_token, apiHost);
 }
 
 export function authCommand(program: Command) {
@@ -139,7 +468,7 @@ export function authCommand(program: Command) {
     .description('Login to Promptfoo Cloud or Enterprise')
     .option('-o, --org <orgId>', 'The organization id to login to.')
     .option(
-      '-h,--host <host>',
+      '-h, --host <host>',
       'The host of the promptfoo instance. This needs to be the url of the API if different from the app url.',
     )
     .option('-k, --api-key <apiKey>', 'Login using an API key.')
@@ -147,258 +476,24 @@ export function authCommand(program: Command) {
       '-t, --team <team>',
       'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
     )
-    .action(async (cmdObj: { orgId: string; host: string; apiKey: string; team?: string }) => {
+    .action(async (cmdObj: LoginCommandOptions) => {
+      const apiHost = cmdObj.host || cloudConfig.getApiHost();
+
       try {
-        // If API key is provided, use it directly (backwards compatible)
         if (cmdObj.apiKey) {
-          const apiHost = cmdObj.host || cloudConfig.getApiHost();
-          await loginWithApiKey(cmdObj.apiKey, apiHost, cmdObj.team);
+          await loginWithApiKey(cmdObj, apiHost);
           return;
         }
 
-        // Non-interactive mode: require API key
-        if (isNonInteractive()) {
-          logger.error(
-            'Authentication required. Please set PROMPTFOO_API_KEY environment variable or use --api-key flag.',
-          );
-          logger.info(chalk.dim('Example: promptfoo auth login --api-key <your-api-key>'));
-          process.exitCode = 1;
-          return;
-        }
-
-        // Interactive mode: Use device code flow
-        let apiHost: string;
-
-        // Determine if we're using cloud or enterprise
-        if (cmdObj.host) {
-          // Host explicitly provided via flag
-          apiHost = cmdObj.host;
-        } else {
-          // Prompt user for cloud vs enterprise
-          const instanceType = await select({
-            message: 'Where would you like to log in?',
-            choices: [
-              {
-                name: 'Promptfoo Cloud',
-                value: 'cloud',
-                description: 'promptfoo.app',
-              },
-              {
-                name: 'Enterprise / Self-hosted',
-                value: 'enterprise',
-                description: "Your organization's Promptfoo instance",
-              },
-            ],
-          });
-
-          if (instanceType === 'cloud') {
-            apiHost = CLOUD_API_HOST;
-          } else {
-            // Prompt for enterprise URL
-            const enterpriseUrl = await input({
-              message: 'Enter your Promptfoo instance URL:',
-              validate: (value) => {
-                try {
-                  new URL(value);
-                  return true;
-                } catch {
-                  return 'Please enter a valid URL (e.g., https://promptfoo.yourcompany.com)';
-                }
-              },
-            });
-            // Normalize URL - ensure we have the API host
-            const url = new URL(enterpriseUrl);
-            apiHost = url.origin;
-          }
-        }
-
-        // Request device code
-        logger.info('');
-        const requestingSpinner = ora({
-          text: 'Requesting device code...',
-          spinner: 'dots',
-        }).start();
-
-        let deviceCode: DeviceCodeResponse;
-        try {
-          deviceCode = await requestDeviceCode(apiHost);
-          requestingSpinner.succeed('Device code received');
-        } catch (error) {
-          requestingSpinner.fail('Failed to request device code');
-          throw error;
-        }
-
-        // Display the code and verification URL
-        logger.info('');
-        logger.info(chalk.bold('To complete login, visit:'));
-        logger.info(chalk.cyan.bold(`  ${deviceCode.verification_uri_complete}`));
-        logger.info('');
-        logger.info(`Or go to ${chalk.cyan(deviceCode.verification_uri)} and enter code:`);
-        logger.info(chalk.yellow.bold(`  ${deviceCode.user_code}`));
-        logger.info('');
-
-        // Open browser automatically
-        await openDeviceVerificationUrl(deviceCode.verification_uri_complete);
-
-        // Poll for authorization
-        const pollingSpinner = ora({
-          text: 'Waiting for authorization...',
-          spinner: 'dots',
-        }).start();
-
-        let tokenResponse: DeviceTokenSuccessResponse;
-        try {
-          tokenResponse = await pollForToken(
-            apiHost,
-            deviceCode.device_code,
-            deviceCode.interval,
-            deviceCode.expires_in,
-          );
-          pollingSpinner.succeed('Authorization complete');
-        } catch (error) {
-          pollingSpinner.fail('Authorization failed');
-          throw error;
-        }
-
-        // Store the token
-        cloudConfig.setApiKey(tokenResponse.access_token);
-        cloudConfig.setApiHost(apiHost);
-
-        // Derive app URL from API host (replace 'api.' with 'www.' if present)
-        const appUrl = apiHost.replace('://api.', '://www.');
-        cloudConfig.setAppUrl(appUrl);
-
-        // Set user email
-        const existingEmail = getUserEmail();
-        if (existingEmail && existingEmail !== tokenResponse.user.email) {
-          logger.info(
-            chalk.yellow(
-              `Updating local email configuration from ${existingEmail} to ${tokenResponse.user.email}`,
-            ),
-          );
-        }
-        setUserEmail(tokenResponse.user.email);
-
-        // Set current organization context
-        cloudConfig.setCurrentOrganization(tokenResponse.organization.id);
-
-        // Display login success
-        logger.info('');
-        logger.info(chalk.green.bold('✓ Successfully logged in'));
-        logger.info(`  User: ${chalk.cyan(tokenResponse.user.email)}`);
-        logger.info(`  Organization: ${chalk.cyan(tokenResponse.organization.name)}`);
-        logger.info(`  App: ${chalk.cyan(appUrl)}`);
-
-        // Set up team
-        await setupTeamAfterLogin(tokenResponse.organization.id, cmdObj.team);
+        await loginWithDeviceCode(cmdObj);
+        return;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Authentication failed: ${errorMessage}`);
         process.exitCode = 1;
+        return;
       }
     });
-
-  /**
-   * Login using an API key directly
-   */
-  async function loginWithApiKey(
-    apiKey: string,
-    apiHost: string,
-    teamIdentifier?: string,
-  ): Promise<void> {
-    const { user, organization } = await cloudConfig.validateAndSetApiToken(apiKey, apiHost);
-
-    // Store token in global config and handle email sync
-    const existingEmail = getUserEmail();
-    if (existingEmail && existingEmail !== user.email) {
-      logger.info(
-        chalk.yellow(`Updating local email configuration from ${existingEmail} to ${user.email}`),
-      );
-    }
-    setUserEmail(user.email);
-
-    // Set current organization context
-    cloudConfig.setCurrentOrganization(organization.id);
-
-    // Display login success with user/org info
-    logger.info(chalk.green.bold('Successfully logged in'));
-    logger.info(`User: ${chalk.cyan(user.email)}`);
-    logger.info(`Organization: ${chalk.cyan(organization.name)}`);
-    logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
-
-    // Set up team
-    await setupTeamAfterLogin(organization.id, teamIdentifier);
-  }
-
-  /**
-   * Set up team context after successful login
-   */
-  async function setupTeamAfterLogin(
-    organizationId: string,
-    teamIdentifier?: string,
-  ): Promise<void> {
-    try {
-      const allTeams = await getUserTeams();
-      cloudConfig.cacheTeams(allTeams, organizationId);
-
-      let selectedTeam;
-
-      if (teamIdentifier) {
-        // --team flag provided: use specified team
-        selectedTeam = await resolveTeamFromIdentifier(teamIdentifier);
-        cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
-        logger.info(`  Team: ${chalk.cyan(selectedTeam.name)}`);
-      } else if (allTeams.length === 1) {
-        // Single team: just use it
-        selectedTeam = allTeams[0];
-        cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
-        logger.info(`  Team: ${chalk.cyan(selectedTeam.name)}`);
-      } else if (allTeams.length > 1) {
-        // Multiple teams
-        if (isNonInteractive()) {
-          // Non-interactive (CI): use default team but warn
-          const defaultTeam = await getDefaultTeam();
-          cloudConfig.setCurrentTeamId(defaultTeam.id, organizationId);
-          logger.info(`  Team: ${chalk.cyan(defaultTeam.name)}`);
-          logger.warn(
-            chalk.yellow(
-              `\n⚠️  You have access to ${allTeams.length} teams. Using '${defaultTeam.name}'.`,
-            ),
-          );
-          logger.info(
-            chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`),
-          );
-        } else {
-          // Interactive: prompt user to select
-          logger.info('');
-          try {
-            const answer = await select({
-              message: 'Select a team to use:',
-              choices: allTeams.map((team) => ({
-                name: team.name,
-                value: team.id,
-                description: team.slug,
-              })),
-            });
-            selectedTeam = allTeams.find((t) => t.id === answer);
-            if (selectedTeam) {
-              cloudConfig.setCurrentTeamId(selectedTeam.id, organizationId);
-              logger.info(`  Team: ${chalk.cyan(selectedTeam.name)}`);
-            }
-          } catch {
-            // User cancelled (Ctrl+C) - use default
-            const defaultTeam = await getDefaultTeam();
-            cloudConfig.setCurrentTeamId(defaultTeam.id, organizationId);
-            logger.info(`  Team: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
-          }
-        }
-      }
-    } catch (teamError) {
-      logger.warn(
-        `Could not set up team context: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
-      );
-    }
-  }
 
   authCommand
     .command('logout')

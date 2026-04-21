@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - CJS provider class'
+
+providers:
+  - file://../providers/echo-cjs.cjs
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: CJS
+    assert:
+      - type: contains
+        value: 'CJS Echo:'
+      - type: contains
+        value: CJS

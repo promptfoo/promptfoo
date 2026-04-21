@@ -67,11 +67,15 @@ export class LlamaProvider implements ApiProvider {
 
     const url = getEnvString('LLAMA_BASE_URL') || 'http://localhost:8080';
 
-    let data,
-      cached = false,
-      latencyMs: number | undefined;
+    interface LlamaCompletionResponse {
+      content: string;
+    }
+
+    let data: LlamaCompletionResponse;
+    let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, latencyMs } = await fetchWithCache(
+      ({ data, cached, latencyMs } = await fetchWithCache<LlamaCompletionResponse>(
         `${url}/completion`,
         {
           method: 'POST',

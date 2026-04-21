@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Capture screenshots for device authorization documentation
  *
@@ -9,10 +10,11 @@
  * - App running on localhost:3200
  */
 
-import { chromium } from 'playwright';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
 import fs from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+import { chromium } from 'playwright';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUTPUT_DIR = join(__dirname, '../static/img/enterprise-docs');
@@ -21,10 +23,18 @@ const API_BASE = 'http://localhost:3201/api/v1';
 const APP_BASE = 'http://localhost:3200';
 
 async function createDeviceCode() {
-  const response = await fetch(`${API_BASE}/auth/device/code`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/auth/device/code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    throw new Error(`Failed to connect to API at ${API_BASE}. Is the server running? ${error}`);
+  }
+  if (!response.ok) {
+    throw new Error(`Failed to create device code: ${response.status} ${response.statusText}`);
+  }
   return response.json();
 }
 
@@ -40,11 +50,13 @@ async function hideUIClutter(page) {
       button[aria-label*="support"], button[aria-label*="chat"] { display: none !important; }
       /* Hide anything fixed to bottom right */
       [style*="position: fixed"][style*="bottom"][style*="right"] { display: none !important; }
-    `
+    `,
   });
   // Also try to remove elements directly
   await page.evaluate(() => {
-    document.querySelectorAll('[class*="pylon"], [aria-label*="support"], [aria-label*="chat"]').forEach(el => el.remove());
+    document
+      .querySelectorAll('[class*="pylon"], [aria-label*="support"], [aria-label*="chat"]')
+      .forEach((el) => el.remove());
   });
 }
 
@@ -112,7 +124,10 @@ async function main() {
 
       // Dismiss the toast by clicking the X or waiting
       try {
-        await page2.locator('[aria-label="close"], .MuiAlert-action button').first().click({ timeout: 1000 });
+        await page2
+          .locator('[aria-label="close"], .MuiAlert-action button')
+          .first()
+          .click({ timeout: 1000 });
       } catch {
         // Toast may auto-dismiss
       }
@@ -156,7 +171,6 @@ async function main() {
 
     console.log('\nAll screenshots captured successfully!');
     console.log(`Output directory: ${OUTPUT_DIR}`);
-
   } catch (error) {
     console.error('Error capturing screenshots:', error);
     process.exit(1);
