@@ -29,14 +29,19 @@ export const handleLatency = ({
   }
 
   const pass = inverse ? latencyMs > assertion.threshold : latencyMs <= assertion.threshold;
+  let reason: string;
+  if (pass) {
+    reason = 'Assertion passed';
+  } else if (inverse) {
+    reason = `Latency ${latencyMs}ms is less than or equal to threshold ${assertion.threshold}ms`;
+  } else {
+    reason = `Latency ${latencyMs}ms is greater than threshold ${assertion.threshold}ms`;
+  }
+
   return {
     pass,
     score: pass ? 1 : 0,
-    reason: pass
-      ? 'Assertion passed'
-      : inverse
-        ? `Latency ${latencyMs}ms is less than or equal to threshold ${assertion.threshold}ms`
-        : `Latency ${latencyMs}ms is greater than threshold ${assertion.threshold}ms`,
+    reason,
     assertion,
   };
 };

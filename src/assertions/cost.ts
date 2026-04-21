@@ -23,14 +23,19 @@ export const handleCost = ({ cost, assertion, inverse }: AssertionParams): Gradi
   }
 
   const pass = inverse ? cost > assertion.threshold : cost <= assertion.threshold;
+  let reason: string;
+  if (pass) {
+    reason = 'Assertion passed';
+  } else if (inverse) {
+    reason = `Cost ${cost.toPrecision(2)} is less than or equal to threshold ${assertion.threshold}`;
+  } else {
+    reason = `Cost ${cost.toPrecision(2)} is greater than threshold ${assertion.threshold}`;
+  }
+
   return {
     pass,
     score: pass ? 1 : 0,
-    reason: pass
-      ? 'Assertion passed'
-      : inverse
-        ? `Cost ${cost.toPrecision(2)} is less than or equal to threshold ${assertion.threshold}`
-        : `Cost ${cost.toPrecision(2)} is greater than threshold ${assertion.threshold}`,
+    reason,
     assertion,
   };
 };
