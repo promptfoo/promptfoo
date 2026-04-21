@@ -584,8 +584,59 @@ describe('OpenAiImageProvider', () => {
         cached: false,
         isBase64: true,
         format: 'json',
+      });
+      expect(result).not.toHaveProperty('cost');
+    });
+
+    it('should report gpt-image-2 cost for explicit table sizes and qualities', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', size: '1024x1024', quality: 'low' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
         cost: 0.006,
       });
+    });
+
+    it('should preserve gpt-image-2 API token usage without inventing cost', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...mockGptImage2Response,
+        data: {
+          data: [{ b64_json: 'base64EncodedImageData' }],
+          usage: {
+            total_tokens: 46,
+            input_tokens: 12,
+            output_tokens: 34,
+            input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+          },
+        },
+      });
+
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
+        tokenUsage: {
+          prompt: 12,
+          completion: 34,
+          total: 46,
+          numRequests: 1,
+        },
+        metadata: {
+          usage: {
+            total_tokens: 46,
+            input_tokens: 12,
+            output_tokens: 34,
+            input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+          },
+        },
+      });
+      expect(result).not.toHaveProperty('cost');
     });
 
     it('should handle gpt-image-2 parameters and custom sizes', async () => {
@@ -619,6 +670,7 @@ describe('OpenAiImageProvider', () => {
         output: 'data:image/webp;base64,base64EncodedImageData',
         images: [{ data: 'data:image/webp;base64,base64EncodedImageData', mimeType: 'image/webp' }],
       });
+      expect(result).not.toHaveProperty('cost');
     });
 
     it('should reject invalid gpt-image-2 custom sizes', async () => {

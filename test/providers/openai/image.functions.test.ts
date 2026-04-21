@@ -264,6 +264,12 @@ describe('OpenAI Image Provider Functions', () => {
       );
     });
 
+    it('should not invent GPT Image 2 cost for auto quality or custom sizes', () => {
+      expect(calculateImageCost('gpt-image-2', '1024x1024')).toBeUndefined();
+      expect(calculateImageCost('gpt-image-2', '1024x1024', 'auto')).toBeUndefined();
+      expect(calculateImageCost('gpt-image-2', '2048x1152', 'high')).toBeUndefined();
+    });
+
     it('should use default cost for models other than DALL-E 2 or 3', () => {
       expect(calculateImageCost('gpt-4', '1024x1024')).toBe(0.04);
       expect(calculateImageCost('', '1024x1024')).toBe(0.04);
@@ -404,6 +410,41 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result.cost).toBe(0);
+    });
+
+    it('should map image API usage to token usage and metadata', async () => {
+      const data = {
+        data: [{ b64_json: 'base64data' }],
+        usage: {
+          total_tokens: 30,
+          input_tokens: 10,
+          output_tokens: 20,
+          input_tokens_details: { text_tokens: 10, image_tokens: 0 },
+        },
+      };
+
+      const result = await processApiResponse(
+        data,
+        'test prompt',
+        'b64_json',
+        false,
+        'gpt-image-2',
+        '1024x1024',
+        undefined,
+      );
+
+      expect(result).toMatchObject({
+        tokenUsage: {
+          prompt: 10,
+          completion: 20,
+          total: 30,
+          numRequests: 1,
+        },
+        metadata: {
+          usage: data.usage,
+        },
+      });
+      expect(result).not.toHaveProperty('cost');
     });
 
     it('should handle errors during output formatting', async () => {

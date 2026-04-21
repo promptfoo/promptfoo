@@ -12,6 +12,7 @@ import type {
   ImageOutput,
   ProviderResponse,
 } from '../../types/index';
+import type { TokenUsage } from '../../types/shared';
 import type { OpenAiSharedOptions } from './types';
 
 type OpenAiImageModel =
@@ -430,7 +431,7 @@ export function calculateImageCost(
   size: string,
   quality?: string,
   n: number = 1,
-): number {
+): number | undefined {
   const imageQuality = quality || 'standard';
   const gptImageQuality =
     quality === 'medium' || quality === 'high' || quality === 'low' ? quality : 'low';
@@ -443,12 +444,16 @@ export function calculateImageCost(
     const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
     return costPerImage * n;
   } else if (isGptImage2(model)) {
+    if (quality !== 'medium' && quality !== 'high' && quality !== 'low') {
+      return undefined;
+    }
+
     const costKey = `${gptImageQuality}_${size}`;
-    const fallbackCostKey = `${gptImageQuality}_1024x1024`;
-    const costPerImage =
-      GPT_IMAGE2_COSTS[costKey] ||
-      GPT_IMAGE2_COSTS[fallbackCostKey] ||
-      GPT_IMAGE2_COSTS['low_1024x1024'];
+    const costPerImage = GPT_IMAGE2_COSTS[costKey];
+    if (costPerImage === undefined) {
+      return undefined;
+    }
+
     return costPerImage * n;
   } else if (isGptImage1(model)) {
     const costKey = `${gptImageQuality}_${size}`;
@@ -465,6 +470,27 @@ export function calculateImageCost(
   }
 
   return 0.04 * n;
+}
+
+function getImageTokenUsage(data: any, cached: boolean): TokenUsage | undefined {
+  if (!data.usage) {
+    return undefined;
+  }
+
+  const prompt = data.usage.prompt_tokens ?? data.usage.input_tokens ?? 0;
+  const completion = data.usage.completion_tokens ?? data.usage.output_tokens ?? 0;
+  const total = data.usage.total_tokens ?? prompt + completion;
+
+  if (cached) {
+    return { cached: total, total };
+  }
+
+  return {
+    prompt,
+    completion,
+    total,
+    numRequests: 1,
+  };
 }
 
 export async function callOpenAiImageApi(
@@ -510,6 +536,7 @@ export async function processApiResponse(
     }
 
     const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
+    const tokenUsage = getImageTokenUsage(data, cached);
     const images = buildStructuredImageOutputs(data, outputFormat);
 
     return {
@@ -517,7 +544,9 @@ export async function processApiResponse(
       images,
       cached,
       latencyMs,
-      cost,
+      ...(cost === undefined ? {} : { cost }),
+      ...(tokenUsage ? { tokenUsage } : {}),
+      ...(data.usage ? { metadata: { usage: data.usage } } : {}),
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
