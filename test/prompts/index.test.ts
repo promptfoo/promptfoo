@@ -6,8 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts/index';
 import { maybeFilePath } from '../../src/prompts/utils';
+import { mockProcessEnv } from '../util/utils';
 
-import type { ApiProvider, Prompt, ProviderResponse, UnifiedConfig } from '../../src/types/index';
+import type {
+  ApiProvider,
+  EvaluateTestSuite,
+  Prompt,
+  ProviderResponse,
+} from '../../src/types/index';
 
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
@@ -46,7 +52,7 @@ describe('readPrompts', () => {
     vi.clearAllMocks();
   });
   afterEach(() => {
-    delete process.env.PROMPTFOO_STRICT_FILES;
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: undefined });
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.statSync).mockReset();
     vi.mocked(globSync).mockReset();
@@ -68,7 +74,7 @@ describe('readPrompts', () => {
   });
 
   it('should throw an error when PROMPTFOO_STRICT_FILES is true and the file does not exist', async () => {
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
       throw new Error("ENOENT: no such file or directory, stat 'non-existent-file.txt'");
@@ -86,7 +92,7 @@ describe('readPrompts', () => {
     vi.mocked(fs.readFileSync).mockReturnValueOnce('');
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(maybeFilePath).mockReturnValueOnce(true);
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
     await expect(readPrompts(['prompts.txt'])).rejects.toThrow(
       'There are no prompts in "prompts.txt"',
     );
@@ -96,7 +102,7 @@ describe('readPrompts', () => {
   it('should throw an error for an unsupported file format', async () => {
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(maybeFilePath).mockReturnValueOnce(true);
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
     await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
       'There are no prompts in "unsupported.for.mat"',
     );
@@ -615,7 +621,7 @@ describe('readPrompts', () => {
 });
 
 describe('readProviderPromptMap', () => {
-  let config: Partial<UnifiedConfig>;
+  let config: Pick<Partial<EvaluateTestSuite>, 'providers'>;
   let parsedPrompts: Prompt[];
 
   beforeEach(() => {
@@ -656,6 +662,33 @@ describe('readProviderPromptMap', () => {
       providers: [{ id: 'provider1', prompts: ['customPrompt1'] }],
     };
     expect(readProviderPromptMap(config, parsedPrompts)).toEqual({ provider1: ['customPrompt1'] });
+  });
+
+  it('should handle a top-level ApiProvider object', () => {
+    const provider: ApiProvider = {
+      id: () => 'provider1',
+      callApi: vi.fn<ApiProvider['callApi']>(),
+      label: 'providerLabel',
+    };
+    config = { providers: provider };
+
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['prompt1', 'prompt2'],
+    });
+  });
+
+  it('should handle ApiProvider objects in provider arrays', () => {
+    const provider: ApiProvider = {
+      id: () => 'provider1',
+      callApi: vi.fn<ApiProvider['callApi']>(),
+      label: 'providerLabel',
+    };
+    config = { providers: [provider] };
+
+    expect(readProviderPromptMap(config, parsedPrompts)).toEqual({
+      provider1: ['prompt1', 'prompt2'],
+      providerLabel: ['prompt1', 'prompt2'],
+    });
   });
 
   it('should handle provider objects with id, label, and prompts', () => {

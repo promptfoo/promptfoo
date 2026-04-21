@@ -4,8 +4,12 @@ import { VERSION } from '../../../src/constants';
 import logger from '../../../src/logger';
 import { extractEntities } from '../../../src/redteam/extraction/entities';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
-
-import type { ApiProvider } from '../../../src/types/index';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -39,20 +43,19 @@ vi.mock('../../../src/redteam/remoteGeneration', async () => ({
 }));
 
 describe('Entities Extractor', () => {
-  let provider: ApiProvider;
+  let provider: MockApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeAll(() => {
-    originalEnv = process.env;
+    originalEnv = { ...process.env };
   });
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
-    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-    provider = {
-      callApi: vi.fn().mockResolvedValue({ output: 'Entity: Apple\nEntity: Google' }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    mockProcessEnv({ PROMPTFOO_REMOTE_GENERATION_URL: undefined });
+    provider = createMockProvider({
+      response: createProviderResponse({ output: 'Entity: Apple\nEntity: Google' }),
+    });
     vi.clearAllMocks();
     vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'https://api.promptfoo.app/api/v1/task';
@@ -60,12 +63,12 @@ describe('Entities Extractor', () => {
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
   });
 
   it('should use remote generation when enabled', async () => {
-    process.env.OPENAI_API_KEY = undefined;
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
     vi.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'entities', result: ['Apple', 'Google'] },
       status: 200,
@@ -93,8 +96,8 @@ describe('Entities Extractor', () => {
   });
 
   it('should not fall back to local extraction when remote generation fails', async () => {
-    process.env.OPENAI_API_KEY = undefined;
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
     vi.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
 
     const result = await extractEntities(provider, ['prompt1', 'prompt2']);
@@ -107,7 +110,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should use local extraction when remote generation is disabled', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
 
     const result = await extractEntities(provider, ['prompt']);
 
@@ -117,7 +120,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should log debug message when no entities are found', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
     vi.mocked(provider.callApi).mockResolvedValue({ output: 'No entities found' });
 
     const result = await extractEntities(provider, ['prompt']);
@@ -126,7 +129,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should ignore Nunjucks template variables in double curly braces', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
     vi.mocked(provider.callApi).mockResolvedValue({
       output: 'Entity: John Smith\nEntity: {{image}}\nEntity: Google\nEntity: {{prompt}}',
     });
@@ -140,7 +143,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should properly extract real entities while ignoring template variables', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
 
     // Currently our extraction simply returns whatever the AI returns as entities
     // We need to fix this to properly filter template variables
@@ -159,7 +162,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should handle complex Nunjucks variables with spaces and special characters', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
     vi.mocked(provider.callApi).mockResolvedValue({
       output:
         'Entity: Microsoft\nEntity: {{ complex_variable with spaces }}\nEntity: {{nested.variable}}',
@@ -174,7 +177,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should handle empty prompts array', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
 
     const result = await extractEntities(provider, []);
 
@@ -183,7 +186,7 @@ describe('Entities Extractor', () => {
   });
 
   it('should handle errors in local extraction', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
     vi.mocked(provider.callApi).mockRejectedValue(new Error('API call failed'));
 
     const result = await extractEntities(provider, ['prompt']);

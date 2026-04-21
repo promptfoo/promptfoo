@@ -1,28 +1,19 @@
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyStats from './StrategyStats';
 import type { PolicyObject, RedteamPluginObject } from '@promptfoo/redteam/types';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import type { EvaluateResult } from '@promptfoo/types';
+
+import type { TestWithMetadata } from './shared';
 
 // No MUI theme mock needed - component uses Tailwind CSS
 
 vi.mock('@app/hooks/useCustomPoliciesMap', () => ({
   useCustomPoliciesMap: vi.fn(),
 }));
-
-interface TestWithMetadata {
-  prompt: string;
-  output: string;
-  gradingResult?: GradingResult;
-  result?: EvaluateResult;
-  metadata?: {
-    strategyId?: string;
-    [key: string]: any;
-  };
-}
 
 describe('StrategyStats', () => {
   let strategyStats: Record<string, { pass: number; total: number; failCount: number }>;
@@ -113,8 +104,9 @@ describe('StrategyStats', () => {
   });
 
   const openStrategyDrawer = async (strategyId: string) => {
+    const user = userEvent.setup();
     const button = screen.getByLabelText(`View details for ${strategyId} attack method`);
-    fireEvent.click(button);
+    await user.click(button);
     // Wait for the sheet/dialog to appear by looking for key content elements
     // The drawer shows strategy stats and a title
     await waitFor(() => {
@@ -143,7 +135,7 @@ describe('StrategyStats', () => {
       const percentages80 = screen.getAllByText(/80\.00\s*%/);
       expect(percentages80.length).toBeGreaterThan(0);
 
-      const jailbreakCard = screen.getByText('Single-shot Optimization');
+      const jailbreakCard = screen.getByText('Single-shot Optimization [DEPRECATED]');
       expect(jailbreakCard).toBeInTheDocument();
       expect(screen.getByText(/3\s*\/\s*8\s*attacks succeeded/)).toBeInTheDocument();
       const percentages37 = screen.getAllByText(/37\.50\s*%/);
@@ -163,7 +155,7 @@ describe('StrategyStats', () => {
       expect(totalAttemptsValue).toBeInTheDocument();
     });
 
-    it('should display the correct total attempts, flagged attempts, and success rate for the selected strategy in the drawer', async () => {
+    it('should display the correct total attempts, flagged attempts, and attack success rate for the selected strategy in the drawer', async () => {
       render(
         <StrategyStats
           strategyStats={strategyStats}
@@ -179,7 +171,7 @@ describe('StrategyStats', () => {
       // Check for the stats in the drawer - use more specific queries
       expect(screen.getByText('Total Attempts')).toBeInTheDocument();
       expect(screen.getByText('Flagged Attempts')).toBeInTheDocument();
-      expect(screen.getByText('Success Rate')).toBeInTheDocument();
+      expect(screen.getAllByText('Attack Success Rate').length).toBeGreaterThan(0);
       const percentages80 = screen.getAllByText('80.00%');
       expect(percentages80.length).toBeGreaterThan(0);
     });
@@ -200,9 +192,9 @@ describe('StrategyStats', () => {
       expect(table).toBeInTheDocument();
 
       expect(screen.getByText('Plugin')).toBeInTheDocument();
-      expect(screen.getByText('Attack Success Rate')).toBeInTheDocument();
-      expect(screen.getByText('# Flagged Attempts')).toBeInTheDocument();
-      expect(screen.getByText('# Attempts')).toBeInTheDocument();
+      expect(within(table).getByText('Attack Success Rate')).toBeInTheDocument();
+      expect(within(table).getByText('# Flagged Attempts')).toBeInTheDocument();
+      expect(within(table).getByText('# Attempts')).toBeInTheDocument();
 
       const pluginAStats = {
         plugin: 'plugin-A',
@@ -242,6 +234,7 @@ describe('StrategyStats', () => {
     });
 
     it('should handle keyboard navigation with Enter or Space key', async () => {
+      const user = userEvent.setup();
       render(
         <StrategyStats
           strategyStats={strategyStats}
@@ -255,8 +248,7 @@ describe('StrategyStats', () => {
         'View details for prompt-injection attack method',
       );
       promptInjectionButton.focus();
-
-      fireEvent.keyDown(promptInjectionButton, { key: 'Enter', code: 'Enter' });
+      await user.keyboard('{Enter}');
 
       // Wait for the sheet/dialog to appear
       await waitFor(() => {
@@ -481,6 +473,7 @@ describe('StrategyStats', () => {
   });
 
   it('should handle a strategy with statistics but no examples in failuresByPlugin or passesByPlugin', async () => {
+    const user = userEvent.setup();
     const strategyStatsWithNoExamples = {
       'no-examples': { pass: 3, total: 7, failCount: 4 },
     };
@@ -495,7 +488,7 @@ describe('StrategyStats', () => {
     );
 
     const noExamplesButton = screen.getByLabelText('View details for no-examples attack method');
-    fireEvent.click(noExamplesButton);
+    await user.click(noExamplesButton);
 
     // Wait for the sheet/dialog to appear
     await waitFor(() => {

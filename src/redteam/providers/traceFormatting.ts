@@ -1,3 +1,4 @@
+import { getToolNameFromAttributes } from '../../tracing/toolAttributes';
 import { TraceContextData, TraceSpan } from '../../tracing/traceContext';
 
 const DEFAULT_MAX_SPANS = 10;
@@ -27,7 +28,7 @@ function formatSpan(span: TraceSpan): string {
     `[${duration}] ${span.name}${span.kind && span.kind !== 'unspecified' ? ` (${span.kind})` : ''}`,
   );
 
-  const tool = span.attributes['tool.name'] || span.attributes['tool_name'];
+  const tool = getToolNameFromAttributes(span.attributes);
   if (tool) {
     parts.push(`tool=${tool}`);
   }

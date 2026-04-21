@@ -15,7 +15,7 @@ import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
 
-import type { NunjucksFilterMap, OutputFile } from '../types';
+import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -243,15 +243,13 @@ export function maybeLoadConfigFromExternalFile(
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
-  if (config && typeof config === 'object' && config !== null) {
+  if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
       // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
       // and current key is 'value', switch to assertion context
       const isAssertionValue =
         key === 'value' &&
-        typeof config === 'object' &&
-        config &&
         'type' in config &&
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
@@ -261,7 +259,18 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      result[key] = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+
+      if (key === '__proto__') {
+        Object.defineProperty(result, key, {
+          value,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        result[key] = value;
+      }
     }
     return result;
   }
@@ -369,6 +378,82 @@ export async function readFilters(
 }
 
 /**
+ * Loads configuration from an external file with variable rendering.
+ * This is a convenience wrapper that combines renderVarsInObject and maybeLoadFromExternalFile.
+ *
+ * Use this for simple config fields that:
+ * - Need variable rendering ({{ vars.x }}, {{ env.X }})
+ * - May reference external files (file://path.json)
+ * - Don't have nested file references that need loading
+ *
+ * For fields with nested file references (like response_format.schema),
+ * use maybeLoadResponseFormatFromExternalFile instead.
+ *
+ * @param config - The configuration to process
+ * @param vars - Variables for template rendering
+ * @returns The processed configuration with variables rendered and files loaded
+ */
+export function maybeLoadFromExternalFileWithVars(
+  config: any,
+  vars?: Record<string, VarValue>,
+): any {
+  const rendered = renderVarsInObject(config, vars);
+  return maybeLoadFromExternalFile(rendered);
+}
+
+/**
+ * Loads response_format configuration from an external file with variable rendering.
+ *
+ * This function handles the special case where response_format may contain:
+ * 1. A top-level file reference (file://format.json)
+ * 2. A nested schema reference for json_schema type (schema: file://schema.json)
+ *
+ * Both levels need variable rendering and file loading.
+ *
+ * @param responseFormat - The response_format configuration
+ * @param vars - Variables for template rendering
+ * @returns The processed response_format with all files loaded
+ */
+export function maybeLoadResponseFormatFromExternalFile(
+  responseFormat: any,
+  vars?: Record<string, VarValue>,
+): any {
+  if (responseFormat === undefined || responseFormat === null) {
+    return responseFormat;
+  }
+
+  // First, render variables and load the outer response_format
+  const rendered = renderVarsInObject(responseFormat, vars);
+  const loaded = maybeLoadFromExternalFile(rendered);
+
+  if (!loaded || typeof loaded !== 'object') {
+    return loaded;
+  }
+
+  // For json_schema type, check if the nested schema is a file reference
+  if (loaded.type === 'json_schema') {
+    const nestedSchema = loaded.schema || loaded.json_schema?.schema;
+
+    if (nestedSchema) {
+      // Render and load the nested schema
+      const loadedSchema = maybeLoadFromExternalFile(renderVarsInObject(nestedSchema, vars));
+
+      // Return with the loaded schema in place
+      if (loaded.schema !== undefined) {
+        return { ...loaded, schema: loadedSchema };
+      } else if (loaded.json_schema?.schema !== undefined) {
+        return {
+          ...loaded,
+          json_schema: { ...loaded.json_schema, schema: loadedSchema },
+        };
+      }
+    }
+  }
+
+  return loaded;
+}
+
+/**
  * Renders variables in a tools object and loads from external file if applicable.
  * This function combines renderVarsInObject and maybeLoadFromExternalFile into a single step
  * specifically for handling tools configurations.
@@ -382,7 +467,7 @@ export async function readFilters(
  */
 export async function maybeLoadToolsFromExternalFile(
   tools: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): Promise<any> {
   const rendered = renderVarsInObject(tools, vars);
 

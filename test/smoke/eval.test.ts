@@ -66,7 +66,7 @@ describe('Eval Smoke Tests', () => {
       expect(exitCode).toBe(0);
 
       // Should show eval results
-      expect(stdout).toContain('Pass');
+      expect(stdout).toContain('PASS');
     });
 
     it('1.4.2 - outputs JSON format', () => {

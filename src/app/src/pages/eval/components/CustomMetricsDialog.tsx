@@ -2,7 +2,7 @@ import React from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
-import { Dialog, DialogContent } from '@app/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { FilterIcon } from '@app/components/ui/icons';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { cn } from '@app/lib/utils';
@@ -13,18 +13,19 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { useApplyFilterFromMetric } from './hooks';
 import { useTableStore } from './store';
+import { getNamedMetricTotal } from './utils';
 import type { ColumnDef } from '@tanstack/react-table';
 
 type MetricScore = {
   score: number;
-  count: number;
+  total: number;
   hasScore: boolean;
 };
 
 interface MetricRow {
   id: string;
   metric: string;
-  [key: string]: any; // For dynamic prompt columns
+  [key: string]: string | MetricScore; // For dynamic prompt columns (prompt_${idx})
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
@@ -102,6 +103,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }, [table.head.prompts]);
 
   // Create columns for DataTable
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const columns: ColumnDef<MetricRow>[] = React.useMemo(() => {
     const cols: ColumnDef<MetricRow>[] = [
       {
@@ -134,16 +136,16 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         size: 150,
         cell: ({ row }) => {
           const metricScore = row.original[columnId] as MetricScore;
-          const { hasScore, score, count } = metricScore;
+          const { hasScore, score, total } = metricScore;
           const percentage =
-            hasScore && typeof count === 'number' && count > 0 ? (score / count) * 100 : 0;
+            hasScore && typeof total === 'number' && total > 0 ? (score / total) * 100 : 0;
           const classes = getPercentageClasses(percentage);
 
           return (
             <div className="flex justify-end items-center h-full">
               <span
                 className={cn(
-                  'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-[80px]',
+                  'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
                   classes,
                 )}
               >
@@ -155,7 +157,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       });
       cols.push({
         accessorKey: `${columnId}_score`,
-        header: `${providerName} - Pass Count`,
+        header: `${providerName} - Metric Score`,
         size: 120,
         cell: ({ row }) => {
           const metricScore = row.original[columnId] as MetricScore;
@@ -164,13 +166,13 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         },
       });
       cols.push({
-        accessorKey: `${columnId}_count`,
-        header: `${providerName} - Test Count`,
+        accessorKey: `${columnId}_total`,
+        header: `${providerName} - Metric Total`,
         size: 120,
         cell: ({ row }) => {
           const metricScore = row.original[columnId] as MetricScore;
-          const { count } = metricScore;
-          return <span className="text-sm">{count}</span>;
+          const { total } = metricScore;
+          return <span className="text-sm">{total}</span>;
         },
       });
     });
@@ -184,10 +186,10 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
         let totalPassRate = 0;
         Object.entries(row.original).forEach(([key, value]) => {
           if (key.startsWith('prompt_')) {
-            const { score, count, hasScore } = value as MetricScore;
-            if (hasScore && typeof count === 'number' && count > 0) {
+            const { score, total, hasScore } = value as MetricScore;
+            if (hasScore && typeof total === 'number' && total > 0) {
               promptCount++;
-              totalPassRate += (score / count) * 100;
+              totalPassRate += (score / total) * 100;
             }
           }
         });
@@ -198,7 +200,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
           <div className="flex justify-end items-center h-full">
             <span
               className={cn(
-                'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-[80px]',
+                'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
                 classes,
               )}
             >
@@ -221,9 +223,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
               variant="ghost"
               size="sm"
               onClick={() => handleMetricFilterClick(row.original.metric)}
-              className="filter-icon h-8 w-8 p-0"
+              className="filter-icon size-8 p-0"
             >
-              <FilterIcon className="h-4 w-4" />
+              <FilterIcon className="size-4" />
             </Button>
           </div>
         );
@@ -250,12 +252,12 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       // Add data for each prompt
       table.head.prompts.forEach((prompt, idx) => {
         const score = prompt.metrics?.namedScores?.[metric];
-        const count = prompt.metrics?.namedScoresCount?.[metric];
+        const total = getNamedMetricTotal(prompt.metrics, metric);
         const hasScore = score !== undefined;
 
         row[`prompt_${idx}`] = {
-          score,
-          count,
+          score: score ?? 0,
+          total: total ?? 0,
           hasScore,
         };
       });
@@ -274,11 +276,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       data={rows}
       getRowId={(row) => row.id}
       initialSorting={[{ id: 'metric', desc: false }]}
-      initialPageSize={50}
       emptyMessage="No metrics available"
       showToolbar
       showFilter
-      showPagination
       showColumnToggle
     />
   );
@@ -294,6 +294,9 @@ export default function CustomMetricsDialog({
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-[90vw] h-[80vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle>Custom Metrics</DialogTitle>
+        </DialogHeader>
         <MetricsTable onClose={onClose} />
       </DialogContent>
     </Dialog>

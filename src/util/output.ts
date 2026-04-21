@@ -2,7 +2,6 @@ import * as fsPromises from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
-import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import { XMLBuilder } from 'fast-xml-parser';
 import yaml from 'js-yaml';
@@ -10,14 +9,13 @@ import { VERSION } from '../constants';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import { type CsvRow, type OutputFile, OutputFileExtension, ResultFailureReason } from '../types';
-import { getHeaderForTable } from './exportToFile/getHeaderForTable';
-import { convertTestResultsToTableRow } from './exportToFile/index';
 import invariant from './invariant';
+import { sanitizeObject } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
 import type { EvaluateTableOutput } from '../types';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -45,6 +43,14 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
     `.trim();
 };
 
+function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
+  return sanitizeObject(config, {
+    context: 'output config',
+    throwOnError: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+  }) as OutputFile['config'];
+}
+
 export function createOutputMetadata(evalRecord: Eval) {
   let evaluationCreatedAt: string | undefined;
   if (evalRecord.createdAt) {
@@ -63,7 +69,7 @@ export function createOutputMetadata(evalRecord: Eval) {
     arch: os.arch(),
     exportedAt: new Date().toISOString(),
     evaluationCreatedAt,
-    author: evalRecord.author,
+    author: evalRecord.author ?? undefined,
   };
 }
 
@@ -80,10 +86,11 @@ async function writeJsonOutputSafely(
 
   try {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const outputData: OutputFile = {
       evalId: evalRecord.id,
       results: summary,
-      config: evalRecord.config,
+      config: redactedConfig,
       shareableUrl,
       metadata,
     };
@@ -149,42 +156,30 @@ export async function writeOutput(
   const metadata = createOutputMetadata(evalRecord);
 
   if (outputExtension === 'csv') {
-    // Write headers first
-    const headers = getHeaderForTable(evalRecord);
-
-    const headerCsv = stringify([
-      [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
-    ]);
-    await fsPromises.writeFile(outputPath, headerCsv);
-
-    // Write body rows in batches
-    for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      // we need split the batch into rows by testIdx
-      const tableRows: Record<number, EvalResult[]> = {};
-      for (const result of batchResults) {
-        if (!(result.testIdx in tableRows)) {
-          tableRows[result.testIdx] = [];
-        }
-        tableRows[result.testIdx].push(result);
-      }
-      const batchCsv = stringify(
-        Object.values(tableRows).map((results) => {
-          const row = convertTestResultsToTableRow(results, headers.vars);
-          return [...row.vars, ...row.outputs.map(outputToSimpleString)];
-        }),
-      );
-      await fsPromises.appendFile(outputPath, batchCsv);
+    // Use streamEvalCsv for memory-efficient CSV generation
+    // This produces the same format as WebUI CSV exports
+    const fileHandle = await fsPromises.open(outputPath, 'w');
+    try {
+      await streamEvalCsv(evalRecord, {
+        isRedteam: Boolean(evalRecord.config.redteam),
+        write: async (data: string) => {
+          await fileHandle.write(data);
+        },
+      });
+    } finally {
+      await fileHandle.close();
     }
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     await fsPromises.writeFile(
       outputPath,
       yaml.dump({
         evalId: evalRecord.id,
         results: summary,
-        config: evalRecord.config,
+        config: redactedConfig,
         shareableUrl,
         metadata,
       } as OutputFile),
@@ -193,6 +188,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
       'utf-8',
@@ -205,7 +201,7 @@ export async function writeOutput(
       ...table.body.map((row) => [...row.vars, ...row.outputs.map(outputToSimpleString)]),
     ];
     const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: evalRecord.config,
+      config: redactedConfig,
       table: htmlTable,
       results: summary,
     });
@@ -219,6 +215,7 @@ export async function writeOutput(
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {
@@ -254,7 +251,7 @@ export async function writeOutput(
       promptfoo: {
         evalId: evalRecord.id,
         results: sanitizeForXml(summary),
-        config: sanitizeForXml(evalRecord.config),
+        config: sanitizeForXml(redactedConfig),
         shareableUrl: shareableUrl || '',
       },
     });

@@ -1,6 +1,8 @@
 {
   "name": "auth-module",
   "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
   "description": "Simple authentication module for refactoring",
   "main": "auth.js",
   "scripts": {

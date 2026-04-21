@@ -21,7 +21,7 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
   useEffect(() => {
     fetchEmail();
     fetchUserId();
-  }, []);
+  }, [fetchEmail, fetchUserId]);
 
   // Identify user when PostHog is initialized and user data changes
   useEffect(() => {
@@ -39,7 +39,7 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,
-          loaded: (_posthogInstance: any) => {
+          loaded: (_posthogInstance) => {
             setIsInitialized(true);
           },
           capture_pageview: false,
@@ -50,7 +50,8 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
           session_recording: {
             maskAllInputs: true,
             maskTextFn(text, element) {
-              if (!['eval-output-cell', 'eval-output-cell-text'].includes(element?.id ?? '')) {
+              const elementId = element?.id ?? '';
+              if (!elementId.startsWith('eval-output-cell-')) {
                 return text;
               }
               return '*'.repeat(text.trim().length);

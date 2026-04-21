@@ -1,6 +1,8 @@
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import useApiConfig from '@app/stores/apiConfig';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ApiSettingsModal from './ApiSettingsModal';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
@@ -36,30 +38,33 @@ describe('ApiSettingsModal', () => {
   });
 
   it('does not render when closed', () => {
-    render(<ApiSettingsModal open={false} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={false} onClose={mockOnClose} />);
     expect(screen.queryByText('API and Sharing Settings')).not.toBeInTheDocument();
   });
 
   it('displays the correct title when open', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('API and Sharing Settings')).toBeInTheDocument();
   });
 
   it('shows current API URL in text field', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const input = screen.getByLabelText('API Base URL') as HTMLInputElement;
     expect(input.value).toBe('https://api.example.com');
   });
 
-  it('updates API URL when typing', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+  it('updates API URL when typing', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const input = screen.getByLabelText('API Base URL');
-    fireEvent.change(input, { target: { value: 'https://new-api.example.com' } });
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('https://new-api.example.com');
     expect((input as HTMLInputElement).value).toBe('https://new-api.example.com');
   });
 
   it('checks health status on open', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(mockCheckHealth).toHaveBeenCalledTimes(1);
   });
 
@@ -70,7 +75,7 @@ describe('ApiSettingsModal', () => {
       isLoading: true,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Checking connection...')).toBeInTheDocument();
   });
 
@@ -81,7 +86,7 @@ describe('ApiSettingsModal', () => {
       isLoading: false,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Connected to promptfoo API')).toBeInTheDocument();
     expect(screen.getByText('Cloud API is healthy')).toBeInTheDocument();
   });
@@ -93,7 +98,7 @@ describe('ApiSettingsModal', () => {
       isLoading: false,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Cannot connect to promptfoo API')).toBeInTheDocument();
     expect(screen.getByText('Failed to connect')).toBeInTheDocument();
   });
@@ -105,21 +110,22 @@ describe('ApiSettingsModal', () => {
       isLoading: false,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
-    const statusText = screen
-      .getAllByText('Remote generation is disabled')
-      .find((element) => element.tagName.toLowerCase() === 'p');
-    expect(statusText).toBeInTheDocument();
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    const elements = screen.getAllByText('Remote generation is disabled');
+    expect(elements.length).toBeGreaterThan(0);
   });
 
   it('handles save button click correctly', async () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    const user = userEvent.setup();
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
     const input = screen.getByLabelText('API Base URL');
-    fireEvent.change(input, { target: { value: 'https://new-api.example.com' } });
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('https://new-api.example.com');
 
     const saveButton = screen.getByText('Save');
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
 
     await waitFor(() => {
       expect(mockSetApiBaseUrl).toHaveBeenCalledWith('https://new-api.example.com');
@@ -136,25 +142,29 @@ describe('ApiSettingsModal', () => {
       isLoading: true,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
     expect(screen.getByLabelText('API Base URL')).toBeDisabled();
-    expect(screen.getByText('Save')).toBeDisabled();
-    expect(screen.getByText('Close')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    // Find the Close button in the footer (not the dialog X button)
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+    const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
+    expect(footerCloseButton).toBeDisabled();
   });
 
-  it('shows refresh button and handles click', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+  it('shows refresh button and handles click', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
 
     const refreshButton = screen.getByLabelText('Check connection');
-    fireEvent.click(refreshButton);
+    await user.click(refreshButton);
 
     expect(mockCheckHealth).toHaveBeenCalled();
   });
 
-  it('has correct aria-labelledby attribute', () => {
-    render(<ApiSettingsModal open={true} onClose={mockOnClose} />);
+  it('has accessible dialog with title', () => {
+    renderWithProviders(<ApiSettingsModal open={true} onClose={mockOnClose} />);
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveAttribute('aria-labelledby', 'api-settings-dialog-title');
+    expect(dialog).toHaveAccessibleName('API and Sharing Settings');
   });
 });

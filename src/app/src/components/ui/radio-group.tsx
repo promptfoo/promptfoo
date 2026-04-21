@@ -18,7 +18,7 @@ function RadioGroupItem({ className, ref, ...props }: RadioGroupItemProps) {
     <RadioGroupPrimitive.Item
       ref={ref}
       className={cn(
-        'aspect-square h-4 w-4 shrink-0 rounded-full border border-border cursor-pointer',
+        'aspect-square size-4 shrink-0 rounded-full border border-border cursor-pointer',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         'disabled:cursor-not-allowed disabled:opacity-50',
         'data-[state=checked]:border-primary',
@@ -29,7 +29,7 @@ function RadioGroupItem({ className, ref, ...props }: RadioGroupItemProps) {
       {...props}
     >
       <RadioGroupPrimitive.Indicator className="flex items-center justify-center">
-        <Circle className="h-2.5 w-2.5 fill-primary text-primary" />
+        <Circle className="size-2.5 fill-primary text-primary" />
       </RadioGroupPrimitive.Indicator>
     </RadioGroupPrimitive.Item>
   );

@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 
 import * as nunjucks from 'nunjucks';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/logger', () => ({
   default: {
@@ -14,26 +14,62 @@ vi.mock('../../../src/logger', () => ({
 
 import logger from '../../../src/logger';
 import {
+  calculateGoogleCost,
+  clearCachedAuth,
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
+  normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
+  resolveProjectId,
+  sanitizeSchemaForGemini,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
 
 import type { Tool } from '../../../src/providers/google/types';
 
-const googleAuthMock = vi.hoisted(() => ({
-  GoogleAuth: vi.fn(function () {
-    return {
-      getClient: vi.fn(),
-      fromJSON: vi.fn(),
-      getProjectId: vi.fn(),
-    };
-  }),
-}));
+// Create a comprehensive mock for Google Auth Library
+// This prevents the real library from reading ~/.config/gcloud/ or environment
+const googleAuthMock = vi.hoisted(() => {
+  const mockAuthInstance = {
+    getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
+    fromJSON: vi.fn().mockImplementation((credentials: any) => {
+      return Promise.resolve({ name: 'mockCredentialClient', credentials });
+    }),
+    getProjectId: vi.fn().mockResolvedValue('google-auth-project'),
+  };
 
+  return {
+    GoogleAuth: vi.fn().mockImplementation(function (this: any) {
+      // Return the mock instance
+      Object.assign(this, mockAuthInstance);
+      return this;
+    }),
+    mockAuthInstance, // Export for test access
+  };
+});
+
+function resetGoogleAuthMock() {
+  const { GoogleAuth, mockAuthInstance } = googleAuthMock;
+
+  mockAuthInstance.getClient.mockReset();
+  mockAuthInstance.fromJSON.mockReset();
+  mockAuthInstance.getProjectId.mockReset();
+  GoogleAuth.mockReset();
+
+  mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
+  mockAuthInstance.fromJSON.mockImplementation((credentials: any) => {
+    return Promise.resolve({ name: 'mockCredentialClient', credentials });
+  });
+  mockAuthInstance.getProjectId.mockResolvedValue('google-auth-project');
+  GoogleAuth.mockImplementation(function (this: any) {
+    Object.assign(this, mockAuthInstance);
+    return this;
+  });
+}
+
+// Mock both the module and dynamic imports
 vi.mock('google-auth-library', () => googleAuthMock);
 
 vi.mock('glob', async (importOriginal) => {
@@ -54,6 +90,13 @@ vi.mock('fs', async (importOriginal) => {
     ...(await importOriginal()),
 
     existsSync: vi.fn().mockImplementation(function (path) {
+      // Block gcloud config directory access
+      if (
+        typeof path === 'string' &&
+        (path.includes('.config/gcloud') || path.includes('gcloud/configurations'))
+      ) {
+        return false;
+      }
       if (path === 'file://system_instruction.json') {
         return true;
       }
@@ -61,6 +104,13 @@ vi.mock('fs', async (importOriginal) => {
     }),
 
     readFileSync: vi.fn().mockImplementation(function (path) {
+      // Block gcloud config file reads
+      if (
+        typeof path === 'string' &&
+        (path.includes('.config/gcloud') || path.includes('gcloud/configurations'))
+      ) {
+        throw new Error('ENOENT: no such file or directory');
+      }
       if (path === 'file://system_instruction.json') {
         return 'system instruction';
       }
@@ -76,14 +126,7 @@ vi.mock('fs', async (importOriginal) => {
 describe('util', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.resetAllMocks();
-    googleAuthMock.GoogleAuth.mockImplementation(function () {
-      return {
-        getClient: vi.fn(),
-        fromJSON: vi.fn(),
-        getProjectId: vi.fn(),
-      };
-    });
+    resetGoogleAuthMock();
   });
 
   describe('parseStringObject', () => {
@@ -920,26 +963,25 @@ describe('util', () => {
 
   describe('getGoogleClient', () => {
     beforeEach(() => {
-      // Reset modules before each test to clear cachedAuth
-      vi.resetModules();
+      // Just reset mock state, don't use vi.resetModules() as it breaks dynamic import mocks
       vi.clearAllMocks();
-      vi.doMock('google-auth-library', () => googleAuthMock);
+
+      // Reset mock to default state
+      const { mockAuthInstance } = googleAuthMock;
+      mockAuthInstance.getClient.mockClear();
+      mockAuthInstance.getProjectId.mockClear();
+      mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
+      mockAuthInstance.getProjectId.mockResolvedValue('test-project');
     });
 
     it('should create and return Google client', async () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
-      const mockAuth = {
-        getClient: vi.fn().mockResolvedValue(mockClient),
-        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
-      };
 
-      const googleAuthLib = await import('google-auth-library');
-      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
-        return mockAuth as any;
-      });
+      const { mockAuthInstance } = googleAuthMock;
+      mockAuthInstance.getClient.mockResolvedValue(mockClient);
+      mockAuthInstance.getProjectId.mockResolvedValue(mockProjectId);
 
-      // Import getGoogleClient after mocking
       const { getGoogleClient } = await import('../../../src/providers/google/util');
 
       const result = await getGoogleClient();
@@ -949,49 +991,47 @@ describe('util', () => {
       });
     });
 
-    it('should reuse cached auth client', async () => {
+    it('should create new auth client per call (SDK aligned, no global cache)', async () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
-      const mockAuth = {
-        getClient: vi.fn().mockResolvedValue(mockClient),
-        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
-      };
 
-      const googleAuthLib = await import('google-auth-library');
-      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
-        return mockAuth as any;
-      });
+      const { mockAuthInstance } = googleAuthMock;
+      mockAuthInstance.getClient.mockResolvedValue(mockClient);
+      mockAuthInstance.getProjectId.mockResolvedValue(mockProjectId);
 
-      // Import getGoogleClient after mocking
       const { getGoogleClient } = await import('../../../src/providers/google/util');
 
-      await getGoogleClient();
-      const googleAuthCalls = vi.mocked(googleAuthLib.GoogleAuth).mock.calls.length;
+      // Clear call count to start fresh
+      googleAuthMock.GoogleAuth.mockClear();
 
       await getGoogleClient();
-      expect(vi.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
+      const googleAuthCalls = googleAuthMock.GoogleAuth.mock.calls.length;
+
+      await getGoogleClient();
+      // Per SDK alignment, we no longer cache auth globally - each call creates new instance
+      // This matches @google/genai SDK behavior where auth is per-instance, not global
+      expect(googleAuthMock.GoogleAuth.mock.calls).toHaveLength(googleAuthCalls + 1);
     });
   });
 
   describe('hasGoogleDefaultCredentials', () => {
     beforeEach(() => {
-      // Reset modules before each test to clear cachedAuth
-      vi.resetModules();
-      vi.doMock('google-auth-library', () => googleAuthMock);
+      // Just reset mock state, don't use vi.resetModules() as it breaks dynamic import mocks
+      vi.clearAllMocks();
+
+      // Reset mock to default state
+      const { mockAuthInstance } = googleAuthMock;
+      mockAuthInstance.getClient.mockClear();
+      mockAuthInstance.getProjectId.mockClear();
+      mockAuthInstance.getClient.mockResolvedValue({});
+      mockAuthInstance.getProjectId.mockResolvedValue('test-project');
     });
 
     it('should return true when credentials are available', async () => {
-      const mockAuth = {
-        getClient: vi.fn().mockResolvedValue({}),
-        getProjectId: vi.fn().mockResolvedValue('test-project'),
-      };
+      const { mockAuthInstance } = googleAuthMock;
+      mockAuthInstance.getClient.mockResolvedValue({});
+      mockAuthInstance.getProjectId.mockResolvedValue('test-project');
 
-      const googleAuthLib = await import('google-auth-library');
-      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
-        return mockAuth as any;
-      });
-
-      // Import hasGoogleDefaultCredentials after mocking
       const { hasGoogleDefaultCredentials } = await import('../../../src/providers/google/util');
 
       const result = await hasGoogleDefaultCredentials();
@@ -1987,31 +2027,147 @@ describe('util', () => {
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
     });
+
+    it('should sanitize function declaration schemas by removing additionalProperties', () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'test_tool',
+              description: 'A test tool',
+              parameters: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                },
+                additionalProperties: false, // Should be removed
+              },
+            },
+          ],
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized[0].functionDeclarations![0].parameters).not.toHaveProperty(
+        'additionalProperties',
+      );
+      expect(normalized[0].functionDeclarations![0].parameters).toEqual({
+        type: 'OBJECT',
+        properties: {
+          query: { type: 'STRING' },
+        },
+      });
+    });
+
+    it('should sanitize nested schemas in function declarations', () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'nested_tool',
+              parameters: {
+                type: 'object',
+                properties: {
+                  options: {
+                    type: 'object',
+                    properties: {
+                      value: { type: 'number', default: 10 },
+                    },
+                    additionalProperties: false,
+                  },
+                },
+                additionalProperties: false,
+                $schema: 'http://json-schema.org/draft-07/schema#',
+              },
+            },
+          ],
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      const params = normalized[0].functionDeclarations![0].parameters as any;
+      expect(params).not.toHaveProperty('additionalProperties');
+      expect(params).not.toHaveProperty('$schema');
+      expect(params.properties.options).not.toHaveProperty('additionalProperties');
+      expect(params.properties.options.properties.value).not.toHaveProperty('default');
+    });
+
+    it('should handle tools without functionDeclarations', () => {
+      const tools = [
+        {
+          googleSearch: {},
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized).toEqual([
+        {
+          googleSearch: {},
+        },
+      ]);
+    });
+
+    it('should handle functionDeclarations without parameters', () => {
+      const tools = [
+        {
+          functionDeclarations: [
+            {
+              name: 'no_params_tool',
+              description: 'Tool without parameters',
+            },
+          ],
+        } as any,
+      ];
+
+      const normalized = normalizeTools(tools);
+
+      expect(normalized[0].functionDeclarations![0]).toEqual({
+        name: 'no_params_tool',
+        description: 'Tool without parameters',
+        parameters: undefined,
+      });
+    });
   });
 
   describe('resolveProjectId', () => {
     const mockProjectId = 'google-auth-project';
 
     beforeEach(async () => {
-      // Reset modules to clear cached auth
-      vi.resetModules();
-      vi.doMock('google-auth-library', () => googleAuthMock);
+      // Clear the cached GoogleAuth instance before each test
+      clearCachedAuth();
 
-      // Re-mock google-auth-library after module reset
-      const mockAuth = {
-        getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
-        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
-      };
-      const googleAuthLib = await import('google-auth-library');
-      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
-        return mockAuth as any;
+      // Stub environment variables to prevent Google Auth Library from reading local gcloud config
+      vi.stubEnv('VERTEX_PROJECT_ID', undefined);
+      vi.stubEnv('GOOGLE_PROJECT_ID', undefined);
+      vi.stubEnv('GCLOUD_PROJECT', undefined);
+      vi.stubEnv('GOOGLE_CLOUD_PROJECT', undefined);
+      vi.stubEnv('GOOGLE_APPLICATION_CREDENTIALS', undefined);
+      vi.stubEnv('CLOUDSDK_CONFIG', undefined);
+      vi.stubEnv('CLOUDSDK_CORE_PROJECT', undefined);
+
+      // Don't use vi.resetModules() - it breaks the mock for dynamic imports
+      // Instead, just reset the mock state
+      const { mockAuthInstance } = googleAuthMock;
+      mockAuthInstance.getClient.mockClear();
+      mockAuthInstance.fromJSON.mockClear();
+      mockAuthInstance.getProjectId.mockClear();
+
+      mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
+      mockAuthInstance.fromJSON.mockImplementation((credentials: any) => {
+        return Promise.resolve({ name: 'mockCredentialClient', credentials });
       });
+      mockAuthInstance.getProjectId.mockResolvedValue(mockProjectId);
+    });
+
+    afterEach(() => {
+      // Restore environment variables
+      vi.unstubAllEnvs();
     });
 
     it('should prioritize explicit config over environment variables', async () => {
-      // Import resolveProject after mocking in beforeEach
-      const { resolveProjectId } = await import('../../../src/providers/google/util');
-
       const config = { projectId: 'explicit-project' };
       const env = { VERTEX_PROJECT_ID: 'env-project' };
 
@@ -2020,8 +2176,6 @@ describe('util', () => {
     });
 
     it('should use environment variables when no explicit config', async () => {
-      const { resolveProjectId } = await import('../../../src/providers/google/util');
-
       const config = {};
       const env = { VERTEX_PROJECT_ID: 'env-project' };
 
@@ -2030,49 +2184,27 @@ describe('util', () => {
     });
 
     it('should fall back to Google Auth Library when no config or env vars', async () => {
-      // Clear any environment variables that could interfere
-      const originalVertexProjectId = process.env.VERTEX_PROJECT_ID;
-      const originalGoogleProjectId = process.env.GOOGLE_PROJECT_ID;
-      delete process.env.VERTEX_PROJECT_ID;
-      delete process.env.GOOGLE_PROJECT_ID;
+      clearCachedAuth();
+      const { mockAuthInstance } = googleAuthMock;
 
-      try {
-        const { resolveProjectId } = await import('../../../src/providers/google/util');
+      const config = {};
+      const env = {};
 
-        const config = {};
-        const env = {};
+      const result = await resolveProjectId(config, env);
 
-        const result = await resolveProjectId(config, env);
-        expect(result).toBe(mockProjectId);
-      } finally {
-        // Restore environment variables
-        if (originalVertexProjectId !== undefined) {
-          process.env.VERTEX_PROJECT_ID = originalVertexProjectId;
-        }
-        if (originalGoogleProjectId !== undefined) {
-          process.env.GOOGLE_PROJECT_ID = originalGoogleProjectId;
-        }
-      }
+      // Verify the mock was called - this confirms our mock isolation is working
+      expect(mockAuthInstance.getProjectId).toHaveBeenCalled();
+      expect(result).toBe(mockProjectId);
     });
 
     it('should handle Google Auth Library getProjectId failure gracefully', async () => {
-      // Reset modules to clear cached auth
-      vi.resetModules();
-
-      // Mock Google Auth Library where getProjectId throws an error
-      const mockAuth = {
-        getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
-        fromJSON: vi.fn().mockResolvedValue({ name: 'mockCredentialClient' }),
-        getProjectId: vi
-          .fn()
-          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
-      };
-      const googleAuthLib = await import('google-auth-library');
-      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
-        return mockAuth;
-      });
-
-      const { resolveProjectId } = await import('../../../src/providers/google/util');
+      // Override mock to make getProjectId fail
+      const { mockAuthInstance } = googleAuthMock;
+      mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
+      mockAuthInstance.fromJSON.mockResolvedValue({ name: 'mockCredentialClient' });
+      mockAuthInstance.getProjectId.mockRejectedValue(
+        new Error('Unable to detect a Project Id in the current environment'),
+      );
 
       // Test that explicit config projectId is still used even when getProjectId fails
       const config = {
@@ -2085,53 +2217,575 @@ describe('util', () => {
       expect(result).toBe('explicit-project');
 
       // Verify that getProjectId was called but failed gracefully
-      expect(mockAuth.getProjectId).toHaveBeenCalled();
-      expect(mockAuth.fromJSON).toHaveBeenCalled();
+      expect(mockAuthInstance.getProjectId).toHaveBeenCalled();
+      expect(mockAuthInstance.fromJSON).toHaveBeenCalled();
     });
 
     it('should return empty string when all sources fail', async () => {
-      // Clear any environment variables that could interfere
-      const originalVertexProjectId = process.env.VERTEX_PROJECT_ID;
-      const originalGoogleProjectId = process.env.GOOGLE_PROJECT_ID;
-      delete process.env.VERTEX_PROJECT_ID;
-      delete process.env.GOOGLE_PROJECT_ID;
+      // Override the mock to make getProjectId fail
+      const { mockAuthInstance } = googleAuthMock;
+      mockAuthInstance.getProjectId.mockRejectedValue(
+        new Error('Unable to detect a Project Id in the current environment'),
+      );
 
-      try {
-        let result: string = '';
-        const mockAuth = {
-          getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
-          getProjectId: vi
-            .fn()
-            .mockRejectedValue(
-              new Error('Unable to detect a Project Id in the current environment'),
-            ),
-        };
+      // Test that when no projectId is available anywhere, we get empty string
+      const config = {};
+      const env = {};
 
-        const googleAuthLib = await import('google-auth-library');
-        vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
-          return mockAuth;
-        });
+      const result = await resolveProjectId(config, env);
 
-        const { resolveProjectId } = await import('../../../src/providers/google/util');
+      expect(result).toBe('');
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuthInstance.getProjectId).toHaveBeenCalled();
+    });
+  });
 
-        // Test that when no projectId is available anywhere, we get empty string
-        const config = {};
-        const env = {};
+  describe('sanitizeSchemaForGemini', () => {
+    it('should remove additionalProperties from schema', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+        additionalProperties: false,
+      };
 
-        result = await resolveProjectId(config, env);
+      const result = sanitizeSchemaForGemini(schema);
 
-        expect(result).toBe('');
-        // Verify that getProjectId was called but failed gracefully
-        expect(mockAuth.getProjectId).toHaveBeenCalled();
-      } finally {
-        // Restore environment variables
-        if (originalVertexProjectId !== undefined) {
-          process.env.VERTEX_PROJECT_ID = originalVertexProjectId;
-        }
-        if (originalGoogleProjectId !== undefined) {
-          process.env.GOOGLE_PROJECT_ID = originalGoogleProjectId;
-        }
-      }
+      expect(result).toEqual({
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+        },
+      });
+      expect(result).not.toHaveProperty('additionalProperties');
+    });
+
+    it('should remove $schema from schema', () => {
+      const schema = {
+        $schema: 'http://json-schema.org/draft-07/schema#',
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).not.toHaveProperty('$schema');
+      expect(result).toEqual({
+        type: 'OBJECT',
+        properties: {
+          id: { type: 'STRING' },
+        },
+      });
+    });
+
+    it('should remove default values from schema', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          count: {
+            type: 'number',
+            default: 10,
+          },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.properties.count).not.toHaveProperty('default');
+      expect(result).toEqual({
+        type: 'OBJECT',
+        properties: {
+          count: { type: 'NUMBER' },
+        },
+      });
+    });
+
+    it('should convert lowercase types to uppercase', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          str: { type: 'string' },
+          num: { type: 'number' },
+          int: { type: 'integer' },
+          bool: { type: 'boolean' },
+          arr: { type: 'array', items: { type: 'string' } },
+          obj: { type: 'object', properties: {} },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.type).toBe('OBJECT');
+      expect(result.properties.str.type).toBe('STRING');
+      expect(result.properties.num.type).toBe('NUMBER');
+      expect(result.properties.int.type).toBe('INTEGER');
+      expect(result.properties.bool.type).toBe('BOOLEAN');
+      expect(result.properties.arr.type).toBe('ARRAY');
+      expect(result.properties.obj.type).toBe('OBJECT');
+    });
+
+    it('should preserve already uppercase types', () => {
+      const schema = {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.type).toBe('OBJECT');
+      expect(result.properties.name.type).toBe('STRING');
+    });
+
+    it('should recursively sanitize nested properties', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          user: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              name: { type: 'string', default: 'unknown' },
+              address: {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  street: { type: 'string' },
+                  city: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        additionalProperties: false,
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).not.toHaveProperty('additionalProperties');
+      expect(result.properties.user).not.toHaveProperty('additionalProperties');
+      expect(result.properties.user.properties.name).not.toHaveProperty('default');
+      expect(result.properties.user.properties.address).not.toHaveProperty('additionalProperties');
+
+      expect(result.type).toBe('OBJECT');
+      expect(result.properties.user.type).toBe('OBJECT');
+      expect(result.properties.user.properties.address.type).toBe('OBJECT');
+      expect(result.properties.user.properties.address.properties.street.type).toBe('STRING');
+    });
+
+    it('should recursively sanitize array items', () => {
+      const schema = {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id: { type: 'string' },
+            tags: {
+              type: 'array',
+              items: { type: 'string', default: '' },
+            },
+          },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.items).not.toHaveProperty('additionalProperties');
+      expect(result.items.properties.tags.items).not.toHaveProperty('default');
+
+      expect(result.type).toBe('ARRAY');
+      expect(result.items.type).toBe('OBJECT');
+      expect(result.items.properties.id.type).toBe('STRING');
+      expect(result.items.properties.tags.type).toBe('ARRAY');
+      expect(result.items.properties.tags.items.type).toBe('STRING');
+    });
+
+    it('should preserve supported Gemini schema properties', () => {
+      const schema = {
+        type: 'object',
+        format: 'date-time',
+        description: 'A user object',
+        nullable: true,
+        enum: ['a', 'b', 'c'],
+        required: ['name'],
+        properties: {
+          name: { type: 'string', description: 'User name' },
+        },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).toEqual({
+        type: 'OBJECT',
+        format: 'date-time',
+        description: 'A user object',
+        nullable: true,
+        enum: ['a', 'b', 'c'],
+        required: ['name'],
+        properties: {
+          name: { type: 'STRING', description: 'User name' },
+        },
+      });
+    });
+
+    it('should preserve minItems and maxItems for arrays', () => {
+      const schema = {
+        type: 'array',
+        minItems: 1,
+        maxItems: 10,
+        items: { type: 'string' },
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).toEqual({
+        type: 'ARRAY',
+        minItems: 1,
+        maxItems: 10,
+        items: { type: 'STRING' },
+      });
+    });
+
+    it('should handle real MCP SDK Zod-generated schema', () => {
+      // This represents what MCP SDK generates from Zod schemas
+      const mcpZodSchema = {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'The prompt to analyze',
+          },
+          maxTokens: {
+            type: 'number',
+            description: 'Maximum tokens to generate',
+            default: 1000,
+          },
+          options: {
+            type: 'object',
+            properties: {
+              temperature: {
+                type: 'number',
+                default: 0.7,
+              },
+              topK: {
+                type: 'integer',
+              },
+            },
+            additionalProperties: false,
+          },
+        },
+        required: ['prompt'],
+        additionalProperties: false,
+        $schema: 'http://json-schema.org/draft-07/schema#',
+      };
+
+      const result = sanitizeSchemaForGemini(mcpZodSchema);
+
+      // Should not have any unsupported properties
+      expect(result).not.toHaveProperty('$schema');
+      expect(result).not.toHaveProperty('additionalProperties');
+      expect(result.properties.maxTokens).not.toHaveProperty('default');
+      expect(result.properties.options).not.toHaveProperty('additionalProperties');
+      expect(result.properties.options.properties.temperature).not.toHaveProperty('default');
+
+      // Should have all supported properties with correct types
+      expect(result).toEqual({
+        type: 'OBJECT',
+        properties: {
+          prompt: {
+            type: 'STRING',
+            description: 'The prompt to analyze',
+          },
+          maxTokens: {
+            type: 'NUMBER',
+            description: 'Maximum tokens to generate',
+          },
+          options: {
+            type: 'OBJECT',
+            properties: {
+              temperature: {
+                type: 'NUMBER',
+              },
+              topK: {
+                type: 'INTEGER',
+              },
+            },
+          },
+        },
+        required: ['prompt'],
+      });
+    });
+
+    it('should handle null or undefined schema gracefully', () => {
+      expect(sanitizeSchemaForGemini(null as any)).toBe(null);
+      expect(sanitizeSchemaForGemini(undefined as any)).toBe(undefined);
+    });
+
+    it('should handle empty schema object', () => {
+      const schema = {};
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).toEqual({});
+    });
+
+    it('should handle null type mapping', () => {
+      // Gemini doesn't support null type directly, map to STRING
+      const schema = {
+        type: 'null',
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result.type).toBe('STRING');
+    });
+
+    it('should remove anyOf, oneOf, allOf (not supported by Gemini)', () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          value: {
+            anyOf: [{ type: 'string' }, { type: 'number' }],
+          },
+        },
+        oneOf: [{ type: 'object' }],
+        allOf: [{ required: ['name'] }],
+      };
+
+      const result = sanitizeSchemaForGemini(schema);
+
+      expect(result).not.toHaveProperty('anyOf');
+      expect(result).not.toHaveProperty('oneOf');
+      expect(result).not.toHaveProperty('allOf');
+      // The nested anyOf in value property should also be removed
+      expect(result.properties.value).not.toHaveProperty('anyOf');
+    });
+  });
+
+  describe('calculateGoogleCost', () => {
+    it('should return undefined for missing token counts', () => {
+      expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
+      expect(calculateGoogleCost('gemini-pro', {}, 100, undefined)).toBeUndefined();
+      expect(calculateGoogleCost('gemini-pro', {}, undefined, undefined)).toBeUndefined();
+    });
+
+    it('should return undefined for unknown models', () => {
+      expect(calculateGoogleCost('unknown-model', {}, 100, 50)).toBeUndefined();
+    });
+
+    it('should calculate cost for gemini-pro model', () => {
+      // gemini-pro: input=0.5/1M, output=1.5/1M
+      const cost = calculateGoogleCost('gemini-pro', {}, 1000, 500);
+      // Expected: (1000 * 0.5 + 500 * 1.5) / 1M = (500 + 750) / 1M = 0.00125
+      expect(cost).toBeCloseTo(0.00125, 10);
+    });
+
+    it('should calculate cost for gemini-2.0-flash model', () => {
+      // gemini-2.0-flash: input=0.1/1M, output=0.4/1M
+      const cost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      // Expected: (10000 * 0.1 + 5000 * 0.4) / 1M = (1000 + 2000) / 1M = 0.003
+      expect(cost).toBeCloseTo(0.003, 10);
+    });
+
+    it('should calculate cost for gemini-2.5-flash model', () => {
+      // gemini-2.5-flash: input=0.3/1M, output=2.5/1M
+      const cost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500);
+      // Expected: (1000 * 0.3 + 500 * 2.5) / 1M = (300 + 1250) / 1M = 0.00155
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    it('should apply tiered pricing for gemini-3.1-pro-preview when above threshold', () => {
+      // gemini-3.1-pro-preview: base input=2.0/1M, output=12.0/1M
+      // tiered (>200k): input=4.0/1M, output=18.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-3.1-pro-preview', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
+    it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
+      // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
+      // tiered (>200k): input=2.5/1M, output=15.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-2.5-pro', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 1.25 + 50000 * 10.0) / 1M = 0.625
+      expect(costBelowThreshold).toBeCloseTo(0.625, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-2.5-pro', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 2.5 + 50000 * 15.0) / 1M = 1.375
+      expect(costAboveThreshold).toBeCloseTo(1.375, 10);
+    });
+
+    it('should apply tiered pricing for gemini-1.5-pro when above threshold', () => {
+      // gemini-1.5-pro: base input=1.25/1M, output=5.0/1M
+      // tiered (>128k): input=2.5/1M, output=10.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-1.5-pro', {}, 100000, 50000);
+      // Expected (below 128k): (100000 * 1.25 + 50000 * 5.0) / 1M = 0.375
+      expect(costBelowThreshold).toBeCloseTo(0.375, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-1.5-pro', {}, 150000, 50000);
+      // Expected (above 128k): (150000 * 2.5 + 50000 * 10.0) / 1M = 0.875
+      expect(costAboveThreshold).toBeCloseTo(0.875, 10);
+    });
+
+    it('should apply tiered pricing for gemini-1.5-flash when above threshold', () => {
+      // gemini-1.5-flash: base input=0.075/1M, output=0.3/1M
+      // tiered (>128k): input=0.15/1M, output=0.6/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-1.5-flash', {}, 100000, 50000);
+      // Expected (below 128k): (100000 * 0.075 + 50000 * 0.3) / 1M = 0.0225
+      expect(costBelowThreshold).toBeCloseTo(0.0225, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-1.5-flash', {}, 150000, 50000);
+      // Expected (above 128k): (150000 * 0.15 + 50000 * 0.6) / 1M = 0.0525
+      expect(costAboveThreshold).toBeCloseTo(0.0525, 10);
+    });
+
+    it('should apply tiered pricing for gemini-1.5-flash-8b when above threshold', () => {
+      // gemini-1.5-flash-8b: base input=0.0375/1M, output=0.15/1M
+      // tiered (>128k): input=0.075/1M, output=0.3/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-1.5-flash-8b', {}, 100000, 50000);
+      // Expected (below 128k): (100000 * 0.0375 + 50000 * 0.15) / 1M = 0.01125
+      expect(costBelowThreshold).toBeCloseTo(0.01125, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-1.5-flash-8b', {}, 150000, 50000);
+      // Expected (above 128k): (150000 * 0.075 + 50000 * 0.3) / 1M = 0.02625
+      expect(costAboveThreshold).toBeCloseTo(0.02625, 10);
+    });
+
+    it('should calculate cost for gemini-embedding-001', () => {
+      // gemini-embedding-001: input=0.15/1M, output=0
+      const cost = calculateGoogleCost('gemini-embedding-001', {}, 10000, 0);
+      // Expected: (10000 * 0.15 + 0 * 0) / 1M = 0.0015
+      expect(cost).toBeCloseTo(0.0015, 10);
+    });
+
+    it('should calculate cost for gemini-robotics-er-1.5-preview', () => {
+      // gemini-robotics-er-1.5-preview: input=0.3/1M, output=2.5/1M
+      const cost = calculateGoogleCost('gemini-robotics-er-1.5-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    it('should apply tiered pricing for gemini-3-pro-preview when above threshold', () => {
+      // gemini-3-pro-preview: base input=2.0/1M, output=12.0/1M
+      // tiered (>200k): input=4.0/1M, output=18.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-3-pro-preview', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-3-pro-preview', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
+    it('should return undefined for models without pricing data', () => {
+      // Legacy PaLM models don't have pricing
+      expect(calculateGoogleCost('chat-bison', {}, 100, 50)).toBeUndefined();
+      expect(calculateGoogleCost('gemma', {}, 100, 50)).toBeUndefined();
+    });
+
+    it('should respect custom cost override in config', () => {
+      // When config.cost is set, it should override default pricing
+      const config = { cost: 0.001 }; // $1 per 1000 tokens
+      const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
+      // Expected: (1000 + 500) * 0.001 = 1.5
+      expect(cost).toBeCloseTo(1.5, 10);
+    });
+
+    it('should respect separate custom input and output cost overrides in config', () => {
+      const config = { inputCost: 0.001, outputCost: 0.003 };
+      const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
+      expect(cost).toBeCloseTo(2.5, 10);
+    });
+
+    it('should prefer separate custom costs over custom cost', () => {
+      const config = { cost: 0.02, inputCost: 0.001, outputCost: 0.003 };
+      const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
+      expect(cost).toBeCloseTo(2.5, 10);
+    });
+
+    it('should respect separate custom costs for tiered pricing', () => {
+      const config = { inputCost: 0.001, outputCost: 0.003 };
+      const cost = calculateGoogleCost('gemini-2.5-pro', config, 250000, 50000);
+      expect(cost).toBeCloseTo(400, 10);
+    });
+
+    it('should use Vertex-specific pricing for gemini-2.0-flash in Vertex mode', () => {
+      // AI Studio: input=0.1/1M, output=0.4/1M
+      // Vertex AI: input=0.15/1M, output=0.6/1M
+      const aiStudioCost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const vertexCost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, true);
+      // AI Studio: (10000 * 0.1 + 5000 * 0.4) / 1M = 0.003
+      expect(aiStudioCost).toBeCloseTo(0.003, 10);
+      // Vertex: (10000 * 0.15 + 5000 * 0.6) / 1M = 0.0045
+      expect(vertexCost).toBeCloseTo(0.0045, 10);
+    });
+
+    it('should respect separate custom costs for Vertex-specific pricing', () => {
+      const config = { inputCost: 0.001, outputCost: 0.003 };
+      const cost = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000, true);
+      expect(cost).toBeCloseTo(25, 10);
+    });
+
+    it('should use standard pricing for models without Vertex-specific pricing in Vertex mode', () => {
+      // gemini-2.5-flash has no vertexCost, so Vertex mode uses the same price
+      const aiStudioCost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500);
+      const vertexCost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500, true);
+      expect(vertexCost).toBeCloseTo(aiStudioCost!, 10);
+    });
+  });
+
+  describe('normalizeSafetySettings', () => {
+    it('should return undefined when given undefined', () => {
+      expect(normalizeSafetySettings(undefined)).toBeUndefined();
+    });
+
+    it('should pass through threshold field as-is', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+    });
+
+    it('should map legacy probability field to threshold', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+    });
+
+    it('should prefer threshold over probability when both are set', () => {
+      const result = normalizeSafetySettings([
+        {
+          category: 'HARM_CATEGORY_HARASSMENT',
+          threshold: 'BLOCK_ONLY_HIGH',
+          probability: 'BLOCK_MEDIUM_AND_ABOVE',
+        },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+    });
+
+    it('should handle multiple safety settings', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
     });
   });
 });

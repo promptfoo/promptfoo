@@ -45,6 +45,7 @@ export default function Prompts({
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const promptId = searchParams.get('id');
     if (promptId && data.length > 0) {
@@ -103,8 +104,11 @@ export default function Prompts({
       {
         accessorKey: 'count',
         header: '# Evals',
-        cell: ({ getValue }) => <span className="text-sm">{getValue<number>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
+        ),
         size: 120,
+        meta: { align: 'right' },
       },
     ],
     [],
@@ -120,7 +124,7 @@ export default function Prompts({
   return (
     <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
-        <div className="container max-w-7xl mx-auto px-6 py-6">
+        <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-semibold">Prompts</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage and track all prompt templates and their evaluation history
