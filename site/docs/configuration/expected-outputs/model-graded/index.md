@@ -269,7 +269,7 @@ tests:
 This works at every level where a grader can be set — per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
 
 :::note
-The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. Reasoning models (o1, o3, o5, etc.) ignore `temperature` entirely.
+The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. OpenAI reasoning models (o1, o3, o4, GPT-5, etc.) ignore `temperature` entirely.
 :::
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.

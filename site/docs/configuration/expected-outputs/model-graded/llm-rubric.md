@@ -141,7 +141,7 @@ assert:
 The same shape works under `defaultTest.options.provider` and `test.options.provider`.
 
 :::note
-The built-in OpenAI grader already defaults to `temperature=0`, so this override is only needed when you're pointing at a different model or provider whose default differs. Reasoning models (o1, o3, o5, etc.) ignore `temperature` and do not need it set.
+The built-in OpenAI grader already defaults to `temperature=0`, so this override is only needed when you're pointing at a different model or provider whose default differs. OpenAI reasoning models (o1, o3, o4, GPT-5, etc.) ignore `temperature` and do not need it set.
 :::
 
 Custom `llm-rubric` providers can also return a `metadata` object in their `ProviderResponse`. promptfoo copies those keys onto the assertion's `GradingResult.metadata` alongside `renderedGradingPrompt`, which makes per-assertion fields such as upload IDs or trace IDs available in hooks like `afterEach`.
