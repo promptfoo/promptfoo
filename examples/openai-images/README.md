@@ -28,6 +28,7 @@ promptfoo view
 ## What's in this Example
 
 - Compares GPT Image 2, GPT Image 1.5, GPT Image 1, and GPT Image 1 Mini outputs
+- Uses text-to-image generation through the Image API generations endpoint
 - Tests artistic style prompts across different models
 - Configures different image sizes and quality settings
 - Tests with different subjects
@@ -48,6 +49,8 @@ providers:
       output_format: webp # png, jpeg, webp
       output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto, low
+      n: 1 # 1-10 images
+      user: promptfoo-user # optional end-user identifier
 ```
 
 ### GPT Image 1.5
@@ -102,6 +105,8 @@ providers:
 
 `dall-e-3` and `dall-e-2` remain supported by the provider for backward compatibility, but they are deprecated by OpenAI. Use `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, or `gpt-image-1-mini` for new evals.
 
+Promptfoo's `openai:image` provider currently supports text-to-image generation. Image edits/reference inputs, variations, and streaming partial images are not part of this example and are rejected if configured.
+
 ## Pricing
 
 | Model            | Quality | Size      | Price per image |
@@ -119,7 +124,7 @@ providers:
 | GPT Image 1 Mini | Medium  | 1024x1024 | $0.011          |
 | GPT Image 1 Mini | High    | 1024x1024 | $0.036          |
 
-**Note:** Prices shown are 1024x1024 output image estimates and do not include input text or image tokens.
+**Note:** Prices shown are 1024x1024 output image estimates and do not include input text tokens. For GPT Image 2 `auto` quality or custom sizes, promptfoo preserves OpenAI usage metadata and leaves `cost` unset instead of guessing.
 
 ## Documentation
 

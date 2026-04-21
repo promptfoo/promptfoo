@@ -14,6 +14,8 @@ providers:
       # output_format: webp # Options: png, jpeg, webp
       # output_compression: 80 # 0-100, only set with jpeg/webp
       # moderation: auto # Options: auto, low
+      # n: 1 # 1-10 images
+      # user: promptfoo-user # Optional end-user identifier
 
   # GPT Image 1.5 - High-quality GPT Image model
   - id: openai:image:gpt-image-1.5

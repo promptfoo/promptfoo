@@ -658,6 +658,8 @@ OpenAI supports image generation via `openai:image:<model>`. Supported models in
 
 `dall-e-3` and `dall-e-2` remain available for backward compatibility, but use `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, or `gpt-image-1-mini` for new evals.
 
+The `openai:image` provider uses the Image API generations endpoint. It supports text-to-image generation; image edit/reference inputs (`image`, `mask`, `input_fidelity`), streaming (`stream`/`partial_images`), and variations are not implemented in this provider.
+
 See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images).
 
 #### GPT Image 2
@@ -674,6 +676,8 @@ providers:
       output_format: webp # png, jpeg, or webp
       output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto or low
+      n: 1 # 1-10 images
+      user: promptfoo-user # optional end-user identifier
 ```
 
 | Parameter            | Description                        | Options                                                                                     |
@@ -684,6 +688,8 @@ providers:
 | `output_format`      | Output image format                | `png`, `jpeg`, `webp`                                                                       |
 | `output_compression` | Compression level (jpeg/webp only) | `0-100`                                                                                     |
 | `moderation`         | Content moderation strictness      | `auto`, `low`                                                                               |
+| `n`                  | Number of images to generate       | `1-10`                                                                                      |
+| `user`               | Optional end-user identifier       | Any string                                                                                  |
 
 For custom `size` values, both dimensions must be multiples of 16, the maximum edge must be no larger than 3840px, the long edge to short edge ratio must be at most 3:1, and total pixels must be between 655,360 and 8,294,400.
 
@@ -695,7 +701,7 @@ For custom `size` values, both dimensions must be multiples of 16, the maximum e
 | Medium  | $0.053    | $0.041    | $0.041    |
 | High    | $0.211    | $0.165    | $0.165    |
 
-These are output image estimates. Input text tokens, and input image tokens for edit requests, may also apply.
+These are output image estimates. Input text tokens may also apply, and OpenAI may return usage data for the request. For GPT Image 2 `quality: auto`, omitted quality, or custom sizes, promptfoo leaves `cost` unset and preserves the returned usage in `tokenUsage`/`metadata.usage` instead of guessing.
 
 #### GPT Image 1.5
 
