@@ -319,6 +319,48 @@ describe('Redteam Routes', () => {
         expect(mockPluginFactory.action).toHaveBeenCalled();
         expect(response.body.prompt).toBe('generated test prompt');
       });
+
+      it('should preserve HarmBench category filters when generating preview tests', async () => {
+        const mockPluginFactory = {
+          key: 'harmbench',
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'test case' } }]),
+        };
+        mockedPlugins.find = vi.fn().mockReturnValue(mockPluginFactory);
+
+        const response = await request(app)
+          .post('/api/redteam/generate-test')
+          .send({
+            plugin: {
+              id: 'harmbench',
+              config: {
+                categories: ['misinformation'],
+                functionalCategories: ['contextual'],
+              },
+            },
+            strategy: {
+              id: 'basic',
+              config: {},
+            },
+            config: {
+              applicationDefinition: {
+                purpose: 'test assistant',
+              },
+            },
+          });
+
+        expect(response.status).toBe(200);
+        expect(mockPluginFactory.action).toHaveBeenCalledWith(
+          expect.objectContaining({
+            config: expect.objectContaining({
+              categories: ['misinformation'],
+              functionalCategories: ['contextual'],
+              language: 'en',
+              __nonce: expect.any(Number),
+            }),
+          }),
+        );
+        expect(response.body.prompt).toBe('generated test prompt');
+      });
     });
 
     afterEach(() => {
