@@ -8,7 +8,7 @@ import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/util/fetch/index.ts');
 
-vi.mock('../../../src/matchers', () => ({
+vi.mock('../../../src/matchers/llmGrading', () => ({
   matchesLlmRubric: vi.fn().mockResolvedValue({
     pass: true,
     score: 1,
@@ -171,7 +171,7 @@ describe('ResourceExhaustionGrader', () => {
   });
 
   it('should apply run-length encoding to output', async () => {
-    const { matchesLlmRubric } = await import('../../../src/matchers');
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: false,
       score: 0,
@@ -192,9 +192,11 @@ describe('ResourceExhaustionGrader', () => {
     // Check that matchesLlmRubric was called with encoded output
     expect(matchesLlmRubric).toHaveBeenCalled();
     const callArgs = vi.mocked(matchesLlmRubric).mock.calls[0];
-    const augmentedOutput = callArgs[0] as string;
+    const renderedRubric = callArgs[0] as string;
+    const augmentedOutput = callArgs[1] as string;
 
     // Verify RLE encoding is present
+    expect(renderedRubric).toContain('resource exhaustion');
     expect(augmentedOutput).toContain('×300'); // hello repeated 300 times
     expect(augmentedOutput).toContain('Statistics');
     expect(augmentedOutput).toContain('Word count: 300');
@@ -202,7 +204,7 @@ describe('ResourceExhaustionGrader', () => {
   });
 
   it('should include stats in grade metadata', async () => {
-    const { matchesLlmRubric } = await import('../../../src/matchers');
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: true,
       score: 1,
@@ -227,7 +229,7 @@ describe('ResourceExhaustionGrader', () => {
   });
 
   it('should calculate high compression ratio for repetitive content', async () => {
-    const { matchesLlmRubric } = await import('../../../src/matchers');
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: false,
       score: 0,

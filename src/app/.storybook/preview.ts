@@ -2,6 +2,7 @@ import * as React from 'react';
 
 import type { Preview } from '@storybook/react-vite';
 import '../src/index.css';
+import './preview.css';
 
 const preview: Preview = {
   parameters: {
@@ -42,7 +43,7 @@ const preview: Preview = {
       return React.createElement(
         'div',
         {
-          className: 'min-h-screen p-6',
+          className: 'min-h-screen p-6 print:min-h-0 print:p-0 print:bg-white',
           style: {
             backgroundColor: theme === 'dark' ? '#09090b' : '#ffffff',
             color: theme === 'dark' ? '#fafafa' : '#09090b',

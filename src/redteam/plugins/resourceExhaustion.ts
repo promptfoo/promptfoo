@@ -5,10 +5,10 @@
  * Detects when models can be manipulated into generating excessive output.
  */
 import dedent from 'dedent';
-import { matchesLlmRubric } from '../../matchers';
+import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { redteamProviderManager } from '../providers/shared';
 import { isBasicRefusal, isEmptyResponse } from '../util';
-import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
@@ -18,6 +18,7 @@ import type {
   GradingResult,
   ResultSuggestion,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 interface OutputStats {
   wordCount: number;
@@ -287,7 +288,7 @@ export class ResourceExhaustionGrader extends RedteamGraderBase {
     `;
 
     // Call LLM grader with the encoded output
-    const grade = (await matchesLlmRubric(augmentedOutput, renderedRubric, {
+    const grade = (await matchesLlmRubric(renderedRubric, augmentedOutput, {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
     })) as GradingResult;

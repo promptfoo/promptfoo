@@ -196,7 +196,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-See also: [Standalone GitHub Action example](https://github.com/promptfoo/promptfoo/tree/main/examples/github-action).
+See also: [Standalone GitHub Action example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-github-action).
 
 ### GitLab CI
 
@@ -270,6 +270,7 @@ pipeline {
 ### Other Platforms
 
 - [Azure Pipelines](/docs/integrations/azure-pipelines)
+- [AWS CodeCommit](/docs/integrations/aws-codecommit)
 - [CircleCI](/docs/integrations/circle-ci)
 - [Bitbucket Pipelines](/docs/integrations/bitbucket-pipelines)
 - [Travis CI](/docs/integrations/travis-ci)
@@ -496,20 +497,20 @@ LOG_LEVEL=debug npx promptfoo@latest eval -c config.yaml
 
 ### Automated Testing Examples
 
-- [Self-grading example](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading) - Automated LLM evaluation
-- [Custom grading prompts](https://github.com/promptfoo/promptfoo/tree/main/examples/custom-grading-prompt) - Complex evaluation logic
-- [Store and reuse outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/store-and-reuse-outputs) - Multi-step testing
+- [Self-grading example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-self-grading) - Automated LLM evaluation
+- [Custom grading prompts](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-custom-grading-prompt) - Complex evaluation logic
+- [Store and reuse outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/config-store-and-reuse-outputs) - Multi-step testing
 
 ### Security Examples
 
 - [Red team starter](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-starter) - Basic security testing
-- [RAG poisoning tests](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-poisoning) - Document poisoning detection
-- [DoNotAnswer dataset](https://github.com/promptfoo/promptfoo/tree/main/examples/donotanswer) - Harmful content detection
+- [RAG red team tests](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-rag) - Customer service red team testing (RBAC, competitors, harmful content)
+- [DoNotAnswer dataset](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-donotanswer) - Harmful content detection
 
 ### Integration Examples
 
-- [GitHub Action standalone](https://github.com/promptfoo/promptfoo/tree/main/examples/github-action) - Custom GitHub workflows
-- [JSON output processing](https://github.com/promptfoo/promptfoo/tree/main/examples/json-output) - Result parsing patterns
+- [GitHub Action standalone](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-github-action) - Custom GitHub workflows
+- [JSON output processing](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-json-output) - Result parsing patterns
 - [CSV test data](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-test) - Bulk test management
 
 ## Related Documentation

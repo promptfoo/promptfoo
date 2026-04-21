@@ -1,6 +1,8 @@
 {
   "name": "sample-api",
   "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
   "description": "A simple Express API for testing Claude Agent SDK",
   "main": "index.js",
   "scripts": {
