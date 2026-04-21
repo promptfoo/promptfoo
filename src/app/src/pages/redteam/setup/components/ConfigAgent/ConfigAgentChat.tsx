@@ -441,7 +441,7 @@ function MessageBubble({ message, theme, index }: MessageBubbleProps) {
     if (isUser) {
       return theme.palette.primary.main;
     }
-    return 'transparent';
+    return theme.palette.divider;
   };
 
   const getBackgroundColor = () => {

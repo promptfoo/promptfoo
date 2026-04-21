@@ -882,6 +882,11 @@ export class ConfigurationAgent {
 
     // Handle explicit auth configuration
     if (auth?.headerName) {
+      if (auth.headerName.toLowerCase() === 'authorization' && auth.type === 'bearer') {
+        return {
+          [auth.headerName]: /^bearer\s+/i.test(apiKey) ? apiKey : `Bearer ${apiKey}`,
+        };
+      }
       return { [auth.headerName]: apiKey };
     }
 

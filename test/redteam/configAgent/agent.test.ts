@@ -23,6 +23,14 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
   });
 }
 
+function textResponse(body: string, init?: ResponseInit): Response {
+  return new Response(body, {
+    status: 200,
+    headers: { 'Content-Type': 'text/plain', ...init?.headers },
+    ...init,
+  });
+}
+
 describe('ConfigurationAgent', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -271,6 +279,322 @@ describe('ConfigurationAgent', () => {
       expect(Object.values(agent.getFinalConfig()?.headers ?? {})).toContain(
         'Bearer sk-test-secret',
       );
+    });
+  });
+
+  describe('Discovery flow', () => {
+    it('discovers and verifies an OpenAI-compatible endpoint', async () => {
+      mockedFetchWithProxy.mockImplementation(async (url, options) => {
+        if (options?.method === 'HEAD') {
+          return new Response('', { status: 204 });
+        }
+        if (String(url).endsWith('/v1/models')) {
+          return jsonResponse({ data: [{ id: 'gpt-test' }, { id: 'gpt-next' }] });
+        }
+        if (String(url).endsWith('/v1/chat/completions')) {
+          return jsonResponse({ choices: [{ message: { content: 'hello' } }] });
+        }
+        return jsonResponse({ error: 'not found' }, { status: 404 });
+      });
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+
+      expect(agent.isComplete()).toBe(true);
+      expect(agent.getSession()).toMatchObject({
+        phase: 'complete',
+        verified: true,
+        triedStrategies: ['openai_compatible'],
+      });
+      expect(agent.getFinalConfig()).toMatchObject({
+        apiType: 'openai_compatible',
+        path: '/v1/chat/completions',
+        defaultModel: 'gpt-test',
+      });
+      expect(agent.getMessages().some((message) => message.content.includes('Found a match'))).toBe(
+        true,
+      );
+    });
+
+    it('falls back from HEAD to GET before probing and asks for manual help when nothing matches', async () => {
+      mockedFetchWithProxy.mockImplementation(async (url, options) => {
+        if (String(url) === 'https://api.example.com' && options?.method === 'HEAD') {
+          throw new Error('HEAD not supported');
+        }
+        if (String(url) === 'https://api.example.com' && options?.method === 'GET') {
+          return textResponse('ok');
+        }
+        return jsonResponse({ error: 'not found' }, { status: 404 });
+      });
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+
+      expect(mockedFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com',
+        expect.objectContaining({ method: 'HEAD', redirect: 'manual' }),
+      );
+      expect(mockedFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com',
+        expect.objectContaining({ method: 'GET', redirect: 'manual' }),
+      );
+      expect(agent.getSession().phase).toBe('analyzing');
+      expect(
+        agent
+          .getMessages()
+          .at(-1)
+          ?.metadata?.options?.map((option) => option.id),
+      ).toEqual(['example', 'openai', 'anthropic', 'custom']);
+    });
+
+    it('handles auth-required discovery and verifies the provided bearer token', async () => {
+      mockedFetchWithProxy.mockImplementation(async (url, options) => {
+        const headers = options?.headers as Record<string, string> | undefined;
+        if (options?.method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        if (headers?.Authorization === 'Bearer sk-live-secret') {
+          return jsonResponse({ choices: [{ message: { content: 'hello' } }] });
+        }
+        if (String(url).endsWith('/v1/chat/completions')) {
+          return jsonResponse(
+            { error: { message: 'Bearer token required' } },
+            { status: 401, headers: { 'www-authenticate': 'Bearer realm="api"' } },
+          );
+        }
+        return jsonResponse({ error: 'not found' }, { status: 404 });
+      });
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+
+      expect(agent.getSession().phase).toBe('analyzing');
+      expect(agent.getMessages().at(-1)?.metadata?.inputRequest).toMatchObject({
+        type: 'api_key',
+        sensitive: true,
+      });
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'api_key',
+        value: 'sk-live-secret',
+        field: 'apiKey',
+      });
+
+      expect(agent.isComplete()).toBe(true);
+      expect(agent.getFinalConfig()).toMatchObject({
+        headers: { Authorization: 'Bearer sk-live-secret' },
+        auth: { type: 'bearer', location: 'header', headerName: 'Authorization' },
+      });
+      expect(JSON.stringify(agent.getMessages())).not.toContain('sk-live-secret');
+      expect(JSON.stringify(agent.getMessages())).toContain('••••••••cret');
+    });
+
+    it('reports connectivity errors without probing', async () => {
+      mockedFetchWithProxy.mockRejectedValue(new Error('network down'));
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+
+      expect(agent.getSession().phase).toBe('error');
+      expect(agent.getMessages().some((message) => message.content.includes('network down'))).toBe(
+        true,
+      );
+      expect(mockedFetchWithProxy).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('User interaction flows', () => {
+    it('supports manual OpenAI selection and no-auth verification', async () => {
+      mockedFetchWithProxy.mockResolvedValue(
+        jsonResponse({ choices: [{ message: { content: 'hello' } }] }),
+      );
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'openai',
+      });
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'no_auth',
+      });
+
+      expect(agent.isComplete()).toBe(true);
+      expect(agent.getFinalConfig()?.apiType).toBe('openai_compatible');
+    });
+
+    it('supports manual Anthropic selection and skip-after-failed-verification', async () => {
+      mockedFetchWithProxy.mockResolvedValue(
+        jsonResponse({ error: 'bad request' }, { status: 400 }),
+      );
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'anthropic',
+      });
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'no_auth',
+      });
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'skip',
+      });
+
+      expect(agent.getSession()).toMatchObject({
+        phase: 'complete',
+        verified: false,
+      });
+      expect(agent.getFinalConfig()?.apiType).toBe('anthropic_compatible');
+      expect(agent.isComplete()).toBe(false);
+    });
+
+    it('handles custom, edit, no-key, and unknown options', async () => {
+      const agent = new ConfigurationAgent('https://api.example.com');
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'custom',
+      });
+      expect(agent.getMessages().at(-1)?.metadata?.inputRequest).toMatchObject({
+        type: 'text',
+        field: 'customFormat',
+      });
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'edit',
+      });
+      expect(agent.getMessages().at(-1)?.metadata?.inputRequest).toMatchObject({
+        type: 'text',
+        field: 'editRequest',
+      });
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'no_key',
+      });
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'unknown_option',
+      });
+
+      const contents = agent.getMessages().map((message) => message.content);
+      expect(contents).toContain(
+        "You'll need an API key to use this endpoint. Check the service's documentation for how to obtain one.",
+      );
+      expect(contents).toContain("I'll help you with that. What would you like to do next?");
+    });
+
+    it('handles freeform auth, help, retry, and generic hints', async () => {
+      mockedFetchWithProxy.mockImplementation(async (url, options) => {
+        if (String(url) === 'https://api.example.com' && options?.method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        return jsonResponse({ error: 'not found' }, { status: 404 });
+      });
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'message',
+        value: 'auth please',
+      });
+      expect(agent.getMessages().at(-1)?.metadata?.inputRequest?.type).toBe('api_key');
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'message',
+        value: 'help',
+      });
+      expect(agent.getMessages().at(-1)?.content).toContain('I can help you configure');
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'message',
+        value: 'try again',
+      });
+      expect(agent.getSession().triedStrategies).toContain('generic_json');
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'message',
+        value: 'it returns XML sometimes',
+      });
+      expect(agent.getSession().userInputs.userHint).toBe('it returns XML sometimes');
+      expect(
+        agent
+          .getMessages()
+          .at(-1)
+          ?.metadata?.options?.map((option) => option.id),
+      ).toEqual(['retry', 'manual']);
+    });
+
+    it('handles invalid API keys, confirmation, apply, and skip without a match', async () => {
+      mockedFetchWithProxy.mockResolvedValue(
+        jsonResponse({ error: 'unauthorized' }, { status: 401 }),
+      );
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'api_key',
+        value: '',
+        field: 'apiKey',
+      });
+      expect(agent.getMessages().at(-1)?.content).toBe('Please provide a valid API key.');
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'openai',
+      });
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'api_key',
+        value: 'bad-key',
+        field: 'apiKey',
+      });
+      expect(
+        agent.getMessages().some((message) => message.content.includes('Authentication failed')),
+      ).toBe(true);
+
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'option',
+        value: 'apply',
+      });
+      expect(
+        agent.getMessages().some((message) => message.content === 'No configuration to apply.'),
+      ).toBe(true);
+
+      const emptyAgent = new ConfigurationAgent('https://api.example.com');
+      await emptyAgent.handleUserInput({
+        sessionId: emptyAgent.getSession().id,
+        type: 'option',
+        value: 'skip',
+      });
+      expect(emptyAgent.getMessages().at(-1)?.content).toBe('No configuration to skip to.');
+
+      await emptyAgent.handleUserInput({
+        sessionId: emptyAgent.getSession().id,
+        type: 'confirmation',
+        value: true,
+      });
+      expect(emptyAgent.getFinalConfig()).toBeNull();
     });
   });
 });
