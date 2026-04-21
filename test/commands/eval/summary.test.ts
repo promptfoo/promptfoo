@@ -139,6 +139,37 @@ describe('generateEvalSummary', () => {
       expect(output).toContain('✓ Red team complete');
       expect(output).not.toContain('Eval complete');
     });
+
+    it('should explain non-retryable target errors when an eval is aborted', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-aborted',
+        isRedteam: false,
+        writeToDatabase: true,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 0,
+        failures: 0,
+        errors: 1,
+        duration: 1000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+        targetErrorStatus: 401,
+      };
+
+      const lines = generateEvalSummary(params);
+      const output = stripAnsi(lines.join('\n'));
+
+      expect(output).toContain('✗ Eval aborted (ID: eval-aborted)');
+      expect(output).toContain(
+        'Scan stopped: Target is unavailable and will not recover on retry.',
+      );
+      expect(output).toContain('Target returned HTTP 401');
+      expect(output).not.toContain('Server error (500)');
+      expect(output).toContain('To fix: Check your target configuration and credentials.');
+    });
   });
 
   describe('token usage', () => {

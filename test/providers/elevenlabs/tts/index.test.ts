@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsTTSProvider } from '../../../../src/providers/elevenlabs/tts';
+import { mockProcessEnv } from '../../../util/utils';
 
 // Mock dependencies
 vi.mock('../../../../src/providers/elevenlabs/client');
@@ -9,11 +10,11 @@ vi.mock('../../../../src/providers/elevenlabs/cost-tracker');
 describe('ElevenLabsTTSProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ELEVENLABS_API_KEY = 'test-api-key';
+    mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
-    delete process.env.ELEVENLABS_API_KEY;
+    mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -31,7 +32,7 @@ describe('ElevenLabsTTSProvider', () => {
     });
 
     it('should throw error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsTTSProvider('elevenlabs:tts')).toThrow(
         'ELEVENLABS_API_KEY environment variable is not set',

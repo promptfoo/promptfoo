@@ -1,5 +1,6 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
+import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -56,6 +57,7 @@ vi.mock('./components/Setup', () => ({
 const mockedUseTelemetry = useTelemetry as Mock;
 const mockedUseToast = useToast as Mock;
 const mockedUseSetupState = useSetupState as unknown as Mock;
+const mockedCallApi = vi.mocked(callApi);
 
 // Capture initial store state for reset
 const initialRedTeamState = useRedTeamConfig.getState();
@@ -79,6 +81,10 @@ describe('RedTeamSetupPage', () => {
       hasSeenSetup: true, // Assume setup has been seen to not render the modal
       markSetupAsSeen: vi.fn(),
     });
+    mockedCallApi.mockResolvedValue({
+      ok: true,
+      json: async () => ({ configs: [] }),
+    } as Response);
   });
 
   afterEach(() => {
@@ -252,6 +258,43 @@ redteam:
         expect(config.provider).toBeUndefined();
         expect(config.purpose).toBe('Test purpose');
         expect(config.plugins).toEqual(['shell-injection']);
+      });
+    });
+
+    it('should preserve legacy GPT-5 target IDs when loading a YAML config', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      const loadButton = screen.getByRole('button', { name: /Load Config/i });
+      await user.click(loadButton);
+
+      const yamlContent = `
+description: Legacy GPT-5 target config
+targets:
+  - openai:gpt-5-mini
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Test purpose
+  plugins:
+    - shell-injection
+`;
+      const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      expect(fileInput).toBeTruthy();
+      await user.upload(fileInput, file);
+
+      await waitFor(() => {
+        const { config, providerType } = useRedTeamConfig.getState();
+        expect(config.target.id).toBe('openai:gpt-5-mini');
+        expect(config.target.label).toBe('openai:gpt-5-mini');
+        expect(providerType).toBe('openai');
       });
     });
   });

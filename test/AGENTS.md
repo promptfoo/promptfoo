@@ -53,6 +53,8 @@ Tests mirror `src/` structure:
 
 - `test/providers/` → `src/providers/`
 - `test/redteam/` → `src/redteam/`
+- `test/agentSkills/` → agent plugin contract tests; read `test/agentSkills/AGENTS.md`
+- `test/fixtures/agent-skills/` → runnable agent skill fixtures; read `test/fixtures/agent-skills/AGENTS.md`
 
 ## Mocking
 
@@ -81,6 +83,12 @@ beforeEach(() => {
 ```
 
 For `vi.hoisted()` mocks or mocks with `mockReturnValue()`, you MUST call `mockReset()` in `beforeEach` to ensure test isolation when tests run in random order.
+
+## Environment Variables
+
+Prefer `mockProcessEnv()` from `test/util/utils.ts` for root tests that need to change environment variables. Use `vi.stubEnv()` only when a test specifically needs Vitest's stub behavior, and pair it with `vi.unstubAllEnvs()`.
+
+Avoid direct `process.env.FOO = ...`, `delete process.env.FOO`, or `process.env = ...` mutations in new tests. The root hygiene suite blocks new files that use direct environment mutation because tests run in random order.
 
 ## Zustand Store Testing
 

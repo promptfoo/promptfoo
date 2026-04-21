@@ -1,6 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
 import { StrategyItem } from './StrategyItem';
@@ -342,7 +343,8 @@ describe('StrategyItem', () => {
   });
 
   describe('Interactions', () => {
-    it('calls onToggle when card is clicked', () => {
+    it('calls onToggle when card is clicked', async () => {
+      const user = userEvent.setup();
       const { container } = renderStrategyItem({
         isDisabled: false,
         isRemoteGenerationDisabled: false,
@@ -354,12 +356,13 @@ describe('StrategyItem', () => {
 
       // Find the Card component wrapper (has cursor-pointer class)
       const card = container.querySelector('.cursor-pointer');
-      fireEvent.click(card!);
+      await user.click(card!);
 
       expect(mockOnToggle).toHaveBeenCalledWith('basic');
     });
 
-    it('calls onToggle when checkbox is clicked', () => {
+    it('calls onToggle when checkbox is clicked', async () => {
+      const user = userEvent.setup();
       renderStrategyItem({
         isDisabled: false,
         isRemoteGenerationDisabled: false,
@@ -370,12 +373,13 @@ describe('StrategyItem', () => {
       });
 
       const checkbox = screen.getByRole('checkbox');
-      fireEvent.click(checkbox);
+      await user.click(checkbox);
 
       expect(mockOnToggle).toHaveBeenCalledWith('basic');
     });
 
-    it('calls onConfigClick when settings button is clicked', () => {
+    it('calls onConfigClick when settings button is clicked', async () => {
+      const user = userEvent.setup();
       const configurableStrategy: StrategyCardData = {
         ...baseStrategy,
         id: 'jailbreak',
@@ -392,7 +396,7 @@ describe('StrategyItem', () => {
 
       const buttons = screen.getAllByRole('button');
       const settingsButton = buttons[buttons.length - 1]; // Last button is settings
-      fireEvent.click(settingsButton);
+      await user.click(settingsButton);
 
       expect(mockOnConfigClick).toHaveBeenCalledWith('jailbreak');
       expect(mockOnToggle).not.toHaveBeenCalled(); // Should not toggle

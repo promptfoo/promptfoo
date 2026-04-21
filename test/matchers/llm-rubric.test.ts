@@ -4,13 +4,15 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import { matchesLlmRubric, renderLlmRubricPrompt } from '../../src/matchers';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
-import type { ApiProvider, Assertion, GradingConfig } from '../../src/types/index';
+import type { Assertion, GradingConfig } from '../../src/types/index';
 
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
@@ -100,13 +102,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: { pass: true, score: 0.85, reason: 'Direct object output' },
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
@@ -130,20 +131,44 @@ describe('matchesLlmRubric', () => {
     );
   });
 
+  it('should preserve provider completion details when grader JSON omits them', async () => {
+    const completionDetails = {
+      reasoning: 3,
+      acceptedPrediction: 2,
+      rejectedPrediction: 1,
+    };
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            completionDetails,
+          },
+        },
+      }),
+    });
+
+    expect(result.tokensUsed?.completionDetails).toEqual(completionDetails);
+  });
+
   it('should merge provider metadata into the grading result metadata', async () => {
     const result = await matchesLlmRubric('Expected output', 'Sample output', {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
           metadata: {
             uploadId: 'upload-123',
             trace: { id: 'trace-456' },
           },
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     });
 
     expect(result.metadata).toEqual({
@@ -156,17 +181,16 @@ describe('matchesLlmRubric', () => {
   it('should preserve renderedGradingPrompt when provider metadata uses the same key', async () => {
     const result = await matchesLlmRubric('Expected output', 'Sample output', {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
           metadata: {
             renderedGradingPrompt: 'spoofed prompt',
             uploadId: 'upload-123',
           },
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     });
 
     expect(result.metadata).toEqual({
@@ -178,14 +202,13 @@ describe('matchesLlmRubric', () => {
   it('should ignore array provider metadata', async () => {
     const result = await matchesLlmRubric('Expected output', 'Sample output', {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
           metadata: ['ignored'] as any,
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     });
 
     expect(result.metadata).toEqual({
@@ -202,14 +225,13 @@ describe('matchesLlmRubric', () => {
 
     const result = await matchesLlmRubric('Expected output', 'Sample output', {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
           metadata: responseMetadata,
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     });
 
     expect(result.metadata).toEqual({
@@ -225,13 +247,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grade: {{ rubric }}',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
           tokenUsage: { total: 1, prompt: 1, completion: 1 },
-        }),
-      },
+        },
+      }),
     };
 
     await matchesLlmRubric(rubric, output, options);
@@ -256,13 +277,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 42, // Numeric output
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -275,7 +295,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -286,13 +306,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: null,
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -304,7 +323,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -315,13 +334,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: [{ pass: false, score: 0, reason: 'bad' }],
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -334,7 +352,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -345,13 +363,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: '{ "pass": true, "reason": "Invalid JSON missing closing brace',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -363,7 +380,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -374,13 +391,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 'This is a valid text response but contains no JSON objects',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -392,7 +408,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -403,13 +419,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 'Here is the result: []',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -422,7 +437,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -432,13 +447,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 'Result: null',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // Since extractJsonObjects only looks for objects starting with {, this returns no objects
@@ -452,7 +466,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -462,13 +476,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: '"just a string"',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -481,7 +494,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -491,13 +504,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 'Result: 123',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -510,7 +522,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -550,14 +562,13 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           error: 'Provider error',
           output: null,
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // With throwOnError: true - should throw
@@ -571,14 +582,13 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           error: null,
           output: null,
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // With throwOnError: true - should throw
@@ -653,12 +663,9 @@ describe('matchesLlmRubric', () => {
     };
 
     const lowScoreResponse = { score: 0.25, reason: 'Low score' };
-    const lowScoreProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: JSON.stringify(lowScoreResponse),
-      }),
-    };
+    const lowScoreProvider = createMockProvider({
+      response: createProviderResponse({ output: JSON.stringify(lowScoreResponse) }),
+    });
 
     await expect(
       matchesLlmRubric(
@@ -671,12 +678,9 @@ describe('matchesLlmRubric', () => {
     ).resolves.toEqual(expect.objectContaining({ assertion, pass: false, ...lowScoreResponse }));
 
     const highScoreResponse = { score: 0.75, reason: 'High score' };
-    const highScoreProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: JSON.stringify(highScoreResponse),
-      }),
-    };
+    const highScoreProvider = createMockProvider({
+      response: createProviderResponse({ output: JSON.stringify(highScoreResponse) }),
+    });
     await expect(
       matchesLlmRubric(
         rubricPrompt,
@@ -700,12 +704,11 @@ describe('matchesLlmRubric', () => {
     const lowScoreResult = { score: 0.25, reason: 'Low score but pass', pass: true };
     const lowScoreOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(lowScoreResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -726,12 +729,11 @@ describe('matchesLlmRubric', () => {
     const failingResult = { score: 0.7, reason: 'Score below threshold', pass: true };
     const failingOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(failingResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -753,12 +755,11 @@ describe('matchesLlmRubric', () => {
     };
     const passingOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(passingResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -786,12 +787,11 @@ describe('matchesLlmRubric', () => {
     const exactThresholdResult = { score: 0.8, reason: 'Exactly at threshold' };
     const exactOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(exactThresholdResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -809,12 +809,11 @@ describe('matchesLlmRubric', () => {
     const justBelowResult = { score: 0.799, reason: 'Just below threshold' };
     const belowOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(justBelowResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -842,12 +841,11 @@ describe('matchesLlmRubric', () => {
     const missingScoreResult = { pass: true, reason: 'No score provided' };
     const missingScoreOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(missingScoreResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -865,12 +863,11 @@ describe('matchesLlmRubric', () => {
     const invalidScoreResult = { score: 'high', reason: 'Invalid score type', pass: true };
     const invalidScoreOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(invalidScoreResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -897,12 +894,11 @@ describe('matchesLlmRubric', () => {
     const stringScoreResult = { score: '0.9', reason: 'String score' };
     const stringScoreOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(stringScoreResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -929,12 +925,11 @@ describe('matchesLlmRubric', () => {
     const stringPassResult = { reason: 'String pass', pass: 'true' };
     const stringPassOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(stringPassResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -950,12 +945,11 @@ describe('matchesLlmRubric', () => {
     const stringFailResult = { reason: 'String fail', pass: 'false' };
     const stringFailOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(stringFailResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -974,13 +968,12 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: `file://${mockFilePath}`,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading);
@@ -1041,13 +1034,12 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: `file://${mockJsonFilePath}`,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading);
@@ -1101,13 +1093,12 @@ Evaluate the response
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: `file://${mockYamlFilePath}`,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading);
@@ -1151,12 +1142,11 @@ Evaluate the response
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: `file://${filePath}`,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
-        }),
-      },
+        },
+      }),
     };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading);
@@ -1192,13 +1182,12 @@ Evaluate the response
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: `file://${mockFilePath}`,
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(rubric, llmOutput, grading)).rejects.toThrow(
@@ -1217,13 +1206,12 @@ Evaluate the response
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: 'Custom prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // Give it a redteam config
@@ -1247,6 +1235,65 @@ Evaluate the response
         }),
       }),
     );
+  });
+
+  it('should not call remote when a grading provider is configured, even if redteam is enabled', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    expect(grading.provider.callApi).toHaveBeenCalled();
+    expect(result.reason).toBe('Local provider used');
+  });
+
+  it('should call remote when a caller prefers remote despite an injected default provider', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: createMockProvider({
+        id: 'implicit-default-provider',
+        response: createProviderResponse({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      }),
+    };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading, undefined, undefined, {
+      preferRemote: true,
+    });
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+    });
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
+    expect(result.reason).toBe('Remote grading passed');
   });
 
   it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {
@@ -1288,13 +1335,12 @@ Evaluate the response
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
     const grading = {
-      provider: {
-        id: () => 'test-provider',
-        callApi: vi.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // Clear and set up specific mock behavior for this test

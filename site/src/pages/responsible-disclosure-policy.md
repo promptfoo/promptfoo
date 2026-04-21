@@ -18,11 +18,17 @@ For technical details on our security model, trust boundaries, and hardening rec
 
 ### Open Source (CLI)
 
-The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (assertions, providers, transforms, plugins) without sandboxing.
+The OSS CLI runs in your environment with your user permissions. It is **permissive by default** and executes user-configured code (custom assertions, custom or script-based providers, transforms, hooks, plugins, and templates in fields that execute code) without sandboxing.
 
-**In scope for OSS:** vulnerabilities where untrusted data inputs (prompts, test cases, model outputs) can trigger code execution, file access, or network access without explicit configuration.
+Treat Promptfoo configuration files and everything they reference or evaluate against as trusted code and data. This includes referenced scripts, prompt packs, test fixtures or datasets, configured providers, models, remote content, and model-output feedback loops. Run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, model-output feedback loops, or pull requests only when the run is isolated and secrets are scoped for that run.
 
-**Out of scope for OSS:** code execution from explicitly configured custom code, and direct local API or browser access to the OSS local server (`promptfoo view`), since these are part of the documented local trust model for the open-source tool.
+Promptfoo OSS is a local eval runner, not a sandbox for adversarial eval content. Adversarial data flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts, variable values rendered through Nunjucks) is normal operation. However, if a code path outside the configured template engine or user-configured code-executing fields promotes runtime data to code, that is a vulnerability.
+
+**In scope for OSS:** runtime data promoted to code by a code path outside the configured template engine and user-configured code-executing fields; bypasses of supported isolation boundaries or hardening controls; data or secret leakage to destinations not configured to receive that data or secret.
+
+**Out of scope for OSS:** adversarial eval content flowing through the configured template engine and eval pipeline; code execution from explicitly configured custom code or templates in fields that execute code; direct local API or browser access to the OSS local server (`promptfoo view`); and issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges.
+
+Secret persistence or display that remains confined to the same local user account is generally treated as a hardening or privacy issue rather than a security-boundary bypass. It becomes in scope only when Promptfoo bypasses a documented redaction or disable/opt-out control, or uploads, shares, exports, or otherwise exposes that data beyond the same local account.
 
 ### Cloud Services
 
@@ -100,9 +106,11 @@ If you act in good faith and follow this policy, we will not pursue legal action
 
 The following are out-of-scope:
 
-- Code execution from explicitly configured custom code in OSS (expected behavior)
+- Code execution from explicitly configured custom code or templates in fields that execute code in OSS (expected behavior)
 - Direct local API access or browser access to the OSS local server (`promptfoo view`)
-- Issues requiring users to run untrusted configs with local privileges
+- Adversarial eval content flowing through the configured template engine and eval pipeline (e.g., model output in grading prompts or reports)
+- Issues requiring users to run untrusted configs, scripts, prompt packs, fixtures, datasets, providers, models, remote content, or model-output feedback loops with local privileges
+- Sensitive data present only in local logs, databases, caches, reports, exports, or UI views under the same local user account, unless Promptfoo bypasses a documented redaction or disable/opt-out control or uploads, shares, exports, or otherwise exposes that artifact beyond that account
 - Reports based only on spoofed `Origin` or `Sec-Fetch-Site` headers from non-browser clients
 - Social engineering, phishing, or physical attacks
 - Volumetric denial of service

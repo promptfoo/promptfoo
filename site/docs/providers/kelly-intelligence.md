@@ -1,6 +1,8 @@
 ---
+title: Kelly Intelligence Provider
 sidebar_label: Kelly Intelligence
 description: OpenAI-compatible API with a built-in 162,000-word vocabulary RAG layer. Built on Claude. Use for tutoring, language-learning, and word-grounded evals.
+sidebar_position: 42
 ---
 
 # Kelly Intelligence

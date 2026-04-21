@@ -9,6 +9,7 @@ import {
   resetTracingState,
   startOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
+import { mockProcessEnv } from '../util/utils';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
@@ -39,9 +40,11 @@ vi.mock('../../src/tracing/otlpReceiver', () => ({
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockStartOTLPReceiver.mockReset();
+    mockStartOTLPReceiver.mockResolvedValue(undefined);
     resetTracingState();
     // Reset environment variables
-    delete process.env.PROMPTFOO_TRACING_ENABLED;
+    mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: undefined });
   });
 
   describe('generateTraceId', () => {
@@ -122,7 +125,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('should generate trace context when tracing is enabled via environment', async () => {
-      process.env.PROMPTFOO_TRACING_ENABLED = 'true';
+      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
       const test: TestCase = {
         vars: { foo: 'bar' },
       };
@@ -170,7 +173,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('should return true when environment variable is set', () => {
-      process.env.PROMPTFOO_TRACING_ENABLED = 'true';
+      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
       const test: TestCase = { vars: {} };
       expect(isTracingEnabled(test)).toBe(true);
     });

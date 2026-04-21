@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
+import { mockProcessEnv } from '../../../util/utils';
 
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
@@ -30,11 +31,11 @@ vi.mock('../../../../src/providers/elevenlabs/cost-tracker', () => {
 describe('ElevenLabsAgentsProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ELEVENLABS_API_KEY = 'test-api-key';
+    mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
-    delete process.env.ELEVENLABS_API_KEY;
+    mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
     vi.resetAllMocks();
   });
 
@@ -47,7 +48,7 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should throw error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsAgentsProvider('elevenlabs:agent')).toThrow(
         'ELEVENLABS_API_KEY environment variable is not set',
@@ -99,7 +100,7 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should respect environment variable overrides', () => {
-      process.env.CUSTOM_API_KEY = 'custom-key';
+      mockProcessEnv({ CUSTOM_API_KEY: 'custom-key' });
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
           apiKeyEnvar: 'CUSTOM_API_KEY',
@@ -107,7 +108,7 @@ describe('ElevenLabsAgentsProvider', () => {
       });
 
       expect(provider).toBeDefined();
-      delete process.env.CUSTOM_API_KEY;
+      mockProcessEnv({ CUSTOM_API_KEY: undefined });
     });
   });
 

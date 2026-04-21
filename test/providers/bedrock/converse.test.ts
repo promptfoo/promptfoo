@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import * as genaiTracer from '../../../src/tracing/genaiTracer';
+import { mockProcessEnv } from '../../util/utils';
 import type { ContentBlock, StopReason } from '@aws-sdk/client-bedrock-runtime';
 
 // Define mock module type
@@ -164,12 +165,12 @@ describe('AwsBedrockConverseProvider', () => {
   beforeEach(() => {
     // Only reset mockSend, not all mocks (which would break the mock implementations)
     mockSend.mockReset();
-    delete process.env.AWS_BEDROCK_MAX_TOKENS;
-    delete process.env.AWS_BEDROCK_TEMPERATURE;
-    delete process.env.AWS_BEDROCK_TOP_P;
-    delete process.env.AWS_BEDROCK_STOP;
-    delete process.env.HTTP_PROXY;
-    delete process.env.HTTPS_PROXY;
+    mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: undefined });
+    mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+    mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
+    mockProcessEnv({ AWS_BEDROCK_STOP: undefined });
+    mockProcessEnv({ HTTP_PROXY: undefined });
+    mockProcessEnv({ HTTPS_PROXY: undefined });
   });
 
   afterEach(() => {
@@ -217,7 +218,7 @@ describe('AwsBedrockConverseProvider', () => {
 
     it('should return default region when not specified', () => {
       const originalEnv = process.env.AWS_BEDROCK_REGION;
-      delete process.env.AWS_BEDROCK_REGION;
+      mockProcessEnv({ AWS_BEDROCK_REGION: undefined });
 
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {},
@@ -225,13 +226,13 @@ describe('AwsBedrockConverseProvider', () => {
       expect(provider.getRegion()).toBe('us-east-1');
 
       if (originalEnv) {
-        process.env.AWS_BEDROCK_REGION = originalEnv;
+        mockProcessEnv({ AWS_BEDROCK_REGION: originalEnv });
       }
     });
 
     it('should return region from environment variable', () => {
       const originalEnv = process.env.AWS_BEDROCK_REGION;
-      process.env.AWS_BEDROCK_REGION = 'ap-northeast-1';
+      mockProcessEnv({ AWS_BEDROCK_REGION: 'ap-northeast-1' });
 
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {},
@@ -239,9 +240,9 @@ describe('AwsBedrockConverseProvider', () => {
       expect(provider.getRegion()).toBe('ap-northeast-1');
 
       if (originalEnv) {
-        process.env.AWS_BEDROCK_REGION = originalEnv;
+        mockProcessEnv({ AWS_BEDROCK_REGION: originalEnv });
       } else {
-        delete process.env.AWS_BEDROCK_REGION;
+        mockProcessEnv({ AWS_BEDROCK_REGION: undefined });
       }
     });
 
@@ -265,7 +266,7 @@ describe('AwsBedrockConverseProvider', () => {
 
     it('should return undefined credentials when API key is used', async () => {
       const originalEnv = process.env.AWS_BEARER_TOKEN_BEDROCK;
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'bearer-token-123';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'bearer-token-123' });
 
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: { region: 'us-east-1' },
@@ -275,9 +276,9 @@ describe('AwsBedrockConverseProvider', () => {
       expect(credentials).toBeUndefined();
 
       if (originalEnv) {
-        process.env.AWS_BEARER_TOKEN_BEDROCK = originalEnv;
+        mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: originalEnv });
       } else {
-        delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+        mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
       }
     });
 
@@ -816,8 +817,8 @@ Third line`;
     });
 
     it('should use environment variables as fallback', async () => {
-      process.env.AWS_BEDROCK_MAX_TOKENS = '4096';
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.8';
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: '4096' });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.8' });
 
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: { region: 'us-east-1' },
@@ -869,8 +870,8 @@ Third line`;
     });
 
     it('should preserve explicit zero-valued inference parameters over env fallbacks', async () => {
-      process.env.AWS_BEDROCK_MAX_TOKENS = '4096';
-      process.env.AWS_BEDROCK_TOP_P = '0.8';
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: '4096' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.8' });
 
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
         config: {
@@ -940,6 +941,69 @@ Third line`;
       expect(capturedSpanContext?.stopSequences).toEqual(['END']);
 
       spanSpy.mockRestore();
+    });
+
+    it('omits temperature for Claude Opus 4.7 even when explicitly set', async () => {
+      const provider = new AwsBedrockConverseProvider('us.anthropic.claude-opus-4-7', {
+        config: {
+          region: 'us-east-1',
+          max_tokens: 1024,
+          temperature: 0.5,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBeUndefined();
+      expect(call?.inferenceConfig?.maxTokens).toBe(1024);
+    });
+
+    it('omits temperature for Opus 4.7 via AWS_BEDROCK_TEMPERATURE env fallback', async () => {
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.7' });
+
+      const provider = new AwsBedrockConverseProvider('global.anthropic.claude-opus-4-7', {
+        config: { region: 'us-east-1', max_tokens: 1024 },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBeUndefined();
+
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+    });
+
+    it('still forwards temperature for Opus 4.6 on Bedrock (regression)', async () => {
+      const provider = new AwsBedrockConverseProvider('us.anthropic.claude-opus-4-6-v1', {
+        config: { region: 'us-east-1', max_tokens: 1024, temperature: 0 },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      const call = (ConverseCommand as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(
+        -1,
+      )?.[0] as { inferenceConfig?: Record<string, unknown> };
+      expect(call?.inferenceConfig?.temperature).toBe(0);
     });
   });
 
@@ -1522,6 +1586,35 @@ Third line`;
         expect.objectContaining({
           toolConfig: expect.objectContaining({
             toolChoice: { any: {} },
+          }),
+        }),
+      );
+    });
+
+    it.each([
+      { tool: null },
+      { tool: {} },
+    ])('should fall back to auto for malformed native toolChoice objects: %j', async (toolChoice) => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          tools: [{ name: 'test_tool', description: 'Test' }],
+          toolChoice: toolChoice as any,
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('Test');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            toolChoice: { auto: {} },
           }),
         }),
       );

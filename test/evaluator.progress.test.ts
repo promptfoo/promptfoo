@@ -1,6 +1,7 @@
 import readline from 'readline';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockProvider } from './factories/provider';
 
 import type { RunEvalOptions } from '../src/types/index';
 
@@ -113,7 +114,7 @@ describe('ProgressBarManager', () => {
       await manager.initialize([], 1, 0);
 
       const evalStep = {
-        provider: { label: 'gpt-4', id: () => 'openai:gpt-4' },
+        provider: createMockProvider({ id: 'openai:gpt-4', label: 'gpt-4' }),
         prompt: { raw: 'Hello world prompt' },
         test: { vars: { name: 'Alice' } },
       } as unknown as RunEvalOptions;
@@ -133,7 +134,7 @@ describe('ProgressBarManager', () => {
       await manager.initialize([], 1, 0);
 
       const evalStep = {
-        provider: { label: '', id: () => 'openai:gpt-4o' },
+        provider: createMockProvider({ id: 'openai:gpt-4o', label: '' }),
         prompt: { raw: 'Test' },
         test: { vars: {} },
       } as unknown as RunEvalOptions;
@@ -150,7 +151,7 @@ describe('ProgressBarManager', () => {
       await manager.initialize([], 1, 0);
 
       const evalStep = {
-        provider: { label: 'test', id: () => 'test' },
+        provider: createMockProvider({ id: 'test', label: 'test' }),
         prompt: { raw: 'test' },
         test: { vars: {} },
       } as unknown as RunEvalOptions;

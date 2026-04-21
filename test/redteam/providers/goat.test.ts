@@ -1,7 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
-import type { Mock } from 'vitest';
+import { createMockProvider } from '../../factories/provider';
 
 import type {
   ApiProvider,
@@ -38,26 +42,21 @@ vi.mock('../../../src/util/server', async (importOriginal) => {
 
 describe('RedteamGoatProvider', () => {
   let mockFetch: Mock;
+  let tempDir: string;
 
   // Helper function to create a mock target provider
   const createMockTargetProvider = (
     outputValue: any = 'target response',
     tokenUsage: any = {},
     responseOverrides: Record<string, unknown> = {},
-  ) => {
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: outputValue,
-      tokenUsage,
-      ...responseOverrides,
+  ) =>
+    createMockProvider({
+      response: {
+        output: outputValue,
+        tokenUsage,
+        ...responseOverrides,
+      },
     });
-
-    return targetProvider;
-  };
 
   // Helper function to create a mock context
   const createMockContext = (
@@ -71,7 +70,44 @@ describe('RedteamGoatProvider', () => {
     test: testConfig,
   });
 
+  const createTempFile = (name: string, content: string): string => {
+    const filePath = path.join(tempDir, name);
+    fs.writeFileSync(filePath, content, 'utf8');
+    return filePath;
+  };
+
+  const collectJsonStrings = (value: unknown): string[] => {
+    if (typeof value === 'string') {
+      return [value];
+    }
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => collectJsonStrings(item));
+    }
+    if (typeof value === 'object' && value !== null) {
+      return Object.entries(value).flatMap(([key, item]) => [key, ...collectJsonStrings(item)]);
+    }
+    return [];
+  };
+
+  const getRenderedTargetPrompt = (targetProvider: ApiProvider): string =>
+    (targetProvider.callApi as Mock).mock.calls[0][0] as string;
+
+  const getRenderedTargetPromptText = (targetProvider: ApiProvider): string => {
+    const renderedPrompt = getRenderedTargetPrompt(targetProvider);
+    try {
+      return collectJsonStrings(JSON.parse(renderedPrompt)).join('\n');
+    } catch {
+      return renderedPrompt;
+    }
+  };
+
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetGraderById.mockReset();
+    mockGetGraderById.mockReturnValue(mockGrader);
+    mockGrader.getResult.mockReset();
+
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-goat-provider-'));
     mockFetch = vi.fn().mockImplementation(async function () {
       return {
         json: async () => ({
@@ -81,13 +117,12 @@ describe('RedteamGoatProvider', () => {
         ok: true,
       };
     });
-    global.fetch = mockFetch as unknown as typeof fetch;
-
-    // Reset mocks
-    vi.clearAllMocks();
+    vi.stubGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -121,6 +156,21 @@ describe('RedteamGoatProvider', () => {
       excludeTargetOutputFromAgenticAttackGeneration: true,
       continueAfterSuccess: false,
     });
+  });
+
+  it('should enforce maxCharsPerMessage from provider config', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxCharsPerMessage: 5,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
   });
 
   it('should preserve an explicit maxTurns value of 0', async () => {
@@ -167,6 +217,187 @@ describe('RedteamGoatProvider', () => {
     expect(lastCallBody.messages).toBeDefined();
   });
 
+  it('should not dereference file:// paths in remote attacker messages', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+    });
+    const fileContent = 'local secret from attacker-controlled file var';
+    const filePath = createTempFile('attacker-goal.txt', fileContent);
+    const fileUrl = `file://${filePath}`;
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: fileUrl },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, { goal: 'initial goal' }, undefined);
+    context.prompt = { raw: 'Attack: {{goal}}', label: 'test' };
+
+    await provider.callApi('test prompt', context);
+
+    const renderedPromptText = getRenderedTargetPromptText(targetProvider);
+    expect(renderedPromptText).toContain(fileUrl);
+    expect(renderedPromptText).not.toContain(fileContent);
+  });
+
+  it('should not dereference multi-input attacker vars and should preserve JSON escaping', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      inputs: {
+        email: 'The user email',
+        notes: 'Additional attacker notes',
+      },
+    });
+
+    const fileContent = 'multi-input local secret';
+    const filePath = createTempFile('multi-input-email.txt', fileContent);
+    const fileUrl = `file://${filePath}`;
+    const packageRef = 'package:@promptfoo/fake:getSecret';
+    const attackerGoal = 'hello "quoted"\nnext line';
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: {
+          role: 'user',
+          content: JSON.stringify({
+            prompt: attackerGoal,
+            email: fileUrl,
+            notes: packageRef,
+          }),
+        },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(
+      targetProvider,
+      { goal: 'initial goal', email: 'safe@example.com', notes: 'safe notes' },
+      undefined,
+    );
+    context.prompt = {
+      raw: JSON.stringify({
+        role: 'user',
+        content: 'Goal={{goal}}\nEmail={{email}}\nNotes={{notes}}',
+      }),
+      label: 'test',
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).toHaveBeenCalledTimes(1);
+    const renderedPrompt = getRenderedTargetPrompt(targetProvider);
+    const renderedPromptText = getRenderedTargetPromptText(targetProvider);
+    const parsedPrompt = JSON.parse(renderedPrompt);
+    expect(parsedPrompt).toEqual({
+      role: 'user',
+      content: `Goal=${attackerGoal}\nEmail=${fileUrl}\nNotes=${packageRef}`,
+    });
+    expect(renderedPromptText).toContain(fileUrl);
+    expect(renderedPromptText).toContain(packageRef);
+    expect(renderedPromptText).not.toContain(fileContent);
+  });
+
+  it('should preserve filters on attacker prompts without evaluating attacker templates', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+    });
+    const attackerGoal = '  do {{7*7}}  ';
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: attackerGoal },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, { goal: 'initial goal' }, undefined);
+    context.prompt = { raw: 'Attack: {{goal | trim | upper}}', label: 'test' };
+
+    await provider.callApi('test prompt', context);
+
+    expect(getRenderedTargetPromptText(targetProvider)).toBe('Attack: DO {{7*7}}');
+  });
+
+  it('should preserve filters on file:// attacker prompts without dereferencing them', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+    });
+    const fileContent = 'filtered local secret';
+    const filePath = createTempFile('filtered-goal.txt', fileContent);
+    const fileUrl = `file://${filePath}`;
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: `  ${fileUrl}\n` },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, { goal: 'initial goal' }, undefined);
+    context.prompt = { raw: 'Attack: {{goal | trim}}', label: 'test' };
+
+    await provider.callApi('test prompt', context);
+
+    const renderedPromptText = getRenderedTargetPromptText(targetProvider);
+    expect(renderedPromptText).toBe(`Attack: ${fileUrl}`);
+    expect(renderedPromptText).not.toContain(fileContent);
+  });
+
+  it('should preserve filters on multi-input attacker vars', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      inputs: {
+        email: 'The user email',
+      },
+    });
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: {
+          role: 'user',
+          content: JSON.stringify({
+            prompt: '  Keep {{7*7}}  ',
+            email: '  USER@EXAMPLE.COM  ',
+          }),
+        },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(
+      targetProvider,
+      { goal: 'initial goal', email: 'safe@example.com' },
+      undefined,
+    );
+    context.prompt = {
+      raw: 'Goal={{goal | trim}}; Email={{email | trim | lower}}',
+      label: 'test',
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(getRenderedTargetPromptText(targetProvider)).toBe(
+      'Goal=Keep {{7*7}}; Email=user@example.com',
+    );
+  });
+
   it('should pass excludeTargetOutputFromAgenticAttackGeneration through config', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -189,15 +420,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 2,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const prompt: Prompt = {
       raw: 'test prompt',
@@ -262,7 +485,7 @@ describe('RedteamGoatProvider', () => {
       completion: 5,
     });
 
-    // Mock grader to fail (indicating success)
+    // Mock grader with pass:false (attack succeeded / jailbreak detected)
     (mockGrader.getResult as any).mockResolvedValue({
       grade: {
         pass: false,
@@ -295,15 +518,7 @@ describe('RedteamGoatProvider', () => {
     });
 
     const objectResponse = { foo: 'bar', baz: 123 };
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: objectResponse,
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider(objectResponse);
 
     const prompt: Prompt = {
       raw: 'test prompt',
@@ -327,15 +542,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 1,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const context: CallApiContextParams = {
       originalProvider: targetProvider,
@@ -361,15 +568,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 1,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const context: CallApiContextParams = {
       originalProvider: targetProvider,
@@ -405,7 +604,7 @@ describe('RedteamGoatProvider', () => {
         completion: 5,
       });
 
-      // Mock grader to fail on first attempt (indicating success)
+      // Mock grader with pass:false on first attempt (indicating attack success)
       (mockGrader.getResult as any).mockResolvedValue({
         grade: {
           pass: false,
@@ -441,12 +640,9 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'first harmful response',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
@@ -517,14 +713,10 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any).mockResolvedValue({
-        output: 'safe response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      const targetProvider = createMockTargetProvider('safe response', {
+        total: 10,
+        prompt: 5,
+        completion: 5,
       });
 
       // Mock grader to always pass (indicating no successful attacks)
@@ -579,12 +771,9 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({ output: 'safe response 1', tokenUsage: {} })
         .mockResolvedValueOnce({ output: 'harmful response 1', tokenUsage: {} })
         .mockResolvedValueOnce({ output: 'safe response 2', tokenUsage: {} })
@@ -1004,13 +1193,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 3,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      // Mock target provider for multiple calls with different token usage
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response 1',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -1044,12 +1229,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 3,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response with tokens',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -1083,12 +1265,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'successful response',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -1117,12 +1296,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response with zero tokens',
           tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
@@ -1151,13 +1327,10 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
+      const targetProvider = createMockProvider();
       // First call (normal attack), second call (next attack)
-      (targetProvider.callApi as any)
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'first response',
           tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
@@ -1208,15 +1381,7 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 1,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: vi.fn() as any,
-      };
-
-      (targetProvider.callApi as any).mockResolvedValue({
-        output: 'target response',
-        tokenUsage: {},
-      });
+      const targetProvider = createMockTargetProvider();
 
       const context = createMockContext(targetProvider);
       const abortController = new AbortController();

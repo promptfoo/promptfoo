@@ -83,6 +83,8 @@ The default relative paths in these configs are intentionally subdirectory-relat
 
 The checked-in `sample-codex-home` fixture is intentionally empty of auth state. Use it with `OPENAI_API_KEY`/`CODEX_API_KEY`, or point `CODEX_HOME_OVERRIDE` at `$HOME/.codex` when you want to reuse a local Codex login.
 
+If your network requires proxy or custom certificate environment variables such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, or `NODE_EXTRA_CA_CERTS`, pass them through `config.cli_env` or set `inherit_process_env: true` in the provider config. Promptfoo intentionally does not forward the full process environment to Codex by default.
+
 ### Thread Persistence
 
 This example demonstrates `persist_threads: true` with one prompt template and multiple tests. It checks that Codex can remember a marker from the first test when answering the second test.

@@ -29,7 +29,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
@@ -69,7 +69,7 @@ describe('Providers Routes', () => {
     let mockProvider: ApiProvider;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
 
       // Setup mock provider
@@ -411,7 +411,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
@@ -434,7 +434,8 @@ describe('Providers Routes', () => {
     it('should return 400 for non-string requestExample', async () => {
       const response = await request(app)
         .post('/api/providers/http-generator')
-        .send({ requestExample: 123 });
+        .set('Content-Type', 'application/json')
+        .send(JSON.stringify({ requestExample: 123 }));
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -445,7 +446,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
@@ -517,7 +518,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
