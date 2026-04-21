@@ -26,6 +26,10 @@ function formatHttpHostForUrl(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 }
 
+function setMcpTransport(transport: 'http' | 'stdio'): void {
+  Object.assign(process.env, { MCP_TRANSPORT: transport });
+}
+
 /**
  * Creates an MCP server with tools for interacting with promptfoo
  */
@@ -83,7 +87,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   }
 
   // Set transport type for telemetry
-  process.env.MCP_TRANSPORT = 'http';
+  setMcpTransport('http');
 
   const app = express();
   app.use(express.json());
@@ -179,7 +183,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
  */
 export async function startStdioMcpServer(): Promise<void> {
   // Set transport type for telemetry
-  process.env.MCP_TRANSPORT = 'stdio';
+  setMcpTransport('stdio');
 
   // Disable all console logging in stdio mode to prevent pollution of JSON-RPC communication
   logger.transports.forEach((transport) => {

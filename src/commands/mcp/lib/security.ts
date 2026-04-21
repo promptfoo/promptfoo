@@ -9,6 +9,8 @@ import { ConfigurationError } from './errors';
 
 const SIMPLE_PROVIDER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 const PROVIDER_MODEL_SEGMENT_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.\\/-]*$/;
+const PROVIDER_FILE_REFERENCE_PATTERN =
+  /^(?:file:\/\/)?(.+\.(?:js|ts|py|mjs))(?::[A-Za-z_$][\w$]*)?$/i;
 
 /**
  * Validates that a file path is safe and within allowed boundaries.
@@ -113,8 +115,9 @@ export function validateProviderId(providerId: string): void {
     }
   }
 
-  if (/\.(js|ts|py|mjs)$/i.test(providerId)) {
-    validateMcpFilePath(providerId);
+  const providerFileMatch = providerId.match(PROVIDER_FILE_REFERENCE_PATTERN);
+  if (providerFileMatch) {
+    validateMcpFilePath(providerFileMatch[1]);
     return;
   }
 

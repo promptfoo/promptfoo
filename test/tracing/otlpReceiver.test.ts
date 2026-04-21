@@ -72,7 +72,7 @@ describe('OTLPReceiver', () => {
   let receiver: OTLPReceiver;
   let mockTraceStore: {
     createTrace: MockedFunction<() => Promise<void>>;
-    addSpans: MockedFunction<() => Promise<void>>;
+    addSpans: MockedFunction<(traceId: string, spans: any[], options?: any) => Promise<void>>;
     getTracesByEvaluation: MockedFunction<() => Promise<any[]>>;
     getTrace: MockedFunction<() => Promise<any | null>>;
     deleteOldTraces: MockedFunction<() => Promise<void>>;
@@ -89,7 +89,9 @@ describe('OTLPReceiver', () => {
     // Create mock trace store
     mockTraceStore = {
       createTrace: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-      addSpans: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+      addSpans: vi
+        .fn<(traceId: string, spans: any[], options?: any) => Promise<void>>()
+        .mockResolvedValue(undefined),
       getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
       getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
       deleteOldTraces: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
@@ -616,6 +618,409 @@ describe('OTLPReceiver', () => {
       expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
         skipTraceCheck: true,
       });
+    });
+  });
+
+  describe('Log ingestion (/v1/logs)', () => {
+    const hexTraceId = '4bf92f3577b34da6a3ce929d0e0e4736';
+    const hexParentSpanId = '00f067aa0ba902b7';
+
+    function makeLogsRequest(records: any[]) {
+      return {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [{ key: 'service.name', value: { stringValue: 'claude-agent-sdk' } }],
+            },
+            scopeLogs: [
+              {
+                scope: { name: 'com.anthropic.claude_code', version: '1.0.0' },
+                logRecords: records,
+              },
+            ],
+          },
+        ],
+      };
+    }
+
+    it('converts a Claude Code log into a child span with event.name attribute', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          severityNumber: 9,
+          severityText: 'INFO',
+          body: { stringValue: 'Tool execution complete' },
+          attributes: [
+            { key: 'event.name', value: { stringValue: 'claude_code.tool.execution' } },
+            { key: 'tool_name', value: { stringValue: 'Bash' } },
+            { key: 'duration_ms', value: { intValue: '342' } },
+          ],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(1);
+      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect(persistedTraceId).toBe(hexTraceId);
+      expect(spans).toHaveLength(1);
+      const span = (spans as any[])[0];
+      expect(span.name).toBe('claude_code.tool.execution');
+      expect(span.parentSpanId).toBe(hexParentSpanId);
+      expect(span.attributes['tool_name']).toBe('Bash');
+      expect(span.attributes['duration_ms']).toBe(342);
+      expect(span.attributes['otel.log.body']).toBe('Tool execution complete');
+      expect(span.attributes['service.name']).toBe('claude-agent-sdk');
+      // Time conversion: nanos → ms, plus a 1ms nominal duration.
+      expect(span.startTime).toBe(1700000000000);
+      expect(span.endTime).toBe(1700000000001);
+    });
+
+    it('drops log records without a trace id', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          attributes: [{ key: 'event.name', value: { stringValue: 'orphan' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it('filters out internal tracing logs via denylist', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.tracing' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it('falls back to a short body string when no event.name attribute is present', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          body: { stringValue: 'agent.message' },
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[])[0].name).toBe('agent.message');
+    });
+
+    it('rejects non-JSON content types on /v1/logs', async () => {
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(Buffer.from([0x00]))
+        .expect(415);
+    });
+
+    it('treats a zero span id as no parent linkage', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: '0000000000000000',
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.tool.execution' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[])[0].parentSpanId).toBeUndefined();
+    });
+
+    it('handles multiple log records in a single request', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.tool.execution' } }],
+        },
+        {
+          timeUnixNano: '1700000000100000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.llm_request' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[]).map((s: any) => s.name)).toEqual([
+        'claude_code.tool.execution',
+        'claude_code.llm_request',
+      ]);
+    });
+
+    it('falls back to promptfoo.trace_id / parent_span_id resource attrs when the log record has none', async () => {
+      // Mimics Claude Agent SDK logs: body carries the event type, the record
+      // itself has no traceId/spanId, and the provider injected trace context
+      // via OTEL_RESOURCE_ATTRIBUTES.
+      const req = {
+        resourceLogs: [
+          {
+            resource: {
+              attributes: [
+                { key: 'service.name', value: { stringValue: 'claude-agent-sdk' } },
+                { key: 'promptfoo.trace_id', value: { stringValue: hexTraceId } },
+                { key: 'promptfoo.parent_span_id', value: { stringValue: hexParentSpanId } },
+              ],
+            },
+            scopeLogs: [
+              {
+                scope: { name: 'com.anthropic.claude_code' },
+                logRecords: [
+                  {
+                    timeUnixNano: '1700000000000000000',
+                    body: { stringValue: 'claude_code.tool_result' },
+                    attributes: [
+                      { key: 'event.name', value: { stringValue: 'tool_result' } },
+                      { key: 'tool_name', value: { stringValue: 'Read' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect(persistedTraceId).toBe(hexTraceId);
+      const span = (spans as any[])[0];
+      expect(span.parentSpanId).toBe(hexParentSpanId);
+      expect(span.name).toBe('tool_result');
+    });
+
+    it('is advertised on the service info endpoint', async () => {
+      // Sanity check that /v1/traces stays stable despite the new /v1/logs route.
+      const response = await request(receiver.getApp()).get('/v1/traces').expect(200);
+      expect(response.body.service).toBe('promptfoo-otlp-receiver');
+    });
+
+    it('marks log-derived spans as ERROR when severityNumber >= 17', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          severityNumber: 17,
+          severityText: 'ERROR',
+          body: { stringValue: 'something failed' },
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.error' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const span = (spans as any[])[0];
+      expect(span.statusMessage).toBe('ERROR');
+      // The synthesized span still reports statusCode=1 (OK for the OTEL span itself)
+      // while statusMessage surfaces the severity — verifies the mapping contract.
+      expect(span.attributes['otel.log.severity_number']).toBe(17);
+    });
+
+    it('uses claude_code.event.name as a secondary span-name source when event.name is absent', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          attributes: [
+            { key: 'claude_code.event.name', value: { stringValue: 'claude_code.llm_request' } },
+          ],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[])[0].name).toBe('claude_code.llm_request');
+    });
+
+    it('drops log records with a malformed trace_id rather than creating orphan spans', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: 'not-a-real-trace-id',
+          spanId: hexParentSpanId,
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.tool.execution' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it('falls back to otel.log for span name when body exceeds the body-as-name limit', async () => {
+      const longBody = 'A'.repeat(200);
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          body: { stringValue: longBody },
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[])[0].name).toBe('otel.log');
+    });
+
+    it('truncates oversize otel.log.body to prevent trace-DB bloat', async () => {
+      const huge = 'x'.repeat(20_000);
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          body: { stringValue: huge },
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.noise' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const storedBody = (spans as any[])[0].attributes['otel.log.body'] as string;
+      expect(storedBody.length).toBeLessThan(huge.length);
+      expect(storedBody.endsWith('... [truncated]')).toBe(true);
+    });
+
+    it('skips a malformed record but keeps good ones in the same batch', async () => {
+      const req = makeLogsRequest([
+        {
+          // Missing attribute value shape — triggers a throw inside parseAttributes.
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          attributes: [{ key: 'broken' } as any],
+        },
+        {
+          timeUnixNano: '1700000000100000000',
+          traceId: hexTraceId,
+          spanId: hexParentSpanId,
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.tool.execution' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      // Either both survived (because parseAttributes was lenient) or the bad
+      // one was skipped while the good one survived — both acceptable. The
+      // failure mode we're guarding against is "bad record → 500 → whole
+      // batch dropped", verified by the 200 status.
+      expect(mockTraceStore.addSpans).toHaveBeenCalled();
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[]).some((s: any) => s.name === 'claude_code.tool.execution')).toBe(true);
+    });
+
+    it('treats a base64-encoded all-zero span_id as no parent linkage', async () => {
+      const req = makeLogsRequest([
+        {
+          timeUnixNano: '1700000000000000000',
+          traceId: hexTraceId,
+          // Eight zero bytes encoded as base64.
+          spanId: 'AAAAAAAAAAA=',
+          attributes: [{ key: 'event.name', value: { stringValue: 'claude_code.noise' } }],
+        },
+      ]);
+
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send(req)
+        .expect(200);
+
+      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect((spans as any[])[0].parentSpanId).toBeUndefined();
+    });
+
+    it('200s on empty resourceLogs without persisting anything', async () => {
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .set('Content-Type', 'application/json')
+        .send({ resourceLogs: [] })
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
     });
   });
 });

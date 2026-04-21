@@ -1,6 +1,6 @@
 # provider-truefoundry (TrueFoundry Examples)
 
-This directory contains example configurations for using [TrueFoundry's LLM Gateway](https://www.truefoundry.com/ai-gateway) with promptfoo.
+This directory contains example configurations for using [TrueFoundry's AI Gateway](https://www.truefoundry.com/ai-gateway) (LLM, MCP, and Agent Gateway) with promptfoo.
 
 ## Prerequisites
 

@@ -259,31 +259,30 @@ describe('Report filtering logic', () => {
           const prompts = evalData.prompts || [];
           const selectedPrompt = prompts[0];
 
-          return evalData.results.results.reduce(
-            (acc, row) => {
-              if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
-                return acc;
-              }
-
-              const pluginId = row.metadata?.pluginId;
-              if (!pluginId) {
-                return acc;
-              }
-
-              if (!acc[pluginId]) {
-                acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-              }
-
-              if (row.success && row.gradingResult?.pass) {
-                acc[pluginId].pass++;
-              } else {
-                acc[pluginId].fail++;
-              }
-
+          return evalData.results.results.reduce<
+            Record<string, { pass: number; fail: number; error: number }>
+          >((acc, row) => {
+            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
               return acc;
-            },
-            {} as Record<string, { pass: number; fail: number; error: number }>,
-          );
+            }
+
+            const pluginId = row.metadata?.pluginId;
+            if (!pluginId) {
+              return acc;
+            }
+
+            if (!acc[pluginId]) {
+              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
+            }
+
+            if (row.success && row.gradingResult?.pass) {
+              acc[pluginId].pass++;
+            } else {
+              acc[pluginId].fail++;
+            }
+
+            return acc;
+          }, {});
         }, [evalData]),
       );
 
@@ -306,31 +305,30 @@ describe('Report filtering logic', () => {
           const prompts = evalData.prompts || [];
           const selectedPrompt = prompts[1];
 
-          return evalData.results.results.reduce(
-            (acc, row) => {
-              if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
-                return acc;
-              }
-
-              const pluginId = row.metadata?.pluginId;
-              if (!pluginId) {
-                return acc;
-              }
-
-              if (!acc[pluginId]) {
-                acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-              }
-
-              if (row.success && row.gradingResult?.pass) {
-                acc[pluginId].pass++;
-              } else {
-                acc[pluginId].fail++;
-              }
-
+          return evalData.results.results.reduce<
+            Record<string, { pass: number; fail: number; error: number }>
+          >((acc, row) => {
+            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
               return acc;
-            },
-            {} as Record<string, { pass: number; fail: number; error: number }>,
-          );
+            }
+
+            const pluginId = row.metadata?.pluginId;
+            if (!pluginId) {
+              return acc;
+            }
+
+            if (!acc[pluginId]) {
+              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
+            }
+
+            if (row.success && row.gradingResult?.pass) {
+              acc[pluginId].pass++;
+            } else {
+              acc[pluginId].fail++;
+            }
+
+            return acc;
+          }, {});
         }, [evalData]),
       );
 

@@ -3,19 +3,6 @@ import path from 'path';
 import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
-import RedteamAuthoritativeMarkupInjectionProvider from '../redteam/providers/authoritativeMarkupInjection';
-import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo/index';
-import RedteamCustomProvider from '../redteam/providers/custom/index';
-import RedteamGoatProvider from '../redteam/providers/goat';
-import { HydraProvider as RedteamHydraProvider } from '../redteam/providers/hydra/index';
-import RedteamIndirectWebPwnProvider from '../redteam/providers/indirectWebPwn';
-import RedteamIterativeProvider from '../redteam/providers/iterative';
-import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
-import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
-import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
-import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
@@ -123,16 +110,8 @@ import { createXAIVideoProvider } from './xai/video';
 import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
-
-interface ProviderFactory {
-  test: (providerPath: string) => boolean;
-  create: (
-    providerPath: string,
-    providerOptions: ProviderOptions,
-    context: LoadApiProviderContext,
-  ) => Promise<ApiProvider>;
-}
+import type { ProviderOptions } from '../types/providers';
+import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
 function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
   const configuredModel = providerOptions.config?.model;
@@ -157,16 +136,6 @@ export const providerMap: ProviderFactory[] = [
         config: providerOptions,
         env: context.env,
       });
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new MemoryPoisoningProvider(providerOptions);
     },
   },
   {
@@ -1495,129 +1464,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:best-of-n',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamBestOfNProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:crescendo',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamCrescendoProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath === 'promptfoo:redteam:custom' ||
-      providerPath.startsWith('promptfoo:redteam:custom:'),
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamCustomProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:goat',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamGoatProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath === 'promptfoo:redteam:authoritative-markup-injection',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamAuthoritativeMarkupInjectionProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:mischievous-user',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamMischievousUserProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIterativeProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:image',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamImageIterativeProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:tree',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIterativeTreeProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:meta',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIterativeMetaProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:hydra',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamHydraProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:indirect-web-pwn',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIndirectWebPwnProvider(providerOptions.config);
-    },
-  },
-  {
     test: (providerPath: string) => providerPath === 'promptfoo:simulated-user',
     create: async (
       _providerPath: string,
@@ -1816,3 +1662,61 @@ export const providerMap: ProviderFactory[] = [
     },
   },
 ];
+
+function isRedteamProviderPath(providerPath: string): boolean {
+  return (
+    providerPath === 'agentic:memory-poisoning' || providerPath.startsWith('promptfoo:redteam:')
+  );
+}
+
+const providerFamilies: ProviderFamily[] = [
+  {
+    canHandle: isRedteamProviderPath,
+    factories: async () => {
+      const { redteamProviderFactories } = await import('../redteam/providers/registry');
+      return redteamProviderFactories;
+    },
+  },
+];
+
+export async function getProviderFactories(
+  providerPath: string,
+): Promise<readonly ProviderFactory[]> {
+  const matchingFamilies = providerFamilies.filter((family) => family.canHandle(providerPath));
+
+  // Hot path: return the module-scoped providerMap directly for the common
+  // no-family-match case instead of copying ~100 entries into a fresh array.
+  // The return type is readonly so callers cannot mutate the shared array.
+  if (matchingFamilies.length === 0) {
+    return providerMap;
+  }
+
+  // Wrap each family load so a broken dynamic import (renamed file, circular
+  // cycle, downstream ESM resolution error) surfaces with the requested
+  // providerPath and the family boundary identified — without this, a
+  // regression in the lazy-load path looks like a raw ERR_MODULE_NOT_FOUND
+  // pointing at an internal file with no connection to the user's config.
+  //
+  // `cause` is assigned as a property rather than passed through the
+  // two-argument Error constructor so this file type-checks under both the
+  // root (ES2022) and the app (ES2020) tsconfig libs — the app build pulls
+  // backend files in via path aliases and the ES2020 lib does not declare
+  // the two-argument Error overload.
+  const extraFactorySets = await Promise.all(
+    matchingFamilies.map(async (family) => {
+      try {
+        return await family.factories();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const wrapped = new Error(
+          `Failed to load provider family for '${providerPath}': ${message}`,
+        );
+        if (err instanceof Error) {
+          (wrapped as Error & { cause?: unknown }).cause = err;
+        }
+        throw wrapped;
+      }
+    }),
+  );
+  return [...providerMap, ...extraFactorySets.flat()];
+}

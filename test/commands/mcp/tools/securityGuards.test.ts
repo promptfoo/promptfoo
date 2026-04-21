@@ -127,11 +127,11 @@ describe('MCP tool security guards', () => {
 
     const result = await handler({
       prompt: 'Translate {{text}}',
-      provider: '../providers/custom.js',
+      provider: `file://${outsideWorkspacePath('custom-provider.js')}`,
     });
 
     expect(result.isError).toBe(true);
-    expect(parseToolResponse(result).error).toContain('Failed to load AI provider');
+    expect(parseToolResponse(result).error).toContain('Path must be within base directory');
     expect(synthesizeFromTestSuite).not.toHaveBeenCalled();
   });
 
@@ -211,7 +211,7 @@ describe('MCP tool security guards', () => {
     const handler = captureToolHandler(registerTestProviderTool);
 
     const result = await handler({
-      provider: '../providers/custom.js',
+      provider: `file://${outsideWorkspacePath('custom-provider.js')}`,
     });
 
     expect(result.isError).toBe(true);
@@ -228,12 +228,12 @@ describe('MCP tool security guards', () => {
     const handler = captureToolHandler(registerCompareProvidersTool);
 
     const result = await handler({
-      providers: ['openai:gpt-4o', '../providers/custom.js'],
+      providers: ['openai:gpt-4o', `file://${outsideWorkspacePath('custom-provider.js')}`],
       testPrompt: 'hello',
     });
 
     expect(result.isError).toBe(true);
-    expect(parseToolResponse(result).error).toContain('Failed to load one or more providers');
+    expect(parseToolResponse(result).error).toContain('Path must be within base directory');
     expect(loadApiProviders).not.toHaveBeenCalled();
   });
 });

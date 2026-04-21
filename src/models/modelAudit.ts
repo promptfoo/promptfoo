@@ -4,7 +4,14 @@ import { modelAuditsTable } from '../database/tables';
 import logger from '../logger';
 import { randomSequence } from '../util/createHash';
 
+import type { MODEL_AUDIT_SORT_FIELDS } from '../types/api/modelAudit';
 import type { ModelAuditScanResults } from '../types/modelAudit';
+
+type ModelAuditSortField = (typeof MODEL_AUDIT_SORT_FIELDS)[number];
+
+function getModelAuditSortColumn(sortField: ModelAuditSortField) {
+  return modelAuditsTable[sortField];
+}
 
 export function createScanId(createdAt: Date = new Date()) {
   return `scan-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
@@ -265,7 +272,7 @@ export default class ModelAudit {
   static async getMany(
     limit: number = 100,
     offset: number = 0,
-    sortField: 'createdAt' | 'name' | 'modelPath' = 'createdAt',
+    sortField: ModelAuditSortField = 'createdAt',
     sortOrder: 'asc' | 'desc' = 'desc',
     search?: string,
   ): Promise<ModelAudit[]> {
@@ -287,18 +294,21 @@ export default class ModelAudit {
     }
 
     // Determine the sort column using explicit allowlist mapping
-    const sortColumn =
-      sortField === 'name'
-        ? modelAuditsTable.name
-        : sortField === 'modelPath'
-          ? modelAuditsTable.modelPath
-          : modelAuditsTable.createdAt;
+    const sortColumn = getModelAuditSortColumn(sortField);
 
-    // Apply ordering
+    // Apply ordering with a unique tie-breaker so offset-based virtualized loads stay stable.
     if (sortOrder === 'asc') {
-      query = query.orderBy(asc(sortColumn)) as typeof query;
+      query = (
+        sortField === 'id'
+          ? query.orderBy(asc(sortColumn))
+          : query.orderBy(asc(sortColumn), asc(modelAuditsTable.id))
+      ) as typeof query;
     } else {
-      query = query.orderBy(desc(sortColumn)) as typeof query;
+      query = (
+        sortField === 'id'
+          ? query.orderBy(desc(sortColumn))
+          : query.orderBy(desc(sortColumn), desc(modelAuditsTable.id))
+      ) as typeof query;
     }
 
     // Apply pagination

@@ -188,6 +188,8 @@ describe('MCP Security', () => {
       expect(() => validateProviderId('my-provider.ts')).not.toThrow();
       expect(() => validateProviderId('script.py')).not.toThrow();
       expect(() => validateProviderId('module.mjs')).not.toThrow();
+      expect(() => validateProviderId('file://providers/custom.js')).not.toThrow();
+      expect(() => validateProviderId('file://script.py:getProvider')).not.toThrow();
     });
 
     it('should accept HTTP providers', () => {
@@ -203,6 +205,9 @@ describe('MCP Security', () => {
       expect(() => validateProviderId('openai::gpt-4')).toThrow(ConfigurationError);
       expect(() => validateProviderId('../providers/custom.js')).toThrow(ConfigurationError);
       expect(() => validateProviderId('openai:../../secret')).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderId(`file://${path.join(path.dirname(process.cwd()), 'evil.py')}`),
+      ).toThrow(ConfigurationError);
     });
   });
 });

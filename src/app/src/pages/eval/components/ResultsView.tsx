@@ -703,7 +703,7 @@ export default function ResultsView({
     if (!table?.body) {
       return [];
     }
-    return table?.body
+    return table.body
       .flatMap((row) => row.outputs.map((output) => output?.score))
       .filter((score) => typeof score === 'number' && !Number.isNaN(score));
   }, [table]);
@@ -882,7 +882,7 @@ export default function ResultsView({
                     {debouncedSearchText && (
                       <Badge variant="secondary" className="text-xs h-5 gap-1">
                         Search:{' '}
-                        {debouncedSearchText.length > 4
+                        {debouncedSearchText.length > 5
                           ? debouncedSearchText.substring(0, 5) + '...'
                           : debouncedSearchText}
                         <button
