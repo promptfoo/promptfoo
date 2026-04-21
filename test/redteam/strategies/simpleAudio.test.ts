@@ -12,6 +12,10 @@ import type { TestCase } from '../../../src/types/index';
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    getRemoteGenerationExplicitlyDisabledError: vi.fn(
+      (strategyName) =>
+        `${strategyName} requires remote generation, which has been explicitly disabled.`,
+    ),
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.url'),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
   };
@@ -93,7 +97,9 @@ describe('audio strategy', () => {
       mockNeverGenerateRemote.mockReturnValue(true);
 
       const text = 'This should fail';
-      await expect(textToAudio(text, 'en')).rejects.toThrow('Remote generation is disabled');
+      await expect(textToAudio(text, 'en')).rejects.toThrow(
+        'Audio strategy requires remote generation, which has been explicitly disabled.',
+      );
     });
 
     it('should throw an error if remote API fails', async () => {

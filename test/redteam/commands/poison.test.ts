@@ -63,11 +63,22 @@ vi.mock('path', async () => ({
 describe('poison command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFsReadFileSync.mockReset();
+    mockFsExistsSync.mockReset();
+    mockFsStatSync.mockReset();
+    mockFsMkdirSync.mockReset();
+    mockFsWriteFileSync.mockReset();
+    mockFsReaddirSync.mockReset();
+    mockPathJoin.mockReset();
+    mockPathRelative.mockReset();
+    mockPathResolve.mockReset();
+    mockPathDirname.mockReset();
     // Set default implementations for fs mocks
     mockFsMkdirSync.mockImplementation(() => '/mock/dir');
     mockFsWriteFileSync.mockReturnValue(undefined);
     mockFsReadFileSync.mockReturnValue('test content');
     mockFsExistsSync.mockReturnValue(true);
+    mockPathDirname.mockReturnValue('mock-dir');
   });
 
   describe('getAllFiles', () => {

@@ -32,6 +32,7 @@ import {
   DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from '../../src/providers/openai/defaults';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { mockProcessEnv } from '../util/utils';
 
 import type { EnvOverrides } from '../../src/types/env';
 import type { ApiProvider } from '../../src/types/index';
@@ -67,29 +68,29 @@ class MockProvider implements ApiProvider {
 }
 
 describe('Provider override tests', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
+    mockProcessEnv({ ...originalEnv }, { clear: true });
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
     vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
     clearCodexDefaultProvidersForTesting();
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.MISTRAL_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.PALM_API_KEY;
-    delete process.env.AZURE_OPENAI_API_KEY;
-    delete process.env.AZURE_API_KEY;
-    delete process.env.AZURE_DEPLOYMENT_NAME;
-    delete process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    mockProcessEnv({ MISTRAL_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ PALM_API_KEY: undefined });
+    mockProcessEnv({ AZURE_OPENAI_API_KEY: undefined });
+    mockProcessEnv({ AZURE_API_KEY: undefined });
+    mockProcessEnv({ AZURE_DEPLOYMENT_NAME: undefined });
+    mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: undefined });
   });
 
   afterEach(async () => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     clearCodexDefaultProvidersForTesting();
     await providerRegistry.shutdownAll();
     vi.resetAllMocks();
@@ -141,7 +142,8 @@ describe('Provider override tests', () => {
   });
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
-    process.env.AZURE_CONTENT_SAFETY_ENDPOINT = 'https://test-endpoint.com';
+    mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com' });
+    mockProcessEnv({ AZURE_API_KEY: 'test-api-key' });
 
     const providers = await getDefaultProviders();
 
@@ -152,7 +154,7 @@ describe('Provider override tests', () => {
   });
 
   it('should use DefaultModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is not set', async () => {
-    delete process.env.AZURE_CONTENT_SAFETY_ENDPOINT;
+    mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: undefined });
 
     const providers = await getDefaultProviders();
     expect(providers.moderationProvider).toBe(DefaultModerationProvider);
@@ -160,6 +162,7 @@ describe('Provider override tests', () => {
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is provided via env overrides', async () => {
     const envOverrides: EnvOverrides = {
+      AZURE_API_KEY: 'test-api-key',
       AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
     } as EnvOverrides;
 
@@ -173,6 +176,7 @@ describe('Provider override tests', () => {
 
   it('should use Azure moderation provider with custom configuration', async () => {
     const envOverrides: EnvOverrides = {
+      AZURE_API_KEY: 'test-api-key',
       AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com',
       AZURE_CONTENT_SAFETY_API_KEY: 'test-api-key',
       AZURE_CONTENT_SAFETY_API_VERSION: '2024-01-01',
@@ -188,7 +192,7 @@ describe('Provider override tests', () => {
   });
 
   it('should use Mistral providers when MISTRAL_API_KEY is set', async () => {
-    process.env.MISTRAL_API_KEY = 'test-key';
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
 
     const providers = await getDefaultProviders();
 
@@ -216,7 +220,7 @@ describe('Provider override tests', () => {
   });
 
   it('should prefer OpenAI API defaults over Codex SDK defaults when OPENAI_API_KEY exists', async () => {
-    process.env.OPENAI_API_KEY = 'test-openai-key';
+    mockProcessEnv({ OPENAI_API_KEY: 'test-openai-key' });
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
 
     const providers = await getDefaultProviders();
@@ -228,7 +232,7 @@ describe('Provider override tests', () => {
   });
 
   it('should prefer Mistral defaults over Codex SDK defaults when MISTRAL_API_KEY exists', async () => {
-    process.env.MISTRAL_API_KEY = 'test-mistral-key';
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral-key' });
     vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
 
     const providers = await getDefaultProviders();
@@ -248,9 +252,9 @@ describe('Provider override tests', () => {
   });
 
   it('should not probe Google default credentials when Azure is preferred', async () => {
-    process.env.AZURE_OPENAI_API_KEY = 'azure-key';
-    process.env.AZURE_DEPLOYMENT_NAME = 'azure-chat';
-    process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'azure-chat';
+    mockProcessEnv({ AZURE_OPENAI_API_KEY: 'azure-key' });
+    mockProcessEnv({ AZURE_DEPLOYMENT_NAME: 'azure-chat' });
+    mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'azure-chat' });
 
     await getDefaultProviders();
 
@@ -272,8 +276,8 @@ describe('Provider override tests', () => {
   });
 
   it('should not use Mistral providers when OpenAI credentials exist', async () => {
-    process.env.MISTRAL_API_KEY = 'test-key';
-    process.env.OPENAI_API_KEY = 'test-key';
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
+    mockProcessEnv({ OPENAI_API_KEY: 'test-key' });
 
     const providers = await getDefaultProviders();
 
@@ -285,8 +289,8 @@ describe('Provider override tests', () => {
   });
 
   it('should not use Mistral providers when Anthropic credentials exist', async () => {
-    process.env.MISTRAL_API_KEY = 'test-key';
-    process.env.ANTHROPIC_API_KEY = 'test-key';
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
+    mockProcessEnv({ ANTHROPIC_API_KEY: 'test-key' });
 
     const providers = await getDefaultProviders();
 
@@ -299,7 +303,7 @@ describe('Provider override tests', () => {
 
   describe('Google AI Studio provider selection', () => {
     it('should use Google AI Studio providers when GEMINI_API_KEY is set', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -312,7 +316,7 @@ describe('Provider override tests', () => {
     });
 
     it('should use Google AI Studio providers when GOOGLE_API_KEY is set', async () => {
-      process.env.GOOGLE_API_KEY = 'test-key';
+      mockProcessEnv({ GOOGLE_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -325,7 +329,7 @@ describe('Provider override tests', () => {
     });
 
     it('should use Google AI Studio providers when PALM_API_KEY is set', async () => {
-      process.env.PALM_API_KEY = 'test-key';
+      mockProcessEnv({ PALM_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -353,8 +357,8 @@ describe('Provider override tests', () => {
     });
 
     it('should not use Google AI Studio providers when OpenAI credentials exist', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
-      process.env.OPENAI_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+      mockProcessEnv({ OPENAI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -365,8 +369,8 @@ describe('Provider override tests', () => {
     });
 
     it('should not use Google AI Studio providers when Anthropic credentials exist', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
-      process.env.ANTHROPIC_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -377,7 +381,7 @@ describe('Provider override tests', () => {
     });
 
     it('should prefer Google AI Studio over Vertex when both credentials are available', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
       // hasGoogleDefaultCredentials is mocked to return false, but in practice
       // AI Studio should be preferred over Vertex in the provider selection order
 
@@ -390,8 +394,8 @@ describe('Provider override tests', () => {
     });
 
     it('should prefer Google AI Studio over Mistral when both credentials are available', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
-      process.env.MISTRAL_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 

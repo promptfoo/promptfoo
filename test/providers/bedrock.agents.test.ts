@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
+import { mockProcessEnv } from '../util/utils';
 
 // Hoisted mocks for AWS SDK
 const mockSend = vi.hoisted(() => vi.fn());
@@ -61,20 +62,20 @@ const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
 describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.HTTP_PROXY = '';
-    process.env.HTTPS_PROXY = '';
+    mockProcessEnv({ HTTP_PROXY: '' });
+    mockProcessEnv({ HTTPS_PROXY: '' });
   });
 
   afterEach(() => {
     if (ORIGINAL_HTTP_PROXY === undefined) {
-      delete process.env.HTTP_PROXY;
+      mockProcessEnv({ HTTP_PROXY: undefined });
     } else {
-      process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
+      mockProcessEnv({ HTTP_PROXY: ORIGINAL_HTTP_PROXY });
     }
     if (ORIGINAL_HTTPS_PROXY === undefined) {
-      delete process.env.HTTPS_PROXY;
+      mockProcessEnv({ HTTPS_PROXY: undefined });
     } else {
-      process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+      mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
     }
   });
 
@@ -150,7 +151,7 @@ describe('AwsBedrockAgentsProvider', () => {
     });
 
     it('should create runtime client with proxy agent when proxy is configured', async () => {
-      process.env.HTTPS_PROXY = 'http://proxy.example:8080';
+      mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example:8080' });
 
       const provider = new AwsBedrockAgentsProvider('test-agent-123', {
         config: {
