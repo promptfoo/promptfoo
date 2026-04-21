@@ -1,5 +1,10 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
-import { mockMatchMedia as installMatchMedia, mockBrowserProperty } from '@app/tests/browserMocks';
+import {
+  mockMatchMedia as installMatchMedia,
+  mockBrowserProperty,
+  restoreBrowserMocks,
+} from '@app/tests/browserMocks';
 import { useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -13,6 +18,7 @@ const mockFetch = vi.fn();
 
 const mockLocalStorage = {
   getItem: vi.fn(),
+  removeItem: vi.fn(),
   setItem: vi.fn(),
 };
 
@@ -20,9 +26,11 @@ let mockMatchMedia: ReturnType<typeof installMatchMedia>;
 
 const renderLauncher = () => {
   return render(
-    <MemoryRouter>
-      <LauncherPage />
-    </MemoryRouter>,
+    <TooltipProvider delayDuration={0}>
+      <MemoryRouter>
+        <LauncherPage />
+      </MemoryRouter>
+    </TooltipProvider>,
   );
 };
 
@@ -38,6 +46,7 @@ describe('LauncherPage', () => {
   beforeEach(() => {
     mockFetch.mockReset();
     mockLocalStorage.getItem.mockReset();
+    mockLocalStorage.removeItem.mockReset();
     mockLocalStorage.setItem.mockReset();
     mockBrowserProperty(globalThis, 'fetch', mockFetch as typeof fetch);
     mockBrowserProperty(window, 'localStorage', mockLocalStorage as unknown as Storage);
@@ -45,6 +54,7 @@ describe('LauncherPage', () => {
   });
 
   afterEach(() => {
+    restoreBrowserMocks();
     vi.clearAllMocks();
   });
 
@@ -72,21 +82,17 @@ describe('LauncherPage', () => {
     });
   });
 
-  it('toggles dark mode when button is clicked', async () => {
-    mockLocalStorage.getItem.mockReturnValue('false');
+  it('sets dark mode from the theme selector', async () => {
+    mockLocalStorage.getItem.mockReturnValue(null);
     document.documentElement.removeAttribute('data-theme'); // Ensure light mode at start
     renderLauncher();
 
-    // Wait for the page to finish loading and render the dark mode toggle
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: /Switch to (dark|light) mode/i }),
-      ).toBeInTheDocument();
-    });
-
-    const darkModeButton = screen.getByRole('button', { name: /Switch to (dark|light) mode/i });
     await act(async () => {
-      await userEvent.click(darkModeButton);
+      await userEvent.click(
+        screen.getByRole('button', {
+          name: 'Theme preference: System theme (light). Switch to Dark theme.',
+        }),
+      );
     });
 
     expect(mockLocalStorage.setItem).toHaveBeenCalledWith('darkMode', 'true');

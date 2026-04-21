@@ -156,6 +156,7 @@ prompts:
 | `betas`                              | string[]      | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                                      | None                     |
 | `custom_system_prompt`               | string        | Replace default system prompt                                                                                | None                     |
 | `append_system_prompt`               | string        | Append to default system prompt                                                                              | None                     |
+| `exclude_dynamic_sections`           | boolean       | Strip per-user dynamic sections from the preset prompt so it stays cacheable across runs                     | false                    |
 | `tools`                              | array/object  | Base set of built-in tools (array of names or `{type: 'preset', preset: 'claude_code'}`)                     | None                     |
 | `custom_allowed_tools`               | string[]      | Replace default allowed tools                                                                                | None                     |
 | `append_allowed_tools`               | string[]      | Add to default allowed tools                                                                                 | None                     |
@@ -188,6 +189,7 @@ prompts:
 | `executable`                         | string        | JavaScript runtime: `node`, `bun`, or `deno`                                                                 | Auto-detected            |
 | `executable_args`                    | string[]      | Arguments to pass to the JavaScript runtime                                                                  | None                     |
 | `extra_args`                         | object        | Additional CLI arguments (keys without `--`, values as strings or null for flags)                            | None                     |
+| `env`                                | object        | Extra environment variables to forward to the SDK subprocess (e.g. `OTEL_*`, `CLAUDE_CODE_ENABLE_TELEMETRY`) | None                     |
 | `path_to_claude_code_executable`     | string        | Path to a custom Claude Code executable                                                                      | Built-in                 |
 | `spawn_claude_code_process`          | function      | Custom spawn function for VMs/containers (programmatic only)                                                 | Default spawn            |
 
@@ -218,6 +220,8 @@ Claude Agent SDK also supports configuring models through [environment variables
 ## System Prompt
 
 Unless you specify a `custom_system_prompt`, the default Claude Code system prompt will be used. You can append additional instructions to it with `append_system_prompt`.
+
+Set `exclude_dynamic_sections: true` to strip per-user context (working directory, auto-memory, git status) from the preset prompt. This keeps the prompt-caching prefix static across runs, which matters for high-volume evals. The stripped context is re-injected as the first user message. Has no effect when `custom_system_prompt` is set.
 
 :::info
 Note that this differs slightly from the Claude Agent SDK's behavior when used independently of Promptfoo. The Agent SDK will _not_ use the Claude Code system prompt by default unless it's specified—it will instead use an empty system prompt if none is provided. If you want to use an empty system prompt with this provider, set `custom_system_prompt` to an empty string.
@@ -960,6 +964,44 @@ assert:
 ```
 
 For skill evals specifically, prefer the deterministic [`skill-used`](/docs/configuration/expected-outputs/deterministic/#skill-used) assertion over raw JavaScript when possible. Promptfoo derives `metadata.skillCalls` from these `Skill` tool calls automatically.
+
+## Tracing
+
+When [tracing](/docs/tracing/) is enabled, every provider call emits an OpenTelemetry span using the GenAI semantic conventions (`gen_ai.system`, `gen_ai.request.model`, `gen_ai.usage.*`, `gen_ai.response.model`, `gen_ai.response.finish_reasons`, etc.) plus a child span per completed tool call (`tool {name}` with `tool.input`, `tool.output`, `tool.is_error`). Spans are parented to the evaluation trace so they appear grouped in the Traces tab.
+
+The W3C `TRACEPARENT` environment variable is propagated to the SDK subprocess so telemetry it exports attaches to the same trace:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      env:
+        CLAUDE_CODE_ENABLE_TELEMETRY: '1'
+        OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318'
+        OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+```
+
+### Deep tracing (SDK-internal events)
+
+To also capture Claude Code's internal events — API requests, tool decisions, tool results — set `OTEL_LOGS_EXPORTER=otlp` and use the JSON logs protocol. Each log record becomes a child span on the provider span.
+
+```yaml
+config:
+  env:
+    CLAUDE_CODE_ENABLE_TELEMETRY: '1'
+    OTEL_LOGS_EXPORTER: otlp
+    OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318'
+    OTEL_EXPORTER_OTLP_PROTOCOL: 'http/json'
+```
+
+The receiver's `/v1/logs` endpoint accepts JSON only. The provider automatically injects `OTEL_RESOURCE_ATTRIBUTES=promptfoo.trace_id=...,promptfoo.parent_span_id=...` so logs link to the correct evaluation trace even though the SDK's logs signal doesn't natively inherit `TRACEPARENT`.
 
 ## Caching Behavior
 

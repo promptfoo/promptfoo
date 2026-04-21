@@ -273,6 +273,31 @@ describe('useModelAuditHistoryStore', () => {
       expect(result.current.historicalScans[0].id).toBe('1');
       expect(result.current.totalCount).toBe(2);
     });
+
+    it('should restore totalCount when an off-page delete fails', async () => {
+      const mockScans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2')];
+
+      useModelAuditHistoryStore.setState({
+        historicalScans: mockScans,
+        totalCount: 3,
+      });
+
+      mockCallApi.mockResolvedValueOnce({
+        ok: false,
+      } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      await act(async () => {
+        await expect(result.current.deleteHistoricalScan('off-page')).rejects.toThrow(
+          'Failed to delete scan',
+        );
+      });
+
+      expect(result.current.historicalScans).toEqual(mockScans);
+      expect(result.current.totalCount).toBe(3);
+      expect(result.current.historyError).toBe('Failed to delete scan');
+    });
   });
 
   describe('pagination and filtering', () => {
