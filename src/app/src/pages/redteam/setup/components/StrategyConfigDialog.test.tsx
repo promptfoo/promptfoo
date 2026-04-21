@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import StrategyConfigDialog from './StrategyConfigDialog';
@@ -1134,7 +1134,9 @@ describe('StrategyConfigDialog', () => {
       expect(saveButton).toBeDisabled();
     });
 
-    it('should allow saving when maxTurns is exactly 30 for jailbreak:hydra strategy', () => {
+    it('should allow saving when maxTurns is exactly 30 for jailbreak:hydra strategy', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategyConfigDialog
           open={true}
@@ -1155,12 +1157,14 @@ describe('StrategyConfigDialog', () => {
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
       expect(saveButton).not.toBeDisabled();
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith('jailbreak:hydra', { maxTurns: 30 });
     });
 
-    it('should block save when user types value exceeding 30 for jailbreak strategy', () => {
+    it('should block save when user types value exceeding 30 for jailbreak strategy', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategyConfigDialog
           open={true}
@@ -1173,7 +1177,9 @@ describe('StrategyConfigDialog', () => {
       );
 
       const numIterationsInput = screen.getByLabelText('Number of Iterations');
-      fireEvent.change(numIterationsInput, { target: { value: '50' } });
+      await user.click(numIterationsInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('50');
 
       // Should show error message
       expect(screen.getByText(/Must be 30 or less/)).toBeInTheDocument();
@@ -1183,8 +1189,31 @@ describe('StrategyConfigDialog', () => {
       expect(saveButton).toBeDisabled();
 
       // Clicking save should not call onSave
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
       expect(mockOnSave).not.toHaveBeenCalled();
+    });
+
+    it('should validate scientific notation against the real numeric value', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      await user.click(numIterationsInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('1e2');
+
+      expect(screen.getByText(/Must be 30 or less/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     });
 
     it('should show normal helper text when numIterations is below 30', () => {
@@ -1224,7 +1253,9 @@ describe('StrategyConfigDialog', () => {
       expect(saveButton).toBeDisabled();
     });
 
-    it('should enable Save button when user corrects numIterations from invalid to valid value', () => {
+    it('should enable Save button when user corrects numIterations from invalid to valid value', async () => {
+      const user = userEvent.setup();
+
       render(
         <StrategyConfigDialog
           open={true}
@@ -1237,15 +1268,19 @@ describe('StrategyConfigDialog', () => {
       );
 
       const numIterationsInput = screen.getByLabelText('Number of Iterations');
-      fireEvent.change(numIterationsInput, { target: { value: '50' } });
+      await user.click(numIterationsInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('50');
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
       expect(saveButton).toBeDisabled();
 
-      fireEvent.change(numIterationsInput, { target: { value: '20' } });
+      await user.click(numIterationsInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('20');
       expect(saveButton).not.toBeDisabled();
 
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
       expect(mockOnSave).toHaveBeenCalledTimes(1);
       expect(mockOnSave).toHaveBeenCalledWith('jailbreak', { numIterations: 20 });
       expect(mockOnClose).toHaveBeenCalledTimes(1);
@@ -1303,7 +1338,9 @@ describe('StrategyConfigDialog', () => {
       expect(saveButton).toBeDisabled();
     });
 
-    it('should disable save and not call onSave when maxTurns is zero for custom strategy', () => {
+    it('should disable save and not call onSave when maxTurns is zero for custom strategy', async () => {
+      const user = userEvent.setup();
+
       // Note: Browser type="number" inputs sanitize non-numeric values to empty string,
       // so we test with zero which is below MIN_TURNS (1)
       render(
@@ -1320,7 +1357,7 @@ describe('StrategyConfigDialog', () => {
       const saveButton = screen.getByRole('button', { name: 'Save' });
       expect(saveButton).toBeDisabled();
 
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
       expect(mockOnSave).not.toHaveBeenCalled();
     });
   });

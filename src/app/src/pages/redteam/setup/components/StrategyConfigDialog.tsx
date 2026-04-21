@@ -50,7 +50,7 @@ function validateIterationValue(value: unknown, min: number): string | null {
   if (value === undefined || value === null || value === '') {
     return null;
   }
-  if (typeof value !== 'number' || Number.isNaN(value)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     return INVALID_NUMBER_ERROR_MESSAGE;
   }
   if (value < min) {
@@ -60,6 +60,10 @@ function validateIterationValue(value: unknown, min: number): string | null {
     return MAX_ITERATIONS_ERROR_MESSAGE;
   }
   return null;
+}
+
+function parseIterationInputValue(rawValue: string): number | undefined {
+  return rawValue === '' ? undefined : Number(rawValue);
 }
 
 // ADDITIONAL_STRATEGIES contains transformation strategies (base64, jailbreak, etc.) that modify test cases.
@@ -565,8 +569,10 @@ export default function StrategyConfigDialog({
           type="number"
           value={localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)}
           onChange={(e) => {
-            const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
-            setLocalConfig({ ...localConfig, numIterations: value });
+            setLocalConfig({
+              ...localConfig,
+              numIterations: parseIterationInputValue(e.target.value),
+            });
           }}
           placeholder="Number of iterations (default: 10)"
           min={MIN_ITERATIONS}
@@ -718,8 +724,10 @@ export default function StrategyConfigDialog({
             type="number"
             value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
             onChange={(e) => {
-              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
-              setLocalConfig({ ...localConfig, maxTurns: value });
+              setLocalConfig({
+                ...localConfig,
+                maxTurns: parseIterationInputValue(e.target.value),
+              });
             }}
             placeholder="Maximum number of conversation turns (default: 10)"
             min={MIN_TURNS}
@@ -766,8 +774,10 @@ export default function StrategyConfigDialog({
           type="number"
           value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
           onChange={(e) => {
-            const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
-            setLocalConfig({ ...localConfig, maxTurns: value });
+            setLocalConfig({
+              ...localConfig,
+              maxTurns: parseIterationInputValue(e.target.value),
+            });
           }}
           placeholder="Maximum conversation turns (default: 10)"
           min={MIN_TURNS}
@@ -812,12 +822,14 @@ export default function StrategyConfigDialog({
           type="number"
           value={localConfig.maxTurns === undefined ? 5 : Number(localConfig.maxTurns)}
           onChange={(e) => {
-            const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
-            setLocalConfig({ ...localConfig, maxTurns: value });
+            setLocalConfig({
+              ...localConfig,
+              maxTurns: parseIterationInputValue(e.target.value),
+            });
           }}
           onBlur={(e) => {
-            const parsed = Number.parseInt(e.target.value, 10);
-            if (!e.target.value || Number.isNaN(parsed) || parsed < MIN_TURNS) {
+            const parsed = parseIterationInputValue(e.target.value);
+            if (parsed === undefined || !Number.isFinite(parsed) || parsed < MIN_TURNS) {
               setLocalConfig({ ...localConfig, maxTurns: 5 });
             }
           }}
@@ -863,8 +875,10 @@ export default function StrategyConfigDialog({
           type="number"
           value={localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)}
           onChange={(e) => {
-            const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
-            setLocalConfig({ ...localConfig, numIterations: value });
+            setLocalConfig({
+              ...localConfig,
+              numIterations: parseIterationInputValue(e.target.value),
+            });
           }}
           placeholder="Number of iterations (default: 10)"
           min={MIN_ITERATIONS}
