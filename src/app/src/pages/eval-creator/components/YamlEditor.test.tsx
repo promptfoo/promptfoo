@@ -1,6 +1,8 @@
 import React from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { mockClipboard, mockObjectUrl } from '@app/tests/browserMocks';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import YamlEditorComponent from './YamlEditor';
@@ -35,13 +37,6 @@ vi.mock('@app/stores/evalConfig', () => ({
   })),
 }));
 
-Object.defineProperty(navigator, 'clipboard', {
-  value: {
-    writeText: vi.fn().mockResolvedValue(undefined),
-  },
-  configurable: true,
-});
-
 // Mock the editor component to avoid prism.js issues
 vi.mock('react-simple-code-editor', () => ({
   default: ({ value, onValueChange, disabled }: any) => (
@@ -73,8 +68,8 @@ vi.mock('@mui/icons-material/Upload', () => ({
 describe('YamlEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    global.URL.createObjectURL = vi.fn(() => 'blob:yaml-editor-test');
-    global.URL.revokeObjectURL = vi.fn();
+    mockClipboard();
+    mockObjectUrl('blob:yaml-editor-test');
 
     // Reset mock to default return value
     mockGetTestSuite.mockReturnValue({
@@ -102,11 +97,12 @@ describe('YamlEditor', () => {
     expect(editor.disabled).toBe(false);
   });
 
-  it('downloads the current YAML when Download YAML is clicked', () => {
+  it('downloads the current YAML when Download YAML is clicked', async () => {
+    const user = userEvent.setup();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     render(<YamlEditorComponent />);
 
-    fireEvent.click(screen.getByRole('button', { name: /Download YAML/ }));
+    await user.click(screen.getByRole('button', { name: /Download YAML/ }));
 
     expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(clickSpy).toHaveBeenCalled();
@@ -216,7 +212,8 @@ describe('YamlEditor', () => {
       expect(saveButton).toBeDisabled();
     });
 
-    it('should enable Discard Changes button when code is modified', () => {
+    it('should enable Discard Changes button when code is modified', async () => {
+      const user = userEvent.setup();
       render(<YamlEditorComponent />);
 
       const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
@@ -227,35 +224,38 @@ describe('YamlEditor', () => {
       expect(discardButton).toBeDisabled();
       expect(saveButton).toBeDisabled();
 
-      // Modify the editor content
-      fireEvent.change(editor, { target: { value: 'description: Modified content' } });
+      await user.click(editor);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('description: Modified content');
 
       // Both buttons should be enabled now
       expect(discardButton).not.toBeDisabled();
       expect(saveButton).not.toBeDisabled();
     });
 
-    it('should disable Discard Changes button after discarding changes', () => {
+    it('should disable Discard Changes button after discarding changes', async () => {
+      const user = userEvent.setup();
       render(<YamlEditorComponent />);
 
       const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
       const discardButton = screen.getByRole('button', { name: /Discard Changes/ });
 
-      // Modify the editor content
-      fireEvent.change(editor, { target: { value: 'description: Modified content' } });
+      await user.click(editor);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('description: Modified content');
 
       // Button should be enabled
       expect(discardButton).not.toBeDisabled();
 
-      // Click discard button
-      fireEvent.click(discardButton);
+      await user.click(discardButton);
 
       // Button should be disabled again
       expect(discardButton).toBeDisabled();
       expect(mockShowToast).toHaveBeenCalledWith('Changes discarded', 'info');
     });
 
-    it('should show unsaved changes indicator when hasUnsavedChanges is true', () => {
+    it('should show unsaved changes indicator when hasUnsavedChanges is true', async () => {
+      const user = userEvent.setup();
       render(<YamlEditorComponent />);
 
       const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
@@ -263,14 +263,16 @@ describe('YamlEditor', () => {
       // Initially no indicator
       expect(screen.queryByText(/Unsaved changes/)).not.toBeInTheDocument();
 
-      // Modify the editor content
-      fireEvent.change(editor, { target: { value: 'description: Modified content' } });
+      await user.click(editor);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('description: Modified content');
 
       // Unsaved changes indicator should appear
       expect(screen.getByText(/Unsaved changes/)).toBeInTheDocument();
     });
 
-    it('should disable both Save and Discard buttons after successful save', () => {
+    it('should disable both Save and Discard buttons after successful save', async () => {
+      const user = userEvent.setup();
       const mockUpdateConfig = vi.fn();
       vi.mocked(
         vi.fn(() => ({
@@ -287,15 +289,15 @@ describe('YamlEditor', () => {
       const saveButton = screen.getByRole('button', { name: /Save/ });
       const discardButton = screen.getByRole('button', { name: /Discard Changes/ });
 
-      // Modify content
-      fireEvent.change(editor, { target: { value: 'description: Valid YAML content' } });
+      await user.click(editor);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('description: Valid YAML content');
 
       // Buttons should be enabled
       expect(saveButton).not.toBeDisabled();
       expect(discardButton).not.toBeDisabled();
 
-      // Click save
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       // Both buttons should be disabled after successful save
       expect(saveButton).toBeDisabled();
@@ -303,22 +305,23 @@ describe('YamlEditor', () => {
       expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
     });
 
-    it('should keep Discard Changes button enabled when save fails with parse error', () => {
+    it('should keep Discard Changes button enabled when save fails with parse error', async () => {
+      const user = userEvent.setup();
       render(<YamlEditorComponent />);
 
       const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
       const saveButton = screen.getByRole('button', { name: /Save/ });
       const discardButton = screen.getByRole('button', { name: /Discard Changes/ });
 
-      // Enter invalid YAML
-      fireEvent.change(editor, { target: { value: 'invalid: yaml: content: ::' } });
+      await user.click(editor);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('invalid: yaml: content: ::');
 
       // Buttons should be enabled
       expect(saveButton).not.toBeDisabled();
       expect(discardButton).not.toBeDisabled();
 
-      // Click save (will fail to parse)
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       // Discard button should still be enabled (user can still discard the invalid changes)
       expect(discardButton).not.toBeDisabled();

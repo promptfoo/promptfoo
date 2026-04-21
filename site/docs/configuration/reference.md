@@ -62,6 +62,7 @@ A test case represents a single example input that is fed into all prompts and p
 | options.prefix                | string                                                          | No       | Text to prepend to the prompt                                                                                                                                                                                                          |
 | options.suffix                | string                                                          | No       | Text to append to the prompt                                                                                                                                                                                                           |
 | options.provider              | string                                                          | No       | The API provider to use for [model-graded](/docs/configuration/expected-outputs/model-graded) assertion grading                                                                                                                        |
+| options.disableDefaultAsserts | boolean                                                         | No       | If true, this test case does not inherit assertions from `defaultTest.assert`; other `defaultTest` properties still apply                                                                                                              |
 | options.runSerially           | boolean                                                         | No       | If true, run this test case without concurrency regardless of global settings                                                                                                                                                          |
 | options.storeOutputAs         | string                                                          | No       | The output of this test will be stored as a variable, which can be used in subsequent tests. See [multi-turn conversations](/docs/configuration/chat#using-storeoutputas).                                                             |
 | options.rubricPrompt          | string \| string[]                                              | No       | Custom prompt for [model-graded](/docs/configuration/expected-outputs/model-graded) assertions                                                                                                                                         |
@@ -487,7 +488,9 @@ module.exports = extensionHook;
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
-The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
+The `beforeAll`, `beforeEach`, and `afterEach` hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
+
+All merges are **shallow**: returned properties replace existing values at the top level. Nested objects (e.g., `metadata: { nested: { a: 1 } }`) are replaced entirely, not deep-merged.
 
 #### beforeAll
 
@@ -507,6 +510,20 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 | Property       | Type                     | Description                    |
 | -------------- | ------------------------ | ------------------------------ |
 | `context.test` | [`TestCase`](#test-case) | The test case to be evaluated. |
+
+#### afterEach
+
+| Property                           | Type                     | Description                                             |
+| ---------------------------------- | ------------------------ | ------------------------------------------------------- |
+| `context.result.namedScores`       | `Record<string, number>` | Custom numeric metrics (e.g., `num_turns`, `cost_usd`). |
+| `context.result.metadata`          | `Record<string, any>`    | Structured data (e.g., tool call details, URLs).        |
+| `context.result.response.metadata` | `Record<string, any>`    | Response-level metadata (e.g., session viewer URLs).    |
+
+Fields like `success`, `score`, and `response.output` are **not** overridable from `afterEach`.
+
+#### afterAll
+
+The `afterAll` hook is intended for side effects (sending to monitoring, cleanup, etc.) and its return value is not persisted. Use it for read-only operations on the completed evaluation.
 
 ## Provider-related types
 

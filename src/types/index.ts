@@ -10,7 +10,7 @@ import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../va
 export { ProvidersSchema };
 
 import { RedteamConfigSchema } from '../validators/redteam';
-import { NunjucksFilterMapSchema } from '../validators/shared';
+import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../validators/shared';
 
 import type { BlobRef } from '../blobs/types';
 import type {
@@ -27,6 +27,7 @@ import type {
   ImageOutput,
   ProviderOptions,
   ProviderResponse,
+  ProvidersConfig,
 } from './providers';
 import type { NunjucksFilterMap, TokenUsage, VarValue } from './shared';
 
@@ -162,9 +163,9 @@ export const OutputConfigSchema = z.object({
   /**
    * @deprecated in > 0.38.0. Use `transform` instead.
    */
-  postprocess: z.string().optional(),
-  transform: z.string().optional(),
-  transformVars: z.string().optional(),
+  postprocess: StringOrFunctionSchema.optional(),
+  transform: StringOrFunctionSchema.optional(),
+  transformVars: StringOrFunctionSchema.optional(),
 
   // The name of the variable to store the output of this test case
   storeOutputAs: z.string().optional(),
@@ -513,6 +514,12 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // Set by LLM-grader matchers when a transport/parse failure prevents a real
+    // evaluation. Callers that support inverse semantics (e.g. `not-g-eval`)
+    // must not flip such results to a pass — a grader error is not evidence
+    // that the criterion was or was not met. `true`-literal so the field is
+    // only meaningful when present; never set `false` explicitly.
+    graderError?: true;
     [key: string]: any;
   };
 }
@@ -676,10 +683,10 @@ export const AssertionSchema = z.object({
   metric: z.string().optional(),
 
   // Process the output before running the assertion
-  transform: z.string().optional(),
+  transform: StringOrFunctionSchema.optional(),
 
   // Extract context from the output using a transform
-  contextTransform: z.string().optional(),
+  contextTransform: StringOrFunctionSchema.optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -844,6 +851,8 @@ export const TestCaseSchema = z.object({
       disableVarExpansion: z.boolean().optional(),
       // If true, do not include an implicit `_conversation` variable in the prompt.
       disableConversationVar: z.boolean().optional(),
+      // If true, skip defaultTest assertions for this test case while still inheriting other defaults.
+      disableDefaultAsserts: z.boolean().optional(),
       // If true, run this without concurrency no matter what
       runSerially: z.boolean().optional(),
     })
@@ -1278,8 +1287,16 @@ export interface EvalWithMetadata {
 // node.js package interface
 export type EvaluateTestSuite = {
   prompts: (string | object | PromptFunction)[];
+  providers: ProvidersConfig;
   writeLatestResults?: boolean;
-} & Omit<TestSuiteConfig, 'prompts'>;
+  /**
+   * Author to attribute the evaluation to.
+   * When the user is logged into cloud with a stored email, that identity
+   * takes precedence and this option is ignored. Otherwise resolution is:
+   * this option > stored user email > PROMPTFOO_AUTHOR env var > null.
+   */
+  author?: string;
+} & Omit<TestSuiteConfig, 'prompts' | 'providers'>;
 
 export type EvaluateTestSuiteWithEvaluateOptions = EvaluateTestSuite & {
   evaluateOptions: EvaluateOptions;

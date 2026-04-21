@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -288,7 +288,8 @@ describe('LoginPage', () => {
     expect(screen.getByText('View Report')).toBeInTheDocument();
   });
 
-  it('shows and hides API key using visibility toggle', () => {
+  it('shows and hides API key using visibility toggle', async () => {
+    const user = userEvent.setup();
     useUserStoreMock.mockReturnValue({
       email: null,
       isLoading: false,
@@ -308,12 +309,10 @@ describe('LoginPage', () => {
     // Initially should be password type
     expect(apiKeyField).toHaveAttribute('type', 'password');
 
-    // Click to show
-    fireEvent.click(toggleButton);
+    await user.click(toggleButton);
     expect(apiKeyField).toHaveAttribute('type', 'text');
 
-    // Click to hide
-    fireEvent.click(toggleButton);
+    await user.click(toggleButton);
     expect(apiKeyField).toHaveAttribute('type', 'password');
   });
 

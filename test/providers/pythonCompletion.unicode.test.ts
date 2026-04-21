@@ -5,6 +5,7 @@ import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
+import { mockProcessEnv } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -19,10 +20,10 @@ const describeOrSkip = process.platform === 'win32' && process.env.CI ? describe
 describeOrSkip('PythonProvider Unicode handling', () => {
   let tempDir: string;
   let provider: PythonProvider;
+  let restoreEnv: () => void;
 
   beforeAll(() => {
-    // Disable caching for tests to ensure fresh runs
-    process.env.PROMPTFOO_CACHE_ENABLED = 'false';
+    restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'false' });
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
 
@@ -75,6 +76,7 @@ def call_api(prompt, options, context):
   });
 
   afterAll(async () => {
+    restoreEnv();
     await provider?.shutdown().catch(() => {});
 
     if (tempDir && fs.existsSync(tempDir)) {

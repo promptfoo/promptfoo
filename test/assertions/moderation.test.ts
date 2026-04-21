@@ -1,17 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModeration } from '../../src/assertions/moderation';
-import { matchesModeration } from '../../src/matchers';
+import { matchesModeration } from '../../src/matchers/moderation';
+import { createMockProvider } from '../factories/provider';
 
 import type {
-  ApiProvider,
   Assertion,
   AssertionParams,
   AssertionValueFunctionContext,
-  ProviderResponse,
   TestCase,
 } from '../../src/types/index';
 
-vi.mock('../../src/matchers', () => ({
+vi.mock('../../src/matchers/moderation', () => ({
   matchesModeration: vi.fn(),
 }));
 
@@ -30,11 +29,7 @@ describe('handleModeration', () => {
     value: ['harassment'],
   };
 
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    config: {},
-    callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-  };
+  const mockProvider = createMockProvider({ config: {}, response: {} });
 
   const mockContext: AssertionValueFunctionContext = {
     prompt: 'test prompt',

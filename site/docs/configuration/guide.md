@@ -307,6 +307,25 @@ defaultTest:
     provider: openai:gpt-5-mini-0613
 ```
 
+Set `options.disableDefaultAsserts: true` on a test case when that test should define its own assertions without inheriting `defaultTest.assert`. Other `defaultTest` fields, such as `vars`, `metadata`, `threshold`, and `options`, still apply:
+
+```yaml
+defaultTest:
+  vars:
+    audience: developer
+  assert:
+    - type: contains
+      value: installation steps
+
+tests:
+  - vars:
+      topic: API setup
+    options:
+      disableDefaultAsserts: true
+    assert:
+      - type: contains-json
+```
+
 ### Default variables
 
 Use `defaultTest` to define variables that are shared across all tests:
@@ -681,6 +700,10 @@ tests:
 
 :::tip
 Use `defaultTest` apply a transform option to every test case in your test suite.
+:::
+
+:::tip
+When using the [Node.js package](/docs/usage/node-package#transform-functions), you can pass functions directly as `transform`, `transformVars`, and `contextTransform` values instead of string expressions.
 :::
 
 ### Transforms from separate files

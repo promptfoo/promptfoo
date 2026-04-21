@@ -4,6 +4,7 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
+import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
@@ -19,13 +20,14 @@ import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
-import { selectMaxScore } from './matchers';
+import { selectMaxScore } from './matchers/comparison';
 import { generateIdFromPrompt } from './models/prompt';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { redteamProviderManager } from './redteam/providers/shared';
+import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
 import {
   createProviderRateLimitOptions,
@@ -67,6 +69,7 @@ import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
+import { filterFiniteScores } from './util/numeric';
 import { isPromptAllowed } from './util/promptMatching';
 import {
   isAnthropicProvider,
@@ -75,7 +78,7 @@ import {
   isProviderAllowed,
 } from './util/provider';
 import { promptYesNo } from './util/readline';
-import { extractVariablesFromTemplate } from './util/templates';
+import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -102,6 +105,33 @@ import type {
   VarValue,
 } from './types/index';
 import type { CallApiContextParams } from './types/providers';
+
+const CONVERSATION_VAR_NAME = '_conversation';
+const PROMPT_CONVERSATION_CACHE_MAX = 1024;
+const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
+  max: PROMPT_CONVERSATION_CACHE_MAX,
+});
+
+function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
+  const cached = promptUsesConversationVariableCache.get(prompt.raw);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const { referenced, parsed } = analyzeTemplateReference(prompt.raw, CONVERSATION_VAR_NAME);
+  // Only cache successfully parsed results. Caching a parse failure would
+  // poison the cache for the lifetime of the process and silently downgrade
+  // future conversation-aware runs to parallel execution.
+  if (parsed) {
+    promptUsesConversationVariableCache.set(prompt.raw, referenced);
+  }
+  return referenced;
+}
+
+/** Test-only: reset the per-process prompt conversation-variable cache. */
+export function __resetPromptConversationCacheForTests(): void {
+  promptUsesConversationVariableCache.clear();
+}
 
 /**
  * Manages a single progress bar for the evaluation
@@ -441,6 +471,48 @@ function shouldDeferGradingForTest(test: AtomicTestCase): boolean {
   return Boolean(test.assert?.some(hasProviderGroupedAssertion));
 }
 
+function logGroupedGradingStatus({
+  concurrency,
+  hasEvalStepTimeout,
+  runEvalOptions,
+  shouldGroupGradingByProvider,
+  usesConversationVar,
+}: {
+  concurrency: number;
+  hasEvalStepTimeout: boolean;
+  runEvalOptions: RunEvalOptions[];
+  shouldGroupGradingByProvider: boolean;
+  usesConversationVar: boolean;
+}) {
+  const hasModelGradedAssertion = runEvalOptions.some(({ test }) =>
+    shouldDeferGradingForTest(test),
+  );
+  if (!hasModelGradedAssertion) {
+    return;
+  }
+  if (shouldGroupGradingByProvider) {
+    logger.info(
+      'Grouping model-graded assertions by provider to minimize local-model reload overhead.',
+    );
+    return;
+  }
+  if (concurrency !== 1) {
+    return;
+  }
+  const reasons: string[] = [];
+  if (hasEvalStepTimeout) {
+    reasons.push('per-eval-step timeout is configured');
+  }
+  if (usesConversationVar) {
+    reasons.push('conversation variables require per-row ordering');
+  }
+  if (reasons.length > 0) {
+    logger.info(
+      `Serial grading grouping disabled because ${reasons.join(' and ')}; model-graded judges may reload between rows.`,
+    );
+  }
+}
+
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
@@ -464,14 +536,38 @@ function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   row.gradingResult = checkResult;
 }
 
-function applyGradingError(row: EvaluateResult, error: unknown) {
-  const errorMessage = error instanceof Error ? (error.stack ?? error.message) : String(error);
-  logger.error('Assertion grading failed during eval', {
-    error: errorMessage,
-    promptIdx: row.promptIdx,
-    testIdx: row.testIdx,
-  });
-  row.error = errorMessage;
+const ABORTED_GRADING_PREFIX = 'Aborted: ';
+
+function isAbortShapedError(error: unknown): boolean {
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
+}
+
+function applyGradingError(row: EvaluateResult, error: unknown, abortSignal?: AbortSignal) {
+  const errorAsError = error instanceof Error ? error : undefined;
+  // Require both signals: a third-party SDK that throws `AbortError` during a
+  // non-aborted run is a real bug, and a real SyntaxError caught microseconds
+  // after an unrelated abort is also a real bug.
+  const aborted = Boolean(abortSignal?.aborted) && isAbortShapedError(error);
+
+  if (aborted) {
+    // Skip stack serialization on the abort path — debug logs usually go
+    // unread and a noisy shutdown can fire this per row.
+    const shortMessage = errorAsError?.message ?? String(error);
+    logger.debug('Assertion grading aborted', {
+      error: shortMessage,
+      promptIdx: row.promptIdx,
+      testIdx: row.testIdx,
+    });
+    row.error = `${ABORTED_GRADING_PREFIX}${shortMessage}`;
+  } else {
+    const fullMessage = errorAsError ? (errorAsError.stack ?? errorAsError.message) : String(error);
+    logger.error('Assertion grading failed during eval', {
+      error: fullMessage,
+      promptIdx: row.promptIdx,
+      testIdx: row.testIdx,
+    });
+    row.error = fullMessage;
+  }
   row.failureReason = ResultFailureReason.ERROR;
   row.success = false;
   row.score = 0;
@@ -550,7 +646,7 @@ function attachConversationVar({
   test: AtomicTestCase;
   vars: Vars;
 }) {
-  const usesConversation = prompt.raw.includes('_conversation');
+  const usesConversation = promptUsesConversationVariable(prompt);
   if (
     !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
     !test.options?.disableConversationVar &&
@@ -613,6 +709,9 @@ async function renderRunEvalPrompt({
     provider,
     skipRenderVars,
   );
+  if (isRedteam) {
+    throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
+  }
   const promptConfig = {
     ...(promptForRender.config ?? {}),
     ...(test.options ?? {}),
@@ -1058,7 +1157,7 @@ async function gradeRunEvalResponse({
           traceId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
-      applyGradingError(ret, error);
+      applyGradingError(ret, error, abortSignal);
     });
     deferredGradingPromises.set(ret, gradingPromise);
     return;
@@ -1973,7 +2072,11 @@ async function prepareTestCaseForEval(
     `testCase.assert is not an array in test case #${index + 1}`,
   );
 
-  testCase.assert = [...(defaultTest?.assert || []), ...(testCase.assert || [])];
+  const disableDefaultAsserts = testCase.options?.disableDefaultAsserts === true;
+  testCase.assert = [
+    ...(disableDefaultAsserts ? [] : defaultTest?.assert || []),
+    ...(testCase.assert || []),
+  ];
   testCase.threshold = testCase.threshold ?? defaultTest?.threshold;
   testCase.options = {
     ...(defaultTest?.options || {}),
@@ -2408,7 +2511,7 @@ function adjustConcurrencyForSerialFeatures({
   prompts: CompletedPrompt[];
   tests: AtomicTestCase[];
 }) {
-  const usesConversationVar = prompts.some((p) => p.raw.includes('_conversation'));
+  const usesConversationVar = prompts.some(promptUsesConversationVariable);
   if (concurrency <= 1) {
     return { concurrency, usesConversationVar };
   }
@@ -2416,7 +2519,7 @@ function adjustConcurrencyForSerialFeatures({
   const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
   if (usesConversationVar) {
     logger.info(
-      `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
+      `Setting concurrency to 1 because the ${chalk.cyan(CONVERSATION_VAR_NAME)} variable is used.`,
     );
     return { concurrency: 1, usesConversationVar };
   }
@@ -3003,9 +3106,44 @@ class Evaluator {
         return;
       }
 
+      // NOTE: trackCompletedRow runs before afterEach hooks intentionally. It only
+      // reads success/failureReason/tokenUsage — not namedScores or metadata — so
+      // the hook's mutations don't need to be applied first. If future changes add
+      // namedScores tracking here, move afterEach above this call.
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
       const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
+
+      // Apply afterEach hook mutations before persisting. Pass a shallow copy
+      // so in-place mutations don't corrupt the row on hook failure.
+      if (context.testSuite.extensions?.length) {
+        try {
+          const afterEachOut = await runExtensionHook(context.testSuite.extensions, 'afterEach', {
+            test: evalStep.test,
+            result: {
+              ...row,
+              namedScores: { ...row.namedScores },
+              metadata: { ...row.metadata },
+              response: row.response
+                ? { ...row.response, metadata: { ...row.response.metadata } }
+                : row.response,
+            },
+          });
+          // runExtensionHook sanitizes namedScores via filterFiniteScores;
+          // re-sanitize here to also catch in-place mutations that bypass the merge.
+          row.namedScores = filterFiniteScores(afterEachOut.result.namedScores);
+          row.metadata = afterEachOut.result.metadata;
+          if (row.response && afterEachOut.result.response) {
+            row.response.metadata = afterEachOut.result.response.metadata;
+          }
+        } catch (error) {
+          logger.error(
+            `afterEach extension hook failed, persisting row without hook modifications`,
+            { error },
+          );
+        }
+      }
+
       await this.persistEvalRow(row);
 
       if (this.abortIfTargetUnavailable(row, context)) {
@@ -3020,11 +3158,6 @@ class Evaluator {
         metrics,
         promptEvalCount,
         row,
-      });
-
-      await runExtensionHook(context.testSuite.extensions, 'afterEach', {
-        test: evalStep.test,
-        result: row,
       });
 
       context.options.progressCallback?.(
@@ -3205,11 +3338,9 @@ class Evaluator {
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
   }): Promise<Eval | undefined> {
-    let flushGroupedRows: (() => Promise<void>) | undefined;
-
     try {
       if (shouldGroupGradingByProvider) {
-        flushGroupedRows = await this.runGroupedEvalSteps({
+        await this.runGroupedEvalSteps({
           checkAbort,
           evalStepIndexMap,
           groupedRunEvalOptions,
@@ -3242,7 +3373,6 @@ class Evaluator {
         throw err;
       }
 
-      await flushGroupedRows?.();
       if (isEvalTimedOut()) {
         logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
       } else if (!processingContext.targetUnavailable) {
@@ -3281,7 +3411,7 @@ class Evaluator {
     processingContext: EvalProcessingContext;
     processedIndices: Set<number>;
     prompts: CompletedPrompt[];
-  }) {
+  }): Promise<void> {
     const providerCallQueue = new ProviderGroupedCallQueue();
     const groupedRows: GroupedRows[] = [];
     const processGroupedRows = async ({ evalStep, index, rows }: GroupedRows) => {
@@ -3325,12 +3455,23 @@ class Evaluator {
         }
       }
     } catch (error) {
-      await flushGroupedRows();
+      // Best-effort: flush any rows whose target calls completed but whose
+      // deferred grading hadn't started/completed yet, so a mid-eval interrupt
+      // doesn't lose the already-computed target outputs. Failures here must
+      // not shadow the original error, so we log and rethrow the outer error.
+      const pendingRowCount = groupedRows.reduce((sum, entry) => sum + entry.rows.length, 0);
+      try {
+        await flushGroupedRows();
+      } catch (flushError) {
+        logger.warn('Failed to flush grouped rows after error; target outputs may be lost', {
+          error: flushError instanceof Error ? flushError.message : String(flushError),
+          pendingRowCount,
+        });
+      }
       throw error;
     }
 
     await flushGroupedRows();
-    return undefined;
   }
 
   private async handleGroupedRowsAfterRun({
@@ -4212,6 +4353,14 @@ class Evaluator {
           `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
         );
       }
+
+      logGroupedGradingStatus({
+        concurrency,
+        hasEvalStepTimeout,
+        runEvalOptions,
+        shouldGroupGradingByProvider,
+        usesConversationVar,
+      });
     }
 
     // Now start the progress bar after info messages

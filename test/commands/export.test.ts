@@ -34,7 +34,6 @@ vi.mock('../../src/util', async (importOriginal) => {
 vi.mock('../../src/logger', () => ({
   default: {
     info: vi.fn(),
-    warn: vi.fn(),
     error: vi.fn(),
   },
 }));
@@ -190,6 +189,34 @@ describe('exportCommand', () => {
       expect.stringContaining('promptfoo export eval test-id -o output.jsonl'),
     );
     expect(process.exitCode).toBe(1);
+  });
+
+  it('should show specific command when JSON output is too large to stringify', async () => {
+    const originalStringify = JSON.stringify;
+    const stringifySpy = vi
+      .spyOn(JSON, 'stringify')
+      .mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
+        const [value] = args;
+        if (value && typeof value === 'object' && 'evalId' in value) {
+          throw new RangeError('Invalid string length');
+        }
+        return originalStringify(args[0], args[1], args[2]);
+      });
+    vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+
+    exportCommand(program);
+
+    try {
+      await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
+
+      expect(stringifySpy).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('promptfoo export eval test-id -o output.jsonl'),
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      stringifySpy.mockRestore();
+    }
   });
 
   it('should re-throw non-RangeError errors from console export', async () => {

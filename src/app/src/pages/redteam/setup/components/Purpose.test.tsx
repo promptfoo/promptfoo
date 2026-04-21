@@ -1,7 +1,8 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { callApi } from '@app/utils/api';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Purpose from './Purpose';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
@@ -70,7 +71,8 @@ describe('Purpose Component', () => {
   });
 
   describe('Navigation', () => {
-    it("should render a 'Back' button and call the provided onBack callback when clicked", () => {
+    it("should render a 'Back' button and call the provided onBack callback when clicked", async () => {
+      const user = userEvent.setup();
       const onBackMock = vi.fn();
       const onNextMock = vi.fn();
 
@@ -79,7 +81,7 @@ describe('Purpose Component', () => {
       const backButton = screen.getByRole('button', { name: /back/i });
       expect(backButton).toBeInTheDocument();
 
-      fireEvent.click(backButton);
+      await user.click(backButton);
 
       expect(onBackMock).toHaveBeenCalledTimes(1);
 
@@ -98,7 +100,8 @@ describe('Purpose Component', () => {
     });
   });
 
-  it('should enable the Next button when testMode is "model" and purpose is empty', () => {
+  it('should enable the Next button when testMode is "model" and purpose is empty', async () => {
+    const user = userEvent.setup();
     mockUseRedTeamConfig.mockReturnValue({
       config: {
         applicationDefinition: {
@@ -114,20 +117,23 @@ describe('Purpose Component', () => {
     renderComponent({ onNext: vi.fn() });
 
     const modelButton = screen.getByRole('button', { name: /testing a model/i });
-    fireEvent.click(modelButton);
+    await user.click(modelButton);
 
     const nextButton = screen.getByRole('button', { name: /next/i });
     expect(nextButton).toBeEnabled();
   });
 
-  it('should preserve form field values when navigating away and returning', () => {
+  it('should preserve form field values when navigating away and returning', async () => {
+    const user = userEvent.setup();
     const testPurpose = 'Updated test purpose';
     renderComponent({ onNext: vi.fn() });
 
     const purposeTextField = screen.getByPlaceholderText(/e\.g\. Assist healthcare professionals/i);
     expect(purposeTextField).toBeInTheDocument();
 
-    fireEvent.change(purposeTextField, { target: { value: testPurpose } });
+    await user.click(purposeTextField);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(testPurpose);
 
     expect(mockUpdateApplicationDefinition).toHaveBeenCalledTimes(1);
     expect(mockUpdateApplicationDefinition).toHaveBeenCalledWith('purpose', testPurpose);
@@ -142,18 +148,20 @@ describe('Purpose Component', () => {
     expect(descriptionElement).toBeInTheDocument();
   });
 
-  it("should display the description 'Describe the foundation model so we can generate targeted tests.' when testMode is set to 'model'", () => {
+  it("should display the description 'Describe the foundation model so we can generate targeted tests.' when testMode is set to 'model'", async () => {
+    const user = userEvent.setup();
     renderComponent({ onNext: vi.fn() });
 
     const modelButton = screen.getByRole('button', { name: /testing a model/i });
-    fireEvent.click(modelButton);
+    await user.click(modelButton);
 
     expect(
       screen.getByText('Describe the foundation model so we can generate targeted tests.'),
     ).toBeInTheDocument();
   });
 
-  it('should update description text immediately when switching between test modes', () => {
+  it('should update description text immediately when switching between test modes', async () => {
+    const user = userEvent.setup();
     renderComponent({ onNext: vi.fn() });
 
     const initialDescription = screen.getByText(
@@ -162,7 +170,7 @@ describe('Purpose Component', () => {
     const initialText = initialDescription.textContent;
 
     const modelButton = screen.getByRole('button', { name: /testing a model/i });
-    fireEvent.click(modelButton);
+    await user.click(modelButton);
 
     const updatedDescription = screen.getByText(
       'Describe the foundation model so we can generate targeted tests.',
@@ -174,7 +182,8 @@ describe('Purpose Component', () => {
   });
 
   describe('Long Text Input', () => {
-    it('should handle extremely long text input in the purpose field without breaking the UI or validation logic', () => {
+    it('should handle extremely long text input in the purpose field without breaking the UI or validation logic', async () => {
+      const user = userEvent.setup();
       const longText = 'This is a very long text input. '.repeat(200);
       const onNextMock = vi.fn();
 
@@ -195,7 +204,9 @@ describe('Purpose Component', () => {
       const purposeTextField = screen.getByPlaceholderText(/e.g. Assist healthcare professionals/i);
       expect(purposeTextField).toBeInTheDocument();
 
-      fireEvent.change(purposeTextField, { target: { value: longText } });
+      await user.click(purposeTextField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste(longText);
 
       expect(mockUpdateApplicationDefinition).toHaveBeenCalledTimes(1);
       expect(mockUpdateApplicationDefinition).toHaveBeenCalledWith('purpose', longText);
@@ -204,6 +215,7 @@ describe('Purpose Component', () => {
 
   describe('Target Purpose Discovery', () => {
     it('should display an error message when the target purpose discovery API call fails', async () => {
+      const user = userEvent.setup();
       const errorMessage = 'Failed to discover target purpose';
       const mockCallApi = vi.mocked(callApi);
       mockCallApi.mockRejectedValue(new Error(errorMessage));
@@ -228,7 +240,7 @@ describe('Purpose Component', () => {
       renderComponent({ onNext: vi.fn() });
 
       const discoverButton = screen.getByRole('button', { name: /discover/i });
-      fireEvent.click(discoverButton);
+      await user.click(discoverButton);
 
       await waitFor(() => {
         expect(screen.getByText(errorMessage)).toBeInTheDocument();
@@ -236,6 +248,7 @@ describe('Purpose Component', () => {
     });
 
     it('should display an error message when attempting to discover purpose with an empty URL', async () => {
+      const user = userEvent.setup();
       const errorMessage = 'Target URL is required';
       const mockCallApi = vi.mocked(callApi);
       mockCallApi.mockRejectedValue(new Error(errorMessage));
@@ -260,7 +273,7 @@ describe('Purpose Component', () => {
       renderComponent({ onNext: vi.fn() });
 
       const discoverButton = screen.getByRole('button', { name: /discover/i });
-      fireEvent.click(discoverButton);
+      await user.click(discoverButton);
 
       await waitFor(() => {
         expect(screen.getByText(errorMessage)).toBeInTheDocument();

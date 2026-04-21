@@ -1,3 +1,8 @@
+import {
+  getFirstStringAttribute,
+  getToolNameFromAttributes,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+} from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -25,47 +30,6 @@ export interface TrajectoryStep {
   type: TrajectoryStepType;
 }
 
-const TOOL_ATTRIBUTE_KEYS = [
-  'tool.name',
-  'tool_name',
-  'tool',
-  'function.name',
-  'function_name',
-  'gen_ai.tool.name',
-  'codex.mcp.tool',
-  'agent.tool',
-  'agent.tool_name',
-  'agent.toolName',
-] as const;
-
-const TOOL_ARGUMENT_ATTRIBUTE_KEYS = [
-  'tool.arguments',
-  'tool.args',
-  'tool.input',
-  'tool_arguments',
-  'tool_args',
-  'tool_input',
-  'function.arguments',
-  'function.args',
-  'function.input',
-  'function_arguments',
-  'function_args',
-  'gen_ai.tool.arguments',
-  'gen_ai.tool.args',
-  'gen_ai.tool.input',
-  'gen_ai.tool.call.arguments',
-  'gen_ai.tool.call.args',
-  'agent.tool.arguments',
-  'agent.tool.args',
-  'agent.tool.input',
-  'codex.mcp.arguments',
-  'codex.mcp.args',
-  'codex.mcp.input',
-  'arguments',
-  'args',
-  'input',
-] as const;
-
 const COMMAND_ATTRIBUTE_KEYS = [
   'codex.command',
   'command',
@@ -76,6 +40,7 @@ const COMMAND_ATTRIBUTE_KEYS = [
 const SEARCH_ATTRIBUTE_KEYS = ['codex.search.query', 'search.query', 'search_query'] as const;
 
 const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
+const COMMAND_TOOL_NAMES = new Set(['exec_command', 'local_shell', 'shell']);
 
 const SEARCH_SPAN_NAME_PATTERN = /(^|[\s._:/-])(search|find|lookup|retriev(?:e|al))($|[\s._:/-])/i;
 
@@ -99,19 +64,6 @@ interface JudgeTrajectoryStep {
 
 interface OmittedJudgeTrajectorySteps {
   omittedCount: number;
-}
-
-function getStringAttribute(
-  attributes: TrajectoryAttributes,
-  keys: readonly string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = attributes[key];
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-  }
-  return undefined;
 }
 
 function normalizeStructuredAttribute(value: unknown): unknown {
@@ -170,10 +122,14 @@ function getCommandExecutable(command: string): string | undefined {
   return executable || undefined;
 }
 
+function isCommandToolName(toolName: string | undefined): boolean {
+  return !!toolName && COMMAND_TOOL_NAMES.has(toolName.trim().toLowerCase());
+}
+
 function extractToolName(span: TraceSpan): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, TOOL_ATTRIBUTE_KEYS);
+  const directMatch = getToolNameFromAttributes(attributes);
   if (directMatch) {
     return directMatch;
   }
@@ -230,10 +186,14 @@ function extractToolArgs(span: TraceSpan): unknown {
   return undefined;
 }
 
-function extractCommand(span: TraceSpan): string | undefined {
+function extractCommand(
+  span: TraceSpan,
+  toolName = extractToolName(span),
+  getToolArgs = () => extractToolArgs(span),
+): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
+  const directMatch = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
   }
@@ -248,6 +208,24 @@ function extractCommand(span: TraceSpan): string | undefined {
     }
   }
 
+  const toolArgs = getToolArgs();
+  if (isCommandToolName(toolName) && toolArgs && typeof toolArgs === 'object') {
+    const args = toolArgs as Record<string, unknown>;
+    const command = args.cmd ?? args.command;
+    if (typeof command === 'string' && command.trim()) {
+      return command.trim();
+    }
+    if (Array.isArray(command)) {
+      const joined = command
+        .map((part) => String(part).trim())
+        .filter(Boolean)
+        .join(' ');
+      if (joined) {
+        return joined;
+      }
+    }
+  }
+
   if (span.name.startsWith('exec ')) {
     return span.name.slice('exec '.length).trim();
   }
@@ -258,12 +236,12 @@ function extractCommand(span: TraceSpan): string | undefined {
 function extractSearchQuery(span: TraceSpan): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, SEARCH_ATTRIBUTE_KEYS);
+  const directMatch = getFirstStringAttribute(attributes, SEARCH_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
   }
 
-  const genericQuery = getStringAttribute(attributes, GENERIC_QUERY_ATTRIBUTE_KEYS);
+  const genericQuery = getFirstStringAttribute(attributes, GENERIC_QUERY_ATTRIBUTE_KEYS);
   if (genericQuery && isSearchLikeSpan(span)) {
     return genericQuery;
   }
@@ -312,7 +290,16 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
     })
     .map(({ span }) => {
       const toolName = extractToolName(span);
-      const command = extractCommand(span);
+      let toolArgs: unknown;
+      let hasExtractedToolArgs = false;
+      const getToolArgs = () => {
+        if (!hasExtractedToolArgs) {
+          toolArgs = extractToolArgs(span);
+          hasExtractedToolArgs = true;
+        }
+        return toolArgs;
+      };
+      const command = extractCommand(span, toolName, getToolArgs);
       const searchQuery = extractSearchQuery(span);
 
       let type: TrajectoryStepType = 'span';
@@ -320,11 +307,23 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
       const aliases = new Set<string>([span.name]);
       let args: unknown;
 
-      if (toolName) {
+      if (command && isCommandToolName(toolName)) {
+        type = 'command';
+        name = command;
+        aliases.add(command);
+        args = getToolArgs();
+        if (toolName) {
+          aliases.add(toolName);
+        }
+        const executable = getCommandExecutable(command);
+        if (executable) {
+          aliases.add(executable);
+        }
+      } else if (toolName) {
         type = 'tool';
         name = toolName;
         aliases.add(toolName);
-        args = extractToolArgs(span);
+        args = getToolArgs();
       } else if (command) {
         type = 'command';
         name = command;
@@ -459,13 +458,16 @@ function truncateJudgeTrajectorySteps(
 }
 
 export function summarizeTrajectoryForJudge(trace: TraceData): string {
-  const rawSteps = extractTrajectorySteps(trace).map((step, index) => ({
-    index: index + 1,
-    type: step.type,
-    name: step.name,
-    ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
-    ...(getTrajectoryStepStatus(step) ? { status: getTrajectoryStepStatus(step) } : {}),
-  }));
+  const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
+    const status = getTrajectoryStepStatus(step);
+    return {
+      index: index + 1,
+      type: step.type,
+      name: step.name,
+      ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
+      ...(status ? { status } : {}),
+    };
+  });
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);
   const steps = truncateJudgeTrajectorySteps(compactedSteps);
 

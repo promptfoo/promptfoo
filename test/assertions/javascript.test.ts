@@ -79,8 +79,9 @@ vi.mock('../../src/cliState', () => ({
   },
   basePath: '/base/path',
 }));
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
+vi.mock('../../src/matchers/rag', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');
   return {
     ...actual,
     matchesContextRelevance: vi

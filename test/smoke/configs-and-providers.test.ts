@@ -98,9 +98,27 @@ describe('Provider Smoke Tests', () => {
       // Exec provider should have executed the echo command
       expect(result.response.output).toContain('Echo from exec');
     });
+
+    // Regression for #8686: exec provider must close the child's stdin so that
+    // scripts reading from stdin (e.g. opencode) do not hang forever.
+    it('3.1.3 - exec provider closes stdin on child process', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/exec-provider-stdin.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'exec-provider-stdin-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.success).toBe(true);
+      expect(result.response.output).toContain('stdin closed');
+    });
   });
 
-  describe('3.3 OpenAI Tool Format', () => {
+  describe('3.3 OpenAI Providers', () => {
     it('3.3.1 - passes tools and tool_choice to providers', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/normalized-tools.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'normalized-tools-output.json');
@@ -145,9 +163,7 @@ describe('Provider Smoke Tests', () => {
       expect(specificOutput.tool_choice.type).toBe('function');
       expect(specificOutput.tool_choice.function.name).toBe('get_weather');
     });
-  });
 
-  describe('3.3 OpenAI Provider Errors', () => {
     it('3.3.2 - surfaces custom apiKeyEnvar in missing API key errors', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/openai-custom-api-key-envar.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'openai-custom-api-key-envar-output.json');
@@ -187,7 +203,6 @@ describe('Provider Smoke Tests', () => {
       if (exitCode !== 0) {
         const output = stdout + stderr;
         if (output.includes('python') || output.includes('Python')) {
-          console.warn('Skipping Python provider test - Python not available');
           return;
         }
       }

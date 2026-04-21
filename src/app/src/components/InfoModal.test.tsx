@@ -1,10 +1,15 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import InfoModal from './InfoModal';
 
 describe('InfoModal', () => {
   const mockOnClose = vi.fn();
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('does not render when closed', () => {
     renderWithProviders(<InfoModal open={false} onClose={mockOnClose} />);
@@ -17,7 +22,7 @@ describe('InfoModal', () => {
   });
 
   it('displays the correct version', () => {
-    process.env.VITE_PROMPTFOO_VERSION = '1.0.0';
+    vi.stubEnv('VITE_PROMPTFOO_VERSION', '1.0.0');
     renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     expect(screen.getByText('Version 1.0.0')).toBeInTheDocument();
   });
@@ -40,12 +45,13 @@ describe('InfoModal', () => {
     });
   });
 
-  it('calls onClose when Close button is clicked', () => {
+  it('calls onClose when Close button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     // Find the Close button in the footer (not the dialog X button)
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
-    fireEvent.click(footerCloseButton!);
+    await user.click(footerCloseButton!);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 

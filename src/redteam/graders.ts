@@ -6,6 +6,7 @@ import { BeavertailsGrader } from './plugins/beavertails';
 import { BflaGrader } from './plugins/bfla';
 import { BiasGrader } from './plugins/bias';
 import { BolaGrader } from './plugins/bola';
+import { createCodingAgentGraders } from './plugins/codingAgent/graders';
 import { CompetitorsGrader } from './plugins/competitors';
 import { CoppaGrader } from './plugins/compliance/coppa';
 import { FerpaGrader } from './plugins/compliance/ferpa';
@@ -291,6 +292,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:vlguard': new VLGuardGrader(),
   'promptfoo:redteam:vlsu': new VLSUGrader(),
   'promptfoo:redteam:wordplay': new WordplayGrader(),
+  ...createCodingAgentGraders(),
 };
 
 export function getGraderById(id: string): RedteamGraderBase | undefined {

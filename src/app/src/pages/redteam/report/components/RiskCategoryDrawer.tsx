@@ -203,9 +203,19 @@ const RiskCategoryDrawer = ({
         <div className="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-primary/30 hover:shadow-sm">
           {/* Header */}
           <CollapsibleTrigger asChild>
-            <button
-              type="button"
+            <div
+              role="button"
+              tabIndex={0}
               className="flex w-full flex-col gap-1 p-3 text-left cursor-pointer hover:bg-muted/50"
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) {
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.currentTarget.click();
+                }
+              }}
             >
               <div className="flex w-full items-center gap-3">
                 <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform [[data-state=closed]_&]:-rotate-90" />
@@ -222,6 +232,8 @@ const RiskCategoryDrawer = ({
                 <div className="flex items-center gap-2 shrink-0">
                   {hasSuggestions && (
                     <button
+                      type="button"
+                      aria-label="View suggestions"
                       className="rounded-md p-1 hover:bg-muted"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -256,7 +268,7 @@ const RiskCategoryDrawer = ({
                   </p>
                 </div>
               )}
-            </button>
+            </div>
           </CollapsibleTrigger>
 
           {/* Collapsible content */}
