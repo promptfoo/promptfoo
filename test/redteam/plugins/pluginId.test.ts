@@ -1,9 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+
+import { describe, expect, it } from 'vitest';
 import {
+  ADDITIONAL_PLUGINS,
   ALL_PLUGINS,
   BASE_PLUGINS,
-  ADDITIONAL_PLUGINS,
+  BIAS_PLUGINS,
   CONFIG_REQUIRED_PLUGINS,
   HARM_PLUGINS,
   PII_PLUGINS,
@@ -119,12 +122,11 @@ describe('Plugin IDs', () => {
 
     // For each plugin ID found in the implementations, check if it matches an expected format
     const unexpectedPlugins: { id: string; baseId: string }[] = [];
+    const idsMissingPrefix: string[] = [];
 
     uniqueIds.forEach((id) => {
       if (!id.startsWith('promptfoo:redteam:') && id !== 'policy') {
-        console.warn(
-          `Plugin ID '${id}' does not start with the expected prefix 'promptfoo:redteam:'`,
-        );
+        idsMissingPrefix.push(id);
       }
 
       if (!expectedPrefixedPluginIds.has(id) && id !== 'policy') {
@@ -139,7 +141,9 @@ describe('Plugin IDs', () => {
             ...ADDITIONAL_PLUGINS,
             ...CONFIG_REQUIRED_PLUGINS,
             ...PII_PLUGINS,
+            ...BIAS_PLUGINS,
             'pii', // Add the general pii plugin
+            'bias', // Add the general bias plugin
             'harmful', // Add the general harmful plugin
             ...Object.keys(HARM_PLUGINS),
           ];
@@ -147,7 +151,6 @@ describe('Plugin IDs', () => {
           const matchesExpectedPlugin = allPluginsList.some((p) => baseId === p);
 
           if (!matchesExpectedPlugin) {
-            console.warn(`Plugin ID '${id}' (base: '${baseId}') is not listed in constants`);
             unexpectedPlugins.push({ id, baseId });
           }
         }
@@ -155,6 +158,16 @@ describe('Plugin IDs', () => {
     });
 
     // Make a single assertion for all unexpected plugins
-    expect(unexpectedPlugins).toEqual([]);
+    expect(
+      { unexpectedPlugins, idsMissingPrefix },
+      [
+        'Unexpected plugin IDs:',
+        ...unexpectedPlugins.map(({ id, baseId }) => `  - ${id} (base: ${baseId})`),
+        idsMissingPrefix.length > 0 ? 'IDs missing promptfoo:redteam: prefix:' : '',
+        ...idsMissingPrefix.map((id) => `  - ${id}`),
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    ).toEqual({ unexpectedPlugins: [], idsMissingPrefix: [] });
   });
 });

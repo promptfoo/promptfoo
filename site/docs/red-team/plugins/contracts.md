@@ -1,5 +1,6 @@
 ---
 sidebar_label: Contracts
+description: Red team AI contract vulnerabilities by testing for unauthorized commitments and agreements to protect systems from inadvertent legal exposure and business risks
 ---
 
 # Contracts Plugin

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-dalle
+cd redteam-dalle
 ```
 
 This example demonstrates how to use promptfoo to automatically discover jailbreaks in OpenAI's DALL-E image generation model. It includes pre-configured test cases that attempt to generate various types of harmful content.
@@ -40,7 +41,6 @@ This example demonstrates how to use promptfoo to automatically discover jailbre
    ```
 
    Important table settings:
-
    - Under TABLE SETTINGS, enable "Render model outputs as Markdown" to display generated images
    - Set "Max text length" to unlimited to view complete responses
    - Click the magnifying glass icon (🔍) in the "View output and test details" column to see the final modified prompt that was used, complete conversation history, and scoring breakdown for each iteration.
@@ -49,7 +49,7 @@ This example demonstrates how to use promptfoo to automatically discover jailbre
 
 During evaluation, you may see error messages like:
 
-```
+```text
 Error from target provider: 400 Your request was rejected as a result of our safety system.
 Error from target provider: 400 This request has been blocked by our content filters.
 ```

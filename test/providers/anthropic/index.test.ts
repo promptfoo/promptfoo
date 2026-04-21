@@ -1,22 +1,23 @@
+import { describe, expect, it } from 'vitest';
 import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 import {
-  DEFAULT_ANTHROPIC_MODEL,
   AnthropicLlmRubricProvider,
+  DEFAULT_ANTHROPIC_MODEL,
   getAnthropicProviders,
 } from '../../../src/providers/anthropic/defaults';
 import { AnthropicGenericProvider } from '../../../src/providers/anthropic/generic';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import {
   ANTHROPIC_MODELS,
-  outputFromMessage,
-  parseMessages,
   calculateAnthropicCost,
   getTokenUsage,
+  outputFromMessage,
+  parseMessages,
 } from '../../../src/providers/anthropic/util';
 
 describe('Anthropic modules', () => {
   it('should export core values', () => {
-    expect(DEFAULT_ANTHROPIC_MODEL).toBeDefined();
+    expect(DEFAULT_ANTHROPIC_MODEL).toBe('claude-sonnet-4-6');
     // Types are exported but we don't need to check them as values
     // AnthropicMessageOptions and AnthropicCompletionOptions are types, not values
   });

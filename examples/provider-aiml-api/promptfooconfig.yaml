@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare AI models with AI/ML API
+
+providers:
+  - aimlapi:chat:deepseek-r1
+  - aimlapi:chat:gpt-4.1-mini
+  - aimlapi:chat:claude-4-sonnet
+
+prompts:
+  - 'Tell me a joke about {{topic}}'
+
+tests:
+  - vars:
+      topic: 'programming'
+    assert:
+      - type: contains-any
+        value: ['code', 'bug', 'debug', 'programmer', 'developer', 'software']
+      - type: llm-rubric
+        value: 'Is this actually funny?'
+
+  - vars:
+      topic: 'artificial intelligence'
+    assert:
+      - type: contains-any
+        value: ['AI', 'robot', 'machine', 'learning', 'neural']
+      - type: llm-rubric
+        value: 'Does the joke make sense and is it appropriate?'

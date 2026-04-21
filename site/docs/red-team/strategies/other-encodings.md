@@ -1,6 +1,5 @@
 ---
 sidebar_position: 102
-title: Other Encodings - Alternative Text Transformation Strategies
 description: Learn how to test LLM resilience using camelCase, Morse code, Pig Latin, and emoji-based text transformations to bypass content filters and evaluate model security.
 ---
 
@@ -137,7 +136,7 @@ prompts:
   - 'Answer this question: {{prompt}}'
 
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 
 # Red team config
 redteam:

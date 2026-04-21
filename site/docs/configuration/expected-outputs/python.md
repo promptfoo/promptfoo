@@ -1,11 +1,18 @@
 ---
 sidebar_position: 51
 sidebar_label: Python
+description: Create advanced Python validation scripts with complex logic, external APIs, and ML libraries for sophisticated output grading
 ---
 
 # Python assertions
 
 The `python` assertion allows you to provide a custom Python function to validate the LLM output.
+
+:::tip Python Overview
+
+For an overview of all Python integrations (providers, assertions, test generators, prompts), see the [Python integration guide](/docs/integrations/python).
+
+:::
 
 A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
 
@@ -50,7 +57,21 @@ assert:
 A `context` object is available in the Python function. Here is its type definition:
 
 ```py
-from typing import Any, Dict, Optional, TypedDict, Union
+from typing import Any, Dict, List, Optional, TypedDict, Union
+
+class TraceSpan(TypedDict):
+    spanId: str
+    parentSpanId: Optional[str]
+    name: str
+    startTime: int  # Unix timestamp in milliseconds
+    endTime: Optional[int]  # Unix timestamp in milliseconds
+    attributes: Optional[Dict[str, Any]]
+    statusCode: Optional[int]
+    statusMessage: Optional[str]
+
+class TraceData(TypedDict):
+    traceId: str
+    spans: List[TraceSpan]
 
 class AssertionValueFunctionContext(TypedDict):
     # Raw prompt sent to LLM
@@ -73,6 +94,9 @@ class AssertionValueFunctionContext(TypedDict):
 
     # The complete provider response
     providerResponse: Optional[Any]  # ProviderResponse type
+
+    # OpenTelemetry trace data (when tracing is enabled)
+    trace: Optional[TraceData]
 ```
 
 For example, if the test case has a var `example`, access it in Python like this:
@@ -176,6 +200,80 @@ class GradingResult:
     named_scores: Optional[Dict[str, float]] = None  # Appear as metrics in the UI
 ```
 
+:::tip Snake case support
+Python snake_case fields are automatically mapped to camelCase:
+
+- `pass_` → `pass` (or just use `"pass"` as a dictionary key)
+- `named_scores` → `namedScores`
+- `component_results` → `componentResults`
+- `tokens_used` → `tokensUsed`
+  :::
+
+## Using trace data
+
+When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
+
+```py
+def get_assert(output: str, context) -> Union[bool, float, Dict[str, Any]]:
+    # Check if trace data is available
+    if not hasattr(context, 'trace') or context.trace is None:
+        # Tracing not enabled, skip trace-based checks
+        return True
+
+    # Access trace spans
+    spans = context.trace['spans']
+
+    # Example: Check for errors in any span
+    error_spans = [s for s in spans if s.get('statusCode', 0) >= 400]
+    if error_spans:
+        return {
+            'pass': False,
+            'score': 0,
+            'reason': f"Found {len(error_spans)} error spans"
+        }
+
+    # Example: Calculate total trace duration
+    if spans:
+        duration = max(s.get('endTime', 0) for s in spans) - min(s['startTime'] for s in spans)
+        if duration > 5000:  # 5 seconds
+            return {
+                'pass': False,
+                'score': 0,
+                'reason': f"Trace took too long: {duration}ms"
+            }
+
+    # Example: Check for specific operations
+    api_calls = [s for s in spans if 'http' in s['name'].lower()]
+    if len(api_calls) > 10:
+        return {
+            'pass': False,
+            'score': 0,
+            'reason': f"Too many API calls: {len(api_calls)}"
+        }
+
+    return True
+```
+
+Example YAML configuration:
+
+```yaml
+tests:
+  - vars:
+      query: "What's the weather?"
+    assert:
+      - type: python
+        value: |
+          # Ensure retrieval happened before response generation
+          if context.trace:
+              spans = context.trace['spans']
+              retrieval_span = next((s for s in spans if 'retrieval' in s['name']), None)
+              generation_span = next((s for s in spans if 'generation' in s['name']), None)
+              
+              if retrieval_span and generation_span:
+                  return retrieval_span['startTime'] < generation_span['startTime']
+          return True
+```
+
 ## Overriding the Python binary
 
 By default, promptfoo will run `python` in your shell. Make sure `python` points to the appropriate executable.
@@ -183,6 +281,16 @@ By default, promptfoo will run `python` in your shell. Make sure `python` points
 If a `python` binary is not present, you will see a "python: command not found" error.
 
 To override the Python binary, set the `PROMPTFOO_PYTHON` environment variable. You may set it to a path (such as `/path/to/python3.11`) or just an executable in your PATH (such as `python3.11`).
+
+## Negation
+
+Use `not-python` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-python
+    value: "'error' in output"
+```
 
 ## Other assertion types
 

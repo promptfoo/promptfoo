@@ -1,37 +1,81 @@
-import React, { useState } from 'react';
-import { useUIStore } from '@app/stores/uiStore';
-import DownloadIcon from '@mui/icons-material/Download';
-import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
-import Tooltip from '@mui/material/Tooltip';
-import type { ResultsFile } from '@promptfoo/types';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-import { convertEvalDataToCsv } from '../utils/csvExport';
+import { useState } from 'react';
+
+import { Button } from '@app/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@app/components/ui/dropdown-menu';
+import { DownloadIcon } from '@app/components/ui/icons';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { stringify } from 'csv-stringify/browser/esm/sync';
+import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
+import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
   evalDescription: string;
   evalData: ResultsFile;
 }
 
-const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
-  evalDescription,
-  evalData,
-}) => {
+const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButtonProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const setNavbarVisible = useUIStore((state) => state.setNavbarVisible);
 
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
-  };
+  const { recordEvent } = useTelemetry();
 
-  const handleClose = () => {
-    setAnchorEl(null);
-  };
+  const customPoliciesById = useCustomPoliciesMap(evalData.config?.redteam?.plugins ?? []);
+
+  function convertEvalDataToCsv(evalData: ResultsFile): string {
+    const rows = evalData.results.results.map((result: EvaluateResult, index: number) => {
+      let pluginDisplayName = null;
+
+      const pluginId = getPluginIdFromResult(result);
+      if (pluginId) {
+        const customPolicy = customPoliciesById[pluginId];
+        if (customPolicy) {
+          pluginDisplayName = customPolicy.name;
+        } else {
+          pluginDisplayName =
+            displayNameOverrides[pluginId as keyof typeof displayNameOverrides] || pluginId;
+        }
+      }
+
+      return {
+        'Test ID': index + 1,
+        Plugin: pluginDisplayName,
+        'Plugin ID': pluginId ?? '',
+        // TODO: getStrategyIdFromTest expects TestWithMetadata but we're passing testCase directly
+        // biome-ignore lint/suspicious/noExplicitAny: Type mismatch between AtomicTestCase and TestWithMetadata
+        Strategy: getStrategyIdFromTest(result.testCase as any),
+        Target: result.provider.label || result.provider.id || '',
+        Prompt:
+          result.vars.query?.toString() ||
+          result.vars.prompt?.toString() ||
+          result.prompt.raw ||
+          '',
+        Response: result.response?.output || '',
+        Pass:
+          result.gradingResult?.pass === true
+            ? `Pass${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`
+            : `Fail${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`,
+        Score: result.gradingResult?.score || '',
+        Reason: result.gradingResult?.reason || '',
+        Timestamp: new Date(evalData.createdAt).toISOString(),
+      };
+    });
+
+    return stringify(rows, {
+      header: true,
+      quoted: true,
+      quoted_string: true,
+      quoted_empty: true,
+    });
+  }
 
   const getFilename = (extension: string) => {
     return evalDescription
@@ -42,37 +86,14 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
       : `report.${extension}`;
   };
 
-  const handlePdfDownload = async () => {
-    setIsDownloading(true);
-    handleClose();
-    setNavbarVisible(false);
-
-    try {
-      setTimeout(async () => {
-        const element = document.documentElement;
-        const canvas = await html2canvas(element, {
-          height: Math.max(element.scrollHeight, element.offsetHeight),
-          windowHeight: document.documentElement.scrollHeight,
-        });
-        const data = canvas.toDataURL('image/png');
-
-        const pdf = new jsPDF('p', 'pt', [canvas.width, canvas.height]);
-        pdf.addImage(data, 'PNG', 0, 0, canvas.width, canvas.height);
-        pdf.save(getFilename('pdf'));
-
-        setIsDownloading(false);
-        setNavbarVisible(true);
-      }, 100);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      setIsDownloading(false);
-      setNavbarVisible(true);
-    }
-  };
-
   const handleCsvDownload = () => {
     setIsDownloading(true);
-    handleClose();
+
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'csv',
+    });
 
     try {
       const csv = convertEvalDataToCsv(evalData);
@@ -95,7 +116,12 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
 
   const handleJsonDownload = () => {
     setIsDownloading(true);
-    handleClose();
+
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'json',
+    });
 
     try {
       const jsonData = JSON.stringify(evalData, null, 2);
@@ -116,38 +142,41 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
     }
   };
 
+  const handlePdfDownload = () => {
+    // Track report export
+    recordEvent('webui_action', {
+      action: 'redteam_report_export',
+      format: 'pdf',
+    });
+    window.print();
+  };
+
   return (
-    <>
-      <Tooltip title="Download report" placement="top" open={isHovering && !isDownloading}>
-        <IconButton
-          onClick={handleClick}
-          onMouseEnter={() => setIsHovering(true)}
-          onMouseLeave={() => setIsHovering(false)}
-          sx={{ mt: '4px', position: 'relative' }}
-          aria-label="download report"
-          disabled={isDownloading}
-        >
-          {isDownloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-        </IconButton>
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onMouseEnter={() => setIsHovering(true)}
+              onMouseLeave={() => setIsHovering(false)}
+              aria-label="download report"
+              disabled={isDownloading}
+              className="mt-1 text-muted-foreground hover:text-foreground"
+            >
+              {isDownloading ? <Spinner size="sm" /> : <DownloadIcon className="size-5" />}
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        {isHovering && !isDownloading && <TooltipContent>Download report</TooltipContent>}
       </Tooltip>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-      >
-        <MenuItem onClick={handlePdfDownload}>Download as PDF</MenuItem>
-        <MenuItem onClick={handleCsvDownload}>Download as CSV</MenuItem>
-        <MenuItem onClick={handleJsonDownload}>Download as JSON</MenuItem>
-      </Menu>
-    </>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={handlePdfDownload}>PDF</DropdownMenuItem>
+        <DropdownMenuItem onClick={handleCsvDownload}>CSV</DropdownMenuItem>
+        <DropdownMenuItem onClick={handleJsonDownload}>JSON</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

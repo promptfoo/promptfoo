@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
@@ -8,8 +9,7 @@ import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../components/LogoContainer';
-import NewsletterForm from '../components/NewsletterForm';
-import styles from './llm-vulnerability-scanner.module.css';
+import styles from './landing-page.module.css';
 
 function HeroSection() {
   return (
@@ -18,7 +18,7 @@ function HeroSection() {
         <img src="/img/guardrails-framed.png" alt="AI Guardrails" className={styles.heroImage} />
         <div className={styles.logoSection}>
           Promptfoo is trusted by teams at...
-          <LogoContainer noBackground noBorder />
+          <LogoContainer className={styles.heroLogos} noBackground noBorder />
         </div>
         {/*
         <h2>Guardrails that evolve with emerging threats</h2>
@@ -34,19 +34,21 @@ function HeroSection() {
 
 function GuardrailsHeader() {
   return (
-    <header className={clsx('hero hero--primary', styles.heroBanner)}>
+    <header className={clsx('hero', styles.heroBanner)}>
       <div className="container">
-        <h1 className={styles.heroTitle}>AI Guardrails that learn & adapt</h1>
-        <p className={styles.heroSubtitle}>
-          Self-improving protection powered by continuous red teaming feedback
-        </p>
-        <div className={styles.buttons}>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonPrimary)}
-            to="/contact/"
-          >
-            Request a demo
-          </Link>
+        <div className={styles.heroContent}>
+          <h1 className={styles.heroTitle}>AI Guardrails that learn & adapt</h1>
+          <p className={styles.heroSubtitle}>
+            Self-improving protection powered by continuous red teaming feedback
+          </p>
+          <div className={styles.heroButtons}>
+            <Link
+              className={clsx('button button--primary button--lg', styles.buttonPrimary)}
+              to="/contact/"
+            >
+              Request a Demo
+            </Link>
+          </div>
         </div>
       </div>
       <HeroSection />
@@ -54,36 +56,15 @@ function GuardrailsHeader() {
   );
 }
 
-function FeaturesSection() {
-  return (
-    <section className={styles.featuresSection}>
-      <div className="container">
-        <div className={styles.features}>
-          <div className={styles.featureItem}>
-            <h3>Self-Improving Security</h3>
-            <p>Guardrails that continuously learn from red team findings.</p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Third-Party Validation</h3>
-            <p>Test and verify any guardrail system, including existing third-party solutions.</p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Comprehensive Content Protection</h3>
-            <p>
-              Advanced filtering against harmful content, PII exposure, and inappropriate outputs.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function BenefitsSection() {
   return (
     <section className={styles.benefitsSection}>
       <div className="container">
-        <h2 className={styles.sectionTitle}>Why choose our adaptive guardrails?</h2>
+        <div className={styles.sectionEyebrow}>THE ADAPTIVE ADVANTAGE</div>
+        <h2 className={styles.sectionTitle}>Why choose adaptive guardrails?</h2>
+        <p className={styles.sectionSubtitle}>
+          Move beyond static rules to guardrails that evolve with emerging threats
+        </p>
         <div className={styles.benefitsList}>
           <div className={styles.benefitItem}>
             <ShieldIcon className={styles.benefitIcon} />
@@ -135,8 +116,9 @@ function ActionOrientedSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Guardrails that get smarter over time</h2>
-        <p>
+        <div className={styles.sectionEyebrow}>ADAPTIVE LEARNING</div>
+        <h2 className={styles.sectionTitle}>Guardrails that get smarter over time</h2>
+        <p className={styles.sectionSubtitle}>
           Our unique feedback loop between red teaming and guardrails creates a continuously
           improving defense system.
         </p>
@@ -156,8 +138,9 @@ function ContinuousMonitoringSection() {
   return (
     <section className={styles.actionOrientedSection}>
       <div className="container">
-        <h2>Third-Party Guardrail Validation</h2>
-        <p>
+        <div className={styles.sectionEyebrow}>INDEPENDENT VALIDATION</div>
+        <h2 className={styles.sectionTitle}>Third-Party Guardrail Validation</h2>
+        <p className={styles.sectionSubtitle}>
           Already using another guardrail system? Our platform can validate and improve any
           guardrail solution.
         </p>
@@ -176,23 +159,26 @@ function ContinuousMonitoringSection() {
 
 function CallToActionSection() {
   return (
-    <section className={styles.callToActionSection}>
+    <section className={styles.finalCTA}>
       <div className="container">
-        <h2>Upgrade to guardrails that learn and adapt</h2>
-        <div className={styles.buttons}>
-          <Link
-            className={clsx('button button--secondary button--lg', styles.buttonSecondary)}
-            to="/contact/"
-          >
-            Request a Demo
+        <h2 className={styles.finalCTATitle}>Upgrade to guardrails that learn and adapt</h2>
+        <p className={styles.finalCTASubtitle}>
+          Join leading enterprises using adaptive AI guardrails to stay ahead of emerging threats.
+        </p>
+        <div className={styles.finalCTAButtons}>
+          <Link className="button button--primary button--lg" to="/contact/">
+            Request Demo
           </Link>
+        </div>
+        <div className={styles.finalCTATrust}>
+          <p>✓ Self-improving • ✓ Third-party validation • ✓ Cloud or on-premise</p>
         </div>
       </div>
     </section>
   );
 }
 
-export default function Guardrails(): JSX.Element {
+export default function Guardrails(): React.ReactElement {
   return (
     <Layout
       title="AI Guardrails"
@@ -205,12 +191,10 @@ export default function Guardrails(): JSX.Element {
       <div className={styles.pageContainer}>
         <GuardrailsHeader />
         <main className={styles.mainContent}>
-          {/*<FeaturesSection />*/}
           <ActionOrientedSection />
           <ContinuousMonitoringSection />
           <BenefitsSection />
           <CallToActionSection />
-          <NewsletterForm />
         </main>
       </div>
     </Layout>

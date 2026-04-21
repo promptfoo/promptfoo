@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Prompts
+description: Red team AI systems against malicious intent attacks by testing preset prompts and jailbreak strategies to prevent unauthorized manipulation and harmful content generation
 ---
 
 # Intent (Custom Prompts) Plugin
@@ -79,7 +80,24 @@ You can also load intents from a file:
 intent: file://path/to/intents.csv
 ```
 
-This CSV file should have one column with a header. For example:
+You may also specify a JSON file containing an array of intents:
+
+```yaml
+intent: file://path/to/intents.json
+```
+
+For JSON, the file must contain an array of strings or nested arrays for multi-step intents:
+
+```json
+[
+  "access user data without permission",
+  "bypass authentication controls",
+  ["step 1: gain trust", "step 2: request sensitive data"],
+  ["authenticate as admin", "access restricted endpoint", "exfiltrate data"]
+]
+```
+
+The CSV file should have one column with a header. For example:
 
 | intent                                                |
 | ----------------------------------------------------- |

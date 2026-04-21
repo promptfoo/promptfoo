@@ -1,0 +1,2 @@
+CREATE INDEX `eval_result_metadata_plugin_id_idx` ON `eval_results` (json_extract(metadata, '$.pluginId'));--> statement-breakpoint
+CREATE INDEX `eval_result_metadata_strategy_id_idx` ON `eval_results` (json_extract(metadata, '$.strategyId'));

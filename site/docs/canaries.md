@@ -1,6 +1,12 @@
-# Training Canary
+---
+title: Training Canaries
+description: Use promptfoo training canaries to detect whether prompt data may have been memorized by an LLM provider.
+sidebar_label: Training canaries
+---
 
-The training canary is a tool for detecting if your prompt data has been used to train an LLM without your knowledge. It works by injecting unique, identifiable "canary tokens" into your conversations with an LLM and then checking later if these tokens have been memorized - a sign that your data was used for training.
+# Training Canaries
+
+Training canaries help detect whether prompt data has been used to train an LLM without your knowledge. They work by injecting unique, identifiable "canary tokens" into conversations with an LLM, then checking later whether those tokens have been memorized.
 
 ## How It Works
 
@@ -8,7 +14,7 @@ The training canary is a tool for detecting if your prompt data has been used to
 2. **Wait Period**: Allow time for potential training cycles to occur
 3. **Check Phase**: Test if the model remembers your unique canaries
 
-The canary is deterministically generated from your provider configuration, ensuring you can check for the same canary later without having to store it. We use sophisticated LLM-generated content to create canaries that are more likely to be memorized during training.
+The canary is deterministically generated from your provider configuration, so you can check for the same canary later without storing it. Promptfoo uses LLM-generated content to create canaries that are more likely to be memorized during training.
 
 ## Privacy and Security
 
@@ -34,7 +40,7 @@ providers: # or "targets"
 
 The canary commands will automatically use all providers from your configuration file. If you have multiple providers defined, it will send/check canaries for all of them.
 
-For more information on configuring providers, see the [provider documentation](/docs/configuration/providers/).
+For more information on configuring providers, see the [provider documentation](/docs/providers/).
 
 ### Sending a Canary
 
@@ -83,7 +89,7 @@ This command:
 2. Regenerates the same hash used when sending the canary for each provider
 3. Gets probe messages and detection patterns from the server
 4. Sends probes to all providers and analyzes responses locally
-5. Applies sophisticated detection strategies to identify potential canary leakage
+5. Applies detection strategies to identify potential canary leakage
 
 You can use different check modes for more thorough testing:
 
@@ -105,7 +111,7 @@ promptfoo canary check --mode semantic
 
 ## Canary Types Generated
 
-The system uses generates diverse canary types:
+The system generates diverse canary types:
 
 1. **Direct canary tokens**: Unique identifiers that include the hash
 2. **False facts**: Made-up but plausible-sounding facts that include the hash
@@ -121,7 +127,7 @@ The system uses generates diverse canary types:
 The detection process follows a straightforward approach:
 
 1. Promptfoo generates probe messages designed to elicit responses that might reveal memorization, along with detection patterns with confidence scores for different match types
-2. These probes to the target LLM
+2. Promptfoo sends these probes to the target LLM
 3. Promptfoo looks for exact, partial, and semantic matches in the responses
 4. Confidence scores are calculated based on the match type and quality
 

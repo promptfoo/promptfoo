@@ -1,15 +1,48 @@
 import { getEnvInt } from '../../../envars';
+import logger from '../../../logger';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
-import type { PluginActionParams, TestCase } from '../../../types';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
-import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
+import { extractPromptFromTags, extractVariablesFromJson } from '../../util';
 import { createTestCase } from './common';
 
-export const PLUGIN_ID = 'promptfoo:redteam:harmful';
+import type { PluginActionParams, TestCase } from '../../../types/index';
+import type { UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../constants';
+
+/**
+ * Extract content from <Prompt> tags and parse JSON if inputs are defined.
+ * Returns the processed prompt and any additional vars extracted from JSON.
+ */
+function processPromptForInputs(
+  prompt: string,
+  _injectVar: string,
+  inputs: Record<string, string> | undefined,
+): { processedPrompt: string; additionalVars: Record<string, string> } {
+  let processedPrompt = prompt.trim();
+  const additionalVars: Record<string, string> = {};
+
+  // Extract content from <Prompt> tags if present
+  const extractedPrompt = extractPromptFromTags(processedPrompt);
+  if (extractedPrompt) {
+    processedPrompt = extractedPrompt;
+  }
+
+  // If inputs are defined, try to parse JSON and extract individual keys
+  if (inputs && Object.keys(inputs).length > 0) {
+    try {
+      const parsed = JSON.parse(processedPrompt);
+      Object.assign(additionalVars, extractVariablesFromJson(parsed, inputs));
+    } catch {
+      // If parsing fails, processedPrompt is plain text - keep it as is
+      logger.debug('[Harmful] Could not parse prompt as JSON for multi-input mode');
+    }
+  }
+
+  return { processedPrompt, additionalVars };
+}
 
 export async function getHarmfulTests(
-  { purpose, injectVar, n, delayMs = 0 }: PluginActionParams,
+  { purpose, injectVar, n, delayMs = 0, config }: PluginActionParams,
   plugin: keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
 ): Promise<TestCase[]> {
   const maxHarmfulTests = getEnvInt('PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST', 5);
@@ -17,6 +50,7 @@ export async function getHarmfulTests(
     purpose,
     n: Math.min(n, maxHarmfulTests),
     harmCategory: plugin,
+    config,
   });
 
   const generatePrompts = async (): Promise<string[]> => {
@@ -30,5 +64,20 @@ export async function getHarmfulTests(
     return [];
   };
   const allPrompts = await retryWithDeduplication(generatePrompts, n);
-  return sampleArray(allPrompts, n).map((prompt) => createTestCase(injectVar, prompt, plugin));
+  const inputs = config?.inputs as Record<string, string> | undefined;
+
+  return sampleArray(allPrompts, n).map((prompt) => {
+    const { processedPrompt, additionalVars } = processPromptForInputs(prompt, injectVar, inputs);
+    const testCase = createTestCase(injectVar, processedPrompt, plugin);
+
+    // Merge additional vars from JSON parsing
+    if (Object.keys(additionalVars).length > 0) {
+      testCase.vars = {
+        ...testCase.vars,
+        ...additionalVars,
+      };
+    }
+
+    return testCase;
+  });
 }

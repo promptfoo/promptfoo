@@ -1,7 +1,7 @@
 ---
 sidebar_label: Tree-based Jailbreaks
 title: Tree-based Jailbreaks Strategy
-description: Create a branching structure of single-shot prompts to systematically explore and bypass AI constraints
+description: Build tree-structured attack patterns with branching prompts to systematically map and exploit AI system constraint boundaries
 ---
 
 # Tree-based Jailbreaks Strategy
@@ -31,6 +31,16 @@ The Tree-based Jailbreaks strategy works by:
 :::warning
 This strategy is medium cost. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
+
+## Session Management
+
+When using `transformVars` with `context.uuid`, each branch exploration automatically gets a new UUID, maintaining the single-shot nature of each prompt variation.
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+```
 
 ![Tree-based Jailbreaks Strategy](/img/docs/tree-jailbreak.svg)
 
@@ -71,9 +81,10 @@ This approach can cover a wide range of inputs and identify weaknesses that migh
 
 ## Related Concepts
 
-- [Iterative Jailbreaks](iterative.md) - Similar approach using sequential refinement
-- [Prompt Injections](prompt-injection.md) - Simpler static approach to jailbreaking
-- [Multi-turn Jailbreaks](multi-turn.md) - Using conversation history to bypass constraints
+- [Iterative Jailbreaks](iterative.md) - Sequential refinement approach
+- [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
+- [Prompt Injections](prompt-injection.md) - Direct injection techniques
+- [Multi-turn Jailbreaks](multi-turn.md) - Conversation-based attacks
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
 

@@ -1,6 +1,7 @@
-import React from 'react';
-import { Typography, Box, Button } from '@mui/material';
+import { Button } from '@app/components/ui/button';
+import { cn } from '@app/lib/utils';
 import { StrategyItem } from './StrategyItem';
+
 import type { StrategyCardData } from './types';
 
 interface StrategySectionProps {
@@ -10,6 +11,12 @@ interface StrategySectionProps {
   onToggle: (id: string) => void;
   onConfigClick: (id: string) => void;
   onSelectNone?: (strategyIds: string[]) => void;
+  highlighted?: boolean;
+  description?: string;
+  isStrategyDisabled: (strategyId: string) => boolean;
+  isRemoteGenerationDisabled: boolean;
+  isStrategyAuthGated?: (strategyId: string) => boolean;
+  isStrategyConfigured?: (strategyId: string) => boolean;
 }
 
 export function StrategySection({
@@ -19,6 +26,12 @@ export function StrategySection({
   onToggle,
   onConfigClick,
   onSelectNone,
+  highlighted = false,
+  description,
+  isStrategyDisabled,
+  isRemoteGenerationDisabled,
+  isStrategyAuthGated,
+  isStrategyConfigured,
 }: StrategySectionProps) {
   const selectedStrategiesInSection = strategies
     .map((strategy) => strategy.id)
@@ -34,40 +47,31 @@ export function StrategySection({
   };
 
   return (
-    <Box sx={{ mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">{title}</Typography>
+    <div className="mb-8">
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h3 className={cn('text-lg font-semibold', highlighted && 'font-bold text-primary')}>
+            {title}
+          </h3>
+          {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        </div>
         {strategies.length > 0 && (
           <Button
-            variant="text"
-            size="small"
-            color="primary"
+            variant="ghost"
+            size="sm"
             onClick={handleSelectNone}
             disabled={selectedStrategiesInSection.length === 0}
-            sx={{
-              fontSize: '0.875rem',
-              fontWeight: 'normal',
-              padding: 0,
-              margin: 0,
-              '&:hover': {
-                backgroundColor: 'transparent',
-              },
-            }}
+            className="px-0 font-normal hover:bg-transparent"
           >
             Reset
           </Button>
         )}
-      </Box>
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: 'repeat(2, 1fr)',
-            lg: 'repeat(3, 1fr)',
-          },
-          gap: 2,
-        }}
+      </div>
+      <div
+        className={cn(
+          'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3',
+          highlighted && 'rounded-lg border border-primary/10 bg-primary/[0.02] p-4',
+        )}
       >
         {strategies.map((strategy) => (
           <StrategyItem
@@ -76,9 +80,13 @@ export function StrategySection({
             isSelected={selectedIds.includes(strategy.id)}
             onToggle={onToggle}
             onConfigClick={onConfigClick}
+            isDisabled={isStrategyDisabled(strategy.id)}
+            isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isAuthGated={isStrategyAuthGated ? isStrategyAuthGated(strategy.id) : false}
+            isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
           />
         ))}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

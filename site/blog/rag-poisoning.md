@@ -1,8 +1,21 @@
 ---
 title: 'RAG Data Poisoning: Key Concepts Explained'
-description: How attackers can manipulate AI responses by corrupting the knowledge base.
+description: Attackers can poison RAG knowledge bases to manipulate AI responses. Learn how these stealth attacks work and why they're so hard to detect.
 image: /img/docs/rag-poisoning.svg
+keywords:
+  [
+    RAG poisoning,
+    data poisoning,
+    retrieval augmented generation,
+    AI security,
+    vector database security,
+    knowledge base security,
+    indirect prompt injection,
+    RAG vulnerabilities,
+  ]
 date: 2024-11-04
+authors: [ian]
+tags: [security-vulnerability, best-practices, rag, data-poisoning]
 ---
 
 AI systems are under attack - and this time, it's their knowledge base that's being targeted. A new security threat called data poisoning lets attackers manipulate AI responses by corrupting the very documents these systems rely on for accurate information.
@@ -212,13 +225,13 @@ Depending on your system, there are multiple touchpoints where you can implement
 
 4. **Context Injection Detection**
 
-   Detect and block context injections by monitoring the RAG context for suspicious patterns or instructions using [guardrails](/docs/red-team/guardrails/).
+   Detect and block context injections by monitoring the RAG context for suspicious patterns or instructions using [guardrails](https://www.promptfoo.dev/guardrails/).
 
    There are also open source models that perform well here, such as [PromptGuard](https://huggingface.co/meta-llama/Prompt-Guard-86M) from Meta.
 
 5. **Response Filtering**
 
-   On the response side, [guardrails](/docs/red-team/guardrails/) can protect the output by comparing generated responses against a corpus of known-good examples using techniques like semantic similarity scoring.
+   On the response side, [guardrails](https://www.promptfoo.dev/guardrails/) can protect the output by comparing generated responses against a corpus of known-good examples using techniques like semantic similarity scoring.
 
    You may not need fancy guardrails to get started. Just a simple check on document relevance and semantic alignment can mitigate many types of poisoning attacks.
 

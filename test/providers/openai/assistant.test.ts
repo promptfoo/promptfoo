@@ -1,12 +1,17 @@
 import OpenAI from 'openai';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
-jest.mock('openai');
+import type { CallbackContext } from '../../../src/providers/openai/types';
+
+vi.mock('openai');
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -18,25 +23,25 @@ describe('OpenAI Provider', () => {
     let mockClient: any;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       mockClient = {
         beta: {
           threads: {
-            createAndRun: jest.fn(),
+            createAndRun: vi.fn(),
             runs: {
-              retrieve: jest.fn(),
-              submitToolOutputs: jest.fn(),
+              retrieve: vi.fn(),
+              submitToolOutputs: vi.fn(),
               steps: {
-                list: jest.fn(),
+                list: vi.fn(),
               },
             },
             messages: {
-              retrieve: jest.fn(),
+              retrieve: vi.fn(),
             },
           },
         },
       };
-      jest.mocked(OpenAI).mockImplementation(function (this: any) {
+      vi.mocked(OpenAI).mockImplementation(function (this: any) {
         Object.assign(this, mockClient);
         return this;
       });
@@ -47,7 +52,7 @@ describe('OpenAI Provider', () => {
         apiKey: 'test-key',
         organization: 'test-org',
         functionToolCallbacks: {
-          test_function: async (args: string) => 'Function result',
+          test_function: async (_args: string) => 'Function result',
         },
       },
     });
@@ -97,6 +102,60 @@ describe('OpenAI Provider', () => {
       expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.messages.retrieve).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve an explicit temperature of 0', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'message_creation',
+              message_creation: {
+                message_id: 'msg_1',
+              },
+            },
+          },
+        ],
+      };
+
+      const mockMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: {
+              value: 'Test response',
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      const provider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+          temperature: 0,
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          temperature: 0,
+        }),
+      );
     });
 
     it('should handle function calling', async () => {
@@ -214,14 +273,423 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle missing API key', async () => {
-      const providerNoKey = new OpenAiAssistantProvider('test-assistant-id');
-      process.env.OPENAI_API_KEY = '';
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
-      await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
-        'OpenAI API key is not set',
+      try {
+        const providerNoKey = new OpenAiAssistantProvider('test-assistant-id', {
+          env: {
+            OPENAI_API_KEY: undefined,
+          },
+        });
+
+        await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage(),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_ASSISTANT_API_KEY: undefined,
+      });
+
+      try {
+        const providerNoKey = new OpenAiAssistantProvider('test-assistant-id', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_ASSISTANT_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_ASSISTANT_API_KEY: undefined,
+          },
+        });
+
+        await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_ASSISTANT_API_KEY'),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+  });
+
+  describe('Function Callbacks with Context', () => {
+    let mockClient: any;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      disableCache();
+
+      mockClient = {
+        beta: {
+          threads: {
+            createAndRun: vi.fn(),
+            runs: {
+              retrieve: vi.fn(),
+              submitToolOutputs: vi.fn(),
+              steps: {
+                list: vi.fn(),
+              },
+            },
+            messages: {
+              retrieve: vi.fn(),
+            },
+          },
+        },
+      };
+
+      vi.mocked(OpenAI).mockImplementation(function (this: any) {
+        Object.assign(this, mockClient);
+        return this;
+      });
+    });
+
+    it('should pass context to function callbacks', async () => {
+      const mockCallback = vi.fn().mockResolvedValue('test result');
+
+      const provider = new OpenAiAssistantProvider('asst_test', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            test_function: mockCallback,
+          },
+        },
+      });
+
+      const mockRun = {
+        id: 'run_test',
+        thread_id: 'thread_test',
+        status: 'requires_action',
+        required_action: {
+          type: 'submit_tool_outputs',
+          submit_tool_outputs: {
+            tool_calls: [
+              {
+                id: 'call_test',
+                type: 'function',
+                function: {
+                  name: 'test_function',
+                  arguments: '{"param": "value"}',
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      const mockCompletedRun = {
+        ...mockRun,
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_test',
+            step_details: {
+              type: 'message_creation',
+              message_creation: {
+                message_id: 'msg_test',
+              },
+            },
+          },
+        ],
+      };
+
+      const mockMessage = {
+        id: 'msg_test',
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: {
+              value: 'Test response',
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve
+        .mockResolvedValueOnce(mockRun)
+        .mockResolvedValueOnce(mockCompletedRun);
+      mockClient.beta.threads.runs.submitToolOutputs.mockResolvedValue(mockCompletedRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      await provider.callApi('test prompt');
+
+      // Verify that the callback was called with the correct context
+      expect(mockCallback).toHaveBeenCalledWith(
+        { param: 'value' },
+        {
+          threadId: 'thread_test',
+          runId: 'run_test',
+          assistantId: 'asst_test',
+          provider: 'openai',
+        },
+      );
+    });
+
+    it('should work with callbacks that do not use context', async () => {
+      const oldStyleCallback = vi.fn().mockResolvedValue('old style result');
+
+      const provider = new OpenAiAssistantProvider('asst_test', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            old_function: oldStyleCallback,
+          },
+        },
+      });
+
+      const mockRun = {
+        id: 'run_test',
+        thread_id: 'thread_test',
+        status: 'requires_action',
+        required_action: {
+          type: 'submit_tool_outputs',
+          submit_tool_outputs: {
+            tool_calls: [
+              {
+                id: 'call_test',
+                type: 'function',
+                function: {
+                  name: 'old_function',
+                  arguments: '{"param": "value"}',
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      const mockCompletedRun = { ...mockRun, status: 'completed' };
+      const mockSteps = { data: [] };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve
+        .mockResolvedValueOnce(mockRun)
+        .mockResolvedValueOnce(mockCompletedRun);
+      mockClient.beta.threads.runs.submitToolOutputs.mockResolvedValue(mockCompletedRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+
+      await provider.callApi('test prompt');
+
+      // Callback should be called with args and context, but context is optional
+      expect(oldStyleCallback).toHaveBeenCalledWith(
+        { param: 'value' },
+        expect.objectContaining({
+          threadId: 'thread_test',
+          runId: 'run_test',
+          assistantId: 'asst_test',
+          provider: 'openai',
+        }),
+      );
+    });
+
+    it('should handle string-based function callbacks', async () => {
+      const provider = new OpenAiAssistantProvider('asst_test', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            string_function:
+              '(args, context) => { return `received: ${JSON.stringify(args)} with context: ${JSON.stringify(context)}`; }',
+          },
+        },
+      });
+
+      const mockRun = {
+        id: 'run_test',
+        thread_id: 'thread_test',
+        status: 'requires_action',
+        required_action: {
+          type: 'submit_tool_outputs',
+          submit_tool_outputs: {
+            tool_calls: [
+              {
+                id: 'call_test',
+                type: 'function',
+                function: {
+                  name: 'string_function',
+                  arguments: '{"test": "data"}',
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      const mockCompletedRun = { ...mockRun, status: 'completed' };
+      const mockSteps = { data: [] };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve
+        .mockResolvedValueOnce(mockRun)
+        .mockResolvedValueOnce(mockCompletedRun);
+      mockClient.beta.threads.runs.submitToolOutputs.mockResolvedValue(mockCompletedRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+
+      await provider.callApi('test prompt');
+
+      // Check that the tool output was submitted correctly
+      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith('run_test', {
+        thread_id: 'thread_test',
+        tool_outputs: [
+          {
+            tool_call_id: 'call_test',
+            output: expect.stringContaining('received: {"test":"data"}'),
+          },
+        ],
+      });
+    });
+
+    it('should handle callbacks that access context properties', async () => {
+      const contextAwareCallback = vi.fn().mockImplementation(function (
+        args: any,
+        context?: CallbackContext,
+      ) {
+        const result = {
+          originalArgs: args,
+          contextInfo: {
+            threadId: context?.threadId,
+            provider: context?.provider,
+          },
+        };
+        return Promise.resolve(JSON.stringify(result));
+      });
+
+      const provider = new OpenAiAssistantProvider('asst_test', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            context_function: contextAwareCallback,
+          },
+        },
+      });
+
+      const mockRun = {
+        id: 'run_test',
+        thread_id: 'thread_test',
+        status: 'requires_action',
+        required_action: {
+          type: 'submit_tool_outputs',
+          submit_tool_outputs: {
+            tool_calls: [
+              {
+                id: 'call_test',
+                type: 'function',
+                function: {
+                  name: 'context_function',
+                  arguments: '{"user_id": "123"}',
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      const mockCompletedRun = { ...mockRun, status: 'completed' };
+      const mockSteps = { data: [] };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve
+        .mockResolvedValueOnce(mockRun)
+        .mockResolvedValueOnce(mockCompletedRun);
+      mockClient.beta.threads.runs.submitToolOutputs.mockResolvedValue(mockCompletedRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+
+      await provider.callApi('test prompt');
+
+      // Verify the callback was called with the correct parameters
+      expect(contextAwareCallback).toHaveBeenCalledWith(
+        { user_id: '123' },
+        expect.objectContaining({
+          threadId: 'thread_test',
+          runId: 'run_test',
+          assistantId: 'asst_test',
+          provider: 'openai',
+        }),
       );
 
-      process.env.OPENAI_API_KEY = 'test-key'; // Restore for other tests
+      // Verify the tool output contains the context information
+      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith('run_test', {
+        thread_id: 'thread_test',
+        tool_outputs: [
+          {
+            tool_call_id: 'call_test',
+            output: JSON.stringify({
+              originalArgs: { user_id: '123' },
+              contextInfo: {
+                threadId: 'thread_test',
+                provider: 'openai',
+              },
+            }),
+          },
+        ],
+      });
+    });
+
+    it('should handle function callback errors gracefully', async () => {
+      const errorCallback = vi.fn().mockRejectedValue(new Error('Callback error'));
+
+      const provider = new OpenAiAssistantProvider('asst_test', {
+        config: {
+          apiKey: 'test-key',
+          functionToolCallbacks: {
+            error_function: errorCallback,
+          },
+        },
+      });
+
+      const mockRun = {
+        id: 'run_test',
+        thread_id: 'thread_test',
+        status: 'requires_action',
+        required_action: {
+          type: 'submit_tool_outputs',
+          submit_tool_outputs: {
+            tool_calls: [
+              {
+                id: 'call_test',
+                type: 'function',
+                function: {
+                  name: 'error_function',
+                  arguments: '{"param": "value"}',
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      const mockCompletedRun = { ...mockRun, status: 'completed' };
+      const mockSteps = { data: [] };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve
+        .mockResolvedValueOnce(mockRun)
+        .mockResolvedValueOnce(mockCompletedRun);
+      mockClient.beta.threads.runs.submitToolOutputs.mockResolvedValue(mockCompletedRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+
+      await provider.callApi('test prompt');
+
+      // Verify error was handled and submitted as tool output
+      expect(mockClient.beta.threads.runs.submitToolOutputs).toHaveBeenCalledWith('run_test', {
+        thread_id: 'thread_test',
+        tool_outputs: [
+          {
+            tool_call_id: 'call_test',
+            output: JSON.stringify({
+              error: 'Error in error_function: Callback error',
+            }),
+          },
+        ],
+      });
     });
   });
 });

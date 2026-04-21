@@ -1,232 +1,239 @@
-import request from 'supertest';
-import logger from '../../src/logger';
-import { createApp, handleServerError, setJavaScriptMimeType } from '../../src/server/server';
+import { EventEmitter } from 'node:events';
+import http from 'node:http';
 
-const mockedFetch = jest.mocked(jest.fn());
-global.fetch = mockedFetch;
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockCloudConfig = {
-  isEnabled: jest.fn().mockReturnValue(false),
-  getApiHost: jest.fn().mockReturnValue('https://custom.api.com'),
-};
-
-jest.mock('../../src/globalConfig/cloud', () => ({
-  CloudConfig: jest.fn().mockImplementation(() => mockCloudConfig),
+// Mock dependencies before importing the module
+vi.mock('../../src/migrate', () => ({
+  runDbMigrations: vi.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../../src/util/database', () => ({
-  getStandaloneEvals: jest.fn().mockImplementation(async (opts) => {
-    if (opts?.tag?.key === 'test' && opts?.tag?.value === 'value') {
-      return [{ id: '1', description: 'Test eval' }];
-    }
-    if (opts?.description === 'search') {
-      return [{ id: '2', description: 'search' }];
-    }
-    return [];
+vi.mock('../../src/database/signal', () => ({
+  setupSignalWatcher: vi.fn().mockReturnValue({
+    close: vi.fn(),
+    on: vi.fn(),
   }),
 }));
 
-describe('/api/remote-health endpoint', () => {
-  let app: ReturnType<typeof createApp>;
+vi.mock('../../src/util/server', () => ({
+  BrowserBehavior: { OPEN: 0, SKIP: 1, ASK: 2 },
+  BrowserBehaviorNames: { 0: 'OPEN', 1: 'SKIP', 2: 'ASK' },
+  openBrowser: vi.fn().mockResolvedValue(undefined),
+}));
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
-    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-    mockCloudConfig.isEnabled.mockReturnValue(false);
-    mockCloudConfig.getApiHost.mockReturnValue('https://custom.api.com');
-    app = createApp();
-  });
+vi.mock('../../src/logger', () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
 
-  it('should return disabled status when remote generation is disabled', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+vi.mock('../../src/models/eval', () => ({
+  default: {
+    latest: vi.fn().mockResolvedValue(null),
+  },
+  getEvalSummaries: vi.fn().mockResolvedValue([]),
+}));
 
-    const response = await request(app).get('/api/remote-health').expect(200);
+import { setupSignalWatcher } from '../../src/database/signal';
+import logger from '../../src/logger';
+// Import after mocks are set up
+import { handleServerError, startServer } from '../../src/server/server';
 
-    expect(response.body).toEqual({
-      status: 'DISABLED',
-      message: 'remote generation and grading are disabled',
+describe('server', () => {
+  describe('handleServerError', () => {
+    const originalExit = process.exit;
+
+    beforeEach(() => {
+      process.exit = vi.fn() as never;
+      vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+      process.exit = originalExit;
+    });
+
+    it('should log specific message for EADDRINUSE error', () => {
+      const error = new Error('Address in use') as NodeJS.ErrnoException;
+      error.code = 'EADDRINUSE';
+
+      handleServerError(error, 3000);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        'Port 3000 is already in use. Do you have another Promptfoo instance running?',
+      );
+      expect(process.exit).toHaveBeenCalledWith(1);
+    });
+
+    it('should log generic message for other errors', () => {
+      const error = new Error('Some other error') as NodeJS.ErrnoException;
+      error.code = 'ENOENT';
+
+      handleServerError(error, 3000);
+
+      expect(logger.error).toHaveBeenCalledWith('Failed to start server: Some other error');
+      expect(process.exit).toHaveBeenCalledWith(1);
     });
   });
 
-  it('should return health check result when enabled', async () => {
-    mockedFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ status: 'OK' }),
-    } as Response);
+  describe('startServer shutdown behavior', () => {
+    type MockHttpServer = EventEmitter & {
+      listen: ReturnType<typeof vi.fn>;
+      close: ReturnType<typeof vi.fn>;
+      listening: boolean;
+    };
 
-    const response = await request(app).get('/api/remote-health').expect(200);
+    let mockHttpServer: MockHttpServer;
+    let originalCreateServer: typeof http.createServer;
+    let signalHandlers: Map<string | symbol, ((...args: unknown[]) => void)[]>;
 
-    expect(response.body).toEqual({
-      status: 'OK',
-      message: 'Cloud API is healthy',
+    beforeEach(() => {
+      vi.clearAllMocks();
+
+      // Track signal handlers using a Map to support multiple handlers per event
+      signalHandlers = new Map();
+
+      vi.spyOn(process, 'once').mockImplementation(
+        (event: string | symbol, handler: (...args: unknown[]) => void) => {
+          if (event === 'SIGINT' || event === 'SIGTERM') {
+            if (!signalHandlers.has(event)) {
+              signalHandlers.set(event, []);
+            }
+            signalHandlers.get(event)!.push(handler);
+          }
+          return process;
+        },
+      );
+
+      // Create mock HTTP server
+      mockHttpServer = Object.assign(new EventEmitter(), {
+        listening: false,
+        listen: vi.fn().mockImplementation(function (
+          this: MockHttpServer,
+          _port: number,
+          callback: () => void,
+        ) {
+          // Simulate async listen - server is now listening
+          this.listening = true;
+          setImmediate(() => callback());
+          return this;
+        }),
+        close: vi.fn().mockImplementation(function (
+          this: MockHttpServer,
+          callback?: (err?: Error) => void,
+        ) {
+          this.listening = false;
+          setImmediate(() => callback?.());
+        }),
+      });
+
+      // Mock http.createServer
+      originalCreateServer = http.createServer;
+      (http.createServer as unknown) = vi.fn().mockReturnValue(mockHttpServer);
     });
-  });
 
-  it('should handle errors from health check', async () => {
-    mockedFetch.mockRejectedValueOnce(new Error('Network error'));
-
-    const response = await request(app).get('/api/remote-health').expect(200);
-
-    expect(response.body).toEqual({
-      status: 'ERROR',
-      message: expect.stringContaining('Network error'),
+    afterEach(() => {
+      http.createServer = originalCreateServer;
+      vi.restoreAllMocks();
     });
-  });
 
-  it('should use custom URL from environment', async () => {
-    process.env.PROMPTFOO_REMOTE_GENERATION_URL = 'https://custom-api.example.com/task';
-    mockedFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ status: 'OK' }),
-    } as Response);
+    const triggerSignal = (signal: 'SIGINT' | 'SIGTERM') => {
+      const handlers = signalHandlers.get(signal);
+      if (handlers) {
+        for (const handler of handlers) {
+          handler();
+        }
+      }
+    };
 
-    await request(app).get('/api/remote-health').expect(200);
+    it('should register SIGINT and SIGTERM handlers', async () => {
+      // Start server and immediately trigger shutdown
+      const serverPromise = startServer(0);
 
-    expect(mockedFetch).toHaveBeenCalledWith(
-      'https://custom-api.example.com/health',
-      expect.any(Object),
-    );
-  });
+      // Wait for server to start
+      await new Promise((resolve) => setImmediate(resolve));
 
-  it('should use cloud config URL when enabled', async () => {
-    mockCloudConfig.isEnabled.mockReturnValue(true);
-    mockCloudConfig.getApiHost.mockReturnValue('https://cloud.example.com');
-    mockedFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ status: 'OK' }),
-    } as Response);
+      expect(signalHandlers.has('SIGINT')).toBe(true);
+      expect(signalHandlers.has('SIGTERM')).toBe(true);
 
-    await request(app).get('/api/remote-health').expect(200);
+      // Trigger shutdown to complete the promise
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
 
-    expect(mockedFetch).toHaveBeenCalledWith(
-      'https://cloud.example.com/health',
-      expect.any(Object),
-    );
-  });
-});
+    it('should close file watcher on shutdown', async () => {
+      const mockWatcher = { close: vi.fn(), on: vi.fn() };
+      vi.mocked(setupSignalWatcher).mockReturnValue(mockWatcher as never);
 
-describe('/api/history endpoint', () => {
-  let app: ReturnType<typeof createApp>;
+      const serverPromise = startServer(0);
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    app = createApp();
-  });
+      // Wait for server to start
+      await new Promise((resolve) => setImmediate(resolve));
 
-  it('should return results filtered by tag', async () => {
-    const response = await request(app)
-      .get('/api/history')
-      .query({ tagName: 'test', tagValue: 'value' })
-      .expect(200);
+      // Trigger SIGINT
+      triggerSignal('SIGINT');
+      await serverPromise;
 
-    expect(response.body.data).toEqual([{ id: '1', description: 'Test eval' }]);
-  });
+      expect(mockWatcher.close).toHaveBeenCalled();
+    });
 
-  it('should return results filtered by description', async () => {
-    const response = await request(app)
-      .get('/api/history')
-      .query({ description: 'search' })
-      .expect(200);
+    it('should log server closure', async () => {
+      const serverPromise = startServer(0);
 
-    expect(response.body.data).toEqual([{ id: '2', description: 'search' }]);
-  });
+      // Wait for server to start
+      await new Promise((resolve) => setImmediate(resolve));
 
-  it('should return empty array when no matches found', async () => {
-    const response = await request(app)
-      .get('/api/history')
-      .query({ tagName: 'nonexistent', tagValue: 'value' })
-      .expect(200);
+      // Trigger SIGINT
+      triggerSignal('SIGINT');
+      await serverPromise;
 
-    expect(response.body.data).toEqual([]);
-  });
+      expect(logger.info).toHaveBeenCalledWith('Shutting down server...');
+      expect(logger.info).toHaveBeenCalledWith('Server closed');
+    });
 
-  it('should handle missing query parameters', async () => {
-    const response = await request(app).get('/api/history').expect(200);
+    it('should handle httpServer.close error gracefully', async () => {
+      // Mock close to call callback with error
+      mockHttpServer.close = vi.fn().mockImplementation(function (
+        callback?: (err?: Error) => void,
+      ) {
+        setImmediate(() => callback?.(new Error('Close failed')));
+      });
 
-    expect(response.body.data).toEqual([]);
-  });
-});
+      const serverPromise = startServer(0);
 
-describe('JavaScript MIME type middleware', () => {
-  const mockRequest = {
-    path: '',
-  };
-  const mockResponse = {
-    setHeader: jest.fn(),
-  };
-  const mockNext = jest.fn();
+      // Wait for server to start
+      await new Promise((resolve) => setImmediate(resolve));
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
+      // Trigger SIGINT
+      triggerSignal('SIGINT');
+      await serverPromise;
 
-  it('should set application/javascript for .js files', () => {
-    mockRequest.path = '/test.js';
-    setJavaScriptMimeType(mockRequest as any, mockResponse as any, mockNext);
-    expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'application/javascript');
-    expect(mockNext).toHaveBeenCalledTimes(1);
-  });
+      expect(logger.warn).toHaveBeenCalledWith('Error closing server: Close failed');
+      expect(logger.info).toHaveBeenCalledWith('Server closed');
+    });
 
-  it('should set application/javascript for .mjs files', () => {
-    mockRequest.path = '/test.mjs';
-    setJavaScriptMimeType(mockRequest as any, mockResponse as any, mockNext);
-    expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'application/javascript');
-    expect(mockNext).toHaveBeenCalledTimes(1);
-  });
+    // Note: Testing the case where socket.io already closed the HTTP server would require
+    // mocking socket.io at the module level. The fix (checking httpServer.listening) handles
+    // this case in production where io.close() closes the underlying server.
+    //
+    // Note: Testing the 5-second force shutdown timeout requires mocking socket.io
+    // at the module level, which is complex. The timeout exists as a safety measure
+    // and the core shutdown logic is tested by the other tests.
 
-  it('should set application/javascript for .cjs files', () => {
-    mockRequest.path = '/test.cjs';
-    setJavaScriptMimeType(mockRequest as any, mockResponse as any, mockNext);
-    expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'application/javascript');
-    expect(mockNext).toHaveBeenCalledTimes(1);
-  });
+    it('should handle SIGTERM the same as SIGINT', async () => {
+      const serverPromise = startServer(0);
 
-  it('should not set MIME type for non-JavaScript files', () => {
-    mockRequest.path = '/test.txt';
-    setJavaScriptMimeType(mockRequest as any, mockResponse as any, mockNext);
-    expect(mockResponse.setHeader).not.toHaveBeenCalled();
-    expect(mockNext).toHaveBeenCalledTimes(1);
-  });
-});
+      // Wait for server to start
+      await new Promise((resolve) => setImmediate(resolve));
 
-describe('handleServerError', () => {
-  const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+      // Trigger SIGTERM instead of SIGINT
+      triggerSignal('SIGTERM');
+      await serverPromise;
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should handle EADDRINUSE error', () => {
-    const error = new Error('Port in use') as NodeJS.ErrnoException;
-    error.code = 'EADDRINUSE';
-    handleServerError(error, 3000);
-
-    expect(logger.error).toHaveBeenCalledWith(
-      'Port 3000 is already in use. Do you have another Promptfoo instance running?',
-    );
-    expect(mockExit).toHaveBeenCalledWith(1);
-  });
-
-  it('should handle other errors', () => {
-    const error = new Error('Unknown error');
-    handleServerError(error, 3000);
-
-    expect(logger.error).toHaveBeenCalledWith('Failed to start server: Unknown error');
-    expect(mockExit).toHaveBeenCalledWith(1);
-  });
-});
-
-describe('Static file serving', () => {
-  let app: ReturnType<typeof createApp>;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    app = createApp();
-  });
-
-  it('should serve index.html for /*splat route', async () => {
-    await request(app).get('/any/path').expect(200).expect('Content-Type', /html/);
-    expect(true).toBeTruthy();
+      expect(logger.info).toHaveBeenCalledWith('Shutting down server...');
+      expect(logger.info).toHaveBeenCalledWith('Server closed');
+    });
   });
 });

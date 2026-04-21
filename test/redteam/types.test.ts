@@ -1,17 +1,21 @@
+import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
+import { StrategyConfigSchema } from '../../src/redteam/types';
+import { createMockProvider } from '../factories/provider';
+
 import type {
-  RedteamPluginObject,
-  RedteamPlugin,
-  RedteamStrategyObject,
+  BaseRedteamMetadata,
   PluginActionParams,
   RedteamCliGenerateOptions,
   RedteamFileConfig,
-  SynthesizeOptions,
+  RedteamGenerateOptions,
+  RedteamPlugin,
+  RedteamPluginObject,
   RedteamRunOptions,
+  RedteamStrategyObject,
   SavedRedteamConfig,
-  BaseRedteamMetadata,
+  SynthesizeOptions,
 } from '../../src/redteam/types';
-import type { ApiProvider } from '../../src/types/providers';
 
 describe('redteam types', () => {
   it('should create valid RedteamPluginObject', () => {
@@ -65,10 +69,7 @@ describe('redteam types', () => {
   });
 
   it('should create valid PluginActionParams', () => {
-    const provider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: async () => ({ output: 'test' }),
-    };
+    const provider = createMockProvider({ response: { output: 'test' } });
 
     const params: PluginActionParams = {
       provider,
@@ -138,7 +139,7 @@ describe('redteam types', () => {
           id: 'test-strategy',
         },
       ],
-      targetLabels: ['label1', 'label2'],
+      targetIds: ['label1', 'label2'],
       maxConcurrency: 3,
     };
 
@@ -163,6 +164,20 @@ describe('redteam types', () => {
     expect(options.maxConcurrency).toBe(5);
   });
 
+  it('should create RedteamRunOptions with description for custom scan names', () => {
+    const options: RedteamRunOptions = {
+      id: 'test-run',
+      config: 'config-uuid',
+      target: 'target-uuid',
+      description: 'My Custom Scan Name',
+      maxConcurrency: 5,
+    };
+
+    expect(options.description).toBe('My Custom Scan Name');
+    expect(options.config).toBe('config-uuid');
+    expect(options.target).toBe('target-uuid');
+  });
+
   it('should create valid SavedRedteamConfig', () => {
     const config: SavedRedteamConfig = {
       description: 'Test config',
@@ -173,6 +188,7 @@ describe('redteam types', () => {
       plugins: ['plugin1', { id: 'plugin2' }],
       strategies: ['strategy1'],
       entities: ['entity1'],
+      maxConcurrency: 5,
       applicationDefinition: {
         purpose: 'test purpose',
         features: 'key app features',
@@ -199,6 +215,7 @@ describe('redteam types', () => {
     expect(config.description).toBe('Test config');
     expect(config.prompts).toHaveLength(2);
     expect(config.plugins).toHaveLength(2);
+    expect(config.maxConcurrency).toBe(5);
     expect(config.applicationDefinition.features).toBe('key app features');
     expect(config.applicationDefinition.hasAccessTo).toBe('allowed data and systems');
     expect(config.applicationDefinition.doesNotHaveAccessTo).toBe('restricted data');
@@ -223,5 +240,113 @@ describe('redteam types', () => {
     expect(metadata.redteamFinalPrompt).toBe('final prompt');
     expect(metadata.messages).toHaveLength(1);
     expect(metadata.stopReason).toBe('complete');
+  });
+
+  it('should create valid RedteamGenerateOptions', () => {
+    const emptyOptions: RedteamGenerateOptions = {};
+    const partialOptions: RedteamGenerateOptions = {
+      cache: true,
+      plugins: [
+        {
+          id: 'test-plugin',
+          numTests: 5,
+        },
+      ],
+      maxConcurrency: 3,
+      injectVar: 'test_var',
+      language: 'en',
+      purpose: 'test purpose',
+      remote: false,
+      sharing: true,
+      testGenerationInstructions: 'test instructions',
+    };
+
+    expect(emptyOptions).toBeDefined();
+    expect(partialOptions.cache).toBe(true);
+    expect(partialOptions.plugins?.length).toBe(1);
+    expect(partialOptions.maxConcurrency).toBe(3);
+    expect(partialOptions.language).toBe('en');
+    expect(partialOptions.remote).toBe(false);
+    expect(partialOptions.sharing).toBe(true);
+    expect(partialOptions.testGenerationInstructions).toBe('test instructions');
+  });
+
+  describe('StrategyConfigSchema numTests validation', () => {
+    it('should accept valid positive numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: 5 });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBe(5);
+      }
+    });
+
+    it('should accept numTests: 0', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: 0 });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBe(0);
+      }
+    });
+
+    it('should accept missing numTests (undefined)', () => {
+      const result = StrategyConfigSchema.safeParse({});
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBeUndefined();
+      }
+    });
+
+    it('should reject negative numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: -1 });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject non-integer numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: 1.5 });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject string numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: '5' });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept numTests with other strategy config fields', () => {
+      const result = StrategyConfigSchema.safeParse({
+        enabled: true,
+        plugins: ['plugin1', 'plugin2'],
+        numTests: 10,
+        customField: 'value',
+      });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBe(10);
+        expect(result.data.enabled).toBe(true);
+        expect(result.data.plugins).toEqual(['plugin1', 'plugin2']);
+      }
+    });
+
+    it('should reject Infinity numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: Infinity });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject -Infinity numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: -Infinity });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject NaN numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: NaN });
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept large but finite numTests', () => {
+      const result = StrategyConfigSchema.safeParse({ numTests: 10000 });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.numTests).toBe(10000);
+      }
+    });
   });
 });

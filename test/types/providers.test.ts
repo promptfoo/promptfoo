@@ -1,28 +1,22 @@
-import type { ProviderOptions } from '../../src/types/providers';
+import { describe, expect, it } from 'vitest';
 import { isApiProvider, isProviderOptions } from '../../src/types/providers';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
+
+import type { ProviderOptions } from '../../src/types/providers';
 
 describe('isApiProvider', () => {
   it('should correctly identify valid ApiProvider objects', () => {
     const validProviders = [
-      {
-        id: () => 'test-provider',
-        callApi: async () => ({ output: 'test' }),
-      },
-      {
-        id: () => 'full-provider',
-        callApi: async () => ({ output: 'test' }),
+      createMockProvider({ response: createProviderResponse({ output: 'test' }) }),
+      Object.assign(createMockProvider({ id: 'full-provider', config: { temperature: 0.7 } }), {
         callEmbeddingApi: async () => ({ embedding: [1, 2, 3] }),
         callClassificationApi: async () => ({ classification: { class1: 0.8 } }),
-        config: { temperature: 0.7 },
         delay: 1000,
         getSessionId: () => 'session-123',
         label: 'Test Provider',
         transform: 'toLowerCase()',
-      },
-      {
-        id: () => 'minimal-provider',
-        callApi: jest.fn(),
-      },
+      }),
+      createMockProvider({ id: 'minimal-provider' }),
     ];
 
     validProviders.forEach((provider) => {
@@ -35,10 +29,11 @@ describe('isApiProvider', () => {
       null,
       undefined,
       {},
-      { id: 'string-id' }, // id should be a function
+      { id: 'string-id' },
       { id: null },
       { id: undefined },
       { id: 42 },
+      { id: () => 'missing-call-api' },
       'string-provider',
       42,
       true,
@@ -49,27 +44,6 @@ describe('isApiProvider', () => {
     invalidProviders.forEach((provider) => {
       expect(isApiProvider(provider)).toBe(false);
     });
-  });
-
-  it('should return false for non-object values', () => {
-    expect(isApiProvider('string')).toBe(false);
-    expect(isApiProvider(123)).toBe(false);
-    expect(isApiProvider(true)).toBe(false);
-    expect(isApiProvider(undefined)).toBe(false);
-    expect(isApiProvider(null)).toBe(false);
-  });
-
-  it('should return false for objects without id property', () => {
-    expect(isApiProvider({})).toBe(false);
-    expect(isApiProvider({ callApi: () => {} })).toBe(false);
-  });
-
-  it('should return false when id exists but is not a function', () => {
-    expect(isApiProvider({ id: 'string' })).toBe(false);
-    expect(isApiProvider({ id: 123 })).toBe(false);
-    expect(isApiProvider({ id: true })).toBe(false);
-    expect(isApiProvider({ id: {} })).toBe(false);
-    expect(isApiProvider({ id: [] })).toBe(false);
   });
 });
 
@@ -132,26 +106,5 @@ describe('isProviderOptions', () => {
     edgeCases.forEach((options) => {
       expect(isProviderOptions(options)).toBe(true);
     });
-  });
-
-  it('should return false for non-object values', () => {
-    expect(isProviderOptions('string')).toBe(false);
-    expect(isProviderOptions(123)).toBe(false);
-    expect(isProviderOptions(true)).toBe(false);
-    expect(isProviderOptions(undefined)).toBe(false);
-    expect(isProviderOptions(null)).toBe(false);
-  });
-
-  it('should return false for objects without id property', () => {
-    expect(isProviderOptions({})).toBe(false);
-    expect(isProviderOptions({ label: 'Test' })).toBe(false);
-  });
-
-  it('should return false when id exists but is not a string', () => {
-    expect(isProviderOptions({ id: () => 'function' })).toBe(false);
-    expect(isProviderOptions({ id: 123 })).toBe(false);
-    expect(isProviderOptions({ id: true })).toBe(false);
-    expect(isProviderOptions({ id: {} })).toBe(false);
-    expect(isProviderOptions({ id: [] })).toBe(false);
   });
 });

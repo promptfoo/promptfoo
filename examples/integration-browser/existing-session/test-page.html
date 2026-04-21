@@ -1,0 +1,148 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Test Chat Interface</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      #user-info {
+        background: #f0f0f0;
+        padding: 10px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+      }
+      #chat-container {
+        border: 1px solid #ccc;
+        padding: 20px;
+        min-height: 300px;
+        margin-bottom: 20px;
+      }
+      .chat-message {
+        margin: 10px 0;
+        padding: 10px;
+        background: #e9e9e9;
+        border-radius: 5px;
+      }
+      .message-content {
+        margin-top: 5px;
+      }
+      #chat-input {
+        width: 70%;
+        padding: 10px;
+        font-size: 16px;
+      }
+      #send-button {
+        padding: 10px 20px;
+        font-size: 16px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      [data-testid='user-avatar'] {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        background: #007bff;
+        color: white;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 40px;
+        margin-right: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="user-info">
+      <span data-testid="user-avatar">JD</span>
+      <strong>Logged in as:</strong> John Doe (john.doe@example.com)
+    </div>
+
+    <h1>Test Chat Interface</h1>
+
+    <div id="chat-container">
+      <div class="chat-message">
+        <strong>System:</strong>
+        <div class="message-content">Welcome! You are authenticated and can start chatting.</div>
+      </div>
+    </div>
+
+    <div>
+      <input type="text" id="chat-input" placeholder="Type your message..." />
+      <button id="send-button">Send</button>
+    </div>
+
+    <script>
+      // Simple chat simulation
+      document.getElementById('send-button').addEventListener('click', function () {
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+
+        if (message) {
+          // Add user message
+          const userMsg = document.createElement('div');
+          userMsg.className = 'chat-message';
+
+          const userLabel = document.createElement('strong');
+          userLabel.textContent = 'You:';
+          userMsg.appendChild(userLabel);
+
+          const userContent = document.createElement('div');
+          userContent.className = 'message-content';
+          userContent.textContent = message;
+          userMsg.appendChild(userContent);
+
+          document.getElementById('chat-container').appendChild(userMsg);
+
+          // Simulate bot response
+          setTimeout(() => {
+            const botMsg = document.createElement('div');
+            botMsg.className = 'chat-message';
+
+            let response = '';
+            if (message.toLowerCase().includes('who am i')) {
+              response =
+                'You are logged in as John Doe (john.doe@example.com). You have authenticated access to this chat system.';
+            } else if (message.toLowerCase().includes('status')) {
+              response =
+                'Your account status is: Active. Premium subscription valid until 2025-12-31.';
+            } else if (message.toLowerCase().includes('activity')) {
+              response = 'Your recent activity: Last login 2 hours ago. 5 conversations today.';
+            } else if (message.toLowerCase().includes('permission')) {
+              response = 'You have the following permissions: chat.read, chat.write, profile.edit';
+            } else if (message.toLowerCase().includes('other user')) {
+              response = "Error: You cannot access other users' private data. Permission denied.";
+            } else {
+              response = 'I received your message: "' + message + '". How can I help you today?';
+            }
+
+            const botLabel = document.createElement('strong');
+            botLabel.textContent = 'Assistant:';
+            botMsg.appendChild(botLabel);
+
+            const botContent = document.createElement('div');
+            botContent.className = 'message-content';
+            botContent.textContent = response;
+            botMsg.appendChild(botContent);
+
+            document.getElementById('chat-container').appendChild(botMsg);
+          }, 500);
+
+          input.value = '';
+        }
+      });
+
+      // Allow Enter key to send
+      document.getElementById('chat-input').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+          document.getElementById('send-button').click();
+        }
+      });
+    </script>
+  </body>
+</html>

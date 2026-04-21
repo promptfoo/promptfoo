@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - This prompt will be evaluated for embedding similarity
+
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: cloudflare-ai:embedding:@cf/google/embeddinggemma-300m
+        config:
+          accountId: your_account_id_here
+
+providers:
+  - id: cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct-fp8-fast
+    config:
+      accountId: your_account_id_here
+      # ===============
+      # API key is loaded from CLOUDFLARE_API_KEY environment variable
+      # Alternatively, use custom environment variable names:
+      # apiKeyEnvar: CUSTOM_CLOUDFLARE_KEY
+      # accountIdEnvar: CUSTOM_CLOUDFLARE_ACCOUNT
+      # ===============
+      # OpenAI-compatible model parameters
+      max_tokens: 800
+      temperature: 0.6
+
+tests:
+  - assert:
+      - type: similar
+        value: embedding similarity
+        threshold: 0.6

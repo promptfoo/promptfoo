@@ -1,6 +1,21 @@
 ---
-date: 2025-02-03
+title: 'What are the Security Risks of Deploying DeepSeek-R1?'
+description: 'Our red team analysis found DeepSeek-R1 fails 60%+ of harmful content tests. See the shocking vulnerabilities we discovered and what they mean for AI safety.'
 image: /img/blog/deepseek-redteam/red_whale.png
+keywords:
+  [
+    DeepSeek security,
+    DeepSeek vulnerabilities,
+    AI red teaming,
+    LLM jailbreak,
+    foundation model security,
+    Chinese AI models,
+    AI safety testing,
+    model evaluation,
+  ]
+date: 2025-02-03
+authors: [vanessa]
+tags: [technical-guide, red-teaming]
 ---
 
 # What are the Security Risks of Deploying DeepSeek-R1?
@@ -130,8 +145,8 @@ description: DeepSeek R1 vs GPT-4o Red Team
 targets:
   - id: openrouter:deepseek/deepseek-r1
     label: deepseek-r1
-  - id: openai:gpt-4.1-mini
-    label: gpt-4.1-mini
+  - id: openai:gpt-5-mini
+    label: gpt-5-mini
 
 redteam:
 
@@ -166,6 +181,6 @@ We encourage you to [run your own red team](https://www.promptfoo.dev/docs/red-t
 npx promptfoo@latest init --example redteam-deepseek-foundation
 ```
 
-Once complete, ensure that you run complete red teams against the LLM application that uses DeepSeek-R1 for inference and consider [enforcing guardrails](https://www.promptfoo.dev/docs/red-team/guardrails/) as a defense-in-depth measure to mitigate the risk of toxicity or harmful content.
+Once complete, ensure that you run complete red teams against the LLM application that uses DeepSeek-R1 for inference and consider [enforcing guardrails](https://www.promptfoo.dev/guardrails/) as a defense-in-depth measure to mitigate the risk of toxicity or harmful content.
 
 Curious about learning more? [Contact us](https://www.promptfoo.dev/contact/) to schedule a demo.

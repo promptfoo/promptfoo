@@ -1,8 +1,9 @@
-import type { ValidateFunction } from 'ajv';
 import yaml from 'js-yaml';
-import type { AssertionParams, GradingResult } from '../types';
 import invariant from '../util/invariant';
 import { extractJsonObjects, getAjv } from '../util/json';
+import type { ValidateFunction } from 'ajv';
+
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export function handleIsJson({
   outputString,
@@ -20,7 +21,7 @@ export function handleIsJson({
     pass = inverse;
   }
 
-  if (pass && renderedValue) {
+  if (parsedJson !== undefined && renderedValue) {
     let validate: ValidateFunction;
     if (typeof renderedValue === 'string') {
       if (renderedValue.startsWith('file://')) {
@@ -37,14 +38,17 @@ export function handleIsJson({
     } else {
       throw new Error('is-json assertion must have a string or object value');
     }
-    pass = validate(parsedJson);
+    const valid = validate(parsedJson);
+    pass = inverse ? !valid : valid;
     if (!pass) {
       return {
         pass,
         score: 0,
-        reason: `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
-          validate.errors,
-        )}`,
+        reason: inverse
+          ? 'Output is JSON that conforms to the provided schema'
+          : `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
+              validate.errors,
+            )}`,
         assertion,
       };
     }
@@ -86,8 +90,12 @@ export function handleContainsJson({
       } else {
         throw new Error('contains-json assertion must have a string or object value');
       }
-      pass = validate(jsonObject);
-      if (pass) {
+      const valid = validate(jsonObject);
+      pass = inverse ? !valid : valid;
+      if (valid) {
+        if (inverse) {
+          errorMessage = 'Output contains JSON conforming to the provided schema';
+        }
         break;
       } else {
         errorMessage = `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(

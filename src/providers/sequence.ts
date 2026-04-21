@@ -1,13 +1,15 @@
 import logger from '../logger';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
+} from '../types/index';
 
 interface SequenceProviderConfig {
   inputs: string[];
@@ -15,7 +17,7 @@ interface SequenceProviderConfig {
 }
 
 export class SequenceProvider implements ApiProvider {
-  private readonly inputs: string[];
+  private readonly sequenceInputs: string[];
   private readonly separator: string;
   private readonly identifier: string;
 
@@ -26,7 +28,7 @@ export class SequenceProvider implements ApiProvider {
     );
 
     const typedConfig = config as SequenceProviderConfig;
-    this.inputs = typedConfig.inputs;
+    this.sequenceInputs = typedConfig.inputs;
     this.separator = typedConfig.separator || '\n---\n';
     this.identifier = id || 'sequence-provider';
   }
@@ -44,16 +46,10 @@ export class SequenceProvider implements ApiProvider {
 
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
-    const totalTokenUsage = {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 0,
-      cached: 0,
-    };
+    const accumulatedTokenUsage = createEmptyTokenUsage();
 
     // Send each input to the original provider
-    for (const input of this.inputs) {
+    for (const input of this.sequenceInputs) {
       const renderedInput = nunjucks.renderString(input, {
         ...context?.vars,
         prompt,
@@ -69,21 +65,12 @@ export class SequenceProvider implements ApiProvider {
 
       responses.push(response.output);
 
-      // Accumulate token usage if available
-      if (response.tokenUsage) {
-        totalTokenUsage.total += response.tokenUsage.total || 0;
-        totalTokenUsage.prompt += response.tokenUsage.prompt || 0;
-        totalTokenUsage.completion += response.tokenUsage.completion || 0;
-        totalTokenUsage.numRequests += response.tokenUsage.numRequests || 1;
-        totalTokenUsage.cached += response.tokenUsage.cached || 0;
-      } else {
-        totalTokenUsage.numRequests += 1;
-      }
+      accumulateResponseTokenUsage(accumulatedTokenUsage, response);
     }
 
     return {
       output: responses.join(this.separator),
-      tokenUsage: totalTokenUsage,
+      tokenUsage: accumulatedTokenUsage,
     };
   }
 

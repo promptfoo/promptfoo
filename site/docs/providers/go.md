@@ -1,5 +1,6 @@
 ---
 sidebar_label: Custom Go (Golang)
+description: Configure custom Go providers to integrate your own Go-based LLM clients, models, and APIs with promptfoo's testing framework for seamless evaluation
 ---
 
 # Custom Go Provider
@@ -15,7 +16,7 @@ The golang provider currently experimental
 You can initialize a new Go provider project using:
 
 ```sh
-promptfoo init --example golang-provider
+promptfoo init --example provider-golang
 ```
 
 ## Provider Interface

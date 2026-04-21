@@ -1,9 +1,10 @@
-import type { DefaultProviders, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { AnthropicMessagesProvider } from './messages';
 
+import type { EnvOverrides } from '../../types/env';
+import type { DefaultProviders, ProviderResponse } from '../../types/index';
+
 // Default model to use for all default providers
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-20250514';
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 
 /**
  * Helper function to create a lazy-loaded provider. This allows the .env file to be
@@ -107,6 +108,23 @@ const llmRubricProviderFactory = createLazyProvider(
   (env?: EnvOverrides) => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
 );
 
+// Web Search Provider with web_search tool
+const webSearchProviderFactory = createLazyProvider(
+  (env?: EnvOverrides) =>
+    new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+      env,
+      config: {
+        tools: [
+          {
+            type: 'web_search_20250305',
+            name: 'web_search',
+            max_uses: 5,
+          } as any,
+        ],
+      },
+    }),
+);
+
 /**
  * Gets all default Anthropic providers with the given environment overrides
  * @param env - Optional environment overrides
@@ -121,10 +139,12 @@ export function getAnthropicProviders(
   | 'llmRubricProvider'
   | 'suggestionsProvider'
   | 'synthesizeProvider'
+  | 'webSearchProvider'
 > {
   // Get providers with the provided environment variables
   const gradingProvider = gradingProviderFactory.getInstance(env);
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
+  const webSearchProvider = webSearchProviderFactory.getInstance(env);
 
   return {
     gradingJsonProvider: gradingProvider,
@@ -132,5 +152,6 @@ export function getAnthropicProviders(
     llmRubricProvider,
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
+    webSearchProvider,
   };
 }

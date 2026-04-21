@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare facts about a topic
+
+prompts:
+  - 'What are three concise facts about {{topic}}?'
+
+providers:
+  - id: docker:ai/llama3.2:3B-Q4_K_M
+
+tests:
+  - vars:
+      topic: 'whales'
+    assert:
+      - type: contains
+        value: 'mammals'

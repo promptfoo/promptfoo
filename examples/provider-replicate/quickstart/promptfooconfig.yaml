@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Replicate provider quick start
+
+prompts:
+  - 'Say hello to {{name}} in a creative way'
+
+providers:
+  # Using the fast hello-world model for testing
+  - id: replicate:replicate/hello-world:5c7d5dc6dd8bf75c1acaa8565735e7986bc5b66206b55cca93cb72c9bf15ccaa
+    config:
+      # Set your API key here or use environment variable REPLICATE_API_TOKEN
+      # apiKey: r8_your_token_here
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: 'hello'
+      - type: javascript
+        value: output.toLowerCase().includes('world')
+
+  - vars:
+      name: promptfoo
+    assert:
+      - type: contains-any
+        value: ['hello', 'hi', 'greetings']
+      - type: javascript
+        value: output.toLowerCase().includes('promptfoo')

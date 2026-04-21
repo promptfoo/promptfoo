@@ -1,6 +1,7 @@
-import { describe, it, expect } from '@jest/globals';
+import { describe, expect, it } from 'vitest';
 import { addGoatTestCases } from '../../../src/redteam/strategies/goat';
-import type { TestCaseWithPlugin, AssertionType } from '../../../src/types';
+
+import type { AssertionType, TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('GOAT Strategy', () => {
   it('should add GOAT configuration to test cases', async () => {

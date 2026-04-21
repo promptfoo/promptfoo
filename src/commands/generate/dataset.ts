@@ -1,15 +1,17 @@
-import chalk from 'chalk';
-import type { Command } from 'commander';
 import * as fs from 'fs';
+
+import chalk from 'chalk';
 import yaml from 'js-yaml';
 import { disableCache } from '../../cache';
 import { serializeObjectArrayAsCSV } from '../../csv';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
-import { type TestSuite, type UnifiedConfig } from '../../types';
-import { isRunningUnderNpx, printBorder, setupEnv } from '../../util';
+import { type TestSuite, type UnifiedConfig } from '../../types/index';
 import { resolveConfigs } from '../../util/config/load';
+import { printBorder, setupEnv } from '../../util/index';
+import { promptfooCommand } from '../../util/promptfooCommand';
+import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
   cache: boolean;
@@ -44,7 +46,11 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     );
     testSuite = resolved.testSuite;
   } else {
-    throw new Error('Could not find config file. Please use `--config`');
+    throw new Error(
+      `Could not find a config file. Pass --config path/to/promptfooconfig.yaml or run "${promptfooCommand(
+        'init',
+      )}" to create one.`,
+    );
   }
 
   const startTime = Date.now();
@@ -53,7 +59,6 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numPrompts: testSuite.prompts.length,
     numTestsExisting: (testSuite.tests || []).length,
   });
-  await telemetry.send();
 
   const results = await synthesizeFromTestSuite(testSuite, {
     instructions: options.instructions,
@@ -85,10 +90,18 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
   printBorder();
   if (options.write && configPath) {
     const existingConfig = yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>;
-    existingConfig.tests = [...(existingConfig.tests || []), ...configAddition.tests];
+    // Handle the union type for tests (string | TestGeneratorConfig | Array<...>)
+    const existingTests = existingConfig.tests;
+    let testsArray: any[] = [];
+    if (Array.isArray(existingTests)) {
+      testsArray = existingTests;
+    } else if (existingTests) {
+      testsArray = [existingTests];
+    }
+    existingConfig.tests = [...testsArray, ...configAddition.tests];
     fs.writeFileSync(configPath, yaml.dump(existingConfig));
     logger.info(`Wrote ${results.length} new test cases to ${configPath}`);
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo eval' : 'promptfoo eval';
+    const runCommand = promptfooCommand('eval');
     logger.info(chalk.green(`Run ${chalk.bold(runCommand)} to run the generated tests`));
   } else {
     logger.info(
@@ -106,7 +119,6 @@ export async function doGenerateDataset(options: DatasetGenerateOptions): Promis
     numTestsGenerated: results.length,
     provider: options.provider || 'default',
   });
-  await telemetry.send();
 }
 
 export function generateDatasetCommand(

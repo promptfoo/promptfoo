@@ -1,5 +1,7 @@
-import { CompetitorsGrader, PLUGIN_ID } from '../../../src/redteam/plugins/competitors';
-import type { AssertionValue } from '../../../src/types';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { CompetitorsGrader } from '../../../src/redteam/plugins/competitors';
+
+import type { AssertionValue } from '../../../src/types/index';
 
 describe('CompetitorsGrader', () => {
   let grader: CompetitorsGrader;
@@ -9,8 +11,7 @@ describe('CompetitorsGrader', () => {
   });
 
   it('should have the correct plugin ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
-    expect(PLUGIN_ID).toBe('promptfoo:redteam:competitors');
+    expect(grader.id).toBe('promptfoo:redteam:competitors');
   });
 
   describe('getSuggestions', () => {

@@ -1,6 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
+description: Build sophisticated JavaScript validators for LLM outputs with async operations, scoring logic, and comprehensive error handling
 ---
 
 # Javascript assertions
@@ -101,6 +102,22 @@ assert:
 The `context` variable contains information about the test case and execution environment:
 
 ```ts
+interface TraceSpan {
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  startTime: number; // Unix timestamp in milliseconds
+  endTime?: number; // Unix timestamp in milliseconds
+  attributes?: Record<string, any>;
+  statusCode?: number;
+  statusMessage?: string;
+}
+
+interface TraceData {
+  traceId: string;
+  spans: TraceSpan[];
+}
+
 interface AssertionValueFunctionContext {
   // Raw prompt sent to LLM
   prompt: string | undefined;
@@ -122,6 +139,9 @@ interface AssertionValueFunctionContext {
 
   // The complete provider response
   providerResponse: ProviderResponse | undefined;
+
+  // OpenTelemetry trace data (when tracing is enabled)
+  trace?: TraceData;
 }
 ```
 
@@ -147,6 +167,32 @@ tests:
     assert:
       - type: javascript
         value: 'output.length >= context.vars.min_length'
+```
+
+## Passing assertion-specific parameters
+
+If you want to reuse the same JavaScript assertion with different parameters in a single test case, prefer assertion-level `config` over test `vars`. Test vars are shared across all assertions and appear as report columns, while `config` stays attached to one assertion and is available as `context.config`.
+
+```yaml
+tests:
+  - description: 'Reuse one assertion script with two thresholds'
+    vars:
+      topic: 'bananas'
+    assert:
+      - type: javascript
+        value: file://assertions/min-length.js
+        config:
+          minLength: 5
+      - type: javascript
+        value: file://assertions/min-length.js
+        config:
+          minLength: 20
+```
+
+```js
+module.exports = (output, context) => {
+  return output.length >= context.config.minLength;
+};
 ```
 
 ## External script
@@ -288,9 +334,115 @@ If you are using promptfoo as a JS package, you can build your assertion inline:
 
 Output will always be a string, so if your [custom response parser](/docs/providers/http/#function-parser) returned an object, you can use `JSON.parse(output)` to convert it back to an object.
 
+## Using trace data
+
+When [tracing is enabled](/docs/tracing/), OpenTelemetry trace data is available in the `context.trace` object. This allows you to write assertions based on the execution flow:
+
+```js
+module.exports = (output, context) => {
+  // Check if trace data is available
+  if (!context.trace) {
+    // Tracing not enabled, skip trace-based checks
+    return true;
+  }
+
+  const { spans } = context.trace;
+
+  // Example: Check for errors in any span
+  const errorSpans = spans.filter((s) => s.statusCode >= 400);
+  if (errorSpans.length > 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Found ${errorSpans.length} error spans`,
+    };
+  }
+
+  // Example: Calculate total trace duration
+  if (spans.length > 0) {
+    const duration =
+      Math.max(...spans.map((s) => s.endTime || 0)) - Math.min(...spans.map((s) => s.startTime));
+    if (duration > 5000) {
+      // 5 seconds
+      return {
+        pass: false,
+        score: 0,
+        reason: `Trace took too long: ${duration}ms`,
+      };
+    }
+  }
+
+  // Example: Check for specific operations
+  const apiCalls = spans.filter((s) => s.name.toLowerCase().includes('http'));
+  if (apiCalls.length > 10) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Too many API calls: ${apiCalls.length}`,
+    };
+  }
+
+  return true;
+};
+```
+
+Example YAML configuration:
+
+```yaml
+tests:
+  - vars:
+      query: "What's the weather?"
+    assert:
+      - type: javascript
+        value: |
+          // Ensure retrieval happened before response generation
+          if (context.trace) {
+            const retrievalSpan = context.trace.spans.find(s => s.name.includes('retrieval'));
+            const generationSpan = context.trace.spans.find(s => s.name.includes('generation'));
+            
+            if (retrievalSpan && generationSpan) {
+              return retrievalSpan.startTime < generationSpan.startTime;
+            }
+          }
+          return true;
+```
+
+Additional examples:
+
+```js
+// Check span hierarchy depth
+const MAX_ALLOWED_DEPTH = 1000;
+const maxDepth = (spans, parentId = null, depth = 0) => {
+  if (depth > MAX_ALLOWED_DEPTH) {
+    throw new Error('Span hierarchy too deep');
+  }
+  const children = spans.filter((s) => s.parentSpanId === parentId);
+  if (children.length === 0) return depth;
+  return Math.max(...children.map((c) => maxDepth(spans, c.spanId, depth + 1)));
+};
+
+if (context.trace && maxDepth(context.trace.spans) > 5) {
+  return {
+    pass: false,
+    score: 0,
+    reason: 'Call stack too deep',
+  };
+}
+```
+
 ### ES modules
 
 ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
+
+## Negation
+
+Use `not-javascript` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-javascript
+    value: output.includes('error')
+```
 
 ## Other assertion types
 

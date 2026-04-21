@@ -1,26 +1,33 @@
 // This file is imported by the frontend and shouldn't use native dependencies.
-import type { UnifiedConfig, Vars } from '../types';
+
 import {
   MULTI_TURN_STRATEGIES,
   type Plugin,
   riskCategorySeverityMap,
   type Severity,
 } from './constants';
+
+import type { UnifiedConfig, Vars } from '../types/index';
 import type { RedteamPluginObject, SavedRedteamConfig } from './types';
 
 export function getRiskCategorySeverityMap(
   plugins?: RedteamPluginObject[],
 ): Record<Plugin, Severity> {
   const overrides =
-    plugins?.reduce(
-      (acc, plugin) => {
-        if (plugin.severity) {
-          acc[plugin.id as Plugin] = plugin.severity;
+    plugins?.reduce<Partial<Record<Plugin, Severity>>>((acc, plugin) => {
+      if (plugin.severity) {
+        acc[plugin.id as Plugin] = plugin.severity;
+
+        // For 'policy' plugins, also add an entry for the specific policy ID.
+        // This allows the severity to be looked up by the deserialized policy ID
+        // (which is what getPluginIdFromResult returns for policy results).
+        const policyId = (plugin.config as { policy?: { id?: string } } | undefined)?.policy?.id;
+        if (plugin.id === 'policy' && policyId) {
+          acc[policyId as Plugin] = plugin.severity;
         }
-        return acc;
-      },
-      {} as Record<Plugin, Severity>,
-    ) || {};
+      }
+      return acc;
+    }, {}) || {};
 
   return {
     ...riskCategorySeverityMap,
@@ -54,6 +61,16 @@ export function getUnifiedConfig(
     redteam: {
       purpose: config.purpose,
       numTests: config.numTests,
+      ...(config.maxCharsPerMessage && {
+        maxCharsPerMessage: config.maxCharsPerMessage,
+      }),
+      ...(config.provider && { provider: config.provider }),
+      ...(config.maxConcurrency && { maxConcurrency: config.maxConcurrency }),
+      ...(config.language && { language: config.language }),
+      ...(config.frameworks &&
+        config.frameworks.length > 0 && {
+          frameworks: Array.from(new Set(config.frameworks)),
+        }),
       plugins: config.plugins.map((plugin): RedteamPluginObject => {
         if (typeof plugin === 'string') {
           return { id: plugin };
@@ -94,6 +111,9 @@ export function getUnifiedConfig(
           id: strategy.id,
           config: configObject,
         };
+      }),
+      ...(config.testGenerationInstructions && {
+        testGenerationInstructions: config.testGenerationInstructions,
       }),
     },
   };

@@ -2,14 +2,14 @@
 sidebar_label: Running Red Teams
 sidebar_position: 40
 title: Running Red Teams in Promptfoo Enterprise
-description: Learn how to configure and run red team security assessments for your LLM applications in Promptfoo Enterprise
+description: Configure enterprise-grade red team assessments with custom plugins, scheduling, and compliance reporting for production LLMs
 keywords:
   [red teams, red teaming, llm security testing, adversarial attacks, llm vulnerability scanning]
 ---
 
 # Running Red Teams
 
-Promptfoo Enterprise allows you to configure targets, plugin collections, and scan configurations that can be shared among your team.
+[Promptfoo Enterprise](/docs/enterprise/) allows you to configure targets, plugin collections, and scan configurations that can be shared among your team.
 
 ## Connecting to Promptfoo
 

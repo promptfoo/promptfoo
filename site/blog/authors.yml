@@ -1,10 +1,76 @@
+promptfoo_team:
+  name: Promptfoo Team
+  title: Development Team
+  url: https://github.com/promptfoo
+  image_url: /img/logo-panda.svg
+
+adel:
+  name: Adel Müürsepp
+  title: Contributor
+  url: https://github.com/adelmuursepp
+  image_url: https://github.com/adelmuursepp.png
+
+asmi:
+  name: Asmi Gulati
+  title: Contributor
+  url: https://github.com/asmigulati
+  image_url: /img/team/asmi.jpeg
+
+dane:
+  name: Dane Schneider
+  title: Staff Engineer
+  url: https://github.com/danenania
+  image_url: /img/team/dane.jpeg
+
 ian:
   name: Ian Webster
-  title: promptfoo maintainer
+  title: Co-founder & CEO
   url: https://github.com/typpo
-  image_url: https://github.com/typpo.png
+  image_url: /img/team/ian.jpeg
+
+konstantine:
+  name: Konstantine Kahadze
+  title: Developer Relations Engineer
+  url: https://github.com/kkahadze
+  image_url: /img/team/konstantine.jpg
+
+michael:
+  name: Michael D'Angelo
+  title: Co-founder & CTO
+  url: https://github.com/mldangelo
+  image_url: /img/team/michael.jpeg
+
+shuo:
+  name: Guangshuo Zang
+  title: Staff Engineer
+  url: https://github.com/mrflounder
+  image_url: /img/team/shuo.jpeg
+
+steve:
+  name: Steven Klein
+  title: Principal Engineer
+  url: https://github.com/sklein12
+  image_url: /img/team/steve.jpeg
+
+tabs:
+  name: Tabs Fakier
+  title: Contributor
+  url: https://github.com/ladyofcode
+  image_url: /img/team/tabs.jpeg
 
 vanessa:
   name: Vanessa Sauter
-  title: solutions architect @ promptfoo
+  title: Principal Solutions Architect
   url: https://github.com/vsauter
+  image_url: /img/team/vanessa.jpeg
+
+vedantr:
+  name: Vedant R
+  title: Contributor
+  url: https://github.com/vedantr
+  image_url: https://github.com/vedantr.png
+
+yash:
+  name: Yash Chhabria
+  title: Security Engineer
+  image_url: /img/team/yash.png

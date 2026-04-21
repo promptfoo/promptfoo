@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Ollama function calling with tiny model
+
+prompts:
+  - 'What is the weather like in {{city}}?'
+
+providers:
+  - id: 'ollama:chat:llama3.2:1b'
+    label: 'ollama-function-calling'
+    config:
+      tools: file://get_current_weather.yaml
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).location.includes('Boston')
+
+  - vars:
+      city: New York
+    assert:
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'get_current_weather'
+
+  - vars:
+      city: Tokyo

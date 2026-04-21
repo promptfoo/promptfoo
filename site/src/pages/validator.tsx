@@ -1,6 +1,7 @@
-import { Editor } from '@monaco-editor/react';
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
 import Link from '@docusaurus/Link';
+import { Editor } from '@monaco-editor/react';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
@@ -39,7 +40,7 @@ defaultTest:
 const ConfigValidator = () => {
   const [input, setInput] = useState(DEFAULT_INPUT);
   const [validationOutput, setValidationOutput] = useState('Configuration is valid');
-  const [schema, setSchema] = useState(null);
+  const [schema, setSchema] = useState<object | null>(null);
 
   useEffect(() => {
     fetch('/config-schema.json')
@@ -48,7 +49,7 @@ const ConfigValidator = () => {
       .catch((error) => console.error('Error loading schema:', error));
   }, []);
 
-  const validateConfig = (value) => {
+  const validateConfig = (value: string) => {
     if (!schema) {
       setValidationOutput('Schema not loaded yet.');
       return;
@@ -69,7 +70,7 @@ const ConfigValidator = () => {
 
       ajv.validate(schema, parsedConfig);
 
-      const errors = new AggregateAjvError(ajv.errors);
+      const errors = new AggregateAjvError(ajv.errors ?? []);
       const errorsByPath: Record<string, string[]> = {};
 
       for (const error of Array.from(errors)) {
@@ -100,13 +101,16 @@ const ConfigValidator = () => {
         setValidationOutput(output.trim());
       }
     } catch (error) {
-      setValidationOutput(`Error parsing input: ${error.message}`);
+      setValidationOutput(
+        `Error parsing input: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   };
 
-  const handleEditorChange = (value) => {
-    setInput(value);
-    validateConfig(value);
+  const handleEditorChange = (value?: string) => {
+    const nextValue = value ?? '';
+    setInput(nextValue);
+    validateConfig(nextValue);
   };
 
   return (
@@ -125,7 +129,7 @@ const ConfigValidator = () => {
           </Typography>
         </Box>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Paper elevation={3} sx={{ height: '80vh' }}>
               <Editor
                 height="100%"
@@ -136,7 +140,7 @@ const ConfigValidator = () => {
               />
             </Paper>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Paper elevation={3} sx={{ height: '80vh', p: 2, overflow: 'auto' }}>
               <pre style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
                 {validationOutput}

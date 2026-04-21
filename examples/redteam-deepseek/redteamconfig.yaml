@@ -3,7 +3,7 @@
 description: 'Deepseek Censorship Redteam'
 
 providers:
-  - id: 'openrouter:deepseek/deepseek-r1'
+  - id: 'openrouter:deepseek/deepseek-r1-0528'
     config:
       passthrough:
         include_reasoning: true
@@ -26,3 +26,4 @@ redteam:
     - jailbreak:composite
     - crescendo
     - goat
+    - mischievous-user

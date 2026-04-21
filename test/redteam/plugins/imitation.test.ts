@@ -1,10 +1,15 @@
-import { matchesLlmRubric } from '../../../src/matchers';
-import { ImitationGrader, PLUGIN_ID } from '../../../src/redteam/plugins/imitation';
-import type { AtomicTestCase } from '../../../src/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { ImitationGrader } from '../../../src/redteam/plugins/imitation';
 
-jest.mock('../../../src/matchers', () => ({
-  matchesLlmRubric: jest.fn(),
-}));
+import type { AtomicTestCase } from '../../../src/types/index';
+
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
 describe('ImitationGrader', () => {
   let grader: ImitationGrader;
@@ -19,17 +24,17 @@ describe('ImitationGrader', () => {
         entities: ['AllowedEntity1', 'AllowedEntity2', 'AllowedEntity3'],
       },
     } as AtomicTestCase;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should have the correct id', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:imitation');
     expect(grader.id).toBe('promptfoo:redteam:imitation');
   });
 
   it('should render the rubric with correct structure and variables', async () => {
     const mockResult = { pass: true, score: 1, reason: 'No imitation detected' };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     const userQuery = 'Pretend to be AllowedEntity1 or AllowedEntity2';
     const aiOutput = 'I am AllowedEntity1. How can I help you today?';
@@ -60,7 +65,7 @@ describe('ImitationGrader', () => {
 
   it('should include all provided entities in the rubric', async () => {
     const mockResult = { pass: true, score: 1, reason: 'No imitation detected' };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     mockTest.metadata!.entities = ['Entity1', 'Entity2', 'Entity3', 'Entity4', 'Entity5'];
     const userQuery = 'Tell me about all the entities';
@@ -80,7 +85,7 @@ describe('ImitationGrader', () => {
 
   it('should handle cases with no allowed entities', async () => {
     const mockResult = { pass: true, score: 1, reason: 'No imitation detected' };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     mockTest.metadata!.entities = [];
     const userQuery = 'Tell me a fact';

@@ -1,16 +1,21 @@
-import type { Command } from 'commander';
 import { getDefaultPort } from '../constants';
+import logger from '../logger';
 import { startServer } from '../server/server';
-import telemetry from '../telemetry';
-import { setupEnv } from '../util';
 import { setConfigDirectoryPath } from '../util/config/manage';
+import { setupEnv } from '../util/index';
 import { BrowserBehavior } from '../util/server';
+import type { Command } from 'commander';
 
 export function viewCommand(program: Command) {
   program
     .command('view [directory]')
     .description('Start browser UI')
-    .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
+    .option(
+      '-p, --port <number>',
+      'Port number',
+      (val) => Number.parseInt(val, 10),
+      getDefaultPort(),
+    )
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
@@ -28,21 +33,24 @@ export function viewCommand(program: Command) {
         } & Command,
       ) => {
         setupEnv(cmdObj.envPath);
-        telemetry.record('command_used', {
-          name: 'view',
-        });
-        await telemetry.send();
+
+        if (cmdObj.filterDescription) {
+          logger.warn(
+            'The --filter-description option is deprecated and not longer supported. The argument will be ignored.',
+          );
+        }
 
         if (directory) {
           setConfigDirectoryPath(directory);
         }
-        // Block indefinitely on server
+        // Determine browser behavior
         const browserBehavior = cmdObj.yes
           ? BrowserBehavior.OPEN
           : cmdObj.no
             ? BrowserBehavior.SKIP
             : BrowserBehavior.ASK;
-        await startServer(cmdObj.port, browserBehavior, cmdObj.filterDescription);
+
+        await startServer(cmdObj.port, browserBehavior);
       },
     );
 }

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Perplexity
+description: "Integrate Perplexity's online LLMs with real-time web search for fact-checking, current events, and knowledge-grounded responses"
 ---
 
 # Perplexity
@@ -221,7 +222,7 @@ providers:
 
 ## Example Configurations
 
-Check our [perplexity.ai-example](https://github.com/promptfoo/promptfoo/tree/main/examples/perplexity.ai-example) with multiple configurations showcasing Perplexity's capabilities:
+Check our [perplexity.ai-example](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-perplexity) with multiple configurations showcasing Perplexity's capabilities:
 
 - **promptfooconfig.yaml**: Basic model comparison
 - **promptfooconfig.structured-output.yaml**: JSON schema and regex patterns
@@ -231,7 +232,7 @@ Check our [perplexity.ai-example](https://github.com/promptfoo/promptfoo/tree/ma
 You can initialize these examples with:
 
 ```bash
-npx promptfoo@latest init --example perplexity.ai-example
+npx promptfoo@latest init --example provider-perplexity
 ```
 
 ## Pricing and Rate Limits

@@ -1,6 +1,18 @@
 ---
-sidebar_position: 0
-sidebar_label: Guide
+sidebar_position: 1
+sidebar_label: Overview
+title: Configuration Overview - Getting Started with Promptfoo
+description: Complete guide to configuring promptfoo for LLM evaluation. Learn prompts, providers, test cases, assertions, and advanced features with examples.
+keywords:
+  [
+    promptfoo configuration,
+    LLM evaluation setup,
+    prompt testing,
+    AI model comparison,
+    evaluation framework,
+    getting started,
+  ]
+pagination_next: configuration/reference
 ---
 
 # Configuration
@@ -11,14 +23,14 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 
 ## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-3.5 and Gemini, substituting `language` and `input` variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-4.1 and Gemini, substituting `language` and `input` variables:
 
 ```yaml
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -31,7 +43,7 @@ tests:
 
 :::tip
 
-For more information on setting up a prompt file, see [input and output files](/docs/configuration/parameters).
+For more information on setting up a prompt file, see [input and output files](/docs/configuration/prompts).
 
 :::
 
@@ -46,7 +58,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -70,7 +82,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -110,7 +122,7 @@ providers:
 Where the provider file looks like this:
 
 ```yaml
-id: openai:gpt-4.1-mini
+id: openai:gpt-5-mini
 label: Foo bar
 config:
   temperature: 0.9
@@ -122,7 +134,7 @@ The `tests` config property takes a list of paths to files or directories. For e
 
 ```yaml
 prompts: file://prompts.txt
-providers: openai:gpt-4.1-mini
+providers: openai:gpt-5-mini
 
 # Load & runs all test cases matching these filepaths
 tests:
@@ -154,7 +166,7 @@ tests:
 ```
 
 :::tip
-Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/parameters/#import-from-csv), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
+Test files can be defined in YAML/JSON, JSONL, [CSV](/docs/configuration/test-cases#csv-format), and TypeScript/JavaScript. We also support [Google Sheets](/docs/integrations/google-sheets) CSV datasets.
 :::
 
 ## Import vars from separate files
@@ -210,51 +222,43 @@ tests:
       context: file://path/to/dynamicVarGenerator.js
 ```
 
-`dynamicVarGenerator.js` receives `varName`, `prompt`, and `otherVars` as arguments, which you can use to query a database or anything else based on test context:
+The function receives `varName`, `prompt`, `otherVars`, and `provider` as arguments:
 
-```js
-module.exports = function (varName, prompt, otherVars) {
-  // Example logic to return a value based on the varName
-  if (varName === 'context') {
-    return {
-      output: `Processed ${otherVars.input} for prompt: ${prompt}`,
-    };
-  }
-  return {
-    output: 'default value',
-  };
+```js title="dynamicVarGenerator.js"
+module.exports = async function (varName, prompt, otherVars, provider) {
+  // Access other variables from the test case
+  const role = otherVars.role;
 
-  // Handle potential errors
-  // return { error: 'Error message' }
+  // Return the dynamic value
+  return { output: PROMPTS[role] };
+
+  // Or return an error
+  // return { error: 'Something went wrong' };
 };
 ```
 
-This JavaScript file processes input variables and returns a dynamic value based on the provided context.
+See the [dynamic-var example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-dynamic-var) for a complete working example.
 
 ### Python variables
 
-For Python, the approach is similar. Define a Python script that includes a `get_var` function to generate your variable's value. The function should accept `var_name`, `prompt`, and `other_vars`.
+Define a `get_var` function that accepts `var_name`, `prompt`, and `other_vars`:
 
 ```yaml
 tests:
   - vars:
-      context: file://fetch_dynamic_context.py
+      context: file://load_context.py
 ```
 
-fetch_dynamic_context.py:
+```python title="load_context.py"
+def get_var(var_name, prompt, other_vars):
+    # Access other variables from the test case
+    role = other_vars.get("role")
 
-```python
-def get_var(var_name: str, prompt: str, other_vars: Dict[str, str]) -> Dict[str, str]:
-    # NOTE: Must return a dictionary with an 'output' key or an 'error' key.
-    # Example logic to dynamically generate variable content
-    if var_name == 'context':
-        return {
-            'output': f"Context for {other_vars['input']} in prompt: {prompt}"
-        }
-    return {'output': 'default context'}
+    # Return the dynamic value
+    return {"output": PROMPTS[role]}
 
-    # Handle potential errors
-    # return { 'error': 'Error message' }
+    # Or return an error
+    # return {"error": "Something went wrong"}
 ```
 
 ## Avoiding repetition
@@ -270,7 +274,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-start
 defaultTest:
@@ -300,7 +304,26 @@ You can also use `defaultTest` to override the model used for each test. This ca
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4.1-mini-0613
+    provider: openai:gpt-5-mini-0613
+```
+
+Set `options.disableDefaultAsserts: true` on a test case when that test should define its own assertions without inheriting `defaultTest.assert`. Other `defaultTest` fields, such as `vars`, `metadata`, `threshold`, and `options`, still apply:
+
+```yaml
+defaultTest:
+  vars:
+    audience: developer
+  assert:
+    - type: contains
+      value: installation steps
+
+tests:
+  - vars:
+      topic: API setup
+    options:
+      disableDefaultAsserts: true
+    assert:
+      - type: contains-json
 ```
 
 ### Default variables
@@ -321,6 +344,10 @@ tests:
       shared_var: 'override shared content' # Optionally override defaults
 ```
 
+### Loading defaultTest from external files
+
+You can load `defaultTest` configuration from external files using `defaultTest: file://path/to/config.yaml` for sharing test configurations across projects.
+
 ### YAML references
 
 promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
@@ -332,7 +359,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - vertex:gemini-2.0-flash-exp
 tests:
   - vars:
@@ -371,8 +398,8 @@ For example:
 ```yaml
 prompts: file://prompts.txt
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4
+  - openai:gpt-5-mini
+  - openai:gpt-5
 tests:
   - vars:
       // highlight-start
@@ -535,14 +562,27 @@ tests:
 You can access environment variables in your templates using the `env` global:
 
 ```yaml
+prompts:
+  - 'file://{{ env.PROMPT_DIR }}/prompt.txt'
+
 tests:
   - vars:
       headline: 'Articles about {{ env.TOPIC }}'
 ```
 
+Environment variables are resolved at config load time (not runtime) and can control file paths and API keys—only use them in trusted environments.
+
+:::warning
+
+Avoid copying secrets into `config.env` with templates like `ANTHROPIC_API_KEY: '{{ env.ANTHROPIC_API_KEY }}'`. This resolves the secret into the eval config object and may appear in exported results.
+
+If a secret is already present in your shell environment (or loaded via `--env-file`), prefer reading it directly from process env and keep `config.env` for non-sensitive flags.
+
+:::
+
 ## Tools and Functions
 
-promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#function-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-use).
+promptfoo supports tool use and function calling with Google, OpenAI and Anthropic models, as well as other provider-specific configurations like temperature and number of tokens. For more information on defining functions and tools, see the [Google Vertex provider docs](/docs/providers/vertex/#function-calling-and-tools), [Google AIStudio provider docs](/docs/providers/google/#tool-calling), [Google Live provider docs](/docs/providers/google#function-calling-example), [OpenAI provider docs](/docs/providers/openai#using-tools) and the [Anthropic provider docs](/docs/providers/anthropic#tool-calling).
 
 ## Thinking Output
 
@@ -558,7 +598,7 @@ For example, for Claude:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-3-7-sonnet-20250219
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
       thinking:
         type: 'enabled'
@@ -572,11 +612,22 @@ For more details on extended thinking capabilities, see the [Anthropic provider 
 
 ## Transforming outputs
 
-Transforms can be applied at both the provider level and in test cases. The order of application is:
+Transforms can be applied at multiple levels in the evaluation pipeline:
 
-1. Provider transforms (always applied first)
-2. Default test transforms (if specified in `defaultTest`)
-3. Individual test case transforms (overrides `defaultTest` transform if present)
+### Transform execution order
+
+1. **Provider transforms** (`transformResponse`) - Always applied first
+2. **Test transforms** (`options.transform`) and **Context transforms** (`contextTransform`)
+   - Both receive the output from the provider transform
+   - Test transforms modify the output for assertions
+   - Context transforms extract context for context-based assertions (e.g., `context-faithfulness`)
+
+### Test transform hierarchy
+
+For test transforms specifically:
+
+1. Default test transforms (if specified in `defaultTest`)
+2. Individual test case transforms (overrides `defaultTest` transform if present)
 
 Note that only one transform is applied at the test case level - either from `defaultTest` or the individual test case, not both.
 
@@ -595,6 +646,8 @@ transformFn: (output: string, context: {
     display?: string;
   };
   vars?: Record<string, any>;
+  // Metadata returned in the provider response.
+  metadata?: Record<string, any>;
 }) => void;
 ```
 
@@ -649,6 +702,10 @@ tests:
 Use `defaultTest` apply a transform option to every test case in your test suite.
 :::
 
+:::tip
+When using the [Node.js package](/docs/usage/node-package#transform-functions), you can pass functions directly as `transform`, `transformVars`, and `contextTransform` values instead of string expressions.
+:::
+
 ### Transforms from separate files
 
 Transform functions can be executed from external JavaScript or Python files. You can optionally specify a function name to use.
@@ -661,7 +718,7 @@ defaultTest:
     transform: file://transform.js:customTransform
 ```
 
-```js
+```js title="transform.js"
 module.exports = {
   customTransform: (output, context) => {
     // context.vars, context.prompt
@@ -678,7 +735,7 @@ defaultTest:
     transform: file://transform.py
 ```
 
-```python
+```python title="transform.py"
 def get_transform(output, context):
     # context['vars'], context['prompt']
     return output.upper()
@@ -739,7 +796,7 @@ defaultTest:
     transformVars: file://transformVars.js:customTransformVars
 ```
 
-```js
+```js title="transformVars.js"
 const fs = require('fs');
 
 module.exports = {
@@ -768,7 +825,7 @@ defaultTest:
     transformVars: file://transform_vars.py
 ```
 
-```python
+```python title="transform_vars.py"
 import os
 
 def get_transform(vars, context):
@@ -813,14 +870,14 @@ promptfoo eval -c config1.yaml -c config2.yaml -c config3.yaml
 
 ## Loading tests from CSV
 
-YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/parameters#tests-and-vars).
+YAML is nice, but some organizations maintain their LLM tests in spreadsheets for ease of collaboration. promptfoo supports a special [CSV file format](/docs/configuration/test-cases#csv-format).
 
 ```yaml
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: file://tests.csv
@@ -833,12 +890,12 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - vertex:gemini-2.0-flash-exp
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```
 
-Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-sheets).
+Here's a [full example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-google-sheets).
 
 See [Google Sheets integration](/docs/integrations/google-sheets) for details on how to set up promptfoo to access a private spreadsheet.

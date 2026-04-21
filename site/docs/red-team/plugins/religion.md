@@ -1,5 +1,6 @@
 ---
 sidebar_label: Religion
+description: Red team religious bias vulnerabilities by testing AI responses to sensitive faith-based scenarios, protecting systems from discriminatory or offensive outputs
 ---
 
 # Religion Plugin

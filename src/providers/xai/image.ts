@@ -1,14 +1,24 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider } from '../../types/providers';
 import invariant from '../../util/invariant';
-import { OpenAiImageProvider, formatOutput, callOpenAiImageApi } from '../openai/image';
-import type { OpenAiSharedOptions } from '../openai/types';
+import {
+  buildStructuredImageOutputs,
+  callOpenAiImageApi,
+  formatOutput,
+  OpenAiImageProvider,
+} from '../openai/image';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
-export type XaiImageOptions = OpenAiSharedOptions & {
+import type { EnvOverrides } from '../../types/env';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+import type { ApiProvider } from '../../types/providers';
+import type { OpenAiSharedOptions } from '../openai/types';
+
+type XaiImageOptions = OpenAiSharedOptions & {
   n?: number;
   response_format?: 'url' | 'b64_json';
   user?: string;
@@ -67,7 +77,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(
@@ -94,8 +104,6 @@ export class XAIImageProvider extends OpenAiImageProvider {
       body.user = config.user;
     }
 
-    logger.debug(`Calling xAI Image API: ${JSON.stringify(body)}`);
-
     const headers = {
       'Content-Type': 'application/json',
       ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
@@ -104,8 +112,9 @@ export class XAIImageProvider extends OpenAiImageProvider {
 
     let data: any, status: number, statusText: string;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
-      ({ data, cached, status, statusText } = await callOpenAiImageApi(
+      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
         `${this.getApiUrl()}${endpoint}`,
         body,
         headers,
@@ -124,8 +133,6 @@ export class XAIImageProvider extends OpenAiImageProvider {
       };
     }
 
-    logger.debug(`\txAI image API response: ${JSON.stringify(data)}`);
-
     if (data.error) {
       await data?.deleteFromCache?.();
       return {
@@ -140,10 +147,13 @@ export class XAIImageProvider extends OpenAiImageProvider {
       }
 
       const cost = cached ? 0 : this.calculateImageCost(config.n || 1);
+      const images = buildStructuredImageOutputs(data);
 
       return {
         output: formattedOutput,
+        images,
         cached,
+        latencyMs,
         cost,
         ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };

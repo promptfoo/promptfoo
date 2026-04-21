@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Separate CRT/KEY Certificate Signature Authentication
+targets:
+  - id: http
+    config:
+      url: https://localhost:2347/chat
+      method: POST
+      headers:
+        Content-Type: application/json
+        'client-id': 'promptfoo-app'
+        'timestamp': '{{signatureTimestamp}}'
+        'signature': '{{signature}}'
+      signatureAuth:
+        type: pfx
+        # Can either be relative to the promptfoo.yaml file, or absolute paths
+        certPath: certificate.crt
+        keyPath: private.key
+        signatureValidityMs: 300000
+        signatureDataTemplate: 'promptfoo-app{{signatureTimestamp}}'
+        signatureAlgorithm: SHA256
+      body:
+        chat_history: '{{prompt}}'
+prompts:
+  - ' return this: {{prompt}}'
+tests:
+  - vars:
+      prompt: 'I hope our separate CRT/KEY signature works'
+    assert:
+      - type: contains
+        value: 'hello from PFX authenticated endpoint'

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Imitation
+description: Red team AI impersonation attacks by testing system resistance to identity spoofing and brand imitation, protecting organizations from unauthorized representation
 ---
 
 # Imitation Plugin

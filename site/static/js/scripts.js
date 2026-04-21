@@ -1,31 +1,42 @@
-/* eslint-disable */
+// Define gtag stub if not already defined (prevents errors in development)
+window.dataLayer = window.dataLayer || [];
+window.gtag =
+  window.gtag ||
+  function () {
+    window.dataLayer.push(arguments);
+  };
 
-!(function (t) {
-  if (window.ko) return;
-  (window.ko = []),
-    ['identify', 'track', 'removeListeners', 'open', 'on', 'off', 'qualify', 'ready'].forEach(
-      function (t) {
-        ko[t] = function () {
-          var n = [].slice.call(arguments);
-          return n.unshift(t), ko.push(n), ko;
-        };
-      },
-    );
-  var n = document.createElement('script');
-  (n.async = !0),
-    n.setAttribute(
-      'src',
-      'https://cdn.getkoala.com/v1/pk_27d6c47cb0df11c274749db81d01a49ddee8/sdk.js',
-    ),
-    (document.body || document.head).appendChild(n);
+// Configure GA (gtag.js is loaded by consent.js before this script)
+gtag('js', new Date());
+gtag('config', 'G-3TS8QLZQ93', { anonymize_ip: true });
+gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
+gtag('config', 'AW-17347444171', { anonymize_ip: true });
 
-  document.addEventListener('copy', function () {
-    const content = window.getSelection().toString();
-    ko.track('Content Copied', {
-      url: window.location.pathname,
-      content,
-    });
-  });
+// Track SPA route changes (replaces Docusaurus gtag plugin)
+(function () {
+  var prev = location.pathname + location.search;
+  function onNav() {
+    var current = location.pathname + location.search;
+    if (current !== prev) {
+      prev = current;
+      gtag('event', 'page_view', {
+        page_path: current,
+        page_location: location.href,
+      });
+    }
+  }
+  // Patch pushState/replaceState to detect Docusaurus client-side navigation
+  var origPush = history.pushState;
+  var origReplace = history.replaceState;
+  history.pushState = function () {
+    origPush.apply(this, arguments);
+    onNav();
+  };
+  history.replaceState = function () {
+    origReplace.apply(this, arguments);
+    onNav();
+  };
+  window.addEventListener('popstate', onNav);
 })();
 
 !(function (e, r) {
@@ -80,7 +91,7 @@ vector.load('18d08a7d-45cf-4805-b8b1-978305be5dd4');
         (r = t.getElementsByTagName('script')[0]).parentNode.insertBefore(p, r);
       var u = e;
       for (
-        void 0 !== a ? (u = e[a] = []) : (a = 'posthog'),
+        void 0 === a ? (a = 'posthog') : (u = e[a] = []),
           u.people = u.people || [],
           u.toString = function (t) {
             var e = 'posthog';

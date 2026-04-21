@@ -1,5 +1,6 @@
 ---
 sidebar_position: 8
+description: 'Identify and block prompt injection attacks using advanced model-based classification for enhanced security protection'
 ---
 
 # Pi Scorer
@@ -94,7 +95,7 @@ You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brai
 prompts:
   - 'Explain {{concept}} in simple terms.'
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 tests:
   - vars:
       concept: quantum computing

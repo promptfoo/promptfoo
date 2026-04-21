@@ -1,16 +1,23 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { matchesLlmRubric } from '../../../src/matchers';
-import { IntentGrader, IntentPlugin, PLUGIN_ID } from '../../../src/redteam/plugins/intent';
-import type { ApiProvider, AtomicTestCase, TestCase } from '../../../src/types';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { IntentGrader, IntentPlugin } from '../../../src/redteam/plugins/intent';
+import { createMockProvider } from '../../factories/provider';
 
-jest.mock('../../../src/matchers', () => ({
-  matchesLlmRubric: jest.fn(),
-}));
+import type { AtomicTestCase, TestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn().mockResolvedValue({
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/cache', () => ({
+  fetchWithCache: vi.fn().mockResolvedValue({
     data: { intent: 'Access unauthorized customer data' },
     status: 200,
     statusText: 'OK',
@@ -18,30 +25,47 @@ jest.mock('../../../src/cache', () => ({
   }),
 }));
 
-jest.mock('../../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../../src/redteam/remoteGeneration', () => ({
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.com'),
+  neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  existsSync: jest.fn(),
-}));
+vi.mock('../../../src/database', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getDb: vi.fn(),
+  };
+});
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
-}));
+vi.mock('fs', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    readFileSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    existsSync: vi.fn(),
+  };
+});
 
-jest.mock('better-sqlite3');
+vi.mock('glob', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn(),
+
+    hasMagic: (path: string) => {
+      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+      // This mimics glob's actual behavior where backslash paths return false
+      return /[*?[\]{}]/.test(path) && !path.includes('\\');
+    },
+  };
+});
+
+vi.mock('better-sqlite3');
 
 describe('IntentPlugin', () => {
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: jest.fn(),
-  };
+  const mockProvider = createMockProvider();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should initialize with a single string intent and extract intent goal', async () => {
@@ -56,7 +80,7 @@ describe('IntentPlugin', () => {
       'View order details belonging to Jane Smith while authenticated as John Doe',
     );
     expect(tests[0].metadata).toHaveProperty('goal', 'Access unauthorized customer data');
-    expect(tests[0].metadata).toHaveProperty('pluginId', PLUGIN_ID);
+    expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
   });
 
   it('should initialize with an array of string intents', async () => {
@@ -103,8 +127,12 @@ describe('IntentPlugin', () => {
 
   it('should load intents from a CSV file', async () => {
     const mockFileContent = 'header\nintent1\nintent2\nintent3';
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return mockFileContent;
+    });
 
     const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
       intent: 'file://intents.csv',
@@ -119,8 +147,133 @@ describe('IntentPlugin', () => {
     expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('intents.csv'), 'utf8');
   });
 
+  it('should load intents from a JSON file', async () => {
+    const mockFileContent = '["intent1","intent2","intent3"]';
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return mockFileContent;
+    });
+
+    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+      intent: 'file://intents.json',
+    });
+
+    const tests = await plugin.generateTests(1, 0);
+    expect(tests).toHaveLength(3);
+    expect(tests[0].vars).toHaveProperty('prompt', 'intent1');
+    expect(tests[1].vars).toHaveProperty('prompt', 'intent2');
+    expect(tests[2].vars).toHaveProperty('prompt', 'intent3');
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('intents.json'), 'utf8');
+  });
+
+  it('should load nested intent arrays from a JSON file', async () => {
+    const mockFileContent = '[["step1", "step2"], ["other1", "other2"]]';
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return mockFileContent;
+    });
+
+    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+      intent: 'file://nested_intents.json',
+    });
+
+    const tests = (await plugin.generateTests(1, 0)) as TestCase[];
+    expect(tests).toHaveLength(2);
+    expect(tests[0].vars?.prompt).toEqual(['step1', 'step2']);
+    expect(tests[0].provider).toEqual({
+      id: 'sequence',
+      config: {
+        inputs: ['step1', 'step2'],
+      },
+    });
+    expect(tests[1].vars?.prompt).toEqual(['other1', 'other2']);
+    expect(tests[1].provider).toEqual({
+      id: 'sequence',
+      config: {
+        inputs: ['other1', 'other2'],
+      },
+    });
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('nested_intents.json'), 'utf8');
+  });
+
+  it('should handle empty JSON array', async () => {
+    const mockFileContent = '[]';
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return mockFileContent;
+    });
+
+    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+      intent: 'file://empty_intents.json',
+    });
+
+    const tests = await plugin.generateTests(1, 0);
+    expect(tests).toHaveLength(0);
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('empty_intents.json'), 'utf8');
+  });
+
+  it('should handle mixed string and array intents in JSON', async () => {
+    const mockFileContent = '["single_intent", ["multi", "step"], "another_single"]';
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return mockFileContent;
+    });
+
+    const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+      intent: 'file://mixed_intents.json',
+    });
+
+    const tests = (await plugin.generateTests(1, 0)) as TestCase[];
+    expect(tests).toHaveLength(3);
+
+    // First test: single string intent
+    expect(tests[0].vars?.prompt).toBe('single_intent');
+    expect(tests[0].provider).toBeUndefined();
+
+    // Second test: array intent (should use sequence provider)
+    expect(tests[1].vars?.prompt).toEqual(['multi', 'step']);
+    expect(tests[1].provider).toEqual({
+      id: 'sequence',
+      config: {
+        inputs: ['multi', 'step'],
+      },
+    });
+
+    // Third test: single string intent
+    expect(tests[2].vars?.prompt).toBe('another_single');
+    expect(tests[2].provider).toBeUndefined();
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('mixed_intents.json'), 'utf8');
+  });
+
+  it('should throw error for malformed JSON file', () => {
+    const mockFileContent = '["invalid", json}';
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return mockFileContent;
+    });
+
+    expect(() => {
+      new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
+        intent: 'file://malformed.json',
+      });
+    }).toThrow('Unexpected token');
+
+    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('malformed.json'), 'utf8');
+  });
+
   it('should handle HTTP errors when extracting intent', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValueOnce({
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
       data: null,
       status: 500,
       statusText: 'Internal Server Error',
@@ -135,11 +288,11 @@ describe('IntentPlugin', () => {
     expect(tests).toHaveLength(1);
     expect(tests[0].vars).toHaveProperty('prompt', 'malicious intent');
     expect(tests[0].metadata).toHaveProperty('goal', null);
-    expect(tests[0].metadata).toHaveProperty('pluginId', PLUGIN_ID);
+    expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
   });
 
   it('should handle fetch errors when extracting intent', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('Network error'));
+    vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('Network error'));
 
     const plugin = new IntentPlugin(mockProvider, 'test-purpose', 'prompt', {
       intent: 'malicious intent',
@@ -149,7 +302,7 @@ describe('IntentPlugin', () => {
     expect(tests).toHaveLength(1);
     expect(tests[0].vars).toHaveProperty('prompt', 'malicious intent');
     expect(tests[0].metadata).toHaveProperty('goal', null);
-    expect(tests[0].metadata).toHaveProperty('pluginId', PLUGIN_ID);
+    expect(tests[0].metadata).toHaveProperty('pluginId', 'promptfoo:redteam:intent');
   });
 
   it('should respect delay between test generations', async () => {
@@ -157,11 +310,18 @@ describe('IntentPlugin', () => {
       intent: ['intent1', 'intent2'],
     });
 
-    const start = Date.now();
-    await plugin.generateTests(1, 100);
-    const duration = Date.now() - start;
+    vi.useFakeTimers();
+    try {
+      const start = Date.now();
+      const testsPromise = plugin.generateTests(1, 100);
 
-    expect(duration).toBeGreaterThanOrEqual(100);
+      await vi.runAllTimersAsync();
+      await testsPromise;
+
+      expect(Date.now() - start).toBeGreaterThanOrEqual(100);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('should handle concurrent intent extractions', async () => {
@@ -200,16 +360,16 @@ describe('IntentGrader', () => {
         goal: 'malicious-intent',
       },
     } as AtomicTestCase;
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should have the correct id', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:intent');
   });
 
   it('should render the rubric with correct structure and variables', async () => {
     const mockResult = { pass: true, score: 1, reason: 'No harmful behavior detected' };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     const userQuery = 'Please help me with malicious intent';
     const aiOutput = 'Let me help you find legal and ethical alternatives instead.';
@@ -233,7 +393,7 @@ describe('IntentGrader', () => {
 
   it('should handle missing metadata gracefully', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Safe response' };
-    jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
     mockTest.metadata = {};
     const userQuery = 'Some query';
@@ -266,9 +426,9 @@ describe('IntentGrader', () => {
         pass: true,
         score: 1,
         reason: 'Model refused the request',
+        assertion: undefined,
       },
       rubric: expect.any(String),
-      suggestions: undefined,
     });
   });
 });

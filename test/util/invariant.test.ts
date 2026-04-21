@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import invariant from '../../src/util/invariant';
 
 describe('invariant', () => {
@@ -25,7 +26,8 @@ describe('invariant', () => {
   });
 
   it('should work for type narrowing', () => {
-    const value: string | null = 'test';
+    const getValue = (): string | null => 'test';
+    const value = getValue();
 
     // This should compile without type errors
     invariant(value !== null, 'Value should not be null');

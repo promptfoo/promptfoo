@@ -1,7 +1,23 @@
 ---
+title: 'Preventing Bias & Toxicity in Generative AI'
 sidebar_label: Preventing bias & toxicity
+description: 'Biased AI outputs can destroy trust and violate regulations. Discover practical methods to detect, measure, and prevent bias in your generative AI applications.'
 image: /img/blog/bias/llm-bias-mitigation-diagram.svg
+keywords:
+  [
+    AI bias prevention,
+    generative AI bias,
+    toxicity detection,
+    LLM fairness,
+    AI ethics,
+    bias mitigation,
+    inclusive AI,
+    algorithmic bias,
+    AI safety,
+  ]
 date: 2024-10-08
+authors: [ian]
+tags: [research-analysis, best-practices]
 ---
 
 # Preventing Bias & Toxicity in Generative AI
@@ -82,7 +98,7 @@ Deploy **bias detection tools** before development. Use sentiment analysis and n
 
 **Red team** your application to detect failure modes across a wide range of inputs. There are tools ([like Promptfoo](/docs/red-team/)) that can help you automate thousands of inputs and outputs.
 
-Set up **guardrails** to catch biased outputs. These are typically provided as [APIs](/docs/red-team/guardrails/) that can classify inputs or outputs, and block, modify, or flag them for human review.
+Set up **guardrails** to catch biased outputs. These are typically provided as APIs that can classify inputs or outputs, and block, modify, or flag them for human review.
 
 ### 3. Fine-tune models
 

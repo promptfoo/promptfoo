@@ -2,7 +2,8 @@ import { fetchWithCache } from './cache';
 import { getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
-import type { GradingResult } from './types';
+
+import type { GradingResult } from './types/index';
 
 type PiQuestion = {
   question: string;
@@ -14,7 +15,7 @@ type RemotePiScoringPayload = {
   scoring_spec: PiScoringSpec;
 };
 
-export function getWithPiApiKey(): string | undefined {
+function getWithPiApiKey(): string | undefined {
   // Check env var first
   const withPiApiKey = getEnvString('WITHPI_API_KEY');
   if (withPiApiKey) {
@@ -48,7 +49,7 @@ export async function doRemoteScoringWithPi(
     if (apiKey) {
       const body = JSON.stringify(payload);
       logger.debug(`Performing remote scoring with pi: ${body}`);
-      const { data } = await fetchWithCache(
+      const { data } = await fetchWithCache<WithPiGradingResult>(
         WITHPI_API_URL,
         {
           method: 'POST',

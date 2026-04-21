@@ -1,40 +1,43 @@
 import { SingleBar } from 'cli-progress';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import * as remoteGeneration from '../../../src/redteam/remoteGeneration';
 import {
+  addMathPrompt,
   DEFAULT_MATH_CONCEPTS,
   EXAMPLES,
-  addMathPrompt,
   encodeMathPrompt,
   generateMathPrompt,
 } from '../../../src/redteam/strategies/mathPrompt';
-import type { ApiProvider } from '../../../src/types/providers';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
-jest.mock('cli-progress');
-jest.mock('../../../src/redteam/providers/shared');
-jest.mock('../../../src/cache');
-jest.mock('../../../src/redteam/remoteGeneration');
+vi.mock('cli-progress');
+vi.mock('../../../src/redteam/providers/shared');
+vi.mock('../../../src/cache');
+vi.mock('../../../src/redteam/remoteGeneration');
 
 describe('mathPrompt', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.restoreAllMocks();
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('generateMathPrompt', () => {
     it('should generate math prompts remotely', async () => {
       const mockProgressBar = {
-        start: jest.fn(),
-        increment: jest.fn(),
-        stop: jest.fn(),
-        render: jest.fn(),
-        update: jest.fn(),
-        isActive: jest.fn(),
-        getProgress: jest.fn(),
+        start: vi.fn(),
+        increment: vi.fn(),
+        stop: vi.fn(),
+        render: vi.fn(),
+        update: vi.fn(),
+        isActive: vi.fn(),
+        getProgress: vi.fn(),
       } as unknown as SingleBar;
 
-      (SingleBar as any).mockImplementation(() => mockProgressBar);
+      (SingleBar as any).mockImplementation(function () {
+        return mockProgressBar;
+      });
 
       const mockTestCases = [{ vars: { prompt: 'test1' } }, { vars: { prompt: 'test2' } }];
       const mockResult = [{ vars: { prompt: 'encoded1' } }, { vars: { prompt: 'encoded2' } }];
@@ -50,7 +53,7 @@ describe('mathPrompt', () => {
         deleteFromCache: async () => {},
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse as any);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse as any);
       const result = await generateMathPrompt(mockTestCases as any, 'prompt', {});
 
       expect(result).toEqual(mockResult);
@@ -60,15 +63,14 @@ describe('mathPrompt', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
-      (SingleBar as any).mockImplementation(
-        () =>
-          ({
-            start: jest.fn(),
-            increment: jest.fn(),
-            stop: jest.fn(),
-          }) as unknown as SingleBar,
-      );
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
 
       const result = await generateMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {});
       expect(result).toEqual([]);
@@ -77,14 +79,14 @@ describe('mathPrompt', () => {
 
   describe('encodeMathPrompt', () => {
     it('should encode text using math concepts', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'mock',
-        callApi: jest.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
           output: JSON.stringify({ encodedPrompt: 'encoded math text' }),
         }),
-      } as any;
+      });
 
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
 
       const result = await encodeMathPrompt('test text', 'set theory');
 
@@ -93,14 +95,12 @@ describe('mathPrompt', () => {
     });
 
     it('should handle JSON parsing errors', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'mock',
-        callApi: jest.fn().mockResolvedValue({
-          output: 'invalid json',
-        }),
-      } as any;
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({ output: 'invalid json' }),
+      });
 
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
 
       await expect(encodeMathPrompt('test text', 'set theory')).rejects.toThrow(
         'Expected a JSON object',
@@ -110,29 +110,30 @@ describe('mathPrompt', () => {
 
   describe('addMathPrompt', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should use custom math concepts when provided', async () => {
-      jest.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(remoteGeneration.shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
       const customConcepts = ['topology', 'calculus'];
 
-      const mockProvider: ApiProvider = {
-        id: () => 'mock',
-        callApi: jest.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
           output: JSON.stringify({ encodedPrompt: 'encoded' }),
         }),
-      } as any;
+      });
 
-      jest.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
-      (SingleBar as any).mockImplementation(
-        () =>
-          ({
-            start: jest.fn(),
-            increment: jest.fn(),
-            stop: jest.fn(),
-          }) as unknown as SingleBar,
-      );
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
+      (SingleBar as any).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          increment: vi.fn(),
+          stop: vi.fn(),
+        } as unknown as SingleBar;
+      });
 
       const result = await addMathPrompt([{ vars: { prompt: 'test' } }] as any, 'prompt', {
         mathConcepts: customConcepts,

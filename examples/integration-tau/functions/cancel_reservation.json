@@ -1,0 +1,26 @@
+{
+  "type": "function",
+  "function": {
+    "name": "cancel_reservation",
+    "description": "Cancel an existing reservation",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "User ID"
+        },
+        "reservation_id": {
+          "type": "string",
+          "description": "Reservation ID to cancel"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["change_of_plan", "airline_cancelled", "other"],
+          "description": "Reason for cancellation"
+        }
+      },
+      "required": ["user_id", "reservation_id", "reason"]
+    }
+  }
+}

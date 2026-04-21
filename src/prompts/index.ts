@@ -1,19 +1,14 @@
+import { stat } from 'fs/promises';
+
 import { globSync } from 'glob';
 import logger from '../logger';
-import type {
-  UnifiedConfig,
-  Prompt,
-  PromptFunction,
-  ProviderOptionsMap,
-  TestSuite,
-  ProviderOptions,
-  EvaluateTestSuite,
-} from '../types';
-import { parsePathOrGlob } from '../util';
+import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
+import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
 import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
@@ -25,7 +20,17 @@ import { processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
 
+import type {
+  EvaluateTestSuite,
+  Prompt,
+  PromptFunction,
+  ProviderOptions,
+  ProviderOptionsMap,
+  TestSuite,
+} from '../types/index';
+
 export * from './grading';
+export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
 
 /**
  * Reads and maps provider prompts based on the configuration and parsed prompts.
@@ -34,7 +39,7 @@ export * from './grading';
  * @returns A map of provider IDs to their respective prompts.
  */
 export function readProviderPromptMap(
-  config: Pick<Partial<UnifiedConfig>, 'providers'>,
+  config: Pick<Partial<EvaluateTestSuite>, 'providers'>,
   parsedPrompts: Prompt[],
 ): TestSuite['providerPromptMap'] {
   const ret: Record<string, string[]> = {};
@@ -43,10 +48,13 @@ export function readProviderPromptMap(
     return ret;
   }
 
-  const allPrompts = [];
-  for (const prompt of parsedPrompts) {
-    allPrompts.push(prompt.label);
-  }
+  const allPrompts = parsedPrompts.map((prompt) => prompt.label);
+  const addProviderPrompts = (id: string, label?: string, prompts = allPrompts) => {
+    ret[id] = prompts;
+    if (label) {
+      ret[label] = prompts;
+    }
+  };
 
   if (typeof config.providers === 'string') {
     return { [config.providers]: allPrompts };
@@ -56,7 +64,17 @@ export function readProviderPromptMap(
     return { 'Custom function': allPrompts };
   }
 
+  if (isApiProvider(config.providers)) {
+    addProviderPrompts(config.providers.id());
+    return ret;
+  }
+
   for (const provider of config.providers) {
+    if (isApiProvider(provider)) {
+      addProviderPrompts(provider.id(), provider.label);
+      continue;
+    }
+
     if (typeof provider === 'object') {
       // It's either a ProviderOptionsMap or a ProviderOptions
       if (provider.id) {
@@ -65,10 +83,7 @@ export function readProviderPromptMap(
           rawProvider.id,
           'You must specify an `id` on the Provider when you override options.prompts',
         );
-        ret[rawProvider.id] = rawProvider.prompts || allPrompts;
-        if (rawProvider.label) {
-          ret[rawProvider.label] = rawProvider.prompts || allPrompts;
-        }
+        addProviderPrompts(rawProvider.id, rawProvider.label, rawProvider.prompts || allPrompts);
       } else {
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];
@@ -89,7 +104,7 @@ export function readProviderPromptMap(
  * @param maxRecursionDepth - Maximum recursion depth for globbing.
  * @returns Promise resolving to an array of processed prompts.
  */
-export async function processPrompt(
+async function processPrompt(
   prompt: Partial<Prompt>,
   basePath: string = '',
   maxRecursionDepth: number = 1,
@@ -102,6 +117,13 @@ export async function processPrompt(
   // Handling when the prompt is a raw function (e.g. javascript function)
   if (prompt.function) {
     return [prompt as Prompt];
+  }
+
+  // Handle exec: prefix for executable prompts
+  if (prompt.raw.startsWith('exec:')) {
+    const execSpec = prompt.raw.substring(5); // Remove 'exec:' prefix
+    const { filePath, functionName } = parsePathOrGlob(basePath, execSpec);
+    return await processExecutableFile(filePath, prompt, functionName);
   }
 
   if (!maybeFilePath(prompt.raw)) {
@@ -129,8 +151,9 @@ export async function processPrompt(
     );
     const prompts: Prompt[] = [];
     for (const globbedFilePath of globbedPath) {
+      const rawPath = functionName ? `${globbedFilePath}:${functionName}` : globbedFilePath;
       const processedPrompts = await processPrompt(
-        { raw: globbedFilePath },
+        { raw: rawPath },
         basePath,
         maxRecursionDepth - 1,
       );
@@ -172,6 +195,23 @@ export async function processPrompt(
   }
   if (extension && ['.yml', '.yaml'].includes(extension)) {
     return processYamlFile(filePath, prompt);
+  }
+  // Handle common executable extensions
+  if (
+    extension &&
+    ['.sh', '.bash', '.exe', '.bat', '.cmd', '.ps1', '.rb', '.pl'].includes(extension)
+  ) {
+    return await processExecutableFile(filePath, prompt, functionName);
+  }
+  // If no extension matched but file exists and is executable, treat it as an executable
+  try {
+    const stats = await stat(filePath);
+    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
+      // File is executable
+      return await processExecutableFile(filePath, prompt, functionName);
+    }
+  } catch (_e) {
+    // File doesn't exist or can't be accessed, fall through
   }
   return [];
 }
@@ -230,44 +270,59 @@ export async function processPrompts(
   ).flat();
 }
 
+// G-Eval prompts
 export const GEVAL_PROMPT_STEPS = `
-Given an evaluation criteria which outlines how you should judge some text, generate 3-4 concise evaluation steps for any text based on the criteria below.
+Given evaluation criteria that outline how you should judge a piece of text, generate 3-4 concise evaluation steps applicable to any text based on the criteria below and designed to check whether the criteria are satisfied by the text.
 
-Evaluation Criteria:
+**EVALUATION CRITERIA**
 {{criteria}}
 
-**
-IMPORTANT: Please make sure to only return in minified JSON format, with the "steps" key as a list of strings. No additional words, explanation or formatting is needed.
-Example JSON:
-{"steps": <list_of_strings>}
-**
+**OUTPUT FORMAT**
+IMPORTANT:
+- Return output ONLY as a minified JSON object (no code fences).
+- The JSON object must contain a single key, "steps", whose value is a list of strings.
+- Each string must represent one evaluation step.
+- Do NOT include any explanations, commentary, extra text, or additional formatting.
 
+Format:
+{"steps": <list_of_strings>}
+
+Example:
+{"steps":["<Evaluation Step 1>","<Evaluation Step 2>","<Evaluation Step 3>","<Evaluation Step 4>"]}
+
+Here are the 3-4 concise evaluation steps, formatted as required in a minified JSON:
 JSON:
 `;
 
 export const GEVAL_PROMPT_EVALUATE = `
-You will be given one Reply for a Source Text below. Your task is to rate the Reply on one metric.
+You will be given one Reply for a Prompt below. Your task is to rate the Reply on one metric.
 Please make sure you read and understand these instructions carefully. Please keep this document open while reviewing, and refer to it as needed.
 
-Evaluation Criteria:
+**Evaluation Criteria**
 {{criteria}}
 
-Evaluation Steps:
+**Evaluation Steps**
 - {{steps}}
-- Given the evaluation steps, return a JSON with two keys: 1) a "score" key ranging from 0 - {{maxScore}}, with {{maxScore}} being that it follows the Evaluation Criteria outlined in the Evaluation Steps and 0 being that it does not; 2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Source Text and Reply in your reason, but be very concise with it!
+Given the evaluation steps, return a JSON with two keys: 
+  1) a "score" key that MUST be an integer from 0 to {{maxScore}}, where {{maxScore}} indicates that the condition described by the Evaluation Criteria is fully and clearly observed in the Reply according to the Evaluation Steps, and 0 indicates that it is not observed at all;
+  2) a "reason" key, a reason for the given score, but DO NOT QUOTE THE SCORE in your reason. Please mention specific information from Prompt and Reply in your reason, but be very concise with it!
 
-Source Text:
+**Prompt**
 {{input}}
 
-Reply:
+**Reply**
 {{output}}
 
-**
-IMPORTANT: Please make sure to only return in minified JSON format, with the "score" and "reason" key. No additional words, explanation or formatting is needed.
+**OUTPUT FORMAT**
+IMPORTANT: 
+- Return output ONLY as a minified JSON object (no code fences).
+- The JSON object must contain exactly two keys: "score" and "reason".
+- No additional words, explanations, or formatting are needed.
+- Absolutely no additional text, explanations, line breaks, or formatting outside the JSON object are allowed.
 
 Example JSON:
-{"score":0,"reason":"The text does not follow the evaluation steps provided."}
-**
+{"score":0,"reason":"The text of reply does not follow the evaluation criteria provided."}
 
+Here is the final evaluation in the required minified JSON format:
 JSON:
 `;

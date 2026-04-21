@@ -1,5 +1,6 @@
 ---
 sidebar_label: Bitbucket Pipelines
+description: Integrate promptfoo LLM testing with Bitbucket Pipelines CI/CD to automate evaluations, track results, and catch regressions in your AI models using built-in assertions
 ---
 
 # Bitbucket Pipelines Integration
@@ -17,7 +18,7 @@ This guide demonstrates how to set up promptfoo with Bitbucket Pipelines to run 
 Create a new file named `bitbucket-pipelines.yml` in the root of your repository with the following configuration:
 
 ```yaml
-image: node:18
+image: node:20
 
 pipelines:
   default:
@@ -124,7 +125,7 @@ pipelines:
 Test across multiple configurations in parallel:
 
 ```yaml
-image: node:18
+image: node:20
 
 pipelines:
   default:
@@ -152,7 +153,7 @@ pipelines:
 Leverage Bitbucket Pipes for a more concise configuration:
 
 ```yaml
-image: node:18
+image: node:20
 
 pipelines:
   default:

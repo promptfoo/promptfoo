@@ -1,12 +1,17 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
-import { XAIImageProvider, createXAIImageProvider } from '../../../src/providers/xai/image';
+import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
+import { mockProcessEnv } from '../../util/utils';
 
-jest.mock('../../../src/logger');
-jest.mock('../../../src/providers/openai/image', () => ({
-  ...jest.requireActual('../../../src/providers/openai/image'),
-  callOpenAiImageApi: jest.fn(),
-}));
+vi.mock('../../../src/logger');
+vi.mock('../../../src/providers/openai/image', async () => {
+  const actual = await vi.importActual('../../../src/providers/openai/image');
+  return {
+    ...actual,
+    callOpenAiImageApi: vi.fn(),
+  };
+});
 
 describe('XAI Image Provider', () => {
   const mockApiKey = 'test-api-key';
@@ -51,9 +56,13 @@ describe('XAI Image Provider', () => {
   };
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.clearAllMocks();
-    jest.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
+    vi.resetAllMocks();
+    vi.clearAllMocks();
+    vi.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('Provider creation and configuration', () => {
@@ -113,6 +122,7 @@ describe('XAI Image Provider', () => {
 
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.jpg)',
+        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' }],
         cached: false,
         cost: 0.07, // xAI pricing: $0.07 per generated image
       });
@@ -123,14 +133,62 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
 
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
         output: '![test prompt](https://example.com/image.jpg)',
+        images: [{ data: 'https://example.com/image.jpg', mimeType: 'image/jpeg' }],
         cached: true,
         cost: 0,
+      });
+    });
+
+    it('should include all generated URL images in images array', async () => {
+      const provider = new XAIImageProvider('grok-2-image', {
+        config: { apiKey: mockApiKey, n: 2 },
+      });
+
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
+        data: {
+          data: [
+            { url: 'https://example.com/image-1.jpg' },
+            { url: 'https://example.com/image-2.jpg' },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output: '![test prompt](https://example.com/image-1.jpg)',
+        images: [
+          { data: 'https://example.com/image-1.jpg', mimeType: 'image/jpeg' },
+          { data: 'https://example.com/image-2.jpg', mimeType: 'image/jpeg' },
+        ],
+        cached: false,
+        cost: 0.14,
+      });
+    });
+
+    it('should include latencyMs when available', async () => {
+      const provider = new XAIImageProvider('grok-2-image', {
+        config: { apiKey: mockApiKey },
+      });
+
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
+        ...mockSuccessResponse,
+        latencyMs: 321,
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toMatchObject({
+        latencyMs: 321,
       });
     });
 
@@ -155,8 +213,8 @@ describe('XAI Image Provider', () => {
       const originalOpenAiKey = process.env.OPENAI_API_KEY;
 
       // Clear all possible API key environment variables
-      delete process.env.XAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ XAI_API_KEY: undefined });
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         // Create provider with no API key in config or environment
@@ -169,10 +227,10 @@ describe('XAI Image Provider', () => {
       } finally {
         // Restore the original environment variables
         if (originalXaiKey) {
-          process.env.XAI_API_KEY = originalXaiKey;
+          mockProcessEnv({ XAI_API_KEY: originalXaiKey });
         }
         if (originalOpenAiKey) {
-          process.env.OPENAI_API_KEY = originalOpenAiKey;
+          mockProcessEnv({ OPENAI_API_KEY: originalOpenAiKey });
         }
       }
     });
@@ -236,7 +294,7 @@ describe('XAI Image Provider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(errorResponse);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(errorResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -249,7 +307,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue({
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
         data: 'Error message',
         cached: false,
         status: 500,
@@ -267,7 +325,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockRejectedValue(new Error('Network error'));
+      vi.mocked(callOpenAiImageApi).mockRejectedValue(new Error('Network error'));
 
       const result = await provider.callApi('test prompt');
 
@@ -280,7 +338,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue({
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
         data: { data: [{}] },
         cached: false,
         status: 200,
@@ -298,7 +356,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue({
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
         data: { error: 'Invalid request' },
         cached: false,
         status: 400,
@@ -316,12 +374,13 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(mockBase64Response);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(mockBase64Response);
 
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: JSON.stringify(mockBase64Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
         isBase64: true,
         format: 'json',
@@ -344,7 +403,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue({
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
         data: { data: [{}] },
         cached: false,
         status: 200,
@@ -513,7 +572,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
 
       const result = await provider.callApi('test prompt');
       expect(result.cost).toBe(0);
@@ -539,7 +598,7 @@ describe('XAI Image Provider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(multiImageResponse);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(multiImageResponse);
 
       const result = await provider.callApi('test prompt');
       expect(result.cost).toBeCloseTo(0.21, 2); // 3 images * $0.07

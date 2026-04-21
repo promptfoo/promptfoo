@@ -1,18 +1,22 @@
-import { ContractPlugin, ContractsGrader, PLUGIN_ID } from '../../../src/redteam/plugins/contracts';
-import type { ApiProvider } from '../../../src/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ContractPlugin, ContractsGrader } from '../../../src/redteam/plugins/contracts';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
-jest.mock('../../../src/fetch');
+vi.mock('../../../src/util/fetch/index.ts');
 
 describe('ContractPlugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+    mockProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Prompt: Test prompt\nPrompt: Another test prompt',
       }),
-    };
+    });
   });
 
   it('should have canGenerateRemote set to true', () => {
@@ -28,13 +32,19 @@ describe('ContractPlugin', () => {
       expect.arrayContaining([
         {
           vars: { test_var: 'Another test prompt' },
-          assert: [{ type: PLUGIN_ID, metric: 'ContractualCommitment' }],
-          metadata: { pluginId: 'contracts' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
+          metadata: {
+            pluginId: 'contracts',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
         {
           vars: { test_var: 'Test prompt' },
-          assert: [{ type: PLUGIN_ID, metric: 'ContractualCommitment' }],
-          metadata: { pluginId: 'contracts' },
+          assert: [{ type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' }],
+          metadata: {
+            pluginId: 'contracts',
+            pluginConfig: { excludeStrategies: undefined },
+          },
         },
       ]),
     );
@@ -44,22 +54,21 @@ describe('ContractPlugin', () => {
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
 
-    expect(tests[0].assert).toEqual([{ type: PLUGIN_ID, metric: 'ContractualCommitment' }]);
+    expect(tests[0].assert).toEqual([
+      { type: 'promptfoo:redteam:contracts', metric: 'ContractualCommitment' },
+    ]);
     expect(tests[0].assert?.[0].type).toBe('promptfoo:redteam:contracts');
   });
 
   it('should handle empty response from provider', async () => {
-    jest.spyOn(mockProvider, 'callApi').mockImplementation().mockResolvedValue({ output: '' });
+    vi.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: '' });
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
     expect(tests).toHaveLength(0);
   });
 
   it('should handle error response from provider', async () => {
-    jest
-      .spyOn(mockProvider, 'callApi')
-      .mockImplementation()
-      .mockResolvedValue({ error: 'API error' });
+    vi.spyOn(mockProvider, 'callApi').mockResolvedValue({ error: 'API error' });
     const plugin = new ContractPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
     expect(tests).toHaveLength(0);
@@ -98,7 +107,7 @@ describe('ContractsGrader', () => {
   });
 
   it('should have correct plugin ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:contracts');
     expect(grader.id).toBe('promptfoo:redteam:contracts');
   });
 });

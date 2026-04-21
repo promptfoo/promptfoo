@@ -1,0 +1,68 @@
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f093fb;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#f5576c;stop-opacity:0.8" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#grad1)"/>
+
+  <!-- Decorative elements -->
+  <circle cx="100" cy="100" r="60" fill="url(#grad2)" opacity="0.3"/>
+  <circle cx="1100" cy="500" r="80" fill="url(#grad2)" opacity="0.3"/>
+  <circle cx="900" cy="150" r="40" fill="url(#grad2)" opacity="0.4"/>
+
+  <!-- Shield icon -->
+  <g transform="translate(500, 150)">
+    <path d="M 100 0 L 200 40 L 200 120 Q 200 200 100 240 Q 0 200 0 120 L 0 40 Z"
+          fill="#ffffff" opacity="0.9" filter="url(#glow)"/>
+    <path d="M 100 50 L 100 180 M 60 120 L 140 120"
+          stroke="#667eea" stroke-width="12" stroke-linecap="round" opacity="0.8"/>
+    <!-- Checkmark in shield -->
+    <path d="M 70 115 L 95 140 L 135 95"
+          stroke="#4ade80" stroke-width="10" stroke-linecap="round"
+          stroke-linejoin="round" fill="none" filter="url(#glow)"/>
+  </g>
+
+  <!-- Title -->
+  <text x="600" y="450" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="52" font-weight="bold" fill="#ffffff" filter="url(#glow)">
+    Top 10 LLM Safety Datasets
+  </text>
+
+  <!-- Subtitle -->
+  <text x="600" y="500" text-anchor="middle"
+        font-family="system-ui, -apple-system, sans-serif"
+        font-size="28" fill="#ffffff" opacity="0.9">
+    Open Benchmarks for Toxicity, Bias &amp; Safety Evaluation
+  </text>
+
+  <!-- Tags -->
+  <g transform="translate(300, 540)">
+    <rect x="0" y="0" width="140" height="40" rx="20" fill="#ffffff" opacity="0.2"/>
+    <text x="70" y="27" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#ffffff">Toxicity</text>
+
+    <rect x="160" y="0" width="100" height="40" rx="20" fill="#ffffff" opacity="0.2"/>
+    <text x="210" y="27" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#ffffff">Bias</text>
+
+    <rect x="280" y="0" width="140" height="40" rx="20" fill="#ffffff" opacity="0.2"/>
+    <text x="350" y="27" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#ffffff">Safety</text>
+
+    <rect x="440" y="0" width="160" height="40" rx="20" fill="#ffffff" opacity="0.2"/>
+    <text x="520" y="27" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#ffffff">Alignment</text>
+  </g>
+</svg>

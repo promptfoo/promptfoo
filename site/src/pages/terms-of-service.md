@@ -1,3 +1,7 @@
+---
+description: Terms of service for using promptfoo products and services - covering usage rights, licensing, warranties, and legal agreements
+---
+
 # Terms of Service
 
 Last updated: January 24, 2025

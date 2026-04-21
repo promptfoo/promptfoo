@@ -1,34 +1,38 @@
 import * as fs from 'fs';
 import * as path from 'path';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  processFileReference,
-  getFinalTest,
   coerceString,
+  getFinalTest,
   loadFromJavaScriptFile,
+  processFileReference,
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import type { TestCase, Assertion, ApiProvider } from '../../src/types';
+import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
-jest.mock('fs');
-jest.mock('path');
-jest.mock('../../src/cliState');
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
+import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
+
+vi.mock('fs');
+vi.mock('path');
+vi.mock('../../src/cliState');
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(),
 }));
 
 describe('processFileReference', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     cliState.basePath = '/base/path';
   });
 
   it('should handle undefined basePath', () => {
     cliState.basePath = undefined;
     const jsonContent = JSON.stringify({ key: 'value' });
-    jest.mocked(fs.readFileSync).mockReturnValue(jsonContent);
-    jest.mocked(path.resolve).mockReturnValue('/test.json');
-    jest.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(jsonContent);
+    vi.mocked(path.resolve).mockReturnValue('/test.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
 
     const result = processFileReference('file://test.json');
     expect(result).toEqual({ key: 'value' });
@@ -37,9 +41,9 @@ describe('processFileReference', () => {
 
   it('should process JSON files correctly', () => {
     const jsonContent = JSON.stringify({ key: 'value' });
-    jest.mocked(fs.readFileSync).mockReturnValue(jsonContent);
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.json');
-    jest.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(jsonContent);
+    vi.mocked(path.resolve).mockReturnValue('/base/path/test.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
 
     const result = processFileReference('file://test.json');
     expect(result).toEqual({ key: 'value' });
@@ -48,9 +52,9 @@ describe('processFileReference', () => {
 
   it('should process YAML files correctly', () => {
     const yamlContent = 'key: value';
-    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.yaml');
-    jest.mocked(path.extname).mockReturnValue('.yaml');
+    vi.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+    vi.mocked(path.resolve).mockReturnValue('/base/path/test.yaml');
+    vi.mocked(path.extname).mockReturnValue('.yaml');
 
     const result = processFileReference('file://test.yaml');
     expect(result).toEqual({ key: 'value' });
@@ -59,9 +63,9 @@ describe('processFileReference', () => {
 
   it('should process YML files correctly', () => {
     const yamlContent = 'key: value';
-    jest.mocked(fs.readFileSync).mockReturnValue(yamlContent);
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.yml');
-    jest.mocked(path.extname).mockReturnValue('.yml');
+    vi.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+    vi.mocked(path.resolve).mockReturnValue('/base/path/test.yml');
+    vi.mocked(path.extname).mockReturnValue('.yml');
 
     const result = processFileReference('file://test.yml');
     expect(result).toEqual({ key: 'value' });
@@ -70,9 +74,9 @@ describe('processFileReference', () => {
 
   it('should process TXT files correctly', () => {
     const txtContent = 'plain text content\n';
-    jest.mocked(fs.readFileSync).mockReturnValue(txtContent);
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.txt');
-    jest.mocked(path.extname).mockReturnValue('.txt');
+    vi.mocked(fs.readFileSync).mockReturnValue(txtContent);
+    vi.mocked(path.resolve).mockReturnValue('/base/path/test.txt');
+    vi.mocked(path.extname).mockReturnValue('.txt');
 
     const result = processFileReference('file://test.txt');
     expect(result).toBe('plain text content');
@@ -80,8 +84,8 @@ describe('processFileReference', () => {
   });
 
   it('should throw an error for unsupported file types', () => {
-    jest.mocked(path.resolve).mockReturnValue('/base/path/test.unsupported');
-    jest.mocked(path.extname).mockReturnValue('.unsupported');
+    vi.mocked(path.resolve).mockReturnValue('/base/path/test.unsupported');
+    vi.mocked(path.extname).mockReturnValue('.unsupported');
 
     expect(() => processFileReference('file://test.unsupported')).toThrow('Unsupported file type');
   });
@@ -111,13 +115,11 @@ describe('coerceString', () => {
 
 describe('getFinalTest', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
-  const createMockProvider = (id: string): ApiProvider => ({
-    id: () => id,
-    callApi: jest.fn(),
-  });
+  const createMockProvider = (id: string): ApiProvider =>
+    createFactoryProvider({ id, response: {} });
 
   it('should correctly merge test and assertion data', () => {
     const mockApiProvider = createMockProvider('mockProvider');
@@ -221,12 +223,12 @@ describe('getFinalTest', () => {
 
 describe('loadFromJavaScriptFile', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should call named function when functionName is provided', async () => {
-    const mockFn = jest.fn().mockReturnValue('result');
-    jest.mocked(importModule).mockResolvedValue({ testFn: mockFn });
+    const mockFn = vi.fn().mockReturnValue('result');
+    vi.mocked(importModule).mockResolvedValue({ testFn: mockFn });
 
     const result = await loadFromJavaScriptFile('/test.js', 'testFn', ['arg1', 'arg2']);
 
@@ -235,8 +237,8 @@ describe('loadFromJavaScriptFile', () => {
   });
 
   it('should call default function when no functionName provided', async () => {
-    const mockFn = jest.fn().mockReturnValue('result');
-    jest.mocked(importModule).mockResolvedValue(mockFn);
+    const mockFn = vi.fn().mockReturnValue('result');
+    vi.mocked(importModule).mockResolvedValue(mockFn);
 
     const result = await loadFromJavaScriptFile('/test.js', undefined, ['arg1']);
 
@@ -245,8 +247,8 @@ describe('loadFromJavaScriptFile', () => {
   });
 
   it('should call default export function when available', async () => {
-    const mockFn = jest.fn().mockReturnValue('result');
-    jest.mocked(importModule).mockResolvedValue({ default: mockFn });
+    const mockFn = vi.fn().mockReturnValue('result');
+    vi.mocked(importModule).mockResolvedValue({ default: mockFn });
 
     const result = await loadFromJavaScriptFile('/test.js', undefined, ['arg1']);
 
@@ -255,7 +257,7 @@ describe('loadFromJavaScriptFile', () => {
   });
 
   it('should throw error when module does not export a function', async () => {
-    jest.mocked(importModule).mockResolvedValue({ notAFunction: 'value' });
+    vi.mocked(importModule).mockResolvedValue({ notAFunction: 'value' });
 
     await expect(loadFromJavaScriptFile('/test.js', undefined, [])).rejects.toThrow(
       'Assertion malformed',
@@ -263,7 +265,7 @@ describe('loadFromJavaScriptFile', () => {
   });
 
   it('should throw error when named function does not exist', async () => {
-    jest.mocked(importModule).mockResolvedValue({ otherFn: () => {} });
+    vi.mocked(importModule).mockResolvedValue({ otherFn: () => {} });
 
     await expect(loadFromJavaScriptFile('/test.js', 'nonExistentFn', [])).rejects.toThrow(
       'Assertion malformed',

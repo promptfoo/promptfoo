@@ -1,10 +1,16 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import util from 'util';
+
 import { getCache, isCacheEnabled } from '../cache';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
+import { sha256 } from '../util/createHash';
+import { parsePathOrGlob } from '../util/index';
+import { safeJsonStringify } from '../util/json';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -13,11 +19,8 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import { parsePathOrGlob } from '../util';
-import { sha256 } from '../util/createHash';
-import { safeJsonStringify } from '../util/json';
 
-const execAsync = util.promisify(exec);
+const execFileAsync = util.promisify(execFile);
 
 interface GolangProviderConfig {
   goExecutable?: string;
@@ -82,13 +85,15 @@ export class GolangProvider implements ApiProvider {
 
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
-      return JSON.parse(cachedResult);
+      return { ...JSON.parse(cachedResult), cached: true };
     } else {
       if (context) {
-        // These are not useful in Golang
-        delete context.fetchWithCache;
+        // Remove properties not useful in Golang and non-serializable objects
+        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
         delete context.getCache;
         delete context.logger;
+        delete context.filters; // NunjucksFilterMap contains functions
+        delete context.originalProvider; // ApiProvider object with methods
       }
 
       const args =
@@ -127,23 +132,28 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(__dirname, '../golang/wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(path.join(getWrapperDir('golang'), 'wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
 
-        // Build from the script directory
-        const compileCommand = `cd ${scriptDir} && ${this.config.goExecutable || 'go'} build -o ${executablePath} wrapper.go ${path.basename(relativeScriptPath)}`;
-
-        await execAsync(compileCommand);
+        // Build from the script directory using execFile (no shell injection)
+        const goExecutable = this.config.goExecutable || 'go';
+        await execFileAsync(
+          goExecutable,
+          ['build', '-o', executablePath, 'wrapper.go', path.basename(relativeScriptPath)],
+          { cwd: scriptDir },
+        );
 
         const jsonArgs = safeJsonStringify(args) || '[]';
-        // Escape single quotes in the JSON string
-        const escapedJsonArgs = jsonArgs.replace(/'/g, "'\\''");
-        const command = `${executablePath} ${tempScriptPath} ${functionName} '${escapedJsonArgs}'`;
-        logger.debug(`Running command: ${command}`);
+        logger.debug(`Running Go executable: ${executablePath}`);
 
-        const { stdout, stderr } = await execAsync(command);
+        // Execute compiled binary with args (no shell escaping needed)
+        const { stdout, stderr } = await execFileAsync(executablePath, [
+          tempScriptPath,
+          functionName,
+          jsonArgs,
+        ]);
         if (stderr) {
           logger.error(`Golang script stderr: ${stderr}`);
         }

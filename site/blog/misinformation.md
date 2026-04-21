@@ -1,8 +1,22 @@
 ---
 sidebar_label: Misinformation in LLMs—Causes and Prevention Strategies
-title: Misinformation in LLMs—Causes and Prevention Strategies
+title: 'Misinformation in LLMs: Causes and Prevention Strategies'
+description: 'LLMs can spread false information at scale. Discover why AI models hallucinate, how misinformation spreads, and practical strategies to detect and prevent it.'
 image: /img/blog/misinformation/misinformed_panda.png
+keywords:
+  [
+    LLM misinformation,
+    AI misinformation,
+    hallucination detection,
+    fact-checking AI,
+    LLM accuracy,
+    misinformation prevention,
+    AI reliability,
+    information quality,
+  ]
 date: 2025-03-19
+authors: [vanessa]
+tags: [security-vulnerability, best-practices]
 ---
 
 # Misinformation in LLMs: Causes and Prevention Strategies
@@ -113,7 +127,7 @@ Perplexity measures the uncertainty of a model when predicting the next token in
 
 Research [indicates](https://arxiv.org/pdf/2212.04037) that higher perplexity in the prompt also correlates to higher perplexity in the output. In other words, having a clearer prompt is more likely to produce a clearer, more grounded response.
 
-You can use Promptfoo to [measure perplexity](https://www.promptfoo.dev/docs/guides/prevent-llm-hallucations/) through the evals framework.
+You can use Promptfoo to [measure perplexity](https://www.promptfoo.dev/docs/guides/prevent-llm-hallucinations/) through the evals framework.
 
 ### Measuring Output Uncertainty
 

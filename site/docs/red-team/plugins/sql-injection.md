@@ -1,5 +1,6 @@
 ---
 sidebar_label: SQL injection
+description: Red team SQL injection vulnerabilities by simulating malicious database queries to protect AI systems from unauthorized data access and manipulation attacks
 ---
 
 # SQL Injection Plugin

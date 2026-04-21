@@ -1,0 +1,7 @@
+# Tests loaded from external YAML file
+# Tests #6393 - file:// references in vars context
+- vars:
+    dynamicVar: LoadedFromExternalFile
+  assert:
+    - type: contains
+      value: LoadedFromExternalFile

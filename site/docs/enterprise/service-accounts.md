@@ -2,13 +2,13 @@
 sidebar_label: Service Accounts
 sidebar_position: 30
 title: Creating and Managing Service Accounts in Promptfoo Enterprise
-description: Learn how to create and manage service accounts and API keys for programmatic access to Promptfoo Enterprise
+description: Manage service accounts and API keys for automated CI/CD integration and programmatic access to Promptfoo Enterprise features
 keywords: [service accounts, api keys, programmatic access, ci/cd integration, automation]
 ---
 
 # Service Accounts
 
-Service accounts allow you to create API keys for programmatic access to Promptfoo Enterprise. These are useful for CI/CD pipelines and automated testing.
+Service accounts allow you to create API keys for programmatic access to [Promptfoo Enterprise](/docs/enterprise/). These are useful for CI/CD pipelines and automated testing.
 
 :::note
 Only global system admins can create and assign service accounts.

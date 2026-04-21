@@ -1,22 +1,51 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
+import {
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import invariant from '../../util/invariant';
+import { isClaudeOpus47Model } from '../anthropic/util';
+import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
-export class AzureChatCompletionProvider extends AzureGenericProvider {
-  private mcpClient: MCPClient | null = null;
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
-  constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
-    super(...args);
+export class AzureChatCompletionProvider extends AzureGenericProvider {
+  declare config: AzureChatResponsesOptions;
+
+  private mcpClient: MCPClient | null = null;
+  private functionCallbackHandler: FunctionCallbackHandler;
+
+  constructor(
+    deploymentName: string,
+    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
+  ) {
+    super(deploymentName, options);
+
+    // Initialize callback handler immediately (will be replaced if MCP is enabled)
+    this.functionCallbackHandler = new FunctionCallbackHandler();
+
+    // Initialize MCP if enabled
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
     }
@@ -25,6 +54,9 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   private async initializeMCP(): Promise<void> {
     this.mcpClient = new MCPClient(this.config.mcp!);
     await this.mcpClient.initialize();
+
+    // Initialize callback handler with MCP client
+    this.functionCallbackHandler = new FunctionCallbackHandler(this.mcpClient);
   }
 
   async cleanup(): Promise<void> {
@@ -36,49 +68,139 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
   }
 
   /**
-   * Check if the current deployment is configured as a reasoning model
+   * Check if the current deployment is configured as a reasoning model.
+   * Reasoning models use max_completion_tokens instead of max_tokens,
+   * don't support temperature, and accept reasoning_effort parameter.
    */
   protected isReasoningModel(): boolean {
-    return !!this.config.isReasoningModel || !!this.config.o1;
+    // Check explicit config flags first
+    if (this.config.isReasoningModel || this.config.o1) {
+      return true;
+    }
+
+    // Auto-detect reasoning models by deployment name (case-insensitive)
+    // Supports both direct names (o1-preview) and prefixed names (prod-o1-mini)
+    const lowerName = this.deploymentName.toLowerCase();
+    return (
+      // OpenAI reasoning models
+      lowerName.startsWith('o1') ||
+      lowerName.includes('-o1') ||
+      lowerName.startsWith('o3') ||
+      lowerName.includes('-o3') ||
+      lowerName.startsWith('o4') ||
+      lowerName.includes('-o4') ||
+      // GPT-5 series (reasoning by default)
+      lowerName.startsWith('gpt-5') ||
+      lowerName.includes('-gpt-5') ||
+      // DeepSeek reasoning models
+      lowerName.includes('deepseek-r1') ||
+      lowerName.includes('deepseek_r1') ||
+      // Microsoft Phi reasoning models
+      lowerName.includes('phi-4-reasoning') ||
+      lowerName.includes('phi-4-mini-reasoning') ||
+      // xAI Grok reasoning models
+      (lowerName.includes('grok') && lowerName.includes('reasoning'))
+    );
   }
 
-  getOpenAiBody(
+  /**
+   * Claude Opus 4.7 deprecates `temperature` at the model level — the
+   * deployment returns 400 for any request that includes it. Opus 4.7 keeps
+   * the standard `max_tokens` field (not `max_completion_tokens`) and does
+   * not accept `reasoning_effort`, so we only strip temperature here and
+   * leave the rest of the chat body intact.
+   */
+  protected isClaudeOpus47(): boolean {
+    return isClaudeOpus47Model(this.deploymentName);
+  }
+
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
-  ): Record<string, any> {
+  ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
     };
 
     // Parse chat prompt
-    const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
+    let messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
-    // Response format with variable rendering
+    // Inject system prompt if configured
+    if (config.systemPrompt) {
+      // Check if there's already a system message
+      const existingSystemMessageIndex = messages.findIndex((msg: any) => msg.role === 'system');
+
+      if (existingSystemMessageIndex >= 0) {
+        // Replace existing system message
+        messages[existingSystemMessageIndex] = {
+          role: 'system',
+          content: config.systemPrompt,
+        };
+      } else {
+        // Prepend new system message
+        messages = [
+          {
+            role: 'system',
+            content: config.systemPrompt,
+          },
+          ...messages,
+        ];
+      }
+    }
+
+    // Response format with variable rendering (handles nested schema loading)
     const responseFormat = config.response_format
       ? {
-          response_format: maybeLoadFromExternalFile(
-            renderVarsInObject(config.response_format, context?.vars),
+          response_format: maybeLoadResponseFormatFromExternalFile(
+            config.response_format,
+            context?.vars,
           ),
         }
       : {};
 
     // Check if this is configured as a reasoning model
     const isReasoningModel = this.isReasoningModel();
+    const isClaudeOpus47 = this.isClaudeOpus47();
 
     // Get max tokens based on model type
-    const maxTokens = config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxCompletionTokens = config.max_completion_tokens;
+    const maxTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxTokens = config.max_tokens ?? maxTokensDefault;
+    const maxCompletionTokens =
+      config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? maxTokens;
+
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const temperature = config.temperature ?? temperatureDefault;
+
+    const topP = config.omitDefaults
+      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P'))
+      : (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1));
+    const presencePenalty = config.omitDefaults
+      ? (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY'))
+      : (config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0));
+    const frequencyPenalty = config.omitDefaults
+      ? (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY'))
+      : (config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0));
 
     // Get reasoning effort for reasoning models
-    const reasoningEffort = config.reasoning_effort ?? 'medium';
+    const reasoningEffort = config.reasoning_effort ?? (config.omitDefaults ? undefined : 'medium');
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
-      ? maybeLoadToolsFromExternalFile(config.tools, context?.vars) || []
+    const loadedTools = config.tools
+      ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
+    // Transform tools to OpenAI format if needed
+    const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
@@ -88,36 +210,38 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       messages,
       ...(isReasoningModel
         ? {
-            max_completion_tokens: maxCompletionTokens ?? maxTokens,
-            reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars),
+            ...(reasoningEffort === undefined
+              ? {}
+              : { reasoning_effort: renderVarsInObject(reasoningEffort, context?.vars) }),
+            ...(maxCompletionTokens === undefined
+              ? {}
+              : { max_completion_tokens: maxCompletionTokens }),
           }
         : {
-            max_tokens: maxTokens,
-            temperature: config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0),
+            ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+            ...(temperature === undefined || isClaudeOpus47 ? {} : { temperature }),
           }),
-      top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1),
-      presence_penalty: config.presence_penalty ?? getEnvFloat('OPENAI_PRESENCE_PENALTY', 0),
-      frequency_penalty: config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
+      ...(topP === undefined ? {} : { top_p: topP }),
+      ...(presencePenalty === undefined ? {} : { presence_penalty: presencePenalty }),
+      ...(frequencyPenalty === undefined ? {} : { frequency_penalty: frequencyPenalty }),
       ...(config.seed === undefined ? {} : { seed: config.seed }),
       ...(config.functions
         ? {
-            functions: maybeLoadFromExternalFile(
-              renderVarsInObject(config.functions, context?.vars),
-            ),
+            functions: maybeLoadFromExternalFileWithVars(config.functions, context?.vars),
           }
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.deployment_id ? { deployment_id: config.deployment_id } : {}),
-      ...(config.dataSources ? { dataSources: config.dataSources } : {}),
+      ...(config.dataSources ? { dataSources: config.dataSources } : {}), // legacy support for versions < 2024-02-15-preview
+      ...(config.data_sources ? { data_sources: config.data_sources } : {}),
       ...responseFormat,
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(config.stop ? { stop: config.stop } : {}),
       ...(config.passthrough || {}),
     };
 
-    logger.debug(`Azure API request body: ${JSON.stringify(body)}`);
     return { body, config };
   }
 
@@ -126,7 +250,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
     await this.ensureInitialized();
@@ -136,10 +260,74 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       throw new Error('Azure API host must be set.');
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'azure',
+      operationName: 'chat',
+      model: this.deploymentName,
+      providerId: this.id(),
+      // Optional request parameters
+      maxTokens: this.config.max_tokens,
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      stopSequences: this.config.stop,
+      frequencyPenalty: this.config.frequency_penalty,
+      presencePenalty: this.config.presence_penalty,
+      // Promptfoo context from test case if available
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+          cached: response.tokenUsage.cached,
+          completionDetails: {
+            reasoning: response.tokenUsage.completionDetails?.reasoning,
+            acceptedPrediction: response.tokenUsage.completionDetails?.acceptedPrediction,
+            rejectedPrediction: response.tokenUsage.completionDetails?.rejectedPrediction,
+          },
+        };
+      }
+
+      // Extract finish reason if available
+      if (response.finishReason) {
+        result.finishReasons = [response.finishReason];
+      }
+
+      return result;
+    };
+
+    // Wrap the API call in a span
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, callApiOptions),
+      resultExtractor,
+    );
+  }
+
+  /**
+   * Internal implementation of callApi without tracing wrapper.
+   */
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     let data;
     let cached = false;
+    let latencyMs: number | undefined;
+
     try {
       const url = config.dataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
@@ -153,6 +341,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
         data: responseData,
         cached: isCached,
         status,
+        latencyMs: fetchLatencyMs,
       } = await fetchWithCache(
         url,
         {
@@ -160,13 +349,17 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
           headers: {
             'Content-Type': 'application/json',
             ...this.authHeaders,
+            ...this.config.headers,
           },
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
       );
 
       cached = isCached;
+      latencyMs = fetchLatencyMs;
 
       // Handle the response data
       if (typeof responseData === 'string') {
@@ -186,75 +379,97 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     }
 
-    logger.debug(`Azure API response: ${JSON.stringify(data)}`);
+    // Inputs and outputs can be flagged by content filters.
+    // See https://learn.microsoft.com/en-us/azure/ai-foundry/openai/concepts/content-filter
+    let flaggedInput = false;
+    let flaggedOutput = false;
+    let output = '';
+    let logProbs: any;
+    let finishReason: string;
+
     try {
       if (data.error) {
-        if (data.error.code === 'content_filter' && data.error.status === 400) {
+        // Was the input prompt deemed inappropriate?
+        if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
+          flaggedInput = true;
+          output = data.error.message;
+          finishReason = FINISH_REASON_MAP.content_filter;
+        } else {
           return {
-            output: data.error.message,
-            guardrails: {
-              flagged: true,
-              flaggedInput: true,
-              flaggedOutput: false,
-            },
+            error: `API response error: ${data.error.code} ${data.error.message}`,
           };
         }
-        return {
-          error: `API response error: ${data.error.code} ${data.error.message}`,
-        };
-      }
-      const hasDataSources = !!config.dataSources;
-      const choice = hasDataSources
-        ? data.choices.find(
-            (choice: { message: { role: string; content: string } }) =>
-              choice.message.role === 'assistant',
-          )
-        : data.choices[0];
+      } else {
+        const hasDataSources = !!config.dataSources || !!config.data_sources;
+        const choice = hasDataSources
+          ? data.choices.find(
+              (choice: { message: { role: string; content: string } }) =>
+                choice.message.role === 'assistant',
+            )
+          : data.choices[0];
 
-      const message = choice?.message;
+        const message = choice?.message;
 
-      // Handle structured output
-      let output = message.content;
+        // NOTE: The `n` parameter is currently (250709) not supported; if and when it is, `finish_reason` must be
+        // checked on all choices; in other words, if n>1 responses are requested, n>1 responses can trigger filters.
+        finishReason = normalizeFinishReason(choice?.finish_reason) as string;
 
-      if (output == null) {
-        if (choice.finish_reason === 'content_filter') {
-          output =
-            "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
+        // Handle structured output
+        output = message?.content;
+
+        // Check for errors indicating that the content filters did not run on the completion.
+        if (choice.content_filter_results && choice.content_filter_results.error) {
+          const { code, message } = choice.content_filter_results.error;
+          logger.warn(
+            `Content filtering system is down or otherwise unable to complete the request in time: ${code} ${message}`,
+          );
         } else {
-          // Restore tool_calls and function_call handling
-          output = message.tool_calls ?? message.function_call;
+          // Was the completion filtered?
+          flaggedOutput = finishReason === FINISH_REASON_MAP.content_filter;
         }
-      } else if (
-        config.response_format?.type === 'json_schema' ||
-        config.response_format?.type === 'json_object'
-      ) {
-        try {
-          output = JSON.parse(output);
-        } catch (err) {
-          logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+
+        if (output == null) {
+          // Handle tool_calls and function_call
+          const toolCalls = message.tool_calls;
+          const functionCall = message.function_call;
+
+          // Process function/tool calls if callbacks are configured or MCP is available
+          if (
+            (config.functionToolCallbacks && (toolCalls || functionCall)) ||
+            (this.mcpClient && (toolCalls || functionCall))
+          ) {
+            // Combine all calls into a single array for processing
+            const allCalls = [];
+            if (toolCalls) {
+              allCalls.push(...(Array.isArray(toolCalls) ? toolCalls : [toolCalls]));
+            }
+            if (functionCall) {
+              allCalls.push(functionCall);
+            }
+
+            output = await this.functionCallbackHandler.processCalls(
+              allCalls.length === 1 ? allCalls[0] : allCalls,
+              config.functionToolCallbacks,
+            );
+          } else {
+            // No callbacks configured, return raw tool/function calls
+            output = toolCalls ?? functionCall;
+          }
+        } else if (
+          config.response_format?.type === 'json_schema' ||
+          config.response_format?.type === 'json_object'
+        ) {
+          try {
+            output = JSON.parse(output);
+          } catch (err) {
+            logger.error(`Failed to parse JSON output: ${err}. Output was: ${output}`);
+          }
         }
+
+        logProbs = data.choices[0].logprobs?.content?.map(
+          (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
+        );
       }
-
-      const logProbs = data.choices[0].logprobs?.content?.map(
-        (logProbObj: { token: string; logprob: number }) => logProbObj.logprob,
-      );
-
-      const contentFilterResults = data.choices[0]?.content_filter_results;
-      const promptFilterResults = data.prompt_filter_results;
-
-      const guardrailsTriggered = !!(
-        (contentFilterResults && Object.keys(contentFilterResults).length > 0) ||
-        (promptFilterResults && promptFilterResults.length > 0)
-      );
-
-      const flaggedInput =
-        promptFilterResults?.some((result: any) =>
-          Object.values(result.content_filter_results).some((filter: any) => filter.filtered),
-        ) ?? false;
-
-      const flaggedOutput = Object.values(contentFilterResults || {}).some(
-        (filter: any) => filter.filtered,
-      );
 
       return {
         output,
@@ -277,22 +492,20 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
                 : {}),
             },
         cached,
+        latencyMs,
         logProbs,
+        finishReason,
         cost: calculateAzureCost(
           this.deploymentName,
           config,
           data.usage?.prompt_tokens,
           data.usage?.completion_tokens,
         ),
-        ...(guardrailsTriggered
-          ? {
-              guardrails: {
-                flaggedInput,
-                flaggedOutput,
-                flagged: flaggedInput || flaggedOutput,
-              },
-            }
-          : {}),
+        guardrails: {
+          flagged: flaggedInput || flaggedOutput,
+          flaggedInput,
+          flaggedOutput,
+        },
       };
     } catch (err) {
       return {

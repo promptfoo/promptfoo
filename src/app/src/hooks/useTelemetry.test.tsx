@@ -1,63 +1,144 @@
-import { renderHook, act } from '@testing-library/react';
-import { callApi } from '@app/utils/api';
-import type { TelemetryEventTypes } from '@promptfoo/telemetry';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { usePostHog } from '@app/components/PostHogContext';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useTelemetry } from './useTelemetry';
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+vi.mock('@app/components/PostHogContext', () => ({
+  usePostHog: vi.fn(),
 }));
 
-const TEST_EVENT: TelemetryEventTypes = 'command_used';
+const TEST_EVENT = 'command_used';
 const TEST_PROPS = { foo: 'bar' };
 
 describe('useTelemetry', () => {
-  const consoleError = console.error;
+  const mockPostHog = {
+    capture: vi.fn(),
+    identify: vi.fn(),
+  } as any;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    console.error = vi.fn();
+    // Default mock - PostHog is initialized and available
+    vi.mocked(usePostHog).mockReturnValue({
+      posthog: mockPostHog,
+      isInitialized: true,
+    });
   });
 
   afterEach(() => {
-    console.error = consoleError;
-    vi.unstubAllEnvs();
+    vi.clearAllMocks();
   });
 
-  it('calls callApi when telemetry is enabled', async () => {
-    vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'false');
-    const { result } = renderHook(() => useTelemetry());
+  describe('recordEvent', () => {
+    it('calls posthog.capture when PostHog is initialized', () => {
+      const { result } = renderHook(() => useTelemetry());
 
-    await act(async () => {
-      await result.current.recordEvent(TEST_EVENT, TEST_PROPS);
+      act(() => {
+        result.current.recordEvent(TEST_EVENT, TEST_PROPS);
+      });
+
+      expect(mockPostHog.capture).toHaveBeenCalledTimes(1);
+      expect(mockPostHog.capture).toHaveBeenCalledWith(TEST_EVENT, TEST_PROPS);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    it('does not call posthog.capture when PostHog is not initialized', () => {
+      vi.mocked(usePostHog).mockReturnValue({
+        posthog: mockPostHog,
+        isInitialized: false,
+      });
+
+      const { result } = renderHook(() => useTelemetry());
+
+      act(() => {
+        result.current.recordEvent(TEST_EVENT, TEST_PROPS);
+      });
+
+      expect(mockPostHog.capture).not.toHaveBeenCalled();
+    });
+
+    it('does not call posthog.capture when posthog is null', () => {
+      vi.mocked(usePostHog).mockReturnValue({
+        posthog: null,
+        isInitialized: true,
+      });
+
+      const { result } = renderHook(() => useTelemetry());
+
+      act(() => {
+        result.current.recordEvent(TEST_EVENT, TEST_PROPS);
+      });
+
+      expect(mockPostHog.capture).not.toHaveBeenCalled();
+    });
+
+    it('works with empty properties', () => {
+      const { result } = renderHook(() => useTelemetry());
+
+      act(() => {
+        result.current.recordEvent(TEST_EVENT);
+      });
+
+      expect(mockPostHog.capture).toHaveBeenCalledWith(TEST_EVENT, {});
+    });
   });
 
-  it('does not call callApi when telemetry is disabled', async () => {
-    vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'true');
-    const { result } = renderHook(() => useTelemetry());
+  describe('identifyUser', () => {
+    it('calls posthog.identify when PostHog is initialized', () => {
+      const { result } = renderHook(() => useTelemetry());
+      const userId = 'user123';
+      const userProps = { name: 'Test User' };
 
-    await act(async () => {
-      await result.current.recordEvent(TEST_EVENT, TEST_PROPS);
+      act(() => {
+        result.current.identifyUser(userId, userProps);
+      });
+
+      expect(mockPostHog.identify).toHaveBeenCalledTimes(1);
+      expect(mockPostHog.identify).toHaveBeenCalledWith(userId, userProps);
     });
 
-    expect(callApi).not.toHaveBeenCalled();
+    it('does not call posthog.identify when PostHog is not initialized', () => {
+      vi.mocked(usePostHog).mockReturnValue({
+        posthog: mockPostHog,
+        isInitialized: false,
+      });
+
+      const { result } = renderHook(() => useTelemetry());
+
+      act(() => {
+        result.current.identifyUser('user123');
+      });
+
+      expect(mockPostHog.identify).not.toHaveBeenCalled();
+    });
+
+    it('works with empty user properties', () => {
+      const { result } = renderHook(() => useTelemetry());
+      const userId = 'user123';
+
+      act(() => {
+        result.current.identifyUser(userId);
+      });
+
+      expect(mockPostHog.identify).toHaveBeenCalledWith(userId, {});
+    });
   });
 
-  it('logs error when callApi rejects', async () => {
-    vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'false');
-    vi.mocked(callApi).mockRejectedValueOnce(new Error('network'));
-    const { result } = renderHook(() => useTelemetry());
+  describe('isInitialized', () => {
+    it('returns true when PostHog is initialized', () => {
+      const { result } = renderHook(() => useTelemetry());
 
-    await act(async () => {
-      await result.current.recordEvent(TEST_EVENT, TEST_PROPS);
+      expect(result.current.isInitialized).toBe(true);
     });
 
-    expect(console.error).toHaveBeenCalledWith(
-      'Failed to record telemetry event:',
-      expect.any(Error),
-    );
+    it('returns false when PostHog is not initialized', () => {
+      vi.mocked(usePostHog).mockReturnValue({
+        posthog: mockPostHog,
+        isInitialized: false,
+      });
+
+      const { result } = renderHook(() => useTelemetry());
+
+      expect(result.current.isInitialized).toBe(false);
+    });
   });
 });

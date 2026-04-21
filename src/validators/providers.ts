@@ -1,73 +1,48 @@
 import { z } from 'zod';
+import { InputsSchema } from '../redteam/types';
 import { ProviderEnvOverridesSchema } from '../types/env';
+import { BaseTokenUsageSchema } from '../types/shared';
+import { StringOrFunctionSchema } from './shared';
+
 import type {
-  ApiProvider,
   CallApiFunction,
   ProviderClassificationResponse,
   ProviderEmbeddingResponse,
   ProviderId,
   ProviderLabel,
-  ProviderOptions,
-  ProviderResponse,
-  ProviderSimilarityResponse,
 } from '../types/providers';
-import { TokenUsageSchema } from '../types/shared';
-import { PromptSchema } from './prompts';
-import { NunjucksFilterMapSchema } from './shared';
 
-export const ProviderOptionsSchema = z
-  .object({
-    id: z.custom<ProviderId>().optional(),
-    label: z.custom<ProviderLabel>().optional(),
-    config: z.any().optional(),
-    prompts: z.array(z.string()).optional(),
-    transform: z.string().optional(),
-    delay: z.number().optional(),
-    env: ProviderEnvOverridesSchema.optional(),
-  })
-  .strict();
-
-export const CallApiContextParamsSchema = z.object({
-  fetchWithCache: z.optional(z.any()),
-  filters: NunjucksFilterMapSchema.optional(),
-  getCache: z.optional(z.any()),
-  logger: z.optional(z.any()),
-  originalProvider: z.optional(z.any()),
-  prompt: PromptSchema,
-  vars: z.record(z.union([z.string(), z.object({})])),
+export const ProviderOptionsSchema = z.object({
+  id: z.custom<ProviderId>().optional(),
+  label: z.custom<ProviderLabel>().optional(),
+  config: z.any().optional(),
+  prompts: z.array(z.string()).optional(),
+  transform: StringOrFunctionSchema.optional(),
+  delay: z.number().optional(),
+  env: ProviderEnvOverridesSchema.optional(),
+  inputs: InputsSchema.optional(),
 });
 
-export const CallApiOptionsParamsSchema = z.object({
-  includeLogProbs: z.optional(z.boolean()),
-});
-
-const CallApiFunctionSchema = z
-  .function()
-  .args(
-    z.string().describe('prompt'),
-    CallApiContextParamsSchema.optional(),
-    CallApiOptionsParamsSchema.optional(),
-  )
-  .returns(z.promise(z.custom<ProviderResponse>()))
-  .and(z.object({ label: z.string().optional() }));
+const CallApiFunctionSchema = z.custom<CallApiFunction & { label?: string }>(
+  (v) => typeof v === 'function',
+);
 
 export const ApiProviderSchema = z.object({
-  id: z.function().returns(z.string()),
-  callApi: z.custom<CallApiFunction>(),
+  id: z.custom<() => string>((v) => typeof v === 'function'),
+  callApi: z.custom<CallApiFunction>((v) => typeof v === 'function'),
   callEmbeddingApi: z
-    .function()
-    .args(z.string())
-    .returns(z.promise(z.custom<ProviderEmbeddingResponse>()))
+    .custom<(prompt: string) => Promise<ProviderEmbeddingResponse>>((v) => typeof v === 'function')
     .optional(),
   callClassificationApi: z
-    .function()
-    .args(z.string())
-    .returns(z.promise(z.custom<ProviderClassificationResponse>()))
+    .custom<(prompt: string) => Promise<ProviderClassificationResponse>>(
+      (v) => typeof v === 'function',
+    )
     .optional(),
   label: z.custom<ProviderLabel>().optional(),
-  transform: z.string().optional(),
+  transform: StringOrFunctionSchema.optional(),
   delay: z.number().optional(),
   config: z.any().optional(),
+  inputs: InputsSchema.optional(),
 });
 
 export const ProviderResponseSchema = z.object({
@@ -82,24 +57,24 @@ export const ProviderResponseSchema = z.object({
     .catchall(z.any())
     .optional(),
   output: z.union([z.string(), z.any()]).optional(),
-  tokenUsage: TokenUsageSchema.optional(),
+  tokenUsage: BaseTokenUsageSchema.optional(),
 });
 
 export const ProviderEmbeddingResponseSchema = z.object({
   error: z.string().optional(),
   embedding: z.array(z.number()).optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
+  tokenUsage: BaseTokenUsageSchema.partial().optional(),
 });
 
 export const ProviderSimilarityResponseSchema = z.object({
   error: z.string().optional(),
   similarity: z.number().optional(),
-  tokenUsage: TokenUsageSchema.partial().optional(),
+  tokenUsage: BaseTokenUsageSchema.partial().optional(),
 });
 
 export const ProviderClassificationResponseSchema = z.object({
   error: z.string().optional(),
-  classification: z.record(z.number()).optional(),
+  classification: z.record(z.string(), z.number()).optional(),
 });
 
 export const ProvidersSchema = z.union([
@@ -108,33 +83,11 @@ export const ProvidersSchema = z.union([
   z.array(
     z.union([
       z.string(),
+      CallApiFunctionSchema,
       z.record(z.string(), ProviderOptionsSchema),
       ProviderOptionsSchema,
-      CallApiFunctionSchema,
     ]),
   ),
 ]);
 
-export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
-
-// Ensure that schemas match their corresponding types
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function assert<T extends never>() {}
-type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
-
-assert<TypeEqualityGuard<CallApiFunction, z.infer<typeof CallApiFunctionSchema>>>();
-assert<TypeEqualityGuard<ProviderOptions, z.infer<typeof ProviderOptionsSchema>>>();
-assert<TypeEqualityGuard<ProviderResponse, z.infer<typeof ProviderResponseSchema>>>();
-assert<
-  TypeEqualityGuard<ProviderEmbeddingResponse, z.infer<typeof ProviderEmbeddingResponseSchema>>
->();
-assert<
-  TypeEqualityGuard<ProviderSimilarityResponse, z.infer<typeof ProviderSimilarityResponseSchema>>
->();
-assert<
-  TypeEqualityGuard<
-    ProviderClassificationResponse,
-    z.infer<typeof ProviderClassificationResponseSchema>
-  >
->();
-assert<TypeEqualityGuard<ApiProvider, z.infer<typeof ApiProviderSchema>>>();
+export const ProviderSchema = z.union([z.string(), ApiProviderSchema, ProviderOptionsSchema]);

@@ -1,8 +1,37 @@
 ---
 sidebar_position: 60
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, native builds, and network/proxy setup in your LLM testing pipeline
 ---
 
 # Troubleshooting
+
+## Log Files and Debugging
+
+Before troubleshooting specific issues, you can access detailed logs to help diagnose problems:
+
+- **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
+- **Custom log directory**: Set the `PROMPTFOO_LOG_DIR` environment variable to write logs to a different directory (e.g., `PROMPTFOO_LOG_DIR=./logs promptfoo eval`)
+- **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
+
+### Live Debug Toggle
+
+During `promptfoo redteam run`, you can toggle debug logging on and off in real-time without restarting:
+
+- **Press `v`** at any time to toggle verbose/debug output
+- Works only in interactive terminal mode (not in CI or when output is piped)
+- Useful for investigating issues mid-run without overwhelming log output
+
+When you start a scan, you'll see:
+
+```
+  Tip: Press v to toggle debug output
+```
+
+Press `v` to enable debug logs and see detailed request metadata, provider response summaries, and grading status. Sensitive payloads, credentials, and raw response bodies may be redacted or summarized. Press `v` again to return to clean output.
+
+:::tip
+This is especially helpful when a scan seems stuck or you want to understand what's happening with a specific test case.
+:::
 
 ## Out of memory error
 
@@ -14,7 +43,11 @@ Follow **all** of these steps:
 
 1. Do not use the `--no-write` flag. We need to write to disk to avoid memory issues.
 2. Use the `--no-table` flag.
-3. Only output to `jsonl` ex: `--output results.jsonl`
+3. **Use JSONL format**: `--output results.jsonl`
+
+:::tip
+JSONL format processes results in batches, avoiding memory limits that cause JSON export to fail on large datasets.
+:::
 
 ### Granular memory optimization
 
@@ -71,7 +104,7 @@ tests:
 
 **Default solution:** Objects are automatically converted to JSON strings:
 
-```
+```text
 Product: {"name":"Headphones","price":99.99}
 ```
 
@@ -110,7 +143,7 @@ prompts:
 
 When running `npx promptfoo@latest`, you might encounter this error:
 
-```
+```text
 Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
 was compiled against a different Node.js version using
 NODE_MODULE_VERSION 115. This version of Node.js requires
@@ -146,11 +179,46 @@ npm install --build-from-source
 npm rebuild
 ```
 
+## Network and proxy issues
+
+If you're behind a corporate proxy or firewall and having trouble connecting to LLM APIs:
+
+### Configure proxy settings
+
+Set standard proxy environment variables before running promptfoo:
+
+```bash
+# Set proxy for HTTPS requests (most common)
+export HTTPS_PROXY=http://proxy.company.com:8080
+
+# With authentication if needed
+export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+# Exclude specific hosts from proxying
+export NO_PROXY=localhost,127.0.0.1,internal.domain.com
+```
+
+### Custom CA certificates
+
+For environments with custom certificate authorities:
+
+```bash
+export PROMPTFOO_CA_CERT_PATH=/path/to/ca-bundle.crt
+```
+
+### Verify your configuration
+
+Run `promptfoo debug` to see detected proxy settings and verify your network configuration is correct.
+
+See the [FAQ](/docs/faq/#how-do-i-configure-promptfoo-for-corporate-networks-or-proxies) for complete proxy and SSL configuration details.
+
 ## OpenAI API key is not set
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
 
-If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `llm-rubric` or `similar` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+For default text-only model grading and synthesis, you can also install `@openai/codex-sdk`, sign in through the Codex CLI, and let Promptfoo use `openai:codex-sdk` automatically when no higher-priority API credentials are set. This does not cover embedding or moderation providers.
+
+If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `similar` or `moderation` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) or configure an embedding/moderation provider explicitly.
 
 Follow the instructions to override the grader, e.g., using the `defaultTest` property:
 
@@ -168,14 +236,104 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
-## Timeout errors
+## Python/JavaScript tool files require function name
 
-When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. These timeouts can manifest as generic errors or as a lack of useful error messages.
+If you see errors like `Python files require a function name` when loading tools from Python or JavaScript files, you need to specify the function name that returns the tool definitions.
 
-To resolve timeout issues, try limiting concurrency by using the `-j 1` flag when running `promptfoo eval`. This reduces the number of simultaneous requests:
+### Solution
+
+Python and JavaScript tool files must specify a function name using the `file://path:function_name` format:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-4.1-mini
+    config:
+      # Correct - specifies function name
+      tools: file://./tools.py:get_tools
+      # or for JavaScript/TypeScript
+      tools: file://./tools.js:getTools
+```
+
+The function must return a tool definitions array (can be synchronous or asynchronous):
+
+```python title="tools.py"
+def get_tools():
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_weather",
+                "description": "Get the current weather in a given location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA"
+                        }
+                    },
+                    "required": ["location"]
+                }
+            }
+        }
+    ]
+```
+
+```javascript title="tools.js"
+function getTools() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'get_current_weather',
+        description: 'Get the current weather in a given location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description: 'The city and state, e.g. San Francisco, CA',
+            },
+          },
+          required: ['location'],
+        },
+      },
+    },
+  ];
+}
+
+module.exports = { getTools };
+```
+
+## How to triage stuck evals
+
+When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:
+
+**Common use cases:**
+
+- Ensure evaluations complete within a time limit (useful for CI/CD)
+- Handle custom providers or providers that get stuck
+- Prevent runaway costs from long-running evaluations
+
+You can control two settings: timeout for individual test cases and timeout for the entire evaluation.
+
+### Quick fixes
+
+**Set timeouts for individual requests and total evaluation time:**
 
 ```bash
-npx promptfoo eval -j 1
+export PROMPTFOO_EVAL_TIMEOUT_MS=30000  # 30 seconds per request
+export PROMPTFOO_MAX_EVAL_TIME_MS=300000  # 5 minutes total limit
+
+npx promptfoo eval
+```
+
+You can also set these values in your `.env` file or Promptfoo config file:
+
+```yaml title="promptfooconfig.yaml"
+env:
+  PROMPTFOO_EVAL_TIMEOUT_MS: 30000
+  PROMPTFOO_MAX_EVAL_TIME_MS: 300000
 ```
 
 ## Debugging Python
@@ -196,25 +354,85 @@ Alternatively, you can use the `--verbose` flag:
 npx promptfoo eval --verbose
 ```
 
-### Using a debugger
+### Using the Python debugger (pdb)
 
-While standard Python debuggers like `pdb` are not directly supported, you can use `remote-pdb` for debugging. First, install `remote-pdb`:
+Promptfoo now supports native Python debugging with pdb. To enable it:
 
 ```bash
-pip install remote-pdb
+export PROMPTFOO_PYTHON_DEBUG_ENABLED=true
 ```
 
-Then, add the following lines to your Python script where you want to set a breakpoint:
+Then add breakpoints in your Python code:
 
 ```python
-from remote_pdb import RemotePdb
-RemotePdb('127.0.0.1', 4444).set_trace()
+import pdb
+
+def call_api(prompt, options, context):
+    pdb.set_trace()  # Debugger will pause here
+    # Your code...
 ```
 
-When your code reaches this point, it will pause execution and wait for you to connect to the debugger. You can then connect to the debugger using a tool like `telnet`:
+### Python Installation and Path Issues
+
+If you encounter errors like `spawn py -3 ENOENT` or `Python 3 not found`, promptfoo cannot locate your Python installation. Here's how to resolve this:
+
+#### Setting a Custom Python Path
+
+Use the `PROMPTFOO_PYTHON` environment variable to specify your Python executable:
 
 ```bash
-telnet 127.0.0.1 4444
+# Windows (if Python is installed at a custom location)
+export PROMPTFOO_PYTHON=C:\Python\3_11\python.exe
+
+# macOS/Linux
+export PROMPTFOO_PYTHON=/usr/local/bin/python3
+
+# Then run your evaluation
+npx promptfoo eval
+```
+
+#### Per-Provider Python Configuration
+
+You can also set the Python path for specific providers in your config:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      pythonExecutable: /path/to/specific/python
+```
+
+#### Windows-Specific Issues
+
+On Windows, promptfoo tries to detect Python in this order:
+
+1. `PROMPTFOO_PYTHON` environment variable (if set)
+2. Provider-specific `pythonExecutable` config (if set)
+3. **Windows smart detection**: Uses `where python` command and filters out Microsoft Store stubs
+4. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
+5. Common fallback commands: `python`, `python3`, `py -3`, `py`
+
+If you don't have the Python launcher (`py.exe`) installed but have Python directly, make sure the `python` command works from your command line. If not, either:
+
+- Add your Python installation directory to your PATH
+- Set `PROMPTFOO_PYTHON` to the full path of your `python.exe`
+
+**Common Windows Python locations:**
+
+- Microsoft Store: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps\python.exe`
+- Direct installer: `C:\Python3X\python.exe` (where X is the version)
+- Anaconda: `C:\Users\YourName\anaconda3\python.exe`
+
+#### Testing Your Python Configuration
+
+To verify your Python is correctly configured:
+
+```bash
+# Test that promptfoo can find your Python
+python -c "import sys; print(sys.executable)"
+
+# If this works but promptfoo still has issues, set PROMPTFOO_PYTHON:
+export PROMPTFOO_PYTHON=$(python -c "import sys; print(sys.executable)")
 ```
 
 ### Handling errors
@@ -243,3 +461,11 @@ Remember that promptfoo runs your Python script in a separate process, so some s
    ```bash
    unset PROMPTFOO_ENABLE_DATABASE_LOGS
    ```
+
+## Finding log files
+
+Promptfoo logs errors and verbose logs to `~/.promptfoo/logs` by default.
+
+Change the location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+
+For each run an error log and a debug log will be created.

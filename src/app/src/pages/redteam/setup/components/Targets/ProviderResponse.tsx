@@ -1,111 +1,112 @@
-import { Paper, Table, TableBody, TableCell, TableHead, TableRow, Typography } from '@mui/material';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { AlertCircle } from 'lucide-react';
 
-export default function ProviderResponse({ providerResponse }: { providerResponse: any }) {
+interface ProviderResponseData {
+  raw?: unknown;
+  output?: unknown;
+  sessionId?: string;
+  error?: string;
+  metadata?: {
+    headers?: Record<string, unknown>;
+    requestBody?: unknown;
+    requestMethod?: string;
+  };
+}
+
+export default function ProviderResponse({ providerResponse }: { providerResponse: unknown }) {
+  const response = providerResponse as ProviderResponseData;
+  const hasHeaders = Object.keys(response?.metadata?.headers || {}).length > 0;
   return (
-    <>
-      <Typography variant="subtitle2" gutterBottom>
-        Headers:
-      </Typography>
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-          maxHeight: '200px',
-          overflow: 'auto',
-          mb: 2,
-        }}
-      >
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Header</TableCell>
-              <TableCell>Value</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {Object.entries(providerResponse?.metadata?.headers || {}).map(([key, value]) => (
-              <TableRow key={key}>
-                <TableCell sx={{ maxWidth: '200px', wordBreak: 'break-word' }}>{key}</TableCell>
-                <TableCell sx={{ maxWidth: '300px', wordBreak: 'break-word' }}>
-                  {value as string}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Paper>
-      <Typography variant="subtitle2" gutterBottom>
-        Raw Result:
-      </Typography>
+    <div>
+      {response && response.raw !== undefined ? (
+        <>
+          {hasHeaders ? (
+            <>
+              <h4 className="mb-2 text-sm font-semibold">Headers:</h4>
+              <div className="mb-4 max-h-[200px] overflow-auto rounded-md bg-muted p-4">
+                <div className="w-full overflow-hidden">
+                  <table className="w-full table-fixed text-sm">
+                    <thead>
+                      <tr>
+                        <th className="w-[30%] rounded-l bg-muted-foreground/20 px-3 py-2 text-left font-bold">
+                          Header
+                        </th>
+                        <th className="w-[70%] bg-muted-foreground/20 px-3 py-2 text-left font-bold">
+                          Value
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(response?.metadata?.headers || {}).map(([key, value]) => (
+                        <tr key={key} className="border-b border-border/50 last:border-0">
+                          <td className="break-words px-3 py-2">{key}</td>
+                          <td className="max-w-0 overflow-hidden break-all px-3 py-2">
+                            {typeof value === 'string' ? value : String(value)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : null}
 
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-          maxHeight: '200px',
-          overflow: 'auto',
-        }}
-      >
-        <pre
-          style={{
-            margin: 0,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
-        >
-          {typeof providerResponse?.raw === 'string'
-            ? providerResponse?.raw
-            : JSON.stringify(providerResponse?.raw, null, 2)}
-        </pre>
-      </Paper>
-      <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-        Parsed Result:
-      </Typography>
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-          maxHeight: '200px',
-          overflow: 'auto',
-        }}
-      >
-        <pre
-          style={{
-            margin: 0,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
-        >
-          {typeof providerResponse?.output === 'string'
-            ? providerResponse?.output
-            : JSON.stringify(providerResponse?.output, null, 2)}
-        </pre>
-      </Paper>
-      <Typography variant="subtitle2" gutterBottom sx={{ mt: 2 }}>
-        Session ID:
-      </Typography>
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          bgcolor: (theme) => (theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'),
-          maxHeight: '200px',
-          overflow: 'auto',
-        }}
-      >
-        <pre
-          style={{
-            margin: 0,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-          }}
-        >
-          {providerResponse?.sessionId}
-        </pre>
-      </Paper>
-    </>
+          {/* Display Request Body if available in metadata */}
+          {response?.metadata?.requestBody && (
+            <>
+              <h4 className="mb-2 text-sm font-semibold">Request Body Sent:</h4>
+              <div className="mb-4 max-h-[200px] overflow-auto rounded-md bg-muted p-4">
+                <pre className="m-0 whitespace-pre-wrap break-words">
+                  {typeof response.metadata.requestBody === 'string'
+                    ? response.metadata.requestBody
+                    : JSON.stringify(response.metadata.requestBody, null, 2)}
+                </pre>
+              </div>
+            </>
+          )}
+
+          {/* Display Request Method if available in metadata */}
+          {response?.metadata?.requestMethod && (
+            <>
+              <h4 className="mb-2 text-sm font-semibold">Request Method:</h4>
+              <div className="mb-4 rounded-md bg-muted p-4">
+                <pre className="m-0">{response.metadata.requestMethod}</pre>
+              </div>
+            </>
+          )}
+
+          <h4 className="mb-2 text-sm font-semibold">Raw Result:</h4>
+          <div className="max-h-[200px] overflow-auto rounded-md bg-muted p-4">
+            <pre className="m-0 whitespace-pre-wrap break-words">
+              {typeof response?.raw === 'string'
+                ? response?.raw
+                : JSON.stringify(response?.raw, null, 2)}
+            </pre>
+          </div>
+
+          <h4 className="mb-2 mt-4 text-sm font-semibold">Parsed Result:</h4>
+          <div className="max-h-[200px] overflow-auto rounded-md bg-muted p-4">
+            <pre className="m-0 whitespace-pre-wrap break-words">
+              {typeof response?.output === 'string'
+                ? response?.output
+                : JSON.stringify(response?.output, null, 2) || 'No parsed response'}
+            </pre>
+          </div>
+
+          <h4 className="mb-2 mt-4 text-sm font-semibold">Session ID:</h4>
+          <div className="max-h-[200px] overflow-auto rounded-md bg-muted p-4">
+            <pre className="m-0 whitespace-pre-wrap break-words">{response?.sessionId}</pre>
+          </div>
+        </>
+      ) : (
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertContent>
+            <AlertDescription>{response?.error || 'No response from provider'}</AlertDescription>
+          </AlertContent>
+        </Alert>
+      )}
+    </div>
   );
 }

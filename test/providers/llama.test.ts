@@ -1,10 +1,14 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { LlamaProvider } from '../../src/providers/llama';
 import { REQUEST_TIMEOUT_MS } from '../../src/providers/shared';
 
-jest.mock('../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
 describe('LlamaProvider', () => {
   const modelName = 'testModel';
@@ -45,12 +49,15 @@ describe('LlamaProvider', () => {
     const response = { data: { content: 'test response' } };
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
     it('should call fetchWithCache with correct parameters', async () => {
-      jest
-        .mocked(fetchWithCache)
-        .mockResolvedValue({ ...response, cached: false, status: 200, statusText: 'OK' });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...response,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
       const provider = new LlamaProvider(modelName, { config });
       await provider.callApi(prompt);
@@ -86,7 +93,7 @@ describe('LlamaProvider', () => {
       );
     });
     it('should return the correct response on success', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: { content: 'test response' },
         cached: false,
         status: 200,
@@ -95,12 +102,16 @@ describe('LlamaProvider', () => {
 
       const provider = new LlamaProvider(modelName, { config });
       const result = await provider.callApi(prompt);
-      expect(result).toEqual({ output: response.data.content });
+      expect(result).toEqual({
+        output: response.data.content,
+        cached: false,
+        latencyMs: undefined,
+      });
     });
 
     it('should return an error if fetchWithCache throws an error', async () => {
       const error = new Error('API call error');
-      jest.mocked(fetchWithCache).mockRejectedValue(error);
+      vi.mocked(fetchWithCache).mockRejectedValue(error);
 
       const provider = new LlamaProvider(modelName, { config });
       const result = await provider.callApi(prompt);
@@ -110,7 +121,7 @@ describe('LlamaProvider', () => {
 
     it('should return an error if response data is malformed', async () => {
       const malformedResponse = { data: null, cached: false, status: 200, statusText: 'OK' };
-      jest.mocked(fetchWithCache).mockResolvedValue(malformedResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(malformedResponse);
 
       const provider = new LlamaProvider(modelName, { config });
       const result = await provider.callApi(prompt);

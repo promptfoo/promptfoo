@@ -1,5 +1,6 @@
 ---
 sidebar_label: vllm
+description: "Achieve high-throughput LLM serving using vLLM's optimized inference engine with PagedAttention and continuous batching"
 ---
 
 # vllm

@@ -1,12 +1,14 @@
+import { describe, expect, it } from 'vitest';
 import {
   addOtherEncodings,
   EncodingType,
-  toMorseCode,
-  toPigLatin,
   toCamelCase,
   toEmojiEncoding,
+  toMorseCode,
+  toPigLatin,
 } from '../../../src/redteam/strategies/otherEncodings';
-import type { TestCase } from '../../../src/types';
+
+import type { TestCase } from '../../../src/types/index';
 
 describe('other encodings strategy', () => {
   const testCases: TestCase[] = [

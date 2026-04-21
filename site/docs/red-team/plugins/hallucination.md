@@ -1,5 +1,6 @@
 ---
 sidebar_label: Hallucination
+description: Red team LLM hallucination vulnerabilities by testing fabrication triggers and false information generation to protect AI systems from producing misleading outputs
 ---
 
 # Hallucination Plugin
@@ -66,6 +67,7 @@ By incorporating the Hallucination plugin in your LLM red teaming strategy, you 
 
 ## Related Concepts
 
+- [RAG Source Attribution](rag-source-attribution.md) - Tests for fabricated document citations in RAG systems
 - [Misinformation and Disinformation](../llm-vulnerability-types.md#misinformation-and-misuse)
 - [Overreliance](overreliance.md)
 - [Excessive Agency](excessive-agency.md)

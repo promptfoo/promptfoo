@@ -1,28 +1,20 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import Editor from 'react-simple-code-editor';
+
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
+import { CopyButton } from '@app/components/ui/copy-button';
+import { CancelIcon, DownloadIcon, SaveIcon, TerminalIcon } from '@app/components/ui/icons';
+import { useToast } from '@app/hooks/useToast';
+import Prism from '@app/lib/prism';
+import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import EditIcon from '@mui/icons-material/Edit';
-import SaveIcon from '@mui/icons-material/Save';
-import UploadIcon from '@mui/icons-material/Upload';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Snackbar from '@mui/material/Snackbar';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { styled } from '@mui/system';
 import yaml from 'js-yaml';
-// @ts-expect-error: No types available
-import { highlight, languages } from 'prismjs/components/prism-core';
-import 'prismjs/components/prism-yaml';
-import './YamlEditor.css';
+import type { UnifiedConfig } from '@promptfoo/types';
 import 'prismjs/themes/prism.css';
 
 interface YamlEditorProps {
-  initialConfig?: any;
+  initialConfig?: unknown;
   readOnly?: boolean;
   initialYaml?: string;
 }
@@ -30,6 +22,8 @@ interface YamlEditorProps {
 // Schema comment that should always be at the top of the YAML file
 const YAML_SCHEMA_COMMENT =
   '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json';
+const YAML_DOWNLOAD_FILE_NAME = 'promptfooconfig.yaml';
+const EVAL_CLI_COMMAND = `promptfoo eval -c ${YAML_DOWNLOAD_FILE_NAME}`;
 
 // Ensure the schema comment is at the top of YAML content
 const ensureSchemaComment = (yamlContent: string): string => {
@@ -39,284 +33,210 @@ const ensureSchemaComment = (yamlContent: string): string => {
   return yamlContent;
 };
 
-// Format YAML with schema comment
-const formatYamlWithSchema = (config: any): string => {
+const formatYamlWithSchema = (config: unknown): string => {
   const yamlContent = yaml.dump(config);
   return ensureSchemaComment(yamlContent);
 };
 
-const StyledLink = styled(Link)({
-  fontWeight: 'medium',
-  textDecoration: 'none',
-});
-
-const YamlEditorComponent: React.FC<YamlEditorProps> = ({
-  initialConfig,
-  readOnly = false,
-  initialYaml,
-}) => {
-  const darkMode = useTheme().palette.mode === 'dark';
+const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: YamlEditorProps) => {
   const [code, setCode] = React.useState('');
-  // Always start in read-only mode on initial load, but respect the readOnly prop
-  const [isReadOnly, setIsReadOnly] = React.useState(true);
+  const [originalCode, setOriginalCode] = React.useState('');
   const [parseError, setParseError] = React.useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
+  const { showToast } = useToast();
 
-  const [notification, setNotification] = React.useState<{
-    show: boolean;
-    message: string;
-  }>({ show: false, message: '' });
-
-  const { getTestSuite } = useStore();
+  const { getTestSuite, updateConfig } = useStore();
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
       // Remove the schema comment for parsing if it exists
       const contentForParsing = yamlContent.replace(YAML_SCHEMA_COMMENT, '').trim();
-      const parsedConfig = yaml.load(contentForParsing) as Record<string, any>;
+      const parsedConfig = yaml.load(contentForParsing) as Record<string, unknown>;
 
       if (parsedConfig && typeof parsedConfig === 'object') {
-        useStore.setState((state) => {
-          const newState = {
-            ...state,
-          };
-
-          if (parsedConfig.description !== undefined) {
-            newState.description = parsedConfig.description;
-          }
-
-          if (parsedConfig.providers !== undefined) {
-            newState.providers = parsedConfig.providers;
-          }
-
-          if (parsedConfig.prompts !== undefined) {
-            newState.prompts = parsedConfig.prompts;
-          }
-
-          if (parsedConfig.tests !== undefined) {
-            newState.testCases = parsedConfig.tests;
-          }
-
-          if (parsedConfig.defaultTest !== undefined) {
-            newState.defaultTest = parsedConfig.defaultTest;
-          }
-
-          if (parsedConfig.evaluateOptions !== undefined) {
-            newState.evaluateOptions = parsedConfig.evaluateOptions;
-          }
-
-          if (parsedConfig.scenarios !== undefined) {
-            newState.scenarios = parsedConfig.scenarios;
-          }
-
-          if (parsedConfig.extensions !== undefined) {
-            newState.extensions = parsedConfig.extensions;
-          }
-
-          if (parsedConfig.env !== undefined) {
-            newState.env = parsedConfig.env;
-          }
-
-          return newState;
-        });
+        // Simply update the config with the parsed YAML
+        // The store will handle the mapping
+        updateConfig(parsedConfig as Partial<UnifiedConfig>);
 
         setParseError(null);
-        setNotification({ show: true, message: 'Configuration saved successfully' });
+        showToast('Configuration saved successfully', 'success');
         return true;
       } else {
         const errorMsg = 'Invalid YAML configuration';
         setParseError(errorMsg);
-        setNotification({ show: true, message: errorMsg });
+        showToast(errorMsg, 'error');
         return false;
       }
     } catch (err) {
       const errorMsg = `Failed to parse YAML: ${err instanceof Error ? err.message : String(err)}`;
       console.error(errorMsg, err);
       setParseError(errorMsg);
-      setNotification({ show: true, message: errorMsg });
+      showToast(errorMsg, 'error');
       return false;
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        // Ensure the schema comment is at the top
-        const contentWithSchema = ensureSchemaComment(content);
-        setCode(contentWithSchema);
-        if (isReadOnly) {
-          setIsReadOnly(false);
-        }
-        parseAndUpdateStore(contentWithSchema);
-      };
-      reader.onerror = () => {
-        const errorMsg = 'Failed to read the uploaded file';
-        setParseError(errorMsg);
-        setNotification({ show: true, message: errorMsg });
-        setIsReadOnly(false);
-      };
-      try {
-        reader.readAsText(file);
-      } catch (err) {
-        const errorMsg = `Error loading file: ${err instanceof Error ? err.message : String(err)}`;
-        setParseError(errorMsg);
-        setNotification({ show: true, message: errorMsg });
-        setIsReadOnly(false);
-      }
+  const handleSave = () => {
+    const success = parseAndUpdateStore(code);
+    if (success) {
+      setOriginalCode(code);
+      setHasUnsavedChanges(false);
     }
   };
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setNotification({ show: true, message: 'YAML copied to clipboard' });
-    } catch (err) {
-      console.error('Failed to copy text:', err);
-    }
+  const handleCancel = () => {
+    setCode(originalCode);
+    setHasUnsavedChanges(false);
+    setParseError(null);
+    showToast('Changes discarded', 'info');
   };
 
+  const handleDownload = () => {
+    const blob = new Blob([code], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = YAML_DOWNLOAD_FILE_NAME;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast(`Downloaded ${YAML_DOWNLOAD_FILE_NAME}`, 'success');
+  };
+
+  // Initial load effect
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     if (initialYaml) {
-      setCode(ensureSchemaComment(initialYaml));
+      const formattedCode = ensureSchemaComment(initialYaml);
+      setCode(formattedCode);
+      setOriginalCode(formattedCode);
     } else if (initialConfig) {
-      setCode(formatYamlWithSchema(initialConfig));
+      const formattedCode = formatYamlWithSchema(initialConfig);
+      setCode(formattedCode);
+      setOriginalCode(formattedCode);
     } else {
       const currentConfig = getTestSuite();
-      setCode(formatYamlWithSchema(currentConfig));
+      const formattedCode = formatYamlWithSchema(currentConfig);
+      setCode(formattedCode);
+      setOriginalCode(formattedCode);
     }
     // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
   }, [initialYaml, initialConfig]);
 
+  // Track unsaved changes
+  React.useEffect(() => {
+    setHasUnsavedChanges(code !== originalCode);
+  }, [code, originalCode]);
+
   return (
-    <Box>
-      <Box
-        sx={{
-          mb: 3,
-          p: 2,
-          bgcolor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-          borderRadius: 1,
-          borderLeft: '4px solid',
-          borderColor: 'primary.main',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Box>
-          <Typography variant="subtitle1" fontWeight="bold" color="primary.main" gutterBottom>
-            YAML Configuration
-          </Typography>
-          <Typography variant="body2">
-            This configuration defines your evaluation parameters and can be exported for use with
-            the promptfoo CLI.
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            <StyledLink target="_blank" to="https://promptfoo.dev/docs/configuration/guide">
-              View documentation →
-            </StyledLink>
-          </Typography>
-        </Box>
-        {!readOnly && (
-          <Button
-            variant={isReadOnly ? 'outlined' : 'contained'}
-            color="primary"
-            size="small"
-            startIcon={isReadOnly ? <EditIcon /> : <SaveIcon />}
-            onClick={() => {
-              if (isReadOnly) {
-                setIsReadOnly(false);
-              } else {
-                const parseSuccess = parseAndUpdateStore(code);
-                if (parseSuccess) {
-                  setIsReadOnly(true);
-                }
-              }
-            }}
-            sx={{ ml: 2, whiteSpace: 'nowrap' }}
-          >
-            {isReadOnly ? 'Edit YAML' : 'Save Changes'}
-          </Button>
-        )}
-      </Box>
-      {!readOnly && !isReadOnly && (
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Box display="flex" gap={2}>
-            <Button variant="text" color="primary" startIcon={<UploadIcon />} component="label">
-              Upload YAML
-              <input type="file" hidden accept=".yaml,.yml" onChange={handleFileUpload} />
+    <div className="space-y-4 min-w-0">
+      {/* Action bar */}
+      {!readOnly && (
+        <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" onClick={handleSave} disabled={!hasUnsavedChanges}>
+              <SaveIcon className="size-4 mr-2" />
+              Save
             </Button>
             <Button
-              variant="text"
-              color="warning"
-              onClick={() => {
-                const currentConfig = getTestSuite();
-                setCode(formatYamlWithSchema(currentConfig));
-                setNotification({ show: true, message: 'Reset to last saved configuration' });
-              }}
+              variant="outline"
+              size="sm"
+              onClick={handleCancel}
+              disabled={!hasUnsavedChanges}
             >
-              Reset
+              <CancelIcon className="size-4 mr-2" />
+              Discard Changes
             </Button>
-          </Box>
-          <Typography variant="caption" color="text.secondary">
-            Editing mode active - changes will be applied when you save
-          </Typography>
-        </Box>
+            <Button variant="outline" size="sm" onClick={handleDownload}>
+              <DownloadIcon className="size-4 mr-2" />
+              Download YAML
+            </Button>
+          </div>
+          {hasUnsavedChanges && (
+            <span className="text-sm text-amber-600 dark:text-amber-400 font-medium">
+              ● Unsaved changes
+            </span>
+          )}
+        </div>
       )}
-      <Box position="relative">
+
+      {!readOnly && (
+        <Alert variant="info" className="items-start">
+          <TerminalIcon className="size-4 mt-0.5" />
+          <AlertContent className="space-y-2">
+            <p className="font-medium text-sm">Run in CLI</p>
+            <AlertDescription>
+              Download this file as <code>{YAML_DOWNLOAD_FILE_NAME}</code>, then run:
+            </AlertDescription>
+            <div className="relative">
+              <code className="block rounded bg-background/70 px-3 py-2 pr-12 text-sm font-mono">
+                {EVAL_CLI_COMMAND}
+              </code>
+              <CopyButton
+                value={EVAL_CLI_COMMAND}
+                className="absolute right-2 top-1.5"
+                aria-label="Copy CLI command"
+              />
+            </div>
+          </AlertContent>
+        </Alert>
+      )}
+
+      {/* Error display */}
+      {parseError && (
+        <Alert variant="destructive">
+          <AlertContent>
+            <AlertDescription>{parseError}</AlertDescription>
+          </AlertContent>
+        </Alert>
+      )}
+
+      {/* Editor Container */}
+      <div className="relative min-w-0">
         <div
-          className={`editor-container ${
-            isReadOnly ? (readOnly ? '' : 'editor-readonly') : 'glowing-border'
-          }`}
+          className={cn(
+            'rounded-lg overflow-auto max-h-[60vh]',
+            'border-2 transition-all',
+            hasUnsavedChanges ? 'border-primary' : 'border-border',
+          )}
         >
-          {!isReadOnly && <div className="editing-indicator">Editing</div>}
           <Editor
             autoCapitalize="off"
             value={code}
             onValueChange={(newCode) => {
-              if (!isReadOnly) {
-                if (parseError) {
-                  setParseError(null);
-                }
-                setCode(newCode);
+              if (readOnly) {
+                return;
+              }
+              setCode(newCode);
+              if (parseError) {
+                setParseError(null);
               }
             }}
-            highlight={(code) => highlight(code, languages.yaml)}
-            padding={10}
+            highlight={(code) => {
+              try {
+                return Prism.languages.yaml
+                  ? Prism.highlight(code, Prism.languages.yaml, 'yaml')
+                  : code;
+              } catch {
+                return code;
+              }
+            }}
+            padding={16}
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
-              backgroundColor: darkMode ? '#1e1e1e' : '#fff',
+              minHeight: '300px',
             }}
-            disabled={isReadOnly}
+            className={cn('bg-background', readOnly && 'cursor-default select-text')}
+            disabled={readOnly}
           />
         </div>
-        <Tooltip title="Copy YAML">
-          <IconButton
-            onClick={handleCopy}
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              bgcolor: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
-              '&:hover': {
-                bgcolor: darkMode ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.1)',
-              },
-            }}
-          >
-            <ContentCopyIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      </Box>
-      <Snackbar
-        open={notification.show}
-        autoHideDuration={2000}
-        onClose={() => setNotification({ ...notification, show: false })}
-        message={notification.message}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      />
-    </Box>
+
+        {/* Copy button - offset to avoid scrollbar */}
+        <div className="absolute top-2 right-5">
+          <CopyButton value={code} />
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -1,31 +1,34 @@
+import { randomUUID } from 'crypto';
+import * as fs from 'fs';
+
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { type Command } from 'commander';
-import { randomUUID } from 'crypto';
 import dedent from 'dedent';
-import * as fs from 'fs';
 import { z } from 'zod';
 import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
-import { fetchWithProxy } from '../../fetch';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { loadApiProvider, loadApiProviders } from '../../providers';
+import { HttpProvider } from '../../providers/http';
+import { loadApiProvider, loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
-import type { ApiProvider, Prompt, UnifiedConfig } from '../../types';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
+import { fetchWithProxy } from '../../util/fetch/index';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
+import type { ApiProvider, Prompt, UnifiedConfig } from '../../types/index';
 
 // ========================================================
 // Schemas
 // ========================================================
 
-export const TargetPurposeDiscoveryStateSchema = z.object({
+const TargetPurposeDiscoveryStateSchema = z.object({
   currentQuestionIndex: z.number(),
-  answers: z.array(z.string()),
+  answers: z.array(z.any()),
 });
 
 export const TargetPurposeDiscoveryRequestSchema = z.object({
@@ -35,7 +38,7 @@ export const TargetPurposeDiscoveryRequestSchema = z.object({
   email: z.string().optional().nullable(),
 });
 
-export const TargetPurposeDiscoveryResultSchema = z.object({
+const TargetPurposeDiscoveryResultSchema = z.object({
   purpose: z.string().nullable(),
   limitations: z.string().nullable(),
   user: z.string().nullable(),
@@ -71,8 +74,8 @@ export const ArgsSchema = z
   })
   // Config and target are mutually exclusive:
   .refine((data) => !(data.config && data.target), {
-    message: 'Cannot specify both config and target!',
     path: ['config', 'target'],
+    message: 'Cannot specify both config and target!',
   });
 
 // ========================================================
@@ -87,8 +90,8 @@ type Args = z.infer<typeof ArgsSchema>;
 // Constants
 // ========================================================
 
-export const DEFAULT_TURN_COUNT = 5;
-export const MAX_TURN_COUNT = 10;
+const DEFAULT_TURN_COUNT = 5;
+const MAX_TURN_COUNT = 10;
 const LOG_PREFIX = '[Target Discovery Agent]';
 const COMMAND = 'discover';
 
@@ -124,30 +127,84 @@ export function normalizeTargetPurposeDiscoveryResult(
   };
 }
 
+function extractStringField(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+async function getRemoteResponseErrorDetail(response: Response): Promise<string> {
+  const rawText = (await response.text()).trim();
+  const fallback = rawText || response.statusText || 'Unknown error';
+  if (!rawText) {
+    return fallback;
+  }
+  try {
+    const parsed = JSON.parse(rawText) as { message?: unknown; error?: unknown } | null;
+    const detail = extractStringField(parsed?.message) ?? extractStringField(parsed?.error);
+    return detail ?? fallback;
+  } catch {
+    // Not JSON — fall through to raw text.
+    return fallback;
+  }
+}
+
+const REMOTE_ERROR_HINTS: Record<number, string> = {
+  400: 'This usually means your promptfoo client is out of date. Try `npm install -g promptfoo@latest` and rerun.',
+  401: 'Check that you are logged in (`promptfoo auth login`) and that your account has access to target discovery.',
+  403: 'Check that you are logged in (`promptfoo auth login`) and that your account has access to target discovery.',
+  404: 'This usually means your promptfoo client is out of date. Try `npm install -g promptfoo@latest` and rerun.',
+  429: 'You are being rate limited. Wait a moment and try again.',
+};
+
+function getRemoteErrorHint(status: number): string | undefined {
+  if (REMOTE_ERROR_HINTS[status]) {
+    return REMOTE_ERROR_HINTS[status];
+  }
+  if (status >= 500) {
+    return 'The remote generation service may be temporarily unavailable. Retry in a few minutes or contact support if the issue persists.';
+  }
+  return undefined;
+}
+
+async function buildRemoteErrorFromResponse(response: Response): Promise<Error> {
+  const detail = await getRemoteResponseErrorDetail(response);
+  const hint = getRemoteErrorHint(response.status);
+  const base = `Remote server returned HTTP ${response.status}: ${detail}`;
+  return new Error(hint ? `${base}\n${hint}` : base);
+}
+
 /**
  * Queries Cloud for the purpose-discovery logic, sends each logic to the target,
  * and summarizes the results.
  *
  * @param target - The target API provider.
  * @param prompt - The prompt to use for the discovery.
+ * @param showProgress - Whether to show the progress bar.
  * @returns The discovery result.
  */
 export async function doTargetPurposeDiscovery(
   target: ApiProvider,
   prompt?: Prompt,
+  showProgress: boolean = true,
 ): Promise<TargetPurposeDiscoveryResult | undefined> {
   // Generate a unique session id to pass to the target across all turns.
   const sessionId = randomUUID();
 
-  const pbar = new cliProgress.SingleBar({
-    format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
-    barCompleteChar: '\u2588',
-    barIncompleteChar: '\u2591',
-    hideCursor: true,
-    gracefulExit: true,
-  });
+  let pbar: cliProgress.SingleBar | undefined;
+  if (showProgress) {
+    pbar = new cliProgress.SingleBar({
+      format: `Mapping the target {bar} {percentage}% | {value}${DEFAULT_TURN_COUNT ? '/{total}' : ''} turns`,
+      barCompleteChar: '\u2588',
+      barIncompleteChar: '\u2591',
+      hideCursor: true,
+      gracefulExit: true,
+    });
 
-  pbar.start(DEFAULT_TURN_COUNT, 0);
+    pbar.start(DEFAULT_TURN_COUNT, 0);
+  }
 
   let done = false;
   let question: string | undefined;
@@ -184,9 +241,7 @@ export async function doTargetPurposeDiscovery(
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        logger.error(`${LOG_PREFIX} Error getting the next question from remote server: ${error}`);
-        continue;
+        throw await buildRemoteErrorFromResponse(response);
       }
 
       const responseData = await response.json();
@@ -202,7 +257,9 @@ export async function doTargetPurposeDiscovery(
       state = data.state;
 
       if (data.error) {
-        logger.error(`${LOG_PREFIX} Error from remote server: ${data.error}`);
+        const errorMessage = `Error from remote server: ${data.error}`;
+        logger.error(`${LOG_PREFIX} ${errorMessage}`);
+        throw new Error(errorMessage);
       }
       // Should another question be asked?
       else if (!done) {
@@ -215,111 +272,51 @@ export async function doTargetPurposeDiscovery(
         const targetResponse = await target.callApi(renderedPrompt, {
           prompt: { raw: question, label: 'Target Discovery Question' },
           vars: { sessionId },
+          bustCache: true,
         });
 
         if (targetResponse.error) {
-          logger.error(`${LOG_PREFIX} Error from target: ${targetResponse.error}`);
-          if (turn > MAX_TURN_COUNT) {
-            logger.error(`${LOG_PREFIX} Too many retries, giving up.`);
-            return undefined;
-          }
-          continue;
+          const errorMessage = `Error from target: ${targetResponse.error}`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
+        }
+
+        if (turn > MAX_TURN_COUNT) {
+          const errorMessage = `Too many retries, giving up.`;
+          logger.error(`${LOG_PREFIX} ${errorMessage}`);
+          throw new Error(errorMessage);
         }
 
         logger.debug(
           `${LOG_PREFIX} Received response from target: ${JSON.stringify(targetResponse, null, 2)}`,
         );
 
+        // If the target is an HTTP provider and has no transformResponse defined, and the response is an object,
+        // prompt the user to define a transformResponse.
+        if (
+          target instanceof HttpProvider &&
+          target.config.transformResponse === undefined &&
+          typeof targetResponse.output === 'object' &&
+          targetResponse.output !== null
+        ) {
+          logger.warn(
+            `${LOG_PREFIX} Target response is an object; should a \`transformResponse\` function be defined?`,
+          );
+        }
+
         state.answers.push(targetResponse.output);
       }
-    } catch (error) {
-      logger.error(
-        `An unexpected error occurred during target discovery: ${error instanceof Error ? error.message : String(error)}\n${
-          error instanceof Error ? error.stack : ''
-        }`,
-      );
     } finally {
-      pbar.increment(1);
+      if (showProgress) {
+        pbar?.increment(1);
+      }
     }
   }
-  pbar.stop();
+  if (showProgress) {
+    pbar?.stop();
+  }
 
   return discoveryResult ? normalizeTargetPurposeDiscoveryResult(discoveryResult) : undefined;
-}
-
-/**
- * Merges the human-defined purpose with the discovered information, structuring these as markdown to be used by test generation.
- * @param humanDefinedPurpose - The human-defined purpose.
- * @param discoveryResult - The discovery result.
- * @returns The merged purpose as markdown.
- */
-export function mergeTargetPurposeDiscoveryResults(
-  humanDefinedPurpose?: string,
-  discoveryResult?: TargetPurposeDiscoveryResult,
-): string {
-  // Check if there's any meaningful discovered content
-  const hasDiscoveredContent =
-    discoveryResult &&
-    (discoveryResult.purpose ||
-      discoveryResult.limitations ||
-      discoveryResult.user ||
-      (discoveryResult.tools && discoveryResult.tools.length > 0));
-
-  return [
-    humanDefinedPurpose &&
-      dedent`
-      # Human Defined Target Purpose
-
-      This purpose was defined by the user and should be trusted and treated as absolute truth:
-
-      ${humanDefinedPurpose}
-    `,
-    hasDiscoveredContent &&
-      dedent`
-      # Agent Discovered Target Purpose
-
-      The following information was discovered by the agent through conversations with the target.
-
-      The boundaries of the agent's capabilities, limitations, and tool access should be tested.
-
-      If there are any discrepancies, the Human Defined Purpose should be trusted and treated as absolute truth.
-    `,
-    discoveryResult?.purpose &&
-      dedent`
-      ## Purpose
-
-      The target believes its purpose is:
-
-      ${discoveryResult.purpose}
-    `,
-    discoveryResult?.limitations &&
-      dedent`
-      ## Limitations
-
-      The target believes its limitations are:
-
-      ${discoveryResult.limitations}
-    `,
-    discoveryResult?.tools &&
-      discoveryResult.tools.length > 0 &&
-      dedent`
-      ## Tools
-
-      The target believes it has access to these tools:
-
-      ${JSON.stringify(discoveryResult.tools, null)}
-    `,
-    discoveryResult?.user &&
-      dedent`
-      ## User
-
-      The target believes the user of the application is:
-
-      ${discoveryResult.user}
-    `,
-  ]
-    .filter(Boolean)
-    .join('\n');
 }
 
 // ========================================================
@@ -355,7 +352,8 @@ export function discoverCommand(
 
           To enable remote generation, unset the PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION environment variable.
         `);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
 
       // Validate the arguments:
@@ -370,9 +368,7 @@ export function discoverCommand(
       }
 
       // Record telemetry:
-      telemetry.record('command_used', {
-        name: `redteam ${COMMAND}`,
-      });
+      telemetry.record('redteam discover', {});
 
       let config: UnifiedConfig | null = null;
       // Although the providers/targets property supports multiple values, Redteaming only supports
@@ -435,20 +431,24 @@ export function discoverCommand(
 
         if (discoveryResult) {
           if (discoveryResult.purpose) {
-            logger.info(chalk.bold(chalk.green('\nThe target believes its purpose is:\n')));
+            logger.info(chalk.bold(chalk.green('\n1. The target believes its purpose is:\n')));
             logger.info(discoveryResult.purpose);
           }
           if (discoveryResult.limitations) {
-            logger.info(chalk.bold(chalk.green('\nThe target believes its limitations to be:\n')));
+            logger.info(
+              chalk.bold(chalk.green('\n2. The target believes its limitations to be:\n')),
+            );
             logger.info(discoveryResult.limitations);
           }
           if (discoveryResult.tools && discoveryResult.tools.length > 0) {
-            logger.info(chalk.bold(chalk.green('\nThe target divulged access to these tools:\n')));
+            logger.info(
+              chalk.bold(chalk.green('\n3. The target divulged access to these tools:\n')),
+            );
             logger.info(JSON.stringify(discoveryResult.tools, null, 2));
           }
           if (discoveryResult.user) {
             logger.info(
-              chalk.bold(chalk.green('\nThe target believes the user of the application is:\n')),
+              chalk.bold(chalk.green('\n4. The target believes the user of the application is:\n')),
             );
             logger.info(discoveryResult.user);
           }
@@ -471,9 +471,8 @@ export function discoverCommand(
             error instanceof Error ? error.stack : ''
           }`,
         );
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
-
-      process.exit();
     });
 }

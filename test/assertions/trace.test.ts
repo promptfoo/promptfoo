@@ -1,0 +1,489 @@
+import * as path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
+import cliState from '../../src/cliState';
+import { getTraceStore } from '../../src/tracing/store';
+import { mockProcessEnv } from '../util/utils';
+
+import type {
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../../src/types/index';
+import type { TraceData } from '../../src/types/tracing';
+
+// Mock the trace store
+vi.mock('../../src/tracing/store');
+
+// Mock Python execution
+vi.mock('../../src/python/wrapper', () => ({
+  runPythonCode: vi.fn((code: string, _functionName: string, args: any[]) => {
+    // Simple Python interpreter mock for our test cases
+    const [_output, context] = args;
+
+    // Handle the specific test cases
+    if (code.includes("len(context.trace['spans']) == 2")) {
+      return context.trace && context.trace.spans && context.trace.spans.length === 2;
+    }
+
+    if (code.includes('root_spans') && code.includes('leaf_spans')) {
+      const trace = context.trace;
+      if (!trace) {
+        return false;
+      }
+      const rootSpans = trace.spans.filter((s: any) => !s.parentSpanId);
+      const leafSpans = trace.spans.filter((s: any) => s.parentSpanId);
+      return rootSpans.length === 1 && leafSpans.length === 1;
+    }
+
+    if (code.includes('avg_duration')) {
+      const trace = context.trace;
+      if (!trace) {
+        return false;
+      }
+      const durations = trace.spans
+        .filter((s: any) => s.endTime)
+        .map((s: any) => s.endTime - s.startTime);
+      const avgDuration = durations.reduce((a: number, b: number) => a + b, 0) / durations.length;
+      return {
+        pass: true,
+        score: 0.9,
+        reason: `Average span duration: ${avgDuration}ms`,
+      };
+    }
+
+    return false;
+  }),
+}));
+
+describe('trace assertions', () => {
+  const originalBasePath = cliState.basePath;
+  const originalTraceFetchEnv = {
+    PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS,
+    PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS,
+    PROMPTFOO_TRACE_FETCH_STABLE_POLLS: process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS,
+  };
+  const mockTraceStore = {
+    getTrace: vi.fn(),
+  };
+
+  const restoreTraceFetchEnv = () => {
+    for (const [name, value] of Object.entries(originalTraceFetchEnv)) {
+      if (value === undefined) {
+        mockProcessEnv({ [name]: undefined });
+      } else {
+        mockProcessEnv({ [name]: value });
+      }
+    }
+  };
+
+  beforeEach(() => {
+    mockTraceStore.getTrace.mockReset();
+    vi.clearAllMocks();
+    restoreTraceFetchEnv();
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
+    vi.mocked(getTraceStore).mockReturnValue(
+      mockTraceStore as unknown as ReturnType<typeof getTraceStore>,
+    );
+  });
+
+  afterEach(() => {
+    cliState.basePath = originalBasePath;
+    restoreTraceFetchEnv();
+    vi.resetAllMocks();
+    vi.useRealTimers();
+  });
+
+  const mockTest: AtomicTestCase = {
+    vars: { test: 'value' },
+  };
+
+  const mockProviderResponse: ProviderResponse = {
+    output: 'Test output',
+  };
+
+  const mockTraceData: TraceData = {
+    traceId: 'test-trace-id',
+    evaluationId: 'test-evaluation-id',
+    testCaseId: 'test-test-case-id',
+    metadata: { test: 'value' },
+    spans: [
+      {
+        spanId: 'span-1',
+        name: 'http.request',
+        startTime: 1000,
+        endTime: 1500,
+        attributes: { 'http.method': 'GET' },
+        statusCode: 200,
+      },
+      {
+        spanId: 'span-2',
+        parentSpanId: 'span-1',
+        name: 'api.call',
+        startTime: 1100,
+        endTime: 1400,
+        attributes: { 'api.name': 'test-api' },
+      },
+    ],
+  };
+
+  describe('javascript assertions with trace', () => {
+    it('should treat ruby assertions as trace-aware', () => {
+      expect(
+        assertionUsesTrace({
+          type: 'ruby',
+          value: 'context.trace && context.trace.spans.length > 0',
+        }),
+      ).toBe(true);
+    });
+
+    it('should pass trace data to javascript assertion', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `
+          if (!context.trace) return false;
+          return context.trace.spans.length === 2 && 
+                 context.trace.traceId === 'test-trace-id';
+        `,
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+        sanitizeAttributes: false,
+      });
+    });
+
+    it('should retry until trace spans are available', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '3' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
+
+      mockTraceStore.getTrace
+        .mockResolvedValueOnce({
+          ...mockTraceData,
+          spans: [],
+        })
+        .mockResolvedValueOnce(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.trace?.spans?.length === 2',
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it('should use default retry timing when trace fetch env vars are unset', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: undefined });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: undefined });
+      vi.useFakeTimers();
+
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const resultPromise = runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'context.trace?.spans?.length === 2',
+        },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      await vi.advanceTimersByTimeAsync(250);
+      const result = await resultPromise;
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it('should wait for span count to stabilize', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '4' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '2' });
+
+      mockTraceStore.getTrace
+        .mockResolvedValueOnce({
+          ...mockTraceData,
+          spans: [mockTraceData.spans[0]],
+        })
+        .mockResolvedValueOnce(mockTraceData)
+        .mockResolvedValueOnce(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.trace?.spans?.length === 2',
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(3);
+    });
+
+    it('should handle missing trace gracefully', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(null);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.trace === undefined',
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'non-existent-trace',
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should reuse a preloaded missing trace instead of retrying once per assertion', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '2' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
+
+      mockTraceStore.getTrace.mockResolvedValue(null);
+
+      const result = await runAssertions({
+        test: {
+          ...mockTest,
+          assert: [
+            {
+              type: 'javascript',
+              value: 'context.trace === undefined',
+            },
+            {
+              type: 'javascript',
+              value: 'context.trace === undefined',
+            },
+          ],
+        },
+        providerResponse: mockProviderResponse,
+        traceId: 'non-existent-trace',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it('should pass trace data to file:// scripts for non-trace assertion types', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+      cliState.basePath = path.resolve(__dirname, '../fixtures/file-script-assertions');
+
+      const result: GradingResult = await runAssertion({
+        assertion: {
+          type: 'equals',
+          value: 'file://rubric-generator.cjs:traceSpanName',
+        },
+        test: mockTest,
+        providerResponse: {
+          ...mockProviderResponse,
+          output: 'http.request',
+        },
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should calculate trace duration correctly', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `
+          const duration = Math.max(...context.trace.spans.map(s => s.endTime || 0)) - 
+                          Math.min(...context.trace.spans.map(s => s.startTime));
+          return duration === 500; // 1500 - 1000
+        `,
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should detect error spans', async () => {
+      const traceWithError: TraceData = {
+        traceId: 'error-trace',
+        evaluationId: 'test-evaluation-id',
+        testCaseId: 'test-test-case-id',
+        metadata: { test: 'value' },
+        spans: [
+          ...mockTraceData.spans,
+          {
+            spanId: 'error-span',
+            name: 'failed.request',
+            startTime: 2000,
+            endTime: 2100,
+            statusCode: 500,
+            statusMessage: 'Internal Server Error',
+          },
+        ],
+      };
+      mockTraceStore.getTrace.mockResolvedValue(traceWithError);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `
+          const errorSpans = context.trace.spans.filter(s => s.statusCode >= 400);
+          return errorSpans.length === 1 && errorSpans[0].statusCode === 500;
+        `,
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'error-trace',
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should work without traceId', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.trace === undefined && output === "Test output"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        // No traceId provided
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('python assertions with trace', () => {
+    it('should pass trace data to python assertion', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'python',
+        value: `
+if not hasattr(context, 'trace') or context.trace is None:
+    return False
+return len(context.trace['spans']) == 2
+        `,
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should analyze span hierarchy in python', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'python',
+        value: `
+root_spans = [s for s in context.trace['spans'] if not s.get('parentSpanId')]
+leaf_spans = [s for s in context.trace['spans'] if s.get('parentSpanId')]
+return len(root_spans) == 1 and len(leaf_spans) == 1
+        `,
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should return grading result object from python', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'python',
+        value: `
+avg_duration = sum(s['endTime'] - s['startTime'] for s in context.trace['spans'] if s.get('endTime')) / len(context.trace['spans'])
+return {
+    'pass': True,
+    'score': 0.9,
+    'reason': f"Average span duration: {avg_duration}ms"
+}
+        `,
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0.9);
+      expect(result.reason).toContain('Average span duration');
+    });
+  });
+
+  describe('trace store error handling', () => {
+    it('should handle trace store errors gracefully', async () => {
+      mockTraceStore.getTrace.mockRejectedValue(new Error('Database error'));
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.trace === undefined',
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+        sanitizeAttributes: false,
+      });
+    });
+  });
+});

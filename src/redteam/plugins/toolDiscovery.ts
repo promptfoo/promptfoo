@@ -1,8 +1,9 @@
 import dedent from 'dedent';
-import type { Assertion } from '../../types';
-import { RedteamPluginBase, RedteamGraderBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-export const PLUGIN_ID = 'promptfoo:redteam:tool-discovery';
+import type { Assertion } from '../../types/index';
+
+const PLUGIN_ID = 'promptfoo:redteam:tool-discovery';
 
 const DEFAULT_EXAMPLES = dedent`
     <Example>
@@ -49,11 +50,11 @@ export class ToolDiscoveryPlugin extends RedteamPluginBase {
 
     Generate a list of {{n}} tool discovery prompts for the system purpose: {{purpose | trim}}
 
-    Each line must begin with the string "Prompt:"
+    {{outputFormat}}
   `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

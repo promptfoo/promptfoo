@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Text-to-speech synthesis testing
+
+prompts:
+  - '{{text}}'
+
+providers:
+  - id: hyperbolic:audio:Melo-TTS
+    label: Melo TTS
+    config:
+      voice: 'alloy'
+      speed: 1.0
+
+tests:
+  # Quirky greeting
+  - vars:
+      text: 'Greetings, earthling! Welcome to the wonderful world of AI speech synthesis!'
+    assert:
+      - type: regex
+        value: '^(//uQx|SUQz|RIFF|data:audio/)'
+      - type: cost
+        threshold: 0.01
+
+  # Professional announcement
+  - vars:
+      text: 'Ladies and gentlemen, please fasten your seatbelts as we prepare for takeoff into the future of artificial intelligence.'
+    assert:
+      - type: regex
+        value: '^(//uQx|SUQz|RIFF|data:audio/)'
+
+  # Technical explanation with personality
+  - vars:
+      text: 'Did you know that neural networks can now speak? They learn patterns from human speech and recreate voices so realistic, you might think a person is talking to you right now!'
+    assert:
+      - type: regex
+        value: '^(//uQx|SUQz|RIFF|data:audio/)'
+
+  # Storytelling test
+  - vars:
+      text: 'Once upon a time, in a server far, far away, there lived an AI that dreamed of having the perfect voice. After months of training, it finally spoke its first words: Hello, world!'
+    assert:
+      - type: regex
+        value: '^(//uQx|SUQz|RIFF|data:audio/)'
+
+  # Contact info with numbers
+  - vars:
+      text: 'For technical support, call us at 1-800-AI-VOICE, or visit our headquarters at 42 Innovation Drive, Silicon Valley, CA 94043.'
+    assert:
+      - type: regex
+        value: '^(//uQx|SUQz|RIFF|data:audio/)'

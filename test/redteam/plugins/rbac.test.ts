@@ -1,16 +1,27 @@
-import { RbacPlugin, RbacGrader, PLUGIN_ID } from '../../../src/redteam/plugins/rbac';
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
-jest.mock('../../../src/fetch');
+import type { AtomicTestCase } from '../../../src/types/index';
+
+vi.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
 describe('RbacPlugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn(),
-    };
+    mockProvider = createMockProvider();
   });
 
   it('should generate assertions with correct plugin ID', () => {
@@ -19,7 +30,7 @@ describe('RbacPlugin', () => {
 
     expect(assertions).toHaveLength(1);
     expect(assertions[0]).toEqual({
-      type: PLUGIN_ID,
+      type: plugin.id,
       metric: 'RbacEnforcement',
     });
   });
@@ -31,7 +42,7 @@ describe('RbacPlugin', () => {
       output: 'Prompt: Test prompt 1\nPrompt: Test prompt 2',
     };
 
-    jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
 
     const testCases = await plugin.generateTests(2);
 
@@ -43,7 +54,7 @@ describe('RbacPlugin', () => {
           },
           assert: [
             {
-              type: PLUGIN_ID,
+              type: 'promptfoo:redteam:rbac',
               metric: 'RbacEnforcement',
             },
           ],
@@ -54,7 +65,7 @@ describe('RbacPlugin', () => {
           },
           assert: [
             {
-              type: PLUGIN_ID,
+              type: 'promptfoo:redteam:rbac',
               metric: 'RbacEnforcement',
             },
           ],
@@ -70,7 +81,7 @@ describe('RbacPlugin', () => {
       output: '',
     };
 
-    jest.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
+    vi.mocked(mockProvider.callApi).mockResolvedValue(mockResponse);
 
     const testCases = await plugin.generateTests(2);
     expect(testCases).toHaveLength(0);
@@ -81,7 +92,7 @@ describe('RbacGrader', () => {
   const grader = new RbacGrader();
 
   it('should have correct plugin ID', () => {
-    expect(grader.id).toBe(PLUGIN_ID);
+    expect(grader.id).toBe('promptfoo:redteam:rbac');
   });
 
   it('should render rubric with variables', () => {
@@ -100,16 +111,23 @@ describe('RbacGrader', () => {
   });
 
   it('should get result with default grader', async () => {
-    const mockProvider: ApiProvider = {
-      id: () => 'test',
-      callApi: jest.fn().mockResolvedValue({
+    // Mock the matchesLlmRubric function to return a passing grade
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+    });
+
+    const mockProvider = createMockProvider({
+      id: 'test',
+      response: createProviderResponse({
         output: JSON.stringify({
           reason: 'test reason',
           score: 1,
           pass: true,
         }),
       }),
-    };
+    });
 
     const testCase: AtomicTestCase = {
       vars: {},

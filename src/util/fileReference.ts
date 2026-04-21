@@ -1,10 +1,12 @@
 import fs from 'fs';
-import yaml from 'js-yaml';
 import path from 'path';
+
+import yaml from 'js-yaml';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
+import { parseFileUrl } from './functions/loadFunction';
 
 /**
  * Loads the content from a file reference
@@ -13,13 +15,8 @@ import { isJavascriptFile } from './fileExtensions';
  * @returns The loaded content from the file
  */
 export async function loadFileReference(fileRef: string, basePath: string = ''): Promise<any> {
-  // Remove the file:// prefix
-  const pathWithProtocolRemoved = fileRef.slice('file://'.length);
-
-  // Split to check for function name
-  const parts = pathWithProtocolRemoved.split(':');
-  const filePath = parts[0];
-  const functionName = parts.length > 1 ? parts[1] : undefined;
+  // Parse file:// URL with Windows-aware path handling
+  const { filePath, functionName } = parseFileUrl(fileRef);
 
   // Resolve the absolute path
   const resolvedPath = path.resolve(basePath, filePath);
@@ -74,7 +71,7 @@ export async function processConfigFileReferences(
   config: any,
   basePath: string = '',
 ): Promise<any> {
-  if (!config) {
+  if (config === null || config === undefined) {
     return config;
   }
 
@@ -93,7 +90,7 @@ export async function processConfigFileReferences(
   }
 
   // Handle objects
-  if (typeof config === 'object' && config !== null) {
+  if (typeof config === 'object') {
     const result: Record<string, any> = {};
     for (const [key, value] of Object.entries(config)) {
       result[key] = await processConfigFileReferences(value, basePath);

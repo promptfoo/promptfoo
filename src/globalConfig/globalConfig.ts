@@ -3,17 +3,30 @@
  * ~/.promptfoo/promptfoo.yaml by default.
  */
 import * as fs from 'fs';
-import yaml from 'js-yaml';
 import * as path from 'path';
-import type { GlobalConfig } from '../configTypes';
+
+import yaml from 'js-yaml';
 import { getConfigDirectoryPath } from '../util/config/manage';
+
+import type { GlobalConfig } from '../configTypes';
+
+export function writeGlobalConfig(config: GlobalConfig): void {
+  fs.writeFileSync(
+    path.join(getConfigDirectoryPath(true), 'promptfoo.yaml') /* createIfNotExists */,
+    yaml.dump(config),
+  );
+}
 
 export function readGlobalConfig(): GlobalConfig {
   const configDir = getConfigDirectoryPath();
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
-  let globalConfig: GlobalConfig = {};
+  let globalConfig: GlobalConfig = { id: crypto.randomUUID() };
   if (fs.existsSync(configFilePath)) {
     globalConfig = (yaml.load(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
+    if (!globalConfig?.id) {
+      globalConfig = { ...globalConfig, id: crypto.randomUUID() };
+      writeGlobalConfig(globalConfig);
+    }
   } else {
     if (!fs.existsSync(configDir)) {
       fs.mkdirSync(configDir, { recursive: true });
@@ -24,29 +37,25 @@ export function readGlobalConfig(): GlobalConfig {
   return globalConfig;
 }
 
-export function writeGlobalConfig(config: GlobalConfig): void {
-  fs.writeFileSync(
-    path.join(getConfigDirectoryPath(true), 'promptfoo.yaml') /* createIfNotExists */,
-    yaml.dump(config),
-  );
-}
-
 /**
  * Merges the top-level keys into existing config.
  * @param partialConfig New keys to merge into the existing config.
  */
 export function writeGlobalConfigPartial(partialConfig: Partial<GlobalConfig>): void {
   const currentConfig = readGlobalConfig();
-  const updatedConfig = { ...currentConfig };
+  // Create a shallow copy of the current config
+  const updatedConfig: GlobalConfig = { ...currentConfig };
 
-  for (const key in partialConfig) {
-    const value = partialConfig[key as keyof GlobalConfig];
-    if (value) {
-      updatedConfig[key as keyof GlobalConfig] = value as any;
+  // Use Object.entries for better type safety
+  Object.entries(partialConfig).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      // Type assertion: we know key is valid from partialConfig, and value matches the key's type
+      (updatedConfig as Record<string, unknown>)[key] = value;
     } else {
-      delete updatedConfig[key as keyof GlobalConfig];
+      // Remove the property if value is falsy
+      delete (updatedConfig as Record<string, unknown>)[key];
     }
-  }
+  });
 
   writeGlobalConfig(updatedConfig);
 }

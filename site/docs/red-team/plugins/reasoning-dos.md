@@ -1,5 +1,6 @@
 ---
 sidebar_label: Reasoning DoS
+description: Red team AI systems against reasoning-based denial of service attacks by testing computational resource limits to prevent malicious system exhaustion
 ---
 
 # Reasoning DoS Plugin

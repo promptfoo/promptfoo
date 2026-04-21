@@ -1,92 +1,93 @@
 import chalk from 'chalk';
-import Table from 'cli-table3';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMINAL_MAX_WIDTH } from '../src/constants';
 import { generateTable, wrapTable } from '../src/table';
-import { ResultFailureReason, type EvaluateTable } from '../src/types';
+import { type EvaluateTable, ResultFailureReason } from '../src/types/index';
+import {
+  createCompletedPrompt,
+  createEvaluateTable,
+  createEvaluateTableOutput,
+  createEvaluateTableRow,
+} from './factories/eval';
 
-jest.mock('cli-table3');
+// Track all created instances and constructor calls
+const mockTableInstances: any[] = [];
+const mockConstructorCalls: any[] = [];
+
+// Create a hoisted mock class for Table - must be an actual class to work with `new`
+const MockTable = vi.hoisted(() => {
+  return class MockTable {
+    push: ReturnType<typeof vi.fn>;
+    toString: ReturnType<typeof vi.fn>;
+    options: object;
+    width: number;
+    length: number;
+    pop: ReturnType<typeof vi.fn>;
+
+    constructor(options: any) {
+      mockConstructorCalls.push(options);
+      this.push = vi.fn();
+      this.toString = vi.fn().mockReturnValue('mocked table string');
+      this.options = options || {};
+      this.width = 0;
+      this.length = 0;
+      this.pop = vi.fn();
+      mockTableInstances.push(this);
+    }
+  };
+});
+
+vi.mock('cli-table3', () => ({
+  default: MockTable,
+}));
 
 describe('table', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    // @ts-ignore
-    jest.mocked(Table).mockImplementation(() => ({
-      push: jest.fn(),
-      toString: jest.fn().mockReturnValue('mocked table string'),
-      options: {},
-      width: 0,
-      length: 0,
-      pop: jest.fn(),
-    }));
+    vi.resetAllMocks();
+    mockTableInstances.length = 0;
+    mockConstructorCalls.length = 0;
   });
 
   describe('generateTable', () => {
-    const mockEvaluateTable: EvaluateTable = {
+    const mockEvaluateTable: EvaluateTable = createEvaluateTable({
       head: {
         vars: ['var1', 'var2'],
         prompts: [
-          {
+          createCompletedPrompt('test prompt', {
             provider: 'test-provider',
             label: 'test-label',
-            raw: 'test prompt',
             id: 'test-id',
             display: 'test display',
             config: {},
-            // @ts-ignore
-            metrics: {},
-          },
+            metrics: undefined,
+          }),
         ],
       },
       body: [
-        {
+        createEvaluateTableRow({
           vars: ['value1', 'value2'],
-          outputs: [
-            {
-              pass: true,
-              score: 1,
-              text: 'passing test',
-              failureReason: ResultFailureReason.NONE,
-              cost: 0,
-              id: 'test',
-              latencyMs: 0,
-              namedScores: {},
-              tokenUsage: {},
-              metadata: {},
-              prompt: 'test prompt',
-              testCase: {},
-            },
-          ],
-          test: {},
+          outputs: [createEvaluateTableOutput({ text: 'passing test' })],
           testIdx: 0,
-        },
-        {
+        }),
+        createEvaluateTableRow({
           vars: ['value3', 'value4'],
           outputs: [
-            {
+            createEvaluateTableOutput({
               pass: false,
               score: 0,
               text: 'failing test',
               failureReason: ResultFailureReason.ASSERT,
-              cost: 0,
-              id: 'test',
-              latencyMs: 0,
-              namedScores: {},
-              tokenUsage: {},
-              metadata: {},
-              prompt: 'test prompt',
-              testCase: {},
-            },
+            }),
           ],
-          test: {},
           testIdx: 1,
-        },
+        }),
       ],
-    };
+    });
 
     it('should generate table with correct headers', () => {
       generateTable(mockEvaluateTable);
 
-      expect(Table).toHaveBeenCalledWith({
+      expect(mockConstructorCalls[0]).toEqual({
         head: ['var1', 'var2', '[test-provider] test-label'],
         colWidths: expect.any(Array),
         wordWrap: true,
@@ -96,11 +97,9 @@ describe('table', () => {
     });
 
     it('should handle passing and failing rows correctly', () => {
-      const table = new Table({});
-      jest.mocked(Table).mockReturnValue(table);
-
       generateTable(mockEvaluateTable);
 
+      const table = mockTableInstances[0];
       expect(table.push).toHaveBeenCalledWith([
         'value1',
         'value2',
@@ -115,11 +114,9 @@ describe('table', () => {
     });
 
     it('should respect maxRows parameter', () => {
-      const table = new Table({});
-      jest.mocked(Table).mockReturnValue(table);
-
       generateTable(mockEvaluateTable, 250, 1);
 
+      const table = mockTableInstances[0];
       expect(table.push).toHaveBeenCalledTimes(1);
     });
 
@@ -127,39 +124,19 @@ describe('table', () => {
       const longText = 'a'.repeat(300);
       const shortMaxLength = 10;
 
-      const testTable: EvaluateTable = {
-        head: {
-          vars: [longText],
-          prompts: [],
-        },
+      const testTable: EvaluateTable = createEvaluateTable({
+        head: { vars: [longText], prompts: [] },
         body: [
-          {
+          createEvaluateTableRow({
             vars: [longText],
-            outputs: [
-              {
-                pass: true,
-                score: 1,
-                text: 'test',
-                failureReason: ResultFailureReason.NONE,
-                cost: 0,
-                id: 'test',
-                latencyMs: 0,
-                namedScores: {},
-                tokenUsage: {},
-                metadata: {},
-                prompt: 'test prompt',
-                testCase: {},
-              },
-            ],
-            test: {},
-            testIdx: 0,
-          },
+            outputs: [createEvaluateTableOutput({ text: 'test' })],
+          }),
         ],
-      };
+      });
 
       generateTable(testTable, shortMaxLength);
 
-      expect(Table).toHaveBeenCalledWith(
+      expect(mockConstructorCalls[0]).toEqual(
         expect.objectContaining({
           head: [expect.stringMatching(/^a{7}\.{3}$/)],
         }),
@@ -179,18 +156,16 @@ describe('table', () => {
         { col1: 'value3', col2: 'value4' },
       ];
 
-      const table = new Table({});
-      jest.mocked(Table).mockReturnValue(table);
-
       wrapTable(rows);
 
-      expect(Table).toHaveBeenCalledWith({
+      expect(mockConstructorCalls[0]).toEqual({
         head: ['col1', 'col2'],
         colWidths: expect.any(Array),
         wordWrap: true,
         wrapOnWordBoundary: true,
       });
 
+      const table = mockTableInstances[0];
       expect(table.push).toHaveBeenCalledWith(['value1', 'value2']);
       expect(table.push).toHaveBeenCalledWith(['value3', 'value4']);
     });
@@ -206,18 +181,16 @@ describe('table', () => {
         col3: 15,
       };
 
-      const table = new Table({});
-      jest.mocked(Table).mockReturnValue(table);
-
       wrapTable(rows, columnWidths);
 
-      expect(Table).toHaveBeenCalledWith({
+      expect(mockConstructorCalls[0]).toEqual({
         head: ['col1', 'col2', 'col3'],
         colWidths: [10, 20, 15],
         wordWrap: true,
         wrapOnWordBoundary: true,
       });
 
+      const table = mockTableInstances[0];
       expect(table.push).toHaveBeenCalledWith(['value1', 'value2', 'value3']);
       expect(table.push).toHaveBeenCalledWith(['value4', 'value5', 'value6']);
     });
@@ -230,18 +203,38 @@ describe('table', () => {
         col3: 15,
       };
 
-      const table = new Table({});
-      jest.mocked(Table).mockReturnValue(table);
-
       wrapTable(rows, columnWidths);
 
       const defaultWidth = Math.floor(TERMINAL_MAX_WIDTH / 3); // 3 columns
-      expect(Table).toHaveBeenCalledWith({
+      expect(mockConstructorCalls[0]).toEqual({
         head: ['col1', 'col2', 'col3'],
         colWidths: [10, defaultWidth, 15],
         wordWrap: true,
         wrapOnWordBoundary: true,
       });
+    });
+
+    it('should return a string representation of the table', () => {
+      const rows = [
+        { col1: 'value1', col2: 'value2' },
+        { col1: 'value3', col2: 'value4' },
+      ];
+
+      const result = wrapTable(rows);
+
+      expect(typeof result).toBe('string');
+      expect(result).toBe('mocked table string');
+      const table = mockTableInstances[0];
+      expect(table.toString).toHaveBeenCalled();
+    });
+
+    it('should return string for single row', () => {
+      const rows = [{ name: 'John', age: 30 }];
+
+      const result = wrapTable(rows);
+
+      expect(typeof result).toBe('string');
+      expect(result).toBe('mocked table string');
     });
   });
 });

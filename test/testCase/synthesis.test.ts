@@ -1,26 +1,29 @@
 import dedent from 'dedent';
-import { loadApiProvider } from '../../src/providers';
+import { describe, expect, it, vi } from 'vitest';
+import { loadApiProvider } from '../../src/providers/index';
 import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
-import type { TestCase } from '../../src/types';
+import { createMockProvider } from '../factories/provider';
 
-jest.mock('../../src/providers', () => ({
-  loadApiProvider: jest.fn(),
+import type { ApiProvider, TestCase } from '../../src/types/index';
+
+vi.mock('../../src/providers', () => ({
+  loadApiProvider: vi.fn(),
 }));
 
 describe('synthesize', () => {
   it('should generate test cases based on prompts and personas', async () => {
     let i = 0;
-    const mockProvider = {
-      id: () => 'mock-provider',
-      callApi: jest.fn(() => {
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
         if (i === 0) {
           i++;
           return Promise.resolve({ output: '{"personas": ["Persona 1", "Persona 2"]}' });
         }
         return Promise.resolve({ output: '{"vars": [{"var1": "value1"}, {"var2": "value2"}]}' });
       }),
-    };
-    jest.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
     const result = await synthesize({
       provider: 'mock-provider',
       prompts: ['Test prompt'],

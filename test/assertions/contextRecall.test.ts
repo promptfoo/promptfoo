@@ -1,45 +1,51 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRecall } from '../../src/assertions/contextRecall';
-import * as matchers from '../../src/matchers';
-import type { AssertionParams, ApiProvider, ProviderResponse } from '../../src/types';
+import * as contextUtils from '../../src/assertions/contextUtils';
+import * as matchers from '../../src/matchers/rag';
+import { createMockProvider } from '../factories/provider';
 
-jest.mock('../../src/matchers');
+import type { AssertionParams, ProviderResponse } from '../../src/types/index';
+
+vi.mock('../../src/matchers/rag');
+vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextRecall', () => {
-  const mockMatchesContextRecall = jest.spyOn(matchers, 'matchesContextRecall');
+  const mockMatchesContextRecall = vi.spyOn(matchers, 'matchesContextRecall');
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.clearAllMocks();
   });
 
-  it('should handle context recall with prompt context', async () => {
+  it('should pass when context recall is above threshold', async () => {
     const mockResult = {
       pass: true,
       score: 0.9,
-      reason: 'Good recall',
+      reason: 'Context contains expected information',
+      metadata: {
+        sentenceAttributions: [
+          { sentence: 'Test sentence 1', attributed: true },
+          { sentence: 'Test sentence 2', attributed: false },
+        ],
+        totalSentences: 2,
+        attributedSentences: 1,
+        score: 0.9,
+      },
     };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn(),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall', threshold: 0.8 },
-      renderedValue: 'test output',
-      prompt: 'test context',
-      test: {
-        vars: {},
-        options: {},
-      },
+      renderedValue: 'Expected fact',
+      prompt: 'test prompt',
+      test: { vars: { context: 'test context' }, options: {} },
       baseType: 'context-recall',
-      context: {
-        prompt: 'test context',
-        vars: {},
-        test: {
-          vars: {},
-          options: {},
-        },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
         logProbs: undefined,
         provider: mockProvider,
         providerResponse: undefined,
@@ -53,48 +59,46 @@ describe('handleContextRecall', () => {
 
     const result = await handleContextRecall(params);
 
-    expect(result).toEqual({
-      assertion: { type: 'context-recall', threshold: 0.8 },
-      ...mockResult,
-    });
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.9);
+    expect(result.reason).toBe('Context contains expected information');
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('test context');
+    // Verify metadata from matcher is preserved
+    expect(result.metadata?.sentenceAttributions).toEqual([
+      { sentence: 'Test sentence 1', attributed: true },
+      { sentence: 'Test sentence 2', attributed: false },
+    ]);
+    expect(result.metadata?.totalSentences).toBe(2);
+    expect(result.metadata?.attributedSentences).toBe(1);
+    expect(result.metadata?.score).toBe(0.9);
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
-      'test output',
+      'Expected fact',
       0.8,
       {},
-      {},
+      { context: 'test context' },
+      undefined,
     );
   });
 
-  it('should handle context recall with vars context', async () => {
-    const mockResult = {
-      pass: true,
-      score: 0.85,
-      reason: 'Good recall from vars',
-    };
+  it('should fail when context recall is below threshold', async () => {
+    const mockResult = { pass: false, score: 0.3, reason: 'Context missing expected information' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn(),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall', threshold: 0.7 },
-      renderedValue: 'test output',
-      prompt: 'original context',
-      test: {
-        vars: { context: 'context from vars' },
-        options: {},
-      },
+      renderedValue: 'Missing fact',
+      prompt: 'test prompt',
+      test: { vars: { context: 'incomplete context' }, options: {} },
       baseType: 'context-recall',
-      context: {
-        prompt: 'original context',
-        vars: { context: 'context from vars' },
-        test: {
-          vars: { context: 'context from vars' },
-          options: {},
-        },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'incomplete context' },
+        test: { vars: { context: 'incomplete context' }, options: {} },
         logProbs: undefined,
         provider: mockProvider,
         providerResponse: undefined,
@@ -108,48 +112,38 @@ describe('handleContextRecall', () => {
 
     const result = await handleContextRecall(params);
 
-    expect(result).toEqual({
-      assertion: { type: 'context-recall', threshold: 0.7 },
-      ...mockResult,
-    });
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0.3);
+    expect(result.reason).toBe('Context missing expected information');
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('test context');
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
-      'context from vars',
-      'test output',
+      'test context',
+      'Missing fact',
       0.7,
       {},
-      { context: 'context from vars' },
+      { context: 'incomplete context' },
+      undefined,
     );
   });
 
   it('should use default threshold of 0 when not provided', async () => {
-    const mockResult = {
-      pass: true,
-      score: 0.5,
-      reason: 'Default threshold test',
-    };
+    const mockResult = { pass: true, score: 1, reason: 'Perfect match' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn(),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall' },
-      renderedValue: 'test output',
-      prompt: 'test context',
-      test: {
-        vars: {},
-        options: {},
-      },
+      renderedValue: 'test value',
+      prompt: 'test prompt',
+      test: { vars: { context: 'test context' }, options: {} },
       baseType: 'context-recall',
-      context: {
-        prompt: 'test context',
-        vars: {},
-        test: {
-          vars: {},
-          options: {},
-        },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
         logProbs: undefined,
         provider: mockProvider,
         providerResponse: undefined,
@@ -163,73 +157,124 @@ describe('handleContextRecall', () => {
 
     const result = await handleContextRecall(params);
 
-    expect(result).toEqual({
-      assertion: { type: 'context-recall' },
-      ...mockResult,
-    });
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('test context', 'test output', 0, {}, {});
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('test context');
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'test value',
+      0,
+      {},
+      { context: 'test context' },
+      undefined,
+    );
   });
 
-  it('should throw error when renderedValue is not a string', async () => {
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn(),
-    };
+  it('should fall back to prompt when no context variable', async () => {
+    const mockResult = { pass: true, score: 1, reason: 'ok' };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test prompt');
+
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall' },
-      renderedValue: { value: 123 }, // Changed to object to match AssertionValue type
-      prompt: 'test context',
-      test: {
-        vars: {},
-        options: {},
-      },
+      renderedValue: 'test output',
+      prompt: 'test prompt',
+      test: { vars: {}, options: {} },
       baseType: 'context-recall',
-      context: {
-        prompt: 'test context',
+      assertionValueContext: {
+        prompt: 'test prompt',
         vars: {},
-        test: {
-          vars: {},
-          options: {},
-        },
+        test: { vars: {}, options: {} },
         logProbs: undefined,
         provider: mockProvider,
         providerResponse: undefined,
       },
       inverse: false,
-      output: '123',
-      outputString: '123',
+      output: 'test output',
+      outputString: 'test output',
       provider: mockProvider,
       providerResponse: {} as ProviderResponse,
     };
 
-    await expect(handleContextRecall(params)).rejects.toThrow(
-      'context-recall assertion type must have a string value',
+    const result = await handleContextRecall(params);
+
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('test prompt');
+    expect(contextUtils.resolveContext).toHaveBeenCalledWith(
+      params.assertion,
+      params.test,
+      params.output,
+      'test prompt',
+      'test prompt',
+      {},
+    );
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test prompt',
+      'test output',
+      0,
+      {},
+      {},
+      undefined,
     );
   });
 
-  it('should throw error when prompt is missing', async () => {
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn(),
+  it('should use contextTransform when provided', async () => {
+    const mockResult = { pass: true, score: 1, reason: 'ok' };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('ctx');
+
+    const mockProvider = createMockProvider({ id: 'p', response: {} });
+
+    const params: AssertionParams = {
+      assertion: { type: 'context-recall', contextTransform: 'expr' },
+      renderedValue: 'val',
+      prompt: 'prompt',
+      test: { vars: {}, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'prompt',
+        vars: {},
+        test: { vars: {}, options: {} },
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
+      },
+      inverse: false,
+      output: { context: 'hello' } as any,
+      outputString: 'str',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
     };
+
+    const result = await handleContextRecall(params);
+
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.context).toBe('ctx');
+    expect(contextUtils.resolveContext).toHaveBeenCalledWith(
+      params.assertion,
+      params.test,
+      params.output,
+      'prompt',
+      'prompt',
+      {},
+    );
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {}, undefined);
+  });
+
+  it('should throw error when renderedValue is not a string', async () => {
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall' },
-      renderedValue: 'test output',
-      prompt: undefined,
-      test: {
-        vars: {},
-        options: {},
-      },
+      renderedValue: 123 as any,
+      prompt: 'test prompt',
+      test: { vars: { context: 'test context' }, options: {} },
       baseType: 'context-recall',
-      context: {
-        prompt: undefined,
-        vars: {},
-        test: {
-          vars: {},
-          options: {},
-        },
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
         logProbs: undefined,
         provider: mockProvider,
         providerResponse: undefined,
@@ -242,7 +287,36 @@ describe('handleContextRecall', () => {
     };
 
     await expect(handleContextRecall(params)).rejects.toThrow(
-      'context-recall assertion type must have a prompt',
+      'context-recall assertion requires a string value (expected answer or fact to verify)',
+    );
+  });
+
+  it('should throw error when prompt is missing', async () => {
+    const mockProvider = createMockProvider({ response: {} });
+
+    const params: AssertionParams = {
+      assertion: { type: 'context-recall' },
+      renderedValue: 'test value',
+      prompt: undefined,
+      test: { vars: { context: 'test context' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: undefined,
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
+      },
+      inverse: false,
+      output: 'test output',
+      outputString: 'test output',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
+    };
+
+    await expect(handleContextRecall(params)).rejects.toThrow(
+      'context-recall assertion requires a prompt',
     );
   });
 });

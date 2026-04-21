@@ -1,19 +1,43 @@
-import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import crypto from 'crypto';
-import type { IamAuthenticator, BearerTokenAuthenticator } from 'ibm-cloud-sdk-core';
+
 import { z } from 'zod';
-import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
-import type { EnvVarKey } from '../envars';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import type { ApiProvider, ProviderResponse, TokenUsage } from '../types';
-import type { EnvOverrides } from '../types/env';
-import type { ProviderOptions } from '../types/providers';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import invariant from '../util/invariant';
-import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
+import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
+import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
+
+import type { EnvVarKey } from '../envars';
+import type { EnvOverrides } from '../types/env';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderResponse,
+  TokenUsage,
+} from '../types/index';
+import type { ProviderOptions } from '../types/providers';
 
 interface TextGenRequestParametersModel {
-  max_new_tokens: number;
+  max_new_tokens?: number;
+  min_new_tokens?: number;
+  decoding_method?: 'greedy' | 'sample';
+  length_penalty?: {
+    decay_factor?: number;
+    start_index?: number;
+  };
+  random_seed?: number;
+  stop_sequences?: string[];
+  temperature?: number;
+  time_limit?: number;
+  top_k?: number;
+  top_p?: number;
+  repetition_penalty?: number;
+  truncate_input_tokens?: number;
+  include_stop_sequence?: boolean;
 }
 
 interface TextGenRequestParams {
@@ -24,15 +48,37 @@ interface TextGenRequestParams {
 }
 
 const ConfigSchema = z.object({
+  // Authentication options
   apiKey: z.string().optional(),
   apiKeyEnvar: z.string().optional(),
   apiBearerToken: z.string().optional(),
   apiBearerTokenEnvar: z.string().optional(),
+
+  // Service configuration
   serviceUrl: z.string().optional(),
   version: z.string().optional(),
   projectId: z.string().optional(),
   modelId: z.string().optional(),
+
+  // Text generation parameters
   maxNewTokens: z.number().optional(),
+  minNewTokens: z.number().optional(),
+  decodingMethod: z.enum(['greedy', 'sample']).optional(),
+  lengthPenalty: z
+    .object({
+      decayFactor: z.number().optional(),
+      startIndex: z.number().optional(),
+    })
+    .optional(),
+  randomSeed: z.number().optional(),
+  stopSequences: z.array(z.string()).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  timeLimit: z.number().optional(),
+  topK: z.number().optional(),
+  topP: z.number().min(0).max(1).optional(),
+  repetitionPenalty: z.number().optional(),
+  truncateInputTokens: z.number().optional(),
+  includeStopSequence: z.boolean().optional(),
 });
 
 const TextGenResponseSchema = z.object({
@@ -130,7 +176,11 @@ interface WatsonXModel {
 
 async function fetchModelSpecs(): Promise<ModelSpec[]> {
   try {
-    const { data } = await fetchWithCache(
+    const {
+      data,
+      cached: _cached,
+      latencyMs: _latencyMs,
+    } = await fetchWithCache(
       'https://us-south.ml.cloud.ibm.com/ml/v1/foundation_model_specs?version=2023-09-30',
       {
         headers: {
@@ -170,7 +220,7 @@ async function getModelSpecs(): Promise<WatsonXModel[]> {
   return modelSpecsCache;
 }
 
-export async function calculateWatsonXCost(
+async function calculateWatsonXCost(
   modelName: string,
   config: any,
   promptTokens?: number,
@@ -200,7 +250,7 @@ export class WatsonXProvider implements ApiProvider {
   constructor(modelName: string, options: ProviderOptions) {
     const validationResult = ConfigSchema.safeParse(options.config);
     if (!validationResult.success) {
-      const errors = validationResult.error.errors.map((e) => e.message).join(', ');
+      const errors = validationResult.error.issues.map((e) => e.message).join(', ');
       throw new Error(`WatsonXProvider requires a valid config. Issues: ${errors}`);
     }
 
@@ -222,7 +272,17 @@ export class WatsonXProvider implements ApiProvider {
   }
 
   async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
-    const { IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core');
+    let IamAuthenticator: any;
+    let BearerTokenAuthenticator: any;
+
+    try {
+      ({ IamAuthenticator, BearerTokenAuthenticator } = await import('ibm-cloud-sdk-core'));
+    } catch (err) {
+      logger.error(`Error loading ibm-cloud-sdk-core: ${err}`);
+      throw new Error(
+        'The ibm-cloud-sdk-core package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
 
     const apiKey =
       this.config.apiKey ||
@@ -303,23 +363,70 @@ export class WatsonXProvider implements ApiProvider {
     }
 
     const authenticator = await this.getAuth();
-    const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
-    this.client = WatsonXAI.newInstance({
-      version: this.options.config.version || '2023-05-29',
-      serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
-      authenticator,
-    });
-    return this.client;
+
+    try {
+      const { WatsonXAI } = await import('@ibm-cloud/watsonx-ai');
+      this.client = WatsonXAI.newInstance({
+        version: this.options.config.version || '2023-05-29',
+        serviceUrl: this.options.config.serviceUrl || 'https://us-south.ml.cloud.ibm.com',
+        authenticator,
+      });
+      return this.client!;
+    } catch (err) {
+      logger.error(`Error loading @ibm-cloud/watsonx-ai: ${err}`);
+      throw new Error(
+        'The @ibm-cloud/watsonx-ai package is required as a peer dependency. Please install it in your project or globally.',
+      );
+    }
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'watsonx',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      maxTokens: this.options.config.maxNewTokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const client = await this.getClient();
+
+    // Merge configs: provider config -> prompt-level config
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
 
     const modelId = this.getModelId();
     const projectId = this.getProjectId();
 
     const cache = getCache();
-    const configHash = generateConfigHash(this.options.config);
+    const configHash = generateConfigHash(config);
     const cacheKey = `watsonx:${this.modelName}:${configHash}:${prompt}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
@@ -328,31 +435,65 @@ export class WatsonXProvider implements ApiProvider {
         logger.debug(
           `Watsonx: Returning cached response for prompt "${prompt}" with config "${configHash}": ${cachedResponse}`,
         );
-        return JSON.parse(cachedResponse as string) as ProviderResponse;
+        const resp = JSON.parse(cachedResponse as string) as ProviderResponse;
+        return { ...resp, cached: true };
       }
     }
 
     try {
-      const textGenRequestParametersModel: TextGenRequestParametersModel = {
-        max_new_tokens: this.options.config.maxNewTokens || 100,
+      // Build parameters with conditional inclusion
+      const parameters: TextGenRequestParametersModel = {
+        max_new_tokens: config.maxNewTokens ?? 100,
+        ...(config.minNewTokens !== undefined && { min_new_tokens: config.minNewTokens }),
+        ...(config.decodingMethod && { decoding_method: config.decodingMethod }),
+        ...(config.lengthPenalty && {
+          length_penalty: {
+            ...(config.lengthPenalty.decayFactor !== undefined && {
+              decay_factor: config.lengthPenalty.decayFactor,
+            }),
+            ...(config.lengthPenalty.startIndex !== undefined && {
+              start_index: config.lengthPenalty.startIndex,
+            }),
+          },
+        }),
+        ...(config.randomSeed !== undefined && { random_seed: config.randomSeed }),
+        ...(config.stopSequences?.length && { stop_sequences: config.stopSequences }),
+        ...(config.temperature !== undefined && { temperature: config.temperature }),
+        ...(config.timeLimit !== undefined && { time_limit: config.timeLimit }),
+        ...(config.topK !== undefined && { top_k: config.topK }),
+        ...(config.topP !== undefined && { top_p: config.topP }),
+        ...(config.repetitionPenalty !== undefined && {
+          repetition_penalty: config.repetitionPenalty,
+        }),
+        ...(config.truncateInputTokens !== undefined && {
+          truncate_input_tokens: config.truncateInputTokens,
+        }),
+        ...(config.includeStopSequence !== undefined && {
+          include_stop_sequence: config.includeStopSequence,
+        }),
       };
 
       const params: TextGenRequestParams = {
         input: prompt,
         modelId,
         projectId,
-        parameters: textGenRequestParametersModel,
+        parameters,
       };
 
       const apiResponse = await client.generateText(params);
       const parsedResponse = TextGenResponseSchema.safeParse(apiResponse.result);
 
       if (!parsedResponse.success) {
-        logger.error(
-          `Watsonx: Invalid response structure for response: ${JSON.stringify(apiResponse.result)}, errors: ${JSON.stringify(parsedResponse.error.errors)}`,
-        );
+        const resultKeys =
+          apiResponse?.result && typeof apiResponse.result === 'object'
+            ? Object.keys(apiResponse.result as unknown as Record<string, unknown>)
+            : undefined;
+        logger.error('Watsonx: Invalid response structure from API', {
+          issues: parsedResponse.error.issues,
+          resultKeys,
+        });
         throw new Error(
-          `Invalid API response structure: ${JSON.stringify(parsedResponse.error.errors)}`,
+          `Invalid API response structure: ${parsedResponse.error.issues.map((i) => i.message).join(', ')}`,
         );
       }
 
@@ -361,7 +502,7 @@ export class WatsonXProvider implements ApiProvider {
 
       providerResponse.cost = await calculateWatsonXCost(
         this.modelName,
-        this.options.config,
+        config,
         providerResponse.tokenUsage?.prompt,
         providerResponse.tokenUsage?.completion,
       );
@@ -377,8 +518,111 @@ export class WatsonXProvider implements ApiProvider {
       return {
         error: `API call error: ${String(err)}`,
         output: '',
-        tokenUsage: {},
+        tokenUsage: createEmptyTokenUsage(),
       };
     }
+  }
+}
+
+/**
+ * WatsonX Chat Provider using the textChat API for messages-based interactions.
+ */
+export class WatsonXChatProvider extends WatsonXProvider {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const client = await this.getClient();
+
+    // Merge configs: provider config -> prompt-level config
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
+    const modelId = this.getModelId();
+    const projectId = this.getProjectId();
+
+    const cache = getCache();
+    const configHash = generateConfigHash(config);
+    const cacheKey = `watsonx:chat:${this.modelName}:${configHash}:${prompt}`;
+    const cacheEnabled = isCacheEnabled();
+    if (cacheEnabled) {
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(
+          `Watsonx Chat: Returning cached response for prompt with config "${configHash}"`,
+        );
+        const resp = JSON.parse(cachedResponse as string) as ProviderResponse;
+        return { ...resp, cached: true };
+      }
+    }
+
+    try {
+      // Parse chat messages using shared utility
+      const messages = parseChatPrompt(prompt, [{ role: 'user' as const, content: prompt }]);
+
+      // Build chat params
+      const params: Record<string, any> = {
+        modelId,
+        projectId,
+        messages,
+        ...(config.temperature !== undefined && { temperature: config.temperature }),
+        ...(config.maxNewTokens !== undefined && { maxTokens: config.maxNewTokens }),
+        ...(config.topP !== undefined && { topP: config.topP }),
+        ...(config.stopSequences?.length && { stop: config.stopSequences }),
+        ...(config.randomSeed !== undefined && { seed: config.randomSeed }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await (client as any).textChat(params);
+      const result = response.result as any;
+
+      const providerResponse = this.convertChatResponse(result);
+
+      providerResponse.cost = await calculateWatsonXCost(
+        this.modelName,
+        config,
+        providerResponse.tokenUsage?.prompt,
+        providerResponse.tokenUsage?.completion,
+      );
+
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(providerResponse));
+      }
+
+      return providerResponse;
+    } catch (err) {
+      logger.error(`Watsonx Chat: API call error: ${String(err)}`);
+
+      return {
+        error: `API call error: ${String(err)}`,
+        output: '',
+        tokenUsage: createEmptyTokenUsage(),
+      };
+    }
+  }
+
+  private convertChatResponse(result: any): ProviderResponse {
+    const choice = result?.choices?.[0];
+    const message = choice?.message;
+
+    // Handle tool calls if present
+    if (message?.tool_calls?.length) {
+      return {
+        output: JSON.stringify(message.tool_calls),
+        tokenUsage: {
+          prompt: result?.usage?.prompt_tokens,
+          completion: result?.usage?.completion_tokens,
+          total: result?.usage?.total_tokens,
+        },
+      };
+    }
+
+    return {
+      output: message?.content || '',
+      tokenUsage: {
+        prompt: result?.usage?.prompt_tokens,
+        completion: result?.usage?.completion_tokens,
+        total: result?.usage?.total_tokens,
+      },
+    };
   }
 }

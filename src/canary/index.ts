@@ -1,8 +1,46 @@
-import { cloudConfig } from '../globalConfig/cloud';
-import logger from '../logger';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
-import { makeRequest } from '../util/cloud';
 import { sha256 } from '../util/createHash';
+
+import type { ApiProvider, ProviderOptions } from '../types/providers';
+
+function getSortedJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(getSortedJsonValue);
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'function') {
+    return value.toString();
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        const sortedValue = getSortedJsonValue((value as Record<string, unknown>)[key]);
+        if (sortedValue !== undefined) {
+          acc[key] = sortedValue;
+        }
+        return acc;
+      }, {});
+  }
+
+  return value;
+}
+
+export function getProviderId(provider: ApiProvider | ProviderOptions): string {
+  if (!('id' in provider)) {
+    return 'unknown';
+  }
+
+  if (typeof provider.id === 'function') {
+    return provider.id() || 'unknown';
+  }
+
+  return provider.id || 'unknown';
+}
 
 /**
  * Converts a provider configuration to a stable string representation for hashing
@@ -12,16 +50,9 @@ import { sha256 } from '../util/createHash';
  * @returns A stable JSON string of the provider configuration
  */
 function serializeProviderForHashing(provider: ApiProvider | ProviderOptions): string {
-  const configToHash: Record<string, any> = {};
+  const configToHash: Record<string, unknown> = {};
 
-  if ('id' in provider) {
-    // Handle ApiProvider which has id as a function
-    if (typeof provider.id === 'function') {
-      configToHash.id = provider.id();
-    } else {
-      configToHash.id = provider.id;
-    }
-  }
+  configToHash.id = getProviderId(provider);
 
   // Include relevant configuration properties
   if ('config' in provider && provider.config) {
@@ -33,7 +64,7 @@ function serializeProviderForHashing(provider: ApiProvider | ProviderOptions): s
   }
 
   // Sort keys to ensure stable serialization
-  return JSON.stringify(configToHash, Object.keys(configToHash).sort());
+  return JSON.stringify(getSortedJsonValue(configToHash));
 }
 
 /**
@@ -64,107 +95,4 @@ export function generateShortProviderHash(
 ): string {
   const fullHash = generateProviderHash(provider);
   return fullHash.substring(0, length);
-}
-
-/**
- * Interface for canary data sent to and received from the server
- */
-export interface CanaryData {
-  providerHash: string;
-  providerId: string;
-  message: string;
-  timestamp: string;
-  status?: 'active' | 'inactive';
-  lastChecked?: string;
-  response?: string;
-}
-
-/**
- * Sends a canary message to the server
- *
- * @param providerId The provider ID or configuration
- * @param message The canary message to send
- * @returns The server response
- */
-export async function sendCanary(
-  provider: ApiProvider | ProviderOptions,
-  message: string,
-): Promise<CanaryData> {
-  if (!cloudConfig.isEnabled()) {
-    throw new Error(
-      `Could not send canary. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
-    );
-  }
-
-  try {
-    const providerHash = generateShortProviderHash(provider);
-    const providerId =
-      'id' in provider
-        ? typeof provider.id === 'function'
-          ? provider.id()
-          : provider.id
-        : 'unknown';
-
-    const canaryData: CanaryData = {
-      providerHash,
-      providerId: providerId || 'unknown',
-      message,
-      timestamp: new Date().toISOString(),
-    };
-
-    const response = await makeRequest('api/canary', 'POST', canaryData);
-
-    if (!response.ok) {
-      const errorMessage = await response.text();
-      logger.error(
-        `[Canary] Failed to send canary: ${errorMessage}. HTTP Status: ${response.status}`,
-      );
-      throw new Error(`Failed to send canary: ${response.statusText}`);
-    }
-
-    const responseData = await response.json();
-    logger.debug(`Canary sent to cloud: ${JSON.stringify(responseData, null, 2)}`);
-    return responseData;
-  } catch (e) {
-    logger.error(`Failed to send canary: ${e}`);
-    throw e;
-  }
-}
-
-/**
- * Checks canary status on the server
- *
- * @param provider The provider to check
- * @returns The canary status information
- */
-export async function checkCanary(provider: ApiProvider | ProviderOptions): Promise<CanaryData> {
-  if (!cloudConfig.isEnabled()) {
-    throw new Error(
-      `Could not check canary. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
-    );
-  }
-
-  try {
-    const providerHash = generateShortProviderHash(provider);
-
-    const response = await makeRequest(`api/canary/${providerHash}`, 'GET');
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error(`No canary found for provider. Use canary send to create one first.`);
-      }
-      const errorMessage = await response.text();
-      logger.error(
-        `[Canary] Failed to check canary: ${errorMessage}. HTTP Status: ${response.status}`,
-      );
-      throw new Error(`Failed to check canary: ${response.statusText}`);
-    }
-
-    const canaryData = await response.json();
-    logger.debug(`Canary status from cloud: ${JSON.stringify(canaryData, null, 2)}`);
-    return canaryData;
-  } catch (e) {
-    logger.error(`Failed to check canary: ${e}`);
-    throw e;
-  }
 }

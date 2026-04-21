@@ -1,17 +1,28 @@
+import { promises as fsPromises } from 'fs';
+import { join } from 'path';
+
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
-import type { Config } from '@docusaurus/types';
-import type { ConfigureWebpackResult } from '@docusaurus/types/src/plugin';
-import * as fs from 'fs';
-import * as path from 'path';
-import { sanitizeMarkdown } from './src/utils/markdown';
+import type { Config, Plugin } from '@docusaurus/types';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
 
+function webpackProgressCompatibilityPlugin(): Plugin {
+  return {
+    name: 'webpack-progress-compatibility-plugin',
+    configureWebpack(config) {
+      config.plugins = config.plugins?.filter(
+        (plugin) => plugin?.constructor?.name !== 'WebpackBarPlugin',
+      );
+      return {};
+    },
+  };
+}
+
 const config: Config = {
-  title: 'promptfoo',
-  tagline: 'Test your prompts',
+  title: 'Promptfoo',
+  tagline: 'Ship secure AI agents and LLM applications',
   favicon: '/favicon.ico',
 
   // Set the production url of your site here
@@ -28,9 +39,8 @@ const config: Config = {
   projectName: 'promptfoo', // Usually your repo name.
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'throw',
   onBrokenAnchors: 'throw',
-  // Even if you don't use internalization, you can use this field to set useful
+  // Even if you don't use internationalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
   // to replace "en" with "zh-Hans".
   i18n: {
@@ -38,34 +48,11 @@ const config: Config = {
     locales: ['en'],
   },
 
-  headTags: [
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.googleapis.com',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'preconnect',
-        href: 'https://fonts.gstatic.com',
-        crossorigin: 'true',
-      },
-    },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap',
-      },
-    },
-  ],
+  headTags: [],
 
   scripts: [
     {
-      src: '/js/scripts.js',
+      src: '/js/consent.js',
       async: true,
     },
   ],
@@ -76,13 +63,19 @@ const config: Config = {
       {
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
-          // Remove this to remove the "edit this page" links.
-          editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
+          editUrl: undefined,
           sidebarCollapsed: false,
+          showLastUpdateAuthor: true,
+          showLastUpdateTime: true,
+          exclude: [
+            '**/CLAUDE.md', // Exclude Claude Code context files
+            '**/AGENTS.md', // Exclude AI agent instruction files
+          ],
         },
         blog: {
           showReadingTime: false,
           blogSidebarCount: 0,
+          postsPerPage: 20,
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           //editUrl:
@@ -91,19 +84,26 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag:
-          process.env.NODE_ENV === 'development'
-            ? undefined
-            : {
-                trackingID: 'G-3TS8QLZQ93',
-                anonymizeIP: true,
-              },
+        // gtag loaded conditionally via consent.js (GDPR)
       } satisfies Preset.Options,
     ],
   ],
 
   themeConfig: {
+    announcementBar: {
+      id: 'joined-openai',
+      content:
+        '<strong>Promptfoo is now part of OpenAI.</strong> <a href="/blog/promptfoo-joining-openai">Read the update →</a>',
+      backgroundColor: '#dc2626',
+      textColor: '#ffffff',
+      isCloseable: false,
+    },
     image: 'img/thumbnail.png',
+    colorMode: {
+      defaultMode: 'light',
+      disableSwitch: false,
+      respectPrefersColorScheme: true,
+    },
     navbar: {
       title: 'promptfoo',
       logo: {
@@ -112,87 +112,110 @@ const config: Config = {
       },
       items: [
         {
-          type: 'dropdown',
+          type: 'custom-navMenuCard',
           label: 'Products',
           position: 'left',
           items: [
             {
               to: '/red-teaming/',
               label: 'Red Teaming',
+              description: 'Proactively identify and fix vulnerabilities in your AI applications',
             },
             {
               to: '/guardrails/',
               label: 'Guardrails',
+              description: 'Real-time protection against jailbreaks and adversarial attacks',
             },
             {
               to: '/model-security/',
               label: 'Model Security',
+              description: 'Comprehensive security testing and monitoring for AI models',
+            },
+            {
+              to: '/mcp/',
+              label: 'MCP Proxy',
+              description: 'Secure proxy for Model Context Protocol communications',
+            },
+            {
+              to: '/code-scanning/',
+              label: 'Code Scanning',
+              description: 'Find LLM vulnerabilities in your IDE and CI/CD',
             },
             {
               to: '/docs/getting-started/',
               label: 'Evaluations',
+              description: 'Test and evaluate your prompts, models, and RAG pipelines',
             },
           ],
         },
         {
-          type: 'dropdown',
+          type: 'custom-navMenuCard',
+          label: 'Solutions',
+          position: 'left',
+          items: [
+            {
+              type: 'section-header',
+              label: 'By Industry',
+            },
+            {
+              to: '/solutions/finance/',
+              label: 'Financial Services',
+              description: 'FINRA-aligned security testing',
+            },
+            {
+              to: '/solutions/insurance/',
+              label: 'Insurance',
+              description: 'Policyholder data & coverage accuracy',
+            },
+            {
+              to: '/solutions/telecom/',
+              label: 'Telecommunications',
+              description: 'Voice & text AI agent security',
+            },
+            {
+              to: '/solutions/real-estate/',
+              label: 'Real Estate',
+              description: 'Fair housing compliance testing',
+            },
+          ],
+        },
+        {
+          type: 'custom-navMenuCard',
           label: 'Company',
           position: 'left',
           items: [
             {
               href: '/about/',
               label: 'About',
-            },
-            {
-              href: '/blog/',
-              label: 'Blog',
+              description: 'Learn about our mission and team',
             },
             {
               href: '/press/',
               label: 'Press',
+              description: 'Media coverage and press releases',
             },
             {
-              href: '/contact/',
-              label: 'Contact',
+              href: '/events/',
+              label: 'Events',
+              description: 'Meet the team at conferences and events',
             },
             {
-              href: '/careers/',
-              label: 'Careers',
+              to: '/store/',
+              label: 'Swag',
+              description: 'Official Promptfoo merch and swag',
             },
           ],
         },
+        { to: '/docs/intro/', label: 'Docs', position: 'left' },
+        { to: '/blog/', label: 'Blog', position: 'left' },
+        { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
-          type: 'dropdown',
-          label: 'Resources',
-          position: 'left',
-          items: [
-            {
-              href: '/docs/intro/',
-              label: 'Docs',
-            },
-            {
-              to: 'https://www.promptfoo.dev/docs/api-reference/',
-              label: 'API Reference',
-            },
-            {
-              to: 'https://www.promptfoo.dev/models/',
-              label: 'Foundation Model Reports',
-            },
-            {
-              to: 'https://www.promptfoo.dev/lm-security-db/',
-              label: 'Language Model Security DB',
-            },
-            {
-              href: 'https://github.com/promptfoo/promptfoo',
-              label: 'GitHub',
-            },
-            {
-              href: 'https://discord.gg/promptfoo',
-              label: 'Discord',
-            },
-          ],
+          to: '/contact/',
+          position: 'right',
+          'aria-label': 'Book a Demo',
+          label: 'Book a Demo',
+          className: 'header-book-demo-link',
         },
-        { to: '/pricing/', label: 'Enterprise', position: 'left' },
         {
           to: 'https://promptfoo.app',
           position: 'right',
@@ -200,10 +223,8 @@ const config: Config = {
           label: 'Log in',
         },
         {
-          href: 'https://github.com/promptfoo/promptfoo',
+          type: 'custom-githubStars',
           position: 'right',
-          className: 'header-github-link',
-          'aria-label': 'GitHub repository',
         },
         {
           href: 'https://discord.gg/promptfoo',
@@ -240,14 +261,43 @@ const config: Config = {
               href: '/pricing/',
             },
             {
+              label: 'MCP Proxy',
+              to: '/mcp/',
+            },
+            {
               label: 'Status',
-              href: 'https://status.promptfoo.dev',
+              href: 'https://status.promptfoo.app/',
+            },
+          ],
+        },
+        {
+          title: 'Solutions',
+          items: [
+            {
+              label: 'Financial Services',
+              to: '/solutions/finance/',
+            },
+            {
+              label: 'Insurance',
+              to: '/solutions/insurance/',
+            },
+            {
+              label: 'Telecommunications',
+              to: '/solutions/telecom/',
+            },
+            {
+              label: 'Real Estate',
+              to: '/solutions/real-estate/',
             },
           ],
         },
         {
           title: 'Resources',
           items: [
+            {
+              label: 'API Reference',
+              to: '/docs/api-reference/',
+            },
             {
               label: 'LLM Red Teaming',
               to: '/docs/red-team',
@@ -262,7 +312,7 @@ const config: Config = {
             },
             {
               label: 'Running Benchmarks',
-              to: '/docs/guides/llama2-uncensored-benchmark-ollama',
+              to: '/docs/guides/censored-vs-uncensored-ollama',
             },
             {
               label: 'Evaluating Factuality',
@@ -274,7 +324,7 @@ const config: Config = {
             },
             {
               label: 'Minimizing Hallucinations',
-              to: '/docs/guides/prevent-llm-hallucations',
+              to: '/docs/guides/prevent-llm-hallucinations',
             },
             {
               label: 'Config Validator',
@@ -294,16 +344,24 @@ const config: Config = {
               to: '/blog/',
             },
             {
+              label: 'Release Notes',
+              to: '/docs/releases/',
+            },
+            {
               label: 'Press',
               to: '/press/',
+            },
+            {
+              label: 'Events',
+              to: '/events/',
             },
             {
               label: 'Contact',
               to: '/contact/',
             },
             {
-              label: 'Careers',
-              to: '/careers/',
+              label: 'Swag',
+              to: '/store/',
             },
             {
               label: 'Log in',
@@ -316,7 +374,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/promptfoo/promptfoo',
+              href: 'https://github.com/promptfoo/promptfoo#readme',
             },
             {
               label: 'Discord',
@@ -335,17 +393,24 @@ const config: Config = {
               to: '/terms-of-service/',
             },
             {
+              label: 'Trust Center',
+              href: 'https://trust.promptfoo.dev',
+            },
+            {
+              html: '<a href="#manage-cookies" class="footer__link-item">Cookie Settings</a>',
+            },
+            {
               html: `
-                <div style="position: relative; margin-top:8px">
-                  <span style="position: absolute; left: 65px; top: 25px; font-size: 10px; font-weight: bold; background-color: #25842c; padding: 2px 4px; border-radius: 4px;">In Progress</span>
-                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Compliance in progress" style="width:80px; height: auto"/>
+                <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
+                  <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>
+                  <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:80px; height: auto"/>
                 </div>
                 `,
             },
           ],
         },
       ],
-      copyright: `© ${new Date().getFullYear()} promptfoo`,
+      copyright: `© ${new Date().getFullYear()} Promptfoo, Inc.`,
     },
     prism: {
       theme: lightCodeTheme,
@@ -376,7 +441,10 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 
   plugins: [
+    webpackProgressCompatibilityPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
+    require.resolve('./src/plugins/docusaurus-plugin-og-image'),
+    // GA/analytics loaded conditionally via consent.js (GDPR)
     [
       '@docusaurus/plugin-client-redirects',
       {
@@ -393,188 +461,135 @@ const config: Config = {
             from: '/docs',
             to: '/docs/intro',
           },
+          {
+            from: '/vegas-contact',
+            to: 'https://triangular-manchego-867.notion.site/2395ae153a138028a8bef35f6889f6e6?pvs=105',
+          },
+          {
+            from: '/docs/guides/prevent-llm-hallucations',
+            to: '/docs/guides/prevent-llm-hallucinations',
+          },
+          {
+            from: '/docs/category/guides',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/gpt-5-vs-gpt-5-mini-mmlu',
+            to: '/docs/guides/gpt-mmlu-comparison',
+          },
+          {
+            from: '/docs/guides/gpt-5.2-vs-o3',
+            to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          {
+            from: '/solutions/healthcare',
+            to: '/docs/red-team/plugins/medical',
+          },
+          {
+            from: '/docs/guides/llama2-uncensored-benchmark-ollama',
+            to: '/docs/guides/censored-vs-uncensored-ollama',
+          },
+          {
+            from: '/docs/red-team/guardrails',
+            to: '/docs/enterprise/guardrails',
+          },
+          // Deleted guides consolidated into gpt-vs-claude-vs-gemini
+          {
+            from: '/docs/guides/claude-vs-gpt',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+          },
+          {
+            from: '/docs/guides/gemini-vs-gpt',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+          },
+          // Deleted guides consolidated into compare-open-source-models
+          {
+            from: '/docs/guides/compare-llama2-vs-gpt',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/gemma-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/gemma-vs-mistral',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/mistral-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/phi-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          // Deleted guides consolidated into choosing-best-gpt-model
+          {
+            from: '/docs/guides/gpt-3.5-vs-gpt-4',
+            to: '/docs/guides/choosing-best-gpt-model',
+          },
+          {
+            from: '/docs/guides/gpt-4-vs-gpt-4o',
+            to: '/docs/guides/choosing-best-gpt-model',
+          },
+          // Deleted guides consolidated into gpt-vs-reasoning-model
+          {
+            from: '/docs/guides/gpt-vs-o1',
+            to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          // Deleted guides consolidated into gpt-mmlu-comparison
+          {
+            from: '/docs/guides/gpt-4.1-vs-gpt-4o-mmlu',
+            to: '/docs/guides/gpt-mmlu-comparison',
+          },
+          // Deleted guides redirected to guides index
+          {
+            from: '/docs/guides/cohere-command-r-benchmark',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/dbrx-benchmark',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/evaluate-replicate-lifeboat',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/building-trust-in-ai-with-portkey-and-promptfoo',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/mistral-magistral-aime2024',
+            to: '/docs/guides',
+          },
+          // Renamed guide: agent-eval -> evaluate-coding-agents
+          {
+            from: '/docs/guides/agent-eval',
+            to: '/docs/guides/evaluate-coding-agents',
+          },
         ],
       },
     ],
-    // Plugin to serve markdown files for CopyPageButton
-    function markdownServePlugin(context) {
-      return {
-        name: 'markdown-serve-plugin',
-        loadContent: async () => {
-          const { siteDir } = context;
-          const docsDir = path.join(siteDir, 'docs');
-          const mdFiles: { [path: string]: string } = {};
-
-          // Recursive function to get all mdx/md files with their paths
-          const getMdFiles = async (dir: string, basePath: string = ''): Promise<void> => {
-            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-
-            for (const entry of entries) {
-              const fullPath = path.join(dir, entry.name);
-              const relativePath = path.join(basePath, entry.name);
-
-              if (entry.isDirectory()) {
-                await getMdFiles(fullPath, relativePath);
-              } else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
-                let content = await fs.promises.readFile(fullPath, 'utf8');
-
-                // Remove frontmatter (content between --- delimiters)
-                content = content.replace(/^---[\s\S]*?---\s*/m, '');
-
-                // If this is an index.md file, also store it with the directory path
-                // to make it accessible via the directory URL
-                if (entry.name === 'index.md' || entry.name === 'index.mdx') {
-                  if (basePath) {
-                    mdFiles[`${basePath}.md`] = content;
-                  }
-                } else {
-                  // Store the file using its relativePath
-                  mdFiles[relativePath] = content;
-                }
-              }
-            }
-          };
-
-          await getMdFiles(docsDir);
-          return { mdFiles };
-        },
-
-        // Configure webpack for dev server middleware
-        configureWebpack(config, isServer) {
-          if (isServer) {
-            return {};
-          }
-
-          // This is our fallback approach in case extendDevServer doesn't work
-          const { siteDir } = context;
-          const docsDir = path.join(siteDir, 'docs');
-
-          return {
-            devServer: {
-              setupMiddlewares: (middlewares, devServer) => {
-                if (!devServer) {
-                  throw new Error('webpack-dev-server is not defined');
-                }
-
-                devServer.app.get('/markdown/*', async (req, res) => {
-                  const requestPath = req.path.replace(/^\/markdown\//, '');
-
-                  // Try both with and without file extension
-                  let filePath = path.join(docsDir, requestPath);
-                  let foundFile = false;
-
-                  // Try direct match first
-                  try {
-                    const stat = await fs.promises.stat(filePath);
-                    if (stat.isFile()) {
-                      foundFile = true;
-                    }
-                  } catch (err) {
-                    // File doesn't exist, try with extensions
-                    const extensions = ['.md', '.mdx'];
-                    for (const ext of extensions) {
-                      try {
-                        const filePathWithExt = `${filePath}${ext}`;
-                        const stat = await fs.promises.stat(filePathWithExt);
-                        if (stat.isFile()) {
-                          filePath = filePathWithExt;
-                          foundFile = true;
-                          break;
-                        }
-                      } catch (err) {
-                        // Try index.md in the directory
-                        try {
-                          const indexPath = path.join(filePath.split('.')[0], `index${ext}`);
-                          const stat = await fs.promises.stat(indexPath);
-                          if (stat.isFile()) {
-                            filePath = indexPath;
-                            foundFile = true;
-                            break;
-                          }
-                        } catch (indexErr) {
-                          // Ignore errors for index files
-                        }
-                      }
-                    }
-                  }
-
-                  if (foundFile) {
-                    try {
-                      // Read the file directly from the filesystem
-                      const content = sanitizeMarkdown(
-                        await fs.promises.readFile(filePath, 'utf8'),
-                      );
-
-                      // Set appropriate headers for raw markdown content
-                      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-                      res.setHeader('Cache-Control', 'no-cache');
-                      res.setHeader('X-Content-Type-Options', 'nosniff');
-                      res.send(content);
-                    } catch (error) {
-                      res.status(500).send('Error reading markdown file');
-                    }
-                  } else {
-                    res.status(404).send('Markdown file not found');
-                  }
-                });
-
-                return middlewares;
-              },
-            },
-          } as ConfigureWebpackResult;
-        },
-
-        // Build process - generate static files for production
-        async postBuild({ content, outDir }) {
-          // Type assertion to handle TypeScript type checking
-          const pluginContent = content as { mdFiles: { [path: string]: string } };
-          const { mdFiles } = pluginContent;
-
-          // Create directory for markdown files
-          const mdOutDir = path.join(outDir, 'markdown');
-          try {
-            await fs.promises.mkdir(mdOutDir, { recursive: true });
-          } catch (err) {
-            console.error('Error creating markdown directory:', err);
-            throw err;
-          }
-
-          // Write each markdown file to the output directory
-          for (const [filePath, content] of Object.entries(mdFiles)) {
-            const outPath = path.join(mdOutDir, filePath);
-            const outDirname = path.dirname(outPath);
-
-            try {
-              // Create nested directories if needed
-              await fs.promises.mkdir(outDirname, { recursive: true });
-              const sanitized = sanitizeMarkdown(content);
-              await fs.promises.writeFile(outPath, sanitized);
-            } catch (err) {
-              console.error(`Error writing markdown file ${filePath}:`, err);
-            }
-          }
-        },
-      };
-    },
     // Define the llms.txt plugin inline similar to the Prisma example
     async function llmsTxtPlugin(context) {
       return {
         name: 'llms-txt-plugin',
         loadContent: async () => {
           const { siteDir } = context;
-          const docsDir = path.join(siteDir, 'docs');
+          const docsDir = join(siteDir, 'docs');
           const allMdx: string[] = [];
 
           // Recursive function to get all mdx/md files
           const getMdFiles = async (dir: string): Promise<void> => {
-            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+            const entries = await fsPromises.readdir(dir, { withFileTypes: true });
 
             for (const entry of entries) {
-              const fullPath = path.join(dir, entry.name);
+              const fullPath = join(dir, entry.name);
               if (entry.isDirectory()) {
                 await getMdFiles(fullPath);
               } else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
-                const content = await fs.promises.readFile(fullPath, 'utf8');
+                const content = await fsPromises.readFile(fullPath, 'utf8');
                 allMdx.push(content);
               }
             }
@@ -589,8 +604,8 @@ const config: Config = {
           const { allMdx } = pluginContent;
 
           // Write concatenated MDX content
-          const concatenatedPath = path.join(outDir, 'llms-full.txt');
-          await fs.promises.writeFile(concatenatedPath, allMdx.join('\n\n---\n\n'));
+          const concatenatedPath = join(outDir, 'llms-full.txt');
+          await fsPromises.writeFile(concatenatedPath, allMdx.join('\n\n---\n\n'));
 
           // Process routes - use routesPaths which is a string[] of all routes
           const docsRoutes: string[] = [];
@@ -614,9 +629,9 @@ const config: Config = {
           const llmsTxt = `# ${context.siteConfig.title}\n\n## Docs\n\n${docsRoutes.join('\n')}`;
 
           // Write llms.txt file
-          const llmsTxtPath = path.join(outDir, 'llms.txt');
+          const llmsTxtPath = join(outDir, 'llms.txt');
           try {
-            fs.writeFileSync(llmsTxtPath, llmsTxt);
+            await fsPromises.writeFile(llmsTxtPath, llmsTxt);
             console.log('Successfully created llms.txt and llms-full.txt files.');
           } catch (err) {
             console.error('Error writing llms.txt file:', err);
@@ -625,11 +640,37 @@ const config: Config = {
         },
       };
     },
+    [
+      '@docusaurus/plugin-content-blog',
+      {
+        id: 'releases',
+        routeBasePath: 'releases',
+        path: './releases',
+        authorsMapPath: '../blog/authors.yml',
+        blogTitle: 'Release Notes',
+        blogDescription: 'promptfoo release notes and updates',
+        blogSidebarCount: 0,
+        blogSidebarTitle: 'Recent Releases',
+        postsPerPage: 10,
+        showReadingTime: false,
+        feedOptions: {
+          type: 'all',
+          title: 'promptfoo Release Notes',
+          description: 'Stay updated with the latest promptfoo releases',
+          copyright: `© ${new Date().getFullYear()} promptfoo`,
+          language: 'en',
+        },
+        editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
+      },
+    ],
   ],
 
   // Mermaid diagram support
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'throw',
+    },
   },
   themes: ['@docusaurus/theme-mermaid'],
 };

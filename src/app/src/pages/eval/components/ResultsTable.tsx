@@ -1,48 +1,130 @@
+import React, { useEffect, useRef } from 'react';
+
+import ErrorBoundary from '@app/components/ErrorBoundary';
+import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
+import { useToast } from '@app/hooks/useToast';
+import { cn } from '@app/lib/utils';
+import { callApi } from '@app/utils/api';
+import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import { getActualPrompt } from '@app/utils/providerResponse';
+import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
+import {
+  type EvalResultsFilterMode,
+  type EvaluateTable,
+  type EvaluateTableOutput,
+  type EvaluateTableRow,
+  type GradingResult,
+  type ProviderOptions,
+  type Vars,
+} from '@promptfoo/types';
+import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import React, { useEffect, useRef, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { Link } from 'react-router-dom';
-import { useToast } from '@app/hooks/useToast';
-import {
-  type EvaluateTableRow,
-  type EvaluateTableOutput,
-  type FilterMode,
-  type EvaluateTable,
-} from '@app/pages/eval/components/types';
-import { callApi } from '@app/utils/api';
-import CloseIcon from '@mui/icons-material/Close';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Checkbox from '@mui/material/Checkbox';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { FILE_METADATA_KEY } from '@promptfoo/constants';
-import invariant from '@promptfoo/util/invariant';
-import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
-import yaml from 'js-yaml';
-import remarkGfm from 'remark-gfm';
-import { useDebounce } from 'use-debounce';
+import { ArrowLeft, ArrowRight, ExternalLink, X } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import CustomMetrics from './CustomMetrics';
+import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
-import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import type { TruncatedTextProps } from './TruncatedText';
+import { useFilterMode } from './FilterModeProvider';
+import { ProviderDisplay } from './ProviderDisplay';
+import { type ProviderDef } from './providerConfig';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
-import { useTableStore, useResultsViewSettingsStore } from './store';
+import VariableMarkdownCell from './VariableMarkdownCell';
+import type {
+  Cell,
+  CellContext,
+  ColumnDef,
+  ColumnSizingState,
+  Row,
+  VisibilityState,
+} from '@tanstack/table-core';
+
+import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
-function formatRowOutput(output: EvaluateTableOutput | string) {
+import { NumberInput } from '@app/components/ui/number-input';
+import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
+import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
+import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { getNamedMetricTotals } from './utils';
+
+/**
+ * Audio player component that handles both storage refs and base64 data
+ */
+function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
+  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (isStorageRef(data) || isBlobRef(data)) {
+      setLoading(true);
+      resolveAudioUrl(data, format).then((url) => {
+        if (!cancelled) {
+          setAudioUrl(url);
+          setLoading(false);
+        }
+      });
+    } else {
+      // Inline base64
+      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
+      setAudioUrl(url);
+      setLoading(false);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data, format]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-0.5">
+        <Spinner className="size-4" />
+        <span className="text-xs text-muted-foreground">Loading audio...</span>
+      </div>
+    );
+  }
+
+  if (!audioUrl) {
+    return <span className="text-xs text-destructive">Failed to load audio</span>;
+  }
+
+  return (
+    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
+      <source src={audioUrl} type={`audio/${format}`} />
+      Your browser does not support the audio element.
+    </audio>
+  );
+}
+
+const VARIABLE_COLUMN_SIZE_PX = 200;
+const PROMPT_COLUMN_SIZE_PX = 400;
+const DESCRIPTION_COLUMN_SIZE_PX = 100;
+
+function formatRowOutput(output: EvaluateTableOutput | string | null | undefined) {
+  if (output == null) {
+    return output;
+  }
+
   if (typeof output === 'string') {
     // Backwards compatibility for 0.15.0 breaking change. Remove eventually.
     const pass = output.startsWith('[PASS]');
@@ -78,15 +160,24 @@ function TableHeader({
     setPromptOpen(false);
   };
   return (
-    <div className={`${className || ''}`}>
-      <TruncatedText text={text} maxLength={maxLength} />
+    <div className={`${className || ''} flex items-center gap-1`}>
+      {expandedText ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              className="text-left cursor-pointer transition-colors px-2 py-1.5 -mx-2 rounded-md bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground font-mono text-[13px]"
+              onClick={handlePromptOpen}
+            >
+              <span className="line-clamp-3">{text}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>View prompt</TooltipContent>
+        </Tooltip>
+      ) : (
+        <TruncatedText text={text} maxLength={maxLength} />
+      )}
       {expandedText && (
         <>
-          <Tooltip title="View prompt">
-            <span className="action" onClick={handlePromptOpen}>
-              🔎
-            </span>
-          </Tooltip>
           {promptOpen && (
             <EvalOutputPromptDialog
               open={promptOpen}
@@ -95,12 +186,13 @@ function TableHeader({
             />
           )}
           {resourceId && (
-            <Tooltip title="View other evals and datasets for this prompt">
-              <span className="action">
-                <Link to={`/prompts/?id=${resourceId}`} target="_blank">
-                  <OpenInNewIcon fontSize="small" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank" className="action">
+                  <ExternalLink className="size-4" />
                 </Link>
-              </span>
+              </TooltipTrigger>
+              <TooltipContent>View other evals and datasets for this prompt</TooltipContent>
             </Tooltip>
           )}
         </>
@@ -109,20 +201,1144 @@ function TableHeader({
   );
 }
 
+function getVariableCellValue({
+  row,
+  varName,
+  injectVarName,
+  fallbackValue,
+}: {
+  row: EvaluateTableRow;
+  varName: string;
+  injectVarName: string;
+  fallbackValue: string | object;
+}): string | object {
+  let value = fallbackValue;
+
+  if (varName === injectVarName) {
+    for (const output of row.outputs || []) {
+      const actualPrompt = getActualPrompt(output?.response);
+      if (actualPrompt) {
+        value = actualPrompt;
+        break;
+      }
+    }
+  }
+
+  if (value && value !== '') {
+    return value;
+  }
+
+  for (const output of row.outputs || []) {
+    const transformVars = output?.metadata?.transformDisplayVars as
+      | Record<string, string>
+      | undefined;
+    if (transformVars?.[varName]) {
+      return transformVars[varName];
+    }
+  }
+
+  return value;
+}
+
+function renderMediaVariableCell({
+  output,
+  mediaMetadata,
+  value,
+  lightboxOpen,
+  lightboxImage,
+  maxTextLength,
+  toggleLightbox,
+}: {
+  output: EvaluateTableOutput | null;
+  mediaMetadata?: { path: string; type: string; format?: string };
+  value: string | object;
+  lightboxOpen: boolean;
+  lightboxImage: string | null;
+  maxTextLength: number;
+  toggleLightbox?: (url?: string) => void;
+}): React.ReactNode | null {
+  if (!output || !mediaMetadata || typeof value !== 'string') {
+    return null;
+  }
+
+  const { type: mediaType, format = '' } = mediaMetadata;
+  const normalizedValue = normalizeMediaText(value);
+  const audioSource =
+    mediaType === 'audio' ? resolveAudioSource({ data: value, format, blobRef: value }) : null;
+  const imageSrc =
+    mediaType === 'image' ? resolveImageSource({ data: value, format, blobRef: value }) : undefined;
+
+  const mediaElement =
+    mediaType === 'audio' && audioSource ? (
+      <audio controls style={{ maxWidth: '100%' }}>
+        <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
+        Your browser does not support the audio element.
+      </audio>
+    ) : mediaType === 'video' ? (
+      <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
+        <source
+          src={
+            normalizedValue.startsWith('data:') ||
+            normalizedValue.startsWith('http') ||
+            normalizedValue.startsWith('/api/')
+              ? normalizedValue
+              : `data:${mediaType}/${format};base64,${value}`
+          }
+          type={`video/${format || 'mp4'}`}
+        />
+        Your browser does not support the video element.
+      </video>
+    ) : mediaType === 'image' && imageSrc && toggleLightbox ? (
+      renderImageCellContent({
+        imgSrc: imageSrc,
+        lightboxOpen,
+        lightboxImage,
+        maxTextLength,
+        toggleLightbox,
+        alt: 'Input image',
+      })
+    ) : null;
+
+  if (!mediaElement) {
+    return null;
+  }
+
+  return (
+    <div className="cell">
+      <div style={{ marginBottom: '8px' }}>{mediaElement}</div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span style={{ fontSize: '0.8em', color: '#666' }}>
+            {mediaMetadata.path} ({mediaType}/{format})
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Original file path</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
+function renderDecodedVariableCell({
+  value,
+  varName,
+  row,
+  injectVarName,
+  maxTextLength,
+  cellContent,
+}: {
+  value: string | object;
+  varName: string;
+  row: EvaluateTableRow;
+  injectVarName: string;
+  maxTextLength: number;
+  cellContent: React.ReactNode;
+}): React.ReactNode {
+  const testMetadata: Record<string, unknown> = row.test?.metadata || {};
+  const metadataOriginal =
+    typeof testMetadata.originalText === 'string' ? testMetadata.originalText : undefined;
+  const strategyId = testMetadata.strategyId;
+  const shouldShowOriginal =
+    varName === injectVarName &&
+    typeof strategyId === 'string' &&
+    isEncodingStrategy(strategyId) &&
+    Boolean(metadataOriginal);
+
+  if (!shouldShowOriginal) {
+    return (
+      <div className="cell" data-capture="true">
+        {cellContent}
+      </div>
+    );
+  }
+
+  const isAudioContent =
+    strategyId === 'audio' ||
+    (typeof value === 'string' &&
+      (isStorageRef(value) || isBlobRef(value)) &&
+      value.includes('audio/'));
+  const isImageContent =
+    strategyId === 'image' ||
+    (typeof value === 'string' &&
+      (isStorageRef(value) || isBlobRef(value)) &&
+      value.includes('image/'));
+
+  return (
+    <div className="cell" data-capture="true">
+      {isAudioContent && typeof value === 'string' ? (
+        <div>
+          <StorageRefAudioPlayer data={value} />
+        </div>
+      ) : isImageContent ? (
+        <div>
+          {typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) ? (
+            <span className="text-xs text-muted-foreground">
+              Image preview not yet supported for storage refs
+            </span>
+          ) : (
+            cellContent
+          )}
+        </div>
+      ) : (
+        cellContent
+      )}
+
+      {metadataOriginal && (
+        <div className="mt-1.5 text-muted-foreground text-[0.8em]">
+          <strong>Original (decoded):</strong>{' '}
+          <TruncatedText text={String(metadataOriginal)} maxLength={maxTextLength} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function renderVariableCell({
+  info,
+  varName,
+  injectVarName,
+  maxTextLength,
+  renderMarkdown,
+  lightboxOpen,
+  lightboxImage,
+  toggleLightbox,
+}: {
+  info: CellContext<EvaluateTableRow, string>;
+  varName: string;
+  injectVarName: string;
+  maxTextLength: number;
+  renderMarkdown: boolean;
+  lightboxOpen: boolean;
+  lightboxImage: string | null;
+  toggleLightbox: (url?: string) => void;
+}): React.ReactNode {
+  const row = info.row.original;
+  let value = getVariableCellValue({
+    row,
+    varName,
+    injectVarName,
+    fallbackValue: info.getValue(),
+  });
+
+  const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
+  const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
+    | Record<string, { path: string; type: string; format?: string }>
+    | undefined;
+  const mediaCell = renderMediaVariableCell({
+    output,
+    mediaMetadata: fileMetadata?.[varName],
+    value,
+    lightboxOpen,
+    lightboxImage,
+    maxTextLength,
+    toggleLightbox,
+  });
+
+  if (mediaCell) {
+    return mediaCell;
+  }
+
+  if (typeof value === 'object') {
+    value = JSON.stringify(value, null, 2);
+    if (renderMarkdown) {
+      value = `\`\`\`json\n${value}\n\`\`\``;
+    }
+  }
+
+  const cellContent = renderMarkdown ? (
+    <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
+  ) : (
+    <TruncatedText text={value} maxLength={maxTextLength} />
+  );
+
+  return renderDecodedVariableCell({
+    value,
+    varName,
+    row,
+    injectVarName,
+    maxTextLength,
+    cellContent,
+  });
+}
+
+type PromptSummaryMetric = {
+  total?: number | null;
+  filtered?: number | null;
+};
+
+type PromptMetrics = ReturnType<ReturnType<typeof useMetricsGetter>>;
+
+type ManualRatingUpdate = {
+  pass: EvaluateTableOutput['pass'];
+  score: EvaluateTableOutput['score'];
+  componentResults?: NonNullable<GradingResult['componentResults']>;
+  modifiedComponentResults: boolean;
+};
+
+function formatProviderString(prompt: EvaluateTable['head']['prompts'][number]): string {
+  if (typeof prompt.provider === 'string') {
+    return prompt.provider;
+  }
+
+  if (typeof prompt.provider === 'object' && prompt.provider !== null) {
+    return (prompt.provider as ProviderOptions).id || JSON.stringify(prompt.provider);
+  }
+
+  return String(prompt.provider || 'Unknown provider');
+}
+
+function formatMetricValue(
+  value: number,
+  options: Intl.NumberFormatOptions = { maximumFractionDigits: 0 },
+): string {
+  return Intl.NumberFormat(undefined, options).format(value);
+}
+
+function renderFilteredSuffix(value: React.ReactNode, unit = 'filtered'): React.ReactNode {
+  return (
+    <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+      ({value} {unit})
+    </span>
+  );
+}
+
+function renderRequestMetric({
+  metrics,
+  isRedteam,
+}: {
+  metrics: PromptMetrics['total'];
+  isRedteam: boolean;
+}): React.ReactNode {
+  if (metrics?.tokenUsage?.numRequests === undefined) {
+    return null;
+  }
+
+  return (
+    <div>
+      <strong>{isRedteam ? 'Probes:' : 'Requests:'}</strong> {metrics.tokenUsage.numRequests}
+    </div>
+  );
+}
+
+function renderAssertMetric({
+  numAsserts,
+  numGoodAsserts,
+  idx,
+}: {
+  numAsserts: number[];
+  numGoodAsserts: number[];
+  idx: number;
+}): React.ReactNode {
+  if (!numAsserts[idx]) {
+    return null;
+  }
+
+  return (
+    <div>
+      <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
+    </div>
+  );
+}
+
+function renderCostMetric({
+  metrics,
+  filteredMetrics,
+  testCount,
+}: {
+  metrics: PromptMetrics['total'];
+  filteredMetrics: PromptMetrics['filtered'];
+  testCount?: PromptSummaryMetric;
+}): React.ReactNode {
+  if (!metrics?.cost) {
+    return null;
+  }
+
+  const totalAverage = testCount?.total ? metrics.cost / testCount.total : 0;
+  const totalCost = formatMetricValue(metrics.cost, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: metrics.cost >= 1 ? 2 : 4,
+  });
+  const averageCost = formatMetricValue(totalAverage, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: testCount?.total && totalAverage >= 1 ? 2 : 4,
+  });
+
+  return (
+    <div>
+      <strong>Total Cost:</strong>{' '}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span style={{ cursor: 'help' }}>${totalCost}</span>
+        </TooltipTrigger>
+        <TooltipContent>{`Average: $${averageCost} per test`}</TooltipContent>
+      </Tooltip>
+      {filteredMetrics?.cost && testCount?.filtered
+        ? renderFilteredSuffix(
+            `$${formatMetricValue(filteredMetrics.cost, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: filteredMetrics.cost >= 1 ? 2 : 4,
+            })}`,
+          )
+        : null}
+    </div>
+  );
+}
+
+function renderTokenMetrics({
+  metrics,
+  filteredMetrics,
+  testCount,
+}: {
+  metrics: PromptMetrics['total'];
+  filteredMetrics: PromptMetrics['filtered'];
+  testCount?: PromptSummaryMetric;
+}): React.ReactNode[] {
+  if (!metrics?.tokenUsage?.total) {
+    return [];
+  }
+
+  const totalTokens = metrics.tokenUsage.total;
+  const filteredTokens = filteredMetrics?.tokenUsage?.total;
+  const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
+  const filteredAverage =
+    filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
+
+  return [
+    <div key="total-tokens">
+      <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
+      {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
+    </div>,
+    <div key="avg-tokens">
+      <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
+      {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
+    </div>,
+  ];
+}
+
+function renderLatencyMetric({
+  metrics,
+  filteredMetrics,
+  testCount,
+}: {
+  metrics: PromptMetrics['total'];
+  filteredMetrics: PromptMetrics['filtered'];
+  testCount?: PromptSummaryMetric;
+}): React.ReactNode {
+  if (!metrics?.totalLatencyMs) {
+    return null;
+  }
+
+  const totalAverage = testCount?.total ? metrics.totalLatencyMs / testCount.total : 0;
+  const filteredAverage =
+    filteredMetrics?.totalLatencyMs && testCount?.filtered
+      ? filteredMetrics.totalLatencyMs / testCount.filtered
+      : undefined;
+
+  return (
+    <div>
+      <strong>Avg Latency:</strong> {formatMetricValue(totalAverage)} ms
+      {filteredAverage
+        ? renderFilteredSuffix(formatMetricValue(filteredAverage), 'ms filtered')
+        : null}
+    </div>
+  );
+}
+
+function renderTokensPerSecondMetric(metrics: PromptMetrics['total']): React.ReactNode {
+  if (!metrics?.totalLatencyMs || !metrics.tokenUsage?.completion) {
+    return null;
+  }
+
+  const tokPerSec =
+    metrics.totalLatencyMs > 0
+      ? metrics.tokenUsage.completion / (metrics.totalLatencyMs / 1000)
+      : 0;
+
+  return (
+    <div>
+      <strong>Tokens/Sec:</strong> {formatMetricValue(tokPerSec)}
+    </div>
+  );
+}
+
+function averageComponentResultScore(
+  componentResults: NonNullable<GradingResult['componentResults']>,
+  fallbackScore: EvaluateTableOutput['score'],
+): EvaluateTableOutput['score'] {
+  const scores = componentResults
+    .map((result) => result.score)
+    .filter((resultScore): resultScore is number => typeof resultScore === 'number');
+
+  if (scores.length === 0) {
+    return fallbackScore;
+  }
+
+  return scores.reduce((sum, resultScore) => sum + resultScore, 0) / scores.length;
+}
+
+function getManualRatingUpdate({
+  existingOutput,
+  isPass,
+  score,
+  comment,
+}: {
+  existingOutput: EvaluateTableOutput;
+  isPass?: boolean | null;
+  score?: number;
+  comment?: string;
+}): ManualRatingUpdate {
+  let finalPass = existingOutput.pass;
+  let finalScore = existingOutput.score;
+
+  if (typeof score !== 'undefined') {
+    finalScore = score;
+  } else if (typeof isPass !== 'undefined' && isPass !== null) {
+    finalScore = isPass ? 1 : 0;
+  }
+
+  if (typeof isPass === 'undefined') {
+    return {
+      pass: finalPass,
+      score: finalScore,
+      modifiedComponentResults: false,
+    };
+  }
+
+  const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
+  const humanResultIndex = componentResults.findIndex(
+    (result) => result.assertion?.type === HUMAN_ASSERTION_TYPE,
+  );
+
+  if (isPass === null) {
+    if (humanResultIndex !== -1) {
+      componentResults.splice(humanResultIndex, 1);
+    }
+
+    if (componentResults.length > 0) {
+      finalPass =
+        componentResults.filter((result) => result.pass).length === componentResults.length;
+      finalScore = averageComponentResultScore(componentResults, finalScore);
+    }
+
+    return {
+      pass: finalPass,
+      score: finalScore,
+      componentResults,
+      modifiedComponentResults: true,
+    };
+  }
+
+  finalPass = isPass;
+
+  const humanResult = {
+    pass: finalPass,
+    score: finalScore,
+    reason: 'Manual result (overrides all other grading results)',
+    comment,
+    assertion: { type: HUMAN_ASSERTION_TYPE },
+  };
+
+  if (humanResultIndex === -1) {
+    componentResults.push(humanResult);
+  } else {
+    componentResults[humanResultIndex] = humanResult;
+  }
+
+  return {
+    pass: finalPass,
+    score: finalScore,
+    componentResults,
+    modifiedComponentResults: true,
+  };
+}
+
+function buildManualGradingResult({
+  existingOutput,
+  ratingUpdate,
+  isPass,
+  score,
+  comment,
+}: {
+  existingOutput: EvaluateTableOutput;
+  ratingUpdate: ManualRatingUpdate;
+  isPass?: boolean | null;
+  score?: number;
+  comment?: string;
+}): GradingResult {
+  const { componentResults: _, ...existingGradingResultWithoutComponents } =
+    existingOutput.gradingResult || {};
+
+  const gradingResult: GradingResult = {
+    ...existingGradingResultWithoutComponents,
+    pass: existingOutput.gradingResult?.pass ?? ratingUpdate.pass,
+    score: existingOutput.gradingResult?.score ?? ratingUpdate.score,
+    reason: existingOutput.gradingResult?.reason ?? 'Manual result',
+    comment,
+  };
+
+  if (isPass === null) {
+    gradingResult.pass = ratingUpdate.pass;
+    gradingResult.score = ratingUpdate.score;
+    if (gradingResult.reason === 'Manual result (overrides all other grading results)') {
+      gradingResult.reason = ratingUpdate.componentResults?.[0]?.reason || 'Manual rating cleared';
+    }
+    if (gradingResult.assertion?.type === HUMAN_ASSERTION_TYPE) {
+      delete gradingResult.assertion;
+    }
+  } else if (typeof isPass !== 'undefined' || typeof score !== 'undefined') {
+    gradingResult.pass = ratingUpdate.pass;
+    gradingResult.score = ratingUpdate.score;
+    gradingResult.reason = 'Manual result (overrides all other grading results)';
+    if (existingOutput.gradingResult?.assertion) {
+      gradingResult.assertion = existingOutput.gradingResult.assertion;
+    }
+  }
+
+  if (ratingUpdate.modifiedComponentResults && ratingUpdate.componentResults) {
+    gradingResult.componentResults = ratingUpdate.componentResults;
+  } else if (existingOutput.gradingResult?.componentResults?.length) {
+    gradingResult.componentResults = existingOutput.gradingResult.componentResults;
+  }
+
+  return gradingResult;
+}
+
+function buildRatingTableUpdate({
+  head,
+  body,
+  rowIndex,
+  promptIndex,
+  ratingUpdate,
+  gradingResult,
+}: {
+  head: EvaluateTable['head'];
+  body: EvaluateTable['body'];
+  rowIndex: number;
+  promptIndex: number;
+  ratingUpdate: ManualRatingUpdate;
+  gradingResult: GradingResult;
+}): EvaluateTable {
+  const updatedData = [...body];
+  const updatedRow = { ...updatedData[rowIndex] };
+  const updatedOutputs = [...updatedRow.outputs];
+
+  updatedOutputs[promptIndex] = {
+    ...updatedOutputs[promptIndex],
+    pass: ratingUpdate.pass,
+    score: ratingUpdate.score,
+    gradingResult,
+  };
+  updatedRow.outputs = updatedOutputs;
+  updatedData[rowIndex] = updatedRow;
+
+  return {
+    head,
+    body: updatedData,
+  };
+}
+
+async function saveManualRating({
+  evalId,
+  resultId,
+  version,
+  gradingResult,
+  table,
+}: {
+  evalId: string | null;
+  resultId: string;
+  version: number | null | undefined;
+  gradingResult: GradingResult;
+  table: EvaluateTable;
+}): Promise<void> {
+  invariant(evalId, 'Cannot save manual rating without an evaluation ID');
+
+  const response =
+    version && version >= 4
+      ? await callApi(EVAL_ROUTES.RESULT_RATING(evalId, resultId), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ...gradingResult }),
+        })
+      : await callApi(EVAL_ROUTES.DETAIL(evalId), {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ table }),
+        });
+
+  if (!response.ok) {
+    throw new Error('Network response was not ok');
+  }
+}
+
+function renderPromptMetricDetails({
+  metrics,
+  filteredMetrics,
+  idx,
+  isRedteam,
+  showStats,
+  numAsserts,
+  numGoodAsserts,
+  testCounts,
+}: {
+  metrics: PromptMetrics['total'];
+  filteredMetrics: PromptMetrics['filtered'];
+  idx: number;
+  isRedteam: boolean;
+  showStats: boolean;
+  numAsserts: number[];
+  numGoodAsserts: number[];
+  testCounts: PromptSummaryMetric[];
+}): React.ReactNode {
+  if (!showStats) {
+    return null;
+  }
+
+  return (
+    <div className="prompt-detail collapse-hidden">
+      {renderRequestMetric({ metrics, isRedteam })}
+      {renderAssertMetric({ numAsserts, numGoodAsserts, idx })}
+      {renderCostMetric({
+        metrics,
+        filteredMetrics,
+        testCount: testCounts[idx],
+      })}
+      {renderTokenMetrics({
+        metrics,
+        filteredMetrics,
+        testCount: testCounts[idx],
+      })}
+      {renderLatencyMetric({
+        metrics,
+        filteredMetrics,
+        testCount: testCounts[idx],
+      })}
+      {renderTokensPerSecondMetric(metrics)}
+    </div>
+  );
+}
+
+function getPassRateClassName(passRate: PromptSummaryMetric | undefined): string {
+  const bucket =
+    passRate?.filtered === null
+      ? passRate?.total
+        ? Math.round(passRate.total / 20) * 20
+        : 0
+      : Math.round((passRate?.filtered ?? 0) / 20) * 20;
+
+  return `highlight success-${bucket}`;
+}
+
+function PromptColumnHeader({
+  prompt,
+  idx,
+  passRates,
+  failureFilter,
+  getMetrics,
+  showStats,
+  isRedteam,
+  numAsserts,
+  numGoodAsserts,
+  testCounts,
+  passingTestCounts,
+  metricTotals,
+  config,
+  filterMode,
+  headPromptCount,
+  maxTextLength,
+  onFailureFilterToggle,
+  setFilterMode,
+  setCustomMetricsDialogOpen,
+}: {
+  prompt: EvaluateTable['head']['prompts'][number];
+  idx: number;
+  passRates: PromptSummaryMetric[];
+  failureFilter: { [key: string]: boolean };
+  getMetrics: ReturnType<typeof useMetricsGetter>;
+  showStats: boolean;
+  isRedteam: boolean;
+  numAsserts: number[];
+  numGoodAsserts: number[];
+  testCounts: PromptSummaryMetric[];
+  passingTestCounts: PromptSummaryMetric[];
+  metricTotals: Record<string, number>;
+  config: ReturnType<typeof useTableStore.getState>['config'];
+  filterMode: EvalResultsFilterMode;
+  headPromptCount: number;
+  maxTextLength: number;
+  onFailureFilterToggle: (columnId: string, checked: boolean) => void;
+  setFilterMode: (mode: EvalResultsFilterMode) => void;
+  setCustomMetricsDialogOpen: (open: boolean) => void;
+}) {
+  const columnId = `Prompt ${idx + 1}`;
+  const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+
+  return (
+    <div className="output-header">
+      <div className="pills collapse-font-small">
+        {prompt.provider ? (
+          <div className="provider">
+            <ProviderDisplay
+              providerString={formatProviderString(prompt)}
+              providersArray={config?.providers as ProviderDef[] | undefined}
+              fallbackIndex={idx}
+            />
+          </div>
+        ) : null}
+        <div className="summary">
+          <div className={getPassRateClassName(passRates[idx])}>
+            {passRates[idx]?.filtered === null ? (
+              <>
+                <strong>{passRates[idx]?.total?.toFixed(2) ?? '0.00'}% passing</strong> (
+                {passingTestCounts[idx]?.total}/{testCounts[idx]?.total} cases)
+              </>
+            ) : (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <strong>{passRates[idx]?.filtered?.toFixed(2)}% passing</strong> (
+                    {passingTestCounts[idx]?.filtered}/{testCounts[idx]?.filtered} filtered,{' '}
+                    {passingTestCounts[idx]?.total}/{testCounts[idx]?.total} total)
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {`Filtered: ${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered} passing (${passRates[idx]?.filtered?.toFixed(2)}%). Total: ${passingTestCounts[idx]?.total}/${testCounts[idx]?.total} passing (${passRates[idx]?.total?.toFixed(2)}%)`}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </div>
+        {metrics?.testErrorCount && metrics.testErrorCount > 0 ? (
+          <button
+            type="button"
+            className="summary error-pill border-0 bg-transparent p-0 text-left"
+            onClick={() => setFilterMode('errors')}
+          >
+            <div className="highlight fail">
+              <strong>Errors:</strong> {metrics?.testErrorCount || 0}
+            </div>
+          </button>
+        ) : null}
+        {!isRedteam && metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
+          <div className="collapse-hidden">
+            <CustomMetrics
+              lookup={metrics.namedScores}
+              counts={getNamedMetricTotals(metrics)}
+              metricTotals={metricTotals}
+              onShowMore={() => setCustomMetricsDialogOpen(true)}
+            />
+          </div>
+        ) : null}
+      </div>
+      <TableHeader
+        className="prompt-container collapse-font-small"
+        text={prompt.label || prompt.display || prompt.raw}
+        expandedText={prompt.raw}
+        maxLength={maxTextLength}
+        resourceId={prompt.id}
+      />
+      {renderPromptMetricDetails({
+        metrics,
+        filteredMetrics,
+        idx,
+        isRedteam,
+        showStats,
+        numAsserts,
+        numGoodAsserts,
+        testCounts,
+      })}
+      {filterMode === 'failures' && headPromptCount > 1 && (
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <Checkbox
+            checked={failureFilter[columnId] || false}
+            onCheckedChange={(checked) => onFailureFilterToggle(columnId, checked === true)}
+          />
+          <span>Show failures</span>
+        </label>
+      )}
+    </div>
+  );
+}
+
+function isMetadataColumn(columnId: string): boolean {
+  return (
+    columnId.startsWith('Variable') ||
+    columnId.startsWith('TransformVar_') ||
+    columnId === 'description'
+  );
+}
+
+function getOriginalImageText({
+  columnId,
+  row,
+  headVars,
+  injectVarName,
+}: {
+  columnId: string;
+  row: Row<EvaluateTableRow>;
+  headVars: string[];
+  injectVarName: string;
+}): string | undefined {
+  const match = columnId.match(/^Variable (\d+)$/);
+  if (!match) {
+    return undefined;
+  }
+
+  const varNameForCol = headVars[Number(match[1]) - 1];
+  if (varNameForCol !== injectVarName) {
+    return undefined;
+  }
+
+  const testMeta = row.original.test?.metadata || {};
+  const fromMeta = typeof testMeta.originalText === 'string' ? testMeta.originalText : undefined;
+  const testVars: Vars = row.original.test?.vars || {};
+  const fromVars = typeof testVars.image_text === 'string' ? testVars.image_text : undefined;
+
+  return fromVars || fromMeta;
+}
+
+function getVariableNameForColumn(columnId: string, headVars: string[]): string | undefined {
+  const variableMatch = columnId.match(/^Variable (\d+)$/);
+  if (variableMatch) {
+    return headVars[Number(variableMatch[1]) - 1];
+  }
+
+  if (columnId.startsWith('TransformVar_')) {
+    return columnId.slice('TransformVar_'.length);
+  }
+
+  return undefined;
+}
+
+function hasFileMetadataForColumn({
+  columnId,
+  row,
+  headVars,
+}: {
+  columnId: string;
+  row: Row<EvaluateTableRow>;
+  headVars: string[];
+}): boolean {
+  const varName = getVariableNameForColumn(columnId, headVars);
+  if (!varName) {
+    return false;
+  }
+
+  const fileMetadata = row.original.outputs?.[0]?.metadata?.[FILE_METADATA_KEY] as
+    | Record<string, unknown>
+    | undefined;
+  return Boolean(fileMetadata?.[varName]);
+}
+
+function getImageSourceForCell({
+  columnId,
+  value,
+  row,
+  headVars,
+  injectVarName,
+}: {
+  columnId: string;
+  value: unknown;
+  row: Row<EvaluateTableRow>;
+  headVars: string[];
+  injectVarName: string;
+}): string | undefined {
+  if (typeof value !== 'string' || hasFileMetadataForColumn({ columnId, row, headVars })) {
+    return undefined;
+  }
+
+  const varName = getVariableNameForColumn(columnId, headVars);
+  const imageValue = varName
+    ? getVariableCellValue({
+        row: row.original,
+        varName,
+        injectVarName,
+        fallbackValue: value,
+      })
+    : value;
+
+  return typeof imageValue === 'string' ? resolveImageSource(imageValue) : undefined;
+}
+
+function renderImageCellContent({
+  imgSrc,
+  originalImageText,
+  alt = 'Base64 encoded image',
+  lightboxOpen,
+  lightboxImage,
+  maxTextLength,
+  toggleLightbox,
+}: {
+  imgSrc: string;
+  originalImageText?: string;
+  alt?: string;
+  lightboxOpen: boolean;
+  lightboxImage: string | null;
+  maxTextLength: number;
+  toggleLightbox: (url?: string) => void;
+}): React.ReactNode {
+  return (
+    <>
+      <img
+        src={imgSrc}
+        alt={alt}
+        style={{
+          maxWidth: '100%',
+          maxHeight: '200px',
+          height: 'auto',
+          objectFit: 'contain',
+          cursor: 'pointer',
+        }}
+        onClick={() => toggleLightbox(imgSrc)}
+      />
+      {lightboxOpen && lightboxImage === imgSrc && (
+        <div className="lightbox" onClick={() => toggleLightbox()}>
+          <img
+            src={lightboxImage}
+            alt="Lightbox"
+            style={{
+              maxWidth: '90%',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+            }}
+          />
+        </div>
+      )}
+      {originalImageText ? (
+        <div className="mt-1.5 text-muted-foreground text-[0.8em]">
+          <strong>Original (image text):</strong>{' '}
+          <TruncatedText text={originalImageText} maxLength={maxTextLength} />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function renderResultsTableCell({
+  cell,
+  row,
+  headVars,
+  injectVarName,
+  shouldDrawColBorder,
+  maxTextLength,
+  lightboxOpen,
+  lightboxImage,
+  toggleLightbox,
+}: {
+  cell: Cell<EvaluateTableRow, unknown>;
+  row: Row<EvaluateTableRow>;
+  headVars: string[];
+  injectVarName: string;
+  shouldDrawColBorder: boolean;
+  maxTextLength: number;
+  lightboxOpen: boolean;
+  lightboxImage: string | null;
+  toggleLightbox: (url?: string) => void;
+}): React.ReactNode {
+  const columnId = String(cell.column.id);
+  const isMetadataCol = isMetadataColumn(columnId);
+  const renderedCellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
+  const value = cell.getValue();
+  const renderedImgSrc =
+    typeof renderedCellContent === 'string' ? resolveImageSource(renderedCellContent) : undefined;
+  const rawImgSrc = getImageSourceForCell({
+    columnId,
+    value,
+    row,
+    headVars,
+    injectVarName,
+  });
+  const imgSrc = renderedImgSrc || rawImgSrc;
+  const cellContent = imgSrc
+    ? renderImageCellContent({
+        imgSrc,
+        originalImageText: getOriginalImageText({
+          columnId,
+          row,
+          headVars,
+          injectVarName,
+        }),
+        lightboxOpen,
+        lightboxImage,
+        maxTextLength,
+        toggleLightbox,
+      })
+    : renderedCellContent;
+
+  return (
+    <td
+      tabIndex={0}
+      key={cell.id}
+      style={{
+        width: cell.column.getSize(),
+      }}
+      className={cn(
+        isMetadataCol && 'variable',
+        shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column',
+      )}
+    >
+      {cellContent}
+    </td>
+  );
+}
+
+function ResultsTableBodyRow({
+  row,
+  pageSize,
+  headVars,
+  injectVarName,
+  maxTextLength,
+  lightboxOpen,
+  lightboxImage,
+  toggleLightbox,
+}: {
+  row: Row<EvaluateTableRow>;
+  pageSize: number;
+  headVars: string[];
+  injectVarName: string;
+  maxTextLength: number;
+  lightboxOpen: boolean;
+  lightboxImage: string | null;
+  toggleLightbox: (url?: string) => void;
+}) {
+  let colBorderDrawn = false;
+
+  return (
+    <tr id={`row-${row.index % pageSize}`}>
+      {row.getVisibleCells().map((cell) => {
+        const shouldDrawColBorder = !isMetadataColumn(String(cell.column.id)) && !colBorderDrawn;
+        if (shouldDrawColBorder) {
+          colBorderDrawn = true;
+        }
+
+        return renderResultsTableCell({
+          cell,
+          row,
+          headVars,
+          injectVarName,
+          shouldDrawColBorder,
+          maxTextLength,
+          lightboxOpen,
+          lightboxImage,
+          toggleLightbox,
+        });
+      })}
+    </tr>
+  );
+}
+
 interface ResultsTableProps {
   maxTextLength: number;
   columnVisibility: VisibilityState;
   wordBreak: 'break-word' | 'break-all';
-  filterMode: FilterMode;
+  filterMode: EvalResultsFilterMode;
   failureFilter: { [key: string]: boolean };
-  searchText: string;
   debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
-  onSearchTextChange: (text: string) => void;
-  setFilterMode: (mode: FilterMode) => void;
-  selectedMetric?: string | null;
-  onMetricFilter?: (metric: string | null) => void;
+  zoom: number;
 }
 
 interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
@@ -134,30 +1350,87 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
-function useScrollHandler() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const { stickyHeader } = useResultsViewSettingsStore();
-  const lastScrollY = useRef(0);
+function ResultsTableHeader({
+  reactTable,
+  tableWidth,
+  maxTextLength,
+  wordBreak,
+  theadRef,
+  stickyHeader,
+  setStickyHeader,
+  hasMinimalScrollRoom,
+  zoom,
+}: {
+  reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
+  tableWidth: number;
+  maxTextLength: number;
+  wordBreak: 'break-word' | 'break-all';
+  theadRef: React.RefObject<HTMLTableSectionElement | null>;
+  stickyHeader: boolean;
+  setStickyHeader: (sticky: boolean) => void;
+  hasMinimalScrollRoom: boolean;
+  zoom: number;
+}) {
+  return (
+    <div
+      data-testid="results-table-header"
+      className={cn(
+        'relative',
+        stickyHeader && 'results-table-sticky',
+        hasMinimalScrollRoom && 'minimal-scroll-room',
+      )}
+    >
+      <div className="header-dismiss" style={{ display: stickyHeader ? undefined : 'none' }}>
+        <button
+          type="button"
+          onClick={() => setStickyHeader(false)}
+          className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      <table
+        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+        style={{
+          wordBreak,
+          width: `${tableWidth}px`,
+          zoom,
+        }}
+      >
+        <thead ref={theadRef}>
+          {reactTable.getHeaderGroups().map((headerGroup) => (
+            <tr key={headerGroup.id} className="header">
+              {headerGroup.headers.map((header) => {
+                const isFinalRow = headerGroup.depth === 1;
 
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      const shouldCollapse = currentScrollY > 500;
-
-      if (shouldCollapse !== isCollapsed || currentScrollY < 100) {
-        setIsCollapsed(shouldCollapse);
-      }
-
-      lastScrollY.current = currentScrollY;
-    };
-
-    if (stickyHeader) {
-      window.addEventListener('scroll', handleScroll, { passive: true });
-      return () => window.removeEventListener('scroll', handleScroll);
-    }
-  }, [stickyHeader]);
-
-  return { isCollapsed };
+                return (
+                  <th
+                    key={header.id}
+                    tabIndex={0}
+                    colSpan={header.colSpan}
+                    style={{
+                      width: header.getSize(),
+                      borderBottom: 'none',
+                      height: isFinalRow ? 'fit-content' : 'auto',
+                    }}
+                  >
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                    <div
+                      onMouseDown={header.getResizeHandler()}
+                      onTouchStart={header.getResizeHandler()}
+                      className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                    />
+                  </th>
+                );
+              })}
+            </tr>
+          ))}
+        </thead>
+      </table>
+    </div>
+  );
 }
 
 function ResultsTable({
@@ -166,14 +1439,10 @@ function ResultsTable({
   wordBreak,
   filterMode,
   failureFilter,
-  searchText,
-  debouncedSearchText: externalDebouncedSearchText,
+  debouncedSearchText,
   showStats,
   onFailureFilterToggle,
-  onSearchTextChange,
-  setFilterMode,
-  selectedMetric,
-  onMetricFilter,
+  zoom,
 }: ResultsTableProps) {
   const {
     evalId,
@@ -184,13 +1453,20 @@ function ResultsTable({
     filteredResultsCount,
     fetchEvalData,
     isFetching,
+    filters,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+
+  const isRedteam = React.useMemo(() => {
+    return config?.redteam !== undefined;
+  }, [config?.redteam]);
 
   const visiblePromptCount = React.useMemo(
     () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
@@ -201,95 +1477,73 @@ function ResultsTable({
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: 50,
+    pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  // Persist column sizing state to prevent header resize flicker during pagination.
+  // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+
+  /**
+   * Reset the pagination state when the filtered results count changes.
+   */
+  React.useEffect(() => {
+    setPagination({
+      pageIndex: 0,
+      pageSize: filteredResultsCount > 10 ? 50 : 10,
+    });
+  }, [filteredResultsCount]);
 
   const toggleLightbox = (url?: string) => {
     setLightboxImage(url || null);
     setLightboxOpen(!lightboxOpen);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
     async (
       rowIndex: number,
       promptIndex: number,
       resultId: string,
-      isPass?: boolean,
+      isPass?: boolean | null,
       score?: number,
       comment?: string,
     ) => {
-      const updatedData = [...body];
-      const updatedRow = { ...updatedData[rowIndex] };
-      const updatedOutputs = [...updatedRow.outputs];
-      const finalPass = isPass ?? updatedOutputs[promptIndex].pass;
-      const finalScore = typeof score === 'undefined' ? (isPass ? 1 : 0) : score || 0;
-      updatedOutputs[promptIndex].pass = finalPass;
-      updatedOutputs[promptIndex].score = finalScore;
-
-      const componentResults = updatedOutputs[promptIndex].gradingResult?.componentResults || [];
-      if (typeof isPass !== 'undefined') {
-        const humanResultIndex = componentResults.findIndex(
-          (result) => result.assertion?.type === 'human',
-        );
-
-        const newResult = {
-          pass: finalPass,
-          score: finalScore,
-          reason: 'Manual result (overrides all other grading results)',
-          comment,
-          assertion: { type: 'human' as const },
-        };
-
-        if (humanResultIndex === -1) {
-          componentResults.push(newResult);
-        } else {
-          componentResults[humanResultIndex] = newResult;
-        }
-      }
-
-      const gradingResult = {
-        ...(updatedOutputs[promptIndex].gradingResult || {}),
-        pass: finalPass,
-        score: finalScore,
-        reason: 'Manual result (overrides all other grading results)',
+      const existingOutput = body[rowIndex].outputs[promptIndex];
+      const ratingUpdate = getManualRatingUpdate({
+        existingOutput,
+        isPass,
+        score,
         comment,
-        assertion: updatedOutputs[promptIndex].gradingResult?.assertion || null,
-        componentResults,
-      };
-      updatedOutputs[promptIndex].gradingResult = gradingResult;
-      updatedRow.outputs = updatedOutputs;
-      updatedData[rowIndex] = updatedRow;
-      const newTable: EvaluateTable = {
+      });
+      const gradingResult = buildManualGradingResult({
+        existingOutput,
+        ratingUpdate,
+        isPass,
+        score,
+        comment,
+      });
+      const newTable = buildRatingTableUpdate({
         head,
-        body: updatedData,
-      };
+        body,
+        rowIndex,
+        promptIndex,
+        ratingUpdate,
+        gradingResult,
+      });
 
       setTable(newTable);
       if (inComparisonMode) {
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          let response;
-          if (version && version >= 4) {
-            response = await callApi(`/eval/${evalId}/results/${resultId}/rating`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ ...gradingResult }),
-            });
-          } else {
-            response = await callApi(`/eval/${evalId}`, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ table: newTable }),
-            });
-          }
-          if (!response.ok) {
-            throw new Error('Network response was not ok');
-          }
+          await saveManualRating({
+            evalId,
+            resultId,
+            version,
+            gradingResult,
+            table: newTable,
+          });
         } catch (error) {
           console.error('Failed to update table:', error);
         }
@@ -298,22 +1552,18 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
-  const [localDebouncedSearchText] = useDebounce(searchText, 200);
-  const debouncedSearchText = externalDebouncedSearchText || localDebouncedSearchText;
-  const [isSearching, setIsSearching] = useState(false);
-
-  React.useEffect(() => {
-    setIsSearching(searchText !== debouncedSearchText && searchText !== '');
-  }, [searchText, debouncedSearchText]);
-
   const tableBody = React.useMemo(() => {
     return body.map((row, rowIndex) => ({
       ...row,
-      outputs: row.outputs.map((output, promptIndex) => ({
-        ...output,
-        originalRowIndex: rowIndex,
-        originalPromptIndex: promptIndex,
-      })),
+      outputs: row.outputs.map((output, promptIndex) =>
+        output == null
+          ? null
+          : {
+              ...output,
+              originalRowIndex: rowIndex,
+              originalPromptIndex: promptIndex,
+            },
+      ),
     })) as ExtendedEvaluateTableRow[];
   }, [body]);
 
@@ -321,18 +1571,58 @@ function ResultsTable({
     return Object.fromEntries(new URLSearchParams(queryString));
   };
 
+  // Create a stable reference for applied filters to avoid unnecessary re-renders
+  const appliedFiltersString = React.useMemo(() => {
+    const appliedFilters = Object.values(filters.values)
+      .filter((filter) => {
+        // For metadata filters with exists operator, only field is required
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        // For other metadata operators, both field and value are required
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For metric filters with is_defined operator, only field is required
+        if (filter.type === 'metric' && filter.operator === 'is_defined') {
+          return Boolean(filter.field);
+        }
+        // For metric filters with comparison operators, both field and value are required
+        if (filter.type === 'metric') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For non-metadata/non-metric filters, value is required
+        return Boolean(filter.value);
+      })
+      .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
+    // Create a stable string representation of applied filters
+    return JSON.stringify(
+      appliedFilters.map((f) => ({
+        type: f.type,
+        operator: f.operator,
+        value: f.value,
+        field: f.field,
+        logicOperator: f.logicOperator,
+        sortIndex: f.sortIndex, // Include sortIndex for complete representation
+      })),
+    );
+  }, [filters.values]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
-    setPagination({ ...pagination, pageIndex: 0 });
-  }, [failureFilter, filterMode, debouncedSearchText, selectedMetric]);
+    // Use functional update to avoid stale closure over pagination state
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [failureFilter, filterMode, debouncedSearchText, appliedFiltersString]);
 
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
 
-  // Reset pagination when evalId changes
+  // Reset pagination when evalId changes. Do not mark previousEvalIdRef here to
+  // allow the fetch effect to skip the first fetch after an eval switch.
   React.useEffect(() => {
     if (evalId !== previousEvalIdRef.current) {
-      setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
-      previousEvalIdRef.current = evalId;
+      // Use functional update to avoid stale closure over pagination state
+      setPagination((prev) => ({ pageIndex: 0, pageSize: prev.pageSize }));
 
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
@@ -340,6 +1630,7 @@ function ResultsTable({
   }, [evalId]);
 
   // Only fetch data when pagination or filters change, but not when evalId changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     if (!evalId) {
       return;
@@ -352,14 +1643,32 @@ function ResultsTable({
       return;
     }
 
-    console.log('Fetching data for filtering/pagination', evalId);
-
     fetchEvalData(evalId, {
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      selectedMetric,
+      // Only pass the filters that have been applied.
+      // For metadata filters with exists operator, only field is required.
+      // For other metadata operators, both field and value are required.
+      // For metric filters with is_defined operator, only field is required.
+      // For metric filters with comparison operators, both field and value are required.
+      // For non-metadata/non-metric filters, value is required.
+      filters: Object.values(filters.values).filter((filter) => {
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        if (filter.type === 'metric' && filter.operator === 'is_defined') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metric') {
+          return Boolean(filter.value && filter.field);
+        }
+        return Boolean(filter.value);
+      }),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -369,42 +1678,42 @@ function ResultsTable({
     filterMode,
     comparisonEvalIds,
     debouncedSearchText,
-    selectedMetric,
     fetchEvalData,
+    appliedFiltersString, // Use the stable string representation instead of filters.values
+    // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
-  // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
-  const numGoodTests = React.useMemo(
-    () => head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
-    [head.prompts, body],
-  );
-
-  const numTests = React.useMemo(
-    () =>
-      head.prompts.map(
-        (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
-      ),
-    [head.prompts, body],
-  );
+  const testCounts = useTestCounts();
+  const passingTestCounts = usePassingTestCounts();
+  const passRates = usePassRates();
+  const getMetrics = useMetricsGetter();
 
   const numAsserts = React.useMemo(
     () =>
-      head.prompts.map(
-        (prompt) => (prompt.metrics?.assertFailCount ?? 0) + (prompt.metrics?.assertPassCount ?? 0),
-      ),
-    [head.prompts, body],
+      head.prompts.map((_, idx) => {
+        const { total: metrics } = getMetrics(idx);
+        return (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
+      }),
+    [head.prompts, getMetrics],
   );
 
   const numGoodAsserts = React.useMemo(
-    () => head.prompts.map((prompt) => prompt.metrics?.assertPassCount || 0),
-    [head.prompts, body],
+    () =>
+      head.prompts.map((_, idx) => {
+        const { total: metrics } = getMetrics(idx);
+        return metrics?.assertPassCount || 0;
+      }),
+    [head.prompts, getMetrics],
   );
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
   const { renderMarkdown } = useResultsViewSettingsStore();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
+      const injectVarName = config?.redteam?.injectVar || 'prompt';
+
       return [
         columnHelper.group({
           id: 'vars',
@@ -415,98 +1724,103 @@ function ResultsTable({
               header: () => (
                 <TableHeader text={varName} maxLength={maxTextLength} className="font-bold" />
               ),
-              cell: (info: CellContext<EvaluateTableRow, string>) => {
-                let value: string | object = info.getValue();
-
-                // Get the first output that has metadata for checking file metadata
-                const row = info.row.original;
-                const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
-
-                const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
-                  | Record<string, { path: string; type: string; format?: string }>
-                  | undefined;
-                const isMediaFile = fileMetadata && fileMetadata[varName];
-
-                if (isMediaFile) {
-                  // Handle various media types
-                  const mediaMetadata = fileMetadata[varName];
-                  const mediaType = mediaMetadata.type;
-                  const format = mediaMetadata.format || '';
-                  const mediaDataUrl = value.startsWith('data:')
-                    ? value
-                    : `data:${mediaType}/${format};base64,${value}`;
-
-                  let mediaElement = null;
-
-                  if (mediaType === 'audio') {
-                    mediaElement = (
-                      <audio controls style={{ maxWidth: '100%' }}>
-                        <source src={mediaDataUrl} type={`audio/${format}`} />
-                        Your browser does not support the audio element.
-                      </audio>
-                    );
-                  } else if (mediaType === 'video') {
-                    mediaElement = (
-                      <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
-                        <source src={mediaDataUrl} type={`video/${format}`} />
-                        Your browser does not support the video element.
-                      </video>
-                    );
-                  } else if (mediaType === 'image') {
-                    mediaElement = (
-                      <img
-                        src={mediaDataUrl}
-                        alt="Input image"
-                        style={{ maxWidth: '100%', maxHeight: '200px' }}
-                        onClick={() => toggleLightbox?.(mediaDataUrl)}
-                      />
-                    );
-                  }
-
-                  if (mediaElement) {
-                    return (
-                      <div className="cell">
-                        <div style={{ marginBottom: '8px' }}>{mediaElement}</div>
-                        <Tooltip title="Original file path">
-                          <span style={{ fontSize: '0.8em', color: '#666' }}>
-                            {mediaMetadata.path} ({mediaType}/{format})
-                          </span>
-                        </Tooltip>
-                      </div>
-                    );
-                  }
-                }
-
-                if (typeof value === 'object') {
-                  value = JSON.stringify(value, null, 2);
-                  if (renderMarkdown) {
-                    value = `\`\`\`json\n${value}\n\`\`\``;
-                  }
-                }
-                const truncatedValue =
-                  value.length > maxTextLength
-                    ? `${value.substring(0, maxTextLength - 3).trim()}...`
-                    : value;
-                return (
-                  <div className="cell">
-                    {renderMarkdown ? (
-                      <MarkdownErrorBoundary fallback={<>{value}</>}>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
-                      </MarkdownErrorBoundary>
-                    ) : (
-                      <TruncatedText text={value} maxLength={maxTextLength} />
-                    )}
-                  </div>
-                );
-              },
-              size: 50,
+              cell: (info: CellContext<EvaluateTableRow, string>) =>
+                renderVariableCell({
+                  info,
+                  varName,
+                  injectVarName,
+                  maxTextLength,
+                  renderMarkdown,
+                  lightboxOpen,
+                  lightboxImage,
+                  toggleLightbox,
+                }),
+              size: VARIABLE_COLUMN_SIZE_PX,
             }),
           ),
         }),
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
+  }, [
+    columnHelper,
+    head,
+    head.vars,
+    maxTextLength,
+    renderMarkdown,
+    lightboxOpen,
+    lightboxImage,
+    config,
+  ]);
+
+  // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
+  const transformDisplayVarsColumns = React.useMemo(() => {
+    // Collect unique transformDisplayVars keys from all outputs
+    const transformVarKeys = new Set<string>();
+    tableBody.forEach((row) => {
+      row.outputs?.forEach((output) => {
+        const transformVars = output?.metadata?.transformDisplayVars as
+          | Record<string, string>
+          | undefined;
+        if (transformVars) {
+          Object.keys(transformVars).forEach((key) => transformVarKeys.add(key));
+        }
+      });
+    });
+
+    if (transformVarKeys.size === 0) {
+      return [];
+    }
+
+    // Filter out keys that already exist in head.vars to avoid duplicate columns
+    // This handles the case where standalone mode has embeddedInjection in vars
+    // and layer mode has it in transformDisplayVars - we want one unified column
+    const existingVarNames = new Set(head.vars);
+    const varKeyArray = Array.from(transformVarKeys).filter((key) => !existingVarNames.has(key));
+
+    // If all keys were filtered out (they all exist in vars), don't create a duplicate column group
+    if (varKeyArray.length === 0) {
+      return [];
+    }
+
+    return [
+      columnHelper.group({
+        id: 'transformDisplayVars',
+        header: () => <span className="font-bold">Variables</span>,
+        columns: varKeyArray.map((varName) =>
+          columnHelper.accessor(
+            (row: EvaluateTableRow) => {
+              // Get the value from the first output's transformDisplayVars
+              const output = row.outputs?.[0];
+              const transformVars = output?.metadata?.transformDisplayVars as
+                | Record<string, string>
+                | undefined;
+              return transformVars?.[varName] || '';
+            },
+            {
+              id: `TransformVar_${varName}`,
+              header: () => (
+                <TableHeader
+                  text={varName.replace(/^__/, '')} // Remove __ prefix for display
+                  maxLength={maxTextLength}
+                  className="font-bold"
+                />
+              ),
+              cell: (info: CellContext<EvaluateTableRow, string>) => {
+                const value = info.getValue();
+                return (
+                  <div className="cell">
+                    <TruncatedText text={value} maxLength={maxTextLength} />
+                  </div>
+                );
+              },
+              size: VARIABLE_COLUMN_SIZE_PX,
+            },
+          ),
+        ),
+      }),
+    ];
+  }, [columnHelper, tableBody, maxTextLength, head.vars]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -523,33 +1837,34 @@ function ResultsTable({
   );
 
   const metricTotals = React.useMemo(() => {
+    // Use the backend's already-correct metric totals instead of recalculating
+    const firstProvider = table?.head?.prompts?.[0];
+    const backendTotals = getNamedMetricTotals(firstProvider?.metrics);
+
+    if (backendTotals) {
+      return backendTotals;
+    }
+
     const totals: Record<string, number> = {};
     table?.body.forEach((row) => {
       row.test.assert?.forEach((assertion) => {
         if (assertion.metric) {
-          totals[assertion.metric] = (totals[assertion.metric] || 0) + 1;
+          totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
         }
         if ('assert' in assertion && Array.isArray(assertion.assert)) {
           assertion.assert.forEach((subAssertion) => {
             if ('metric' in subAssertion && subAssertion.metric) {
-              totals[subAssertion.metric] = (totals[subAssertion.metric] || 0) + 1;
+              totals[subAssertion.metric] =
+                (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
             }
           });
         }
       });
     });
     return totals;
-  }, [table]);
+  }, [table?.head?.prompts, table?.body]);
 
-  const handleMetricFilter = React.useCallback(
-    (metric: string | null) => {
-      if (onMetricFilter) {
-        onMetricFilter(metric);
-      }
-    },
-    [onMetricFilter],
-  );
-
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -558,199 +1873,64 @@ function ResultsTable({
         columns: head.prompts.map((prompt, idx) =>
           columnHelper.accessor((row: EvaluateTableRow) => formatRowOutput(row.outputs[idx]), {
             id: `Prompt ${idx + 1}`,
-            header: () => {
-              const pct =
-                numGoodTests[idx] && numTests[idx]
-                  ? ((numGoodTests[idx] / numTests[idx]) * 100.0).toFixed(2)
-                  : '0.00';
-              const columnId = `Prompt ${idx + 1}`;
-              const isChecked = failureFilter[columnId] || false;
-
-              const details = showStats ? (
-                <div className="prompt-detail">
-                  {numAsserts[idx] ? (
-                    <div>
-                      <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
-                    </div>
-                  ) : null}
-                  {prompt.metrics?.cost ? (
-                    <div>
-                      <strong>Total Cost:</strong>{' '}
-                      <Tooltip
-                        title={`Average: $${Intl.NumberFormat(undefined, {
-                          minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / numTests[idx] >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / numTests[idx])} per test`}
-                      >
-                        <span style={{ cursor: 'help' }}>
-                          $
-                          {Intl.NumberFormat(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: prompt.metrics.cost >= 1 ? 2 : 4,
-                          }).format(prompt.metrics.cost)}
-                        </span>
-                      </Tooltip>
-                    </div>
-                  ) : null}
-                  {prompt.metrics?.tokenUsage?.total ? (
-                    <div>
-                      <strong>Total Tokens:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total)}
-                    </div>
-                  ) : null}
-
-                  {prompt.metrics?.tokenUsage?.total ? (
-                    <div>
-                      <strong>Avg Tokens:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / numTests[idx])}
-                    </div>
-                  ) : null}
-                  {prompt.metrics?.totalLatencyMs ? (
-                    <div>
-                      <strong>Avg Latency:</strong>{' '}
-                      {Intl.NumberFormat(undefined, {
-                        maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / numTests[idx])}{' '}
-                      ms
-                    </div>
-                  ) : null}
-                  {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
-                    <div>
-                      <strong>Tokens/Sec:</strong>{' '}
-                      {prompt.metrics.totalLatencyMs > 0
-                        ? Intl.NumberFormat(undefined, {
-                            maximumFractionDigits: 0,
-                          }).format(
-                            prompt.metrics.tokenUsage.completion /
-                              (prompt.metrics.totalLatencyMs / 1000),
-                          )
-                        : '0'}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null;
-              const providerConfig = Array.isArray(config?.providers)
-                ? config.providers[idx]
-                : undefined;
-
-              let providerParts: string[] = [];
-              try {
-                if (prompt.provider && typeof prompt.provider === 'string') {
-                  providerParts = prompt.provider.split(':');
-                } else if (prompt.provider) {
-                  const providerObj = prompt.provider as any; // Use any for flexible typing
-                  const providerId =
-                    typeof providerObj === 'object' && providerObj !== null
-                      ? providerObj.id || JSON.stringify(providerObj)
-                      : String(providerObj);
-                  providerParts = [providerId];
-                }
-              } catch (error) {
-                console.error('Error parsing provider:', error);
-                providerParts = ['Error parsing provider'];
-              }
-
-              const providerDisplay = (
-                <Tooltip title={providerConfig ? <pre>{yaml.dump(providerConfig)}</pre> : ''}>
-                  {providerParts.length > 1 ? (
-                    <>
-                      {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                    </>
-                  ) : (
-                    <strong>{providerParts[0] || 'Unknown provider'}</strong>
-                  )}
-                </Tooltip>
-              );
-              return (
-                <div className="output-header">
-                  <div className="pills">
-                    {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
-                    <div className="summary">
-                      <div
-                        className={`highlight ${
-                          numGoodTests[idx] && numTests[idx]
-                            ? `success-${Math.round(((numGoodTests[idx] / numTests[idx]) * 100) / 20) * 20}`
-                            : 'success-0'
-                        }`}
-                      >
-                        <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{numTests[idx]} cases)
-                      </div>
-                    </div>
-                    {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
-                      <div className="summary error-pill" onClick={() => setFilterMode('errors')}>
-                        <div className="highlight fail">
-                          <strong>Errors:</strong> {prompt.metrics?.testErrorCount || 0}
-                        </div>
-                      </div>
-                    ) : null}
-                    {prompt.metrics?.namedScores &&
-                    Object.keys(prompt.metrics.namedScores).length > 0 ? (
-                      <CustomMetrics
-                        lookup={prompt.metrics.namedScores}
-                        counts={prompt.metrics.namedScoresCount}
-                        metricTotals={metricTotals}
-                        onSearchTextChange={onSearchTextChange}
-                        onMetricFilter={handleMetricFilter}
-                      />
-                    ) : null}
-                    {/* TODO(ian): Remove backwards compatibility for prompt.provider added 12/26/23 */}
-                  </div>
-                  <TableHeader
-                    className="prompt-container"
-                    text={prompt.label || prompt.display || prompt.raw}
-                    expandedText={prompt.raw}
-                    maxLength={maxTextLength}
-                    resourceId={prompt.id}
-                  />
-                  {details}
-                  {filterMode === 'failures' && head.prompts.length > 1 && (
-                    <FormControlLabel
-                      sx={{
-                        '& .MuiFormControlLabel-label': {
-                          fontSize: '0.75rem',
-                        },
-                      }}
-                      control={
-                        <Checkbox
-                          checked={isChecked}
-                          onChange={(event) =>
-                            onFailureFilterToggle(columnId, event.target.checked)
-                          }
-                        />
-                      }
-                      label="Show failures"
-                    />
-                  )}
-                </div>
-              );
-            },
+            header: () => (
+              <PromptColumnHeader
+                prompt={prompt}
+                idx={idx}
+                passRates={passRates}
+                failureFilter={failureFilter}
+                getMetrics={getMetrics}
+                showStats={showStats}
+                isRedteam={isRedteam}
+                numAsserts={numAsserts}
+                numGoodAsserts={numGoodAsserts}
+                testCounts={testCounts}
+                passingTestCounts={passingTestCounts}
+                metricTotals={metricTotals}
+                config={config}
+                filterMode={filterMode}
+                headPromptCount={head.prompts.length}
+                maxTextLength={maxTextLength}
+                onFailureFilterToggle={onFailureFilterToggle}
+                setFilterMode={setFilterMode}
+                setCustomMetricsDialogOpen={setCustomMetricsDialogOpen}
+              />
+            ),
             cell: (info: CellContext<EvaluateTableRow, EvaluateTableOutput>) => {
               const output = getOutput(info.row.index, idx);
               return output ? (
-                <EvalOutputCell
-                  output={output}
-                  maxTextLength={maxTextLength}
-                  rowIndex={info.row.index}
-                  promptIndex={idx}
-                  onRating={handleRating.bind(
-                    null,
-                    output.originalRowIndex ?? info.row.index,
-                    output.originalPromptIndex ?? idx,
-                    output.id,
-                  )}
-                  firstOutput={getFirstOutput(info.row.index)}
-                  showDiffs={filterMode === 'different' && visiblePromptCount > 1}
-                  searchText={debouncedSearchText}
-                  showStats={showStats}
-                />
+                <ErrorBoundary
+                  name={`EvalOutputCell-${info.row.index}-${idx}`}
+                  fallback={
+                    <div style={{ padding: '20px', color: 'red', fontSize: '12px' }}>
+                      Error loading cell
+                    </div>
+                  }
+                >
+                  <EvalOutputCell
+                    output={output}
+                    maxTextLength={maxTextLength}
+                    rowIndex={info.row.index}
+                    promptIndex={idx}
+                    onRating={handleRating.bind(
+                      null,
+                      output.originalRowIndex ?? info.row.index,
+                      output.originalPromptIndex ?? idx,
+                      output.id,
+                    )}
+                    firstOutput={getFirstOutput(info.row.index)}
+                    showDiffs={filterMode === 'different' && visiblePromptCount > 1}
+                    searchText={debouncedSearchText}
+                    showStats={showStats}
+                    evaluationId={evalId || undefined}
+                    testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                  />
+                </ErrorBoundary>
               ) : (
-                <div style={{ padding: '20px' }}>'Test still in progress...'</div>
+                <div className="cell" aria-label="No output for this prompt" />
               );
             },
+            size: PROMPT_COLUMN_SIZE_PX,
           }),
         ),
       }),
@@ -762,19 +1942,22 @@ function ResultsTable({
     failureFilter,
     filterMode,
     getFirstOutput,
+    getMetrics,
     getOutput,
     handleRating,
+    head,
     head.prompts,
     maxTextLength,
     metricTotals,
     numAsserts,
     numGoodAsserts,
-    numGoodTests,
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
-    selectedMetric,
-    handleMetricFilter,
+    filters.appliedCount,
+    passRates,
+    passingTestCounts,
+    testCounts,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -789,7 +1972,7 @@ function ResultsTable({
             <TruncatedText text={String(info.getValue())} maxLength={maxTextLength} />
           </div>
         ),
-        size: 50,
+        size: DESCRIPTION_COLUMN_SIZE_PX,
       };
     }
     return null;
@@ -800,11 +1983,12 @@ function ResultsTable({
     if (descriptionColumn) {
       cols.push(descriptionColumn);
     }
-    cols.push(...variableColumns, ...promptColumns);
+    cols.push(...variableColumns, ...transformDisplayVarsColumns, ...promptColumns);
     return cols;
-  }, [descriptionColumn, variableColumns, promptColumns]);
+  }, [descriptionColumn, variableColumns, transformDisplayVarsColumns, promptColumns]);
 
   const pageCount = Math.ceil(filteredResultsCount / pagination.pageSize);
+
   const reactTable = useReactTable({
     data: tableBody,
     columns,
@@ -814,28 +1998,31 @@ function ResultsTable({
     pageCount,
     state: {
       columnVisibility,
+      columnSizing,
       pagination,
     },
+    onColumnSizingChange: setColumnSizing,
+    enableColumnResizing: true,
   });
 
-  const { isCollapsed } = useScrollHandler();
   const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
   const clearRowIdFromUrl = React.useCallback(() => {
     const url = new URL(window.location.href);
     if (url.searchParams.has('rowId')) {
       url.searchParams.delete('rowId');
-      window.history.replaceState({}, '', url);
+      navigate({ pathname: url.pathname, search: url.search }, { replace: true });
     }
-  }, []);
+  }, [navigate]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const params = parseQueryParams(window.location.search);
     const rowId = params['rowId'];
 
-    if (rowId) {
+    if (rowId && Number.isInteger(Number(rowId))) {
       const parsedRowId = Number(rowId);
-      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, tableBody.length - 1));
+      const rowIndex = Math.max(0, Math.min(parsedRowId - 1, filteredResultsCount - 1));
 
       let hasScrolled = false;
 
@@ -905,244 +2092,283 @@ function ResultsTable({
         clearTimeout(timeoutId);
       };
     }
-  }, [pagination.pageIndex, pagination.pageSize, reactTable, tableBody.length]);
+  }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
+
+  // Use TanStack Table's built-in method to calculate total width of visible columns.
+  // This automatically handles both column visibility changes and user-initiated column resizing.
+  const tableWidth = reactTable.getTotalSize();
+
+  // Listen for scroll events on the table container and sync the header horizontally
+  const tableRef = useRef<HTMLDivElement>(null);
+  const theadRef = useRef<HTMLTableSectionElement>(null);
+
+  // Detect if there's minimal scroll room - in this case, disable height collapse
+  // to prevent jitter feedback loop (height change affects scroll position)
+  const [hasMinimalScrollRoom, setHasMinimalScrollRoom] = React.useState(false);
+
+  const checkScrollRoom = React.useCallback(() => {
+    const scrollRoom = document.documentElement.scrollHeight - window.innerHeight;
+    setHasMinimalScrollRoom(scrollRoom < 150);
+  }, []);
+
+  useEffect(() => {
+    checkScrollRoom();
+    window.addEventListener('resize', checkScrollRoom);
+    // Re-check after initial render
+    const timeoutId = setTimeout(checkScrollRoom, 100);
+
+    return () => {
+      window.removeEventListener('resize', checkScrollRoom);
+      clearTimeout(timeoutId);
+    };
+  }, [checkScrollRoom]);
+
+  // Re-check scroll room when content changes (filtered results count affects page height)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filteredResultsCount is intentionally used as a trigger to re-check scroll room when the number of rows changes
+  useEffect(() => {
+    checkScrollRoom();
+  }, [filteredResultsCount, checkScrollRoom]);
+
+  useEffect(() => {
+    if (!tableRef.current || !theadRef.current) {
+      return;
+    }
+
+    const container = tableRef.current;
+    let rafId: number | null = null;
+
+    const handleScroll = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      rafId = requestAnimationFrame(() => {
+        if (theadRef.current) {
+          const xScroll = container.scrollLeft;
+          theadRef.current.style.transform = `translateX(-${xScroll}px)`;
+        }
+      });
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+
+    // Initial sync
+    handleScroll();
+    // Keep in sync on resize
+    window.addEventListener('resize', handleScroll);
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      container.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
+
+  const [customMetricsDialogOpen, setCustomMetricsDialogOpen] = React.useState(false);
 
   return (
-    <div>
-      {isSearching && searchText && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: '60px',
-            right: '20px',
-            zIndex: 1000,
-            backgroundColor: 'rgba(25, 118, 210, 0.1)',
-            padding: '5px 10px',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <Typography variant="body2" color="primary">
-            Searching...
-          </Typography>
-        </Box>
-      )}
-
+    // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
+    // of this component. This ensures that the pagination footer is always pinned to the bottom
+    // of the viewport (because the parent container is a flexbox).
+    <>
       {filteredResultsCount === 0 &&
         !isFetching &&
-        (debouncedSearchText || filterMode !== 'all' || selectedMetric) && (
-          <Box
-            sx={{
-              padding: '20px',
-              textAlign: 'center',
-              backgroundColor: 'rgba(0, 0, 0, 0.03)',
-              borderRadius: '4px',
-              marginTop: '20px',
-              marginBottom: '20px',
-            }}
-          >
-            <Typography variant="body1">No results found for the current filters.</Typography>
-          </Box>
+        (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
+          <div className="p-5 text-center bg-black/[0.03] dark:bg-white/[0.03] rounded my-5">
+            <p>No results found for the current filters.</p>
+          </div>
+        )}
+      <div className="h-4" />
+      <ResultsTableHeader
+        reactTable={reactTable}
+        tableWidth={tableWidth}
+        maxTextLength={maxTextLength}
+        wordBreak={wordBreak}
+        theadRef={theadRef}
+        stickyHeader={stickyHeader}
+        setStickyHeader={setStickyHeader}
+        hasMinimalScrollRoom={hasMinimalScrollRoom}
+        zoom={zoom}
+      />
+      <div
+        id="results-table-container"
+        style={{
+          zoom,
+          borderTop: 'none',
+          // Grow vertically into any empty space; this applies when total number of evals is so few that the table otherwise
+          // won't extend to the bottom of the viewport.
+          flexGrow: 1,
+          minHeight: 0,
+          position: 'relative',
+        }}
+        ref={tableRef}
+      >
+        <div
+          className={cn(
+            'absolute inset-0 flex items-center justify-center bg-background/70 z-20 transition-opacity duration-300 backdrop-blur-[2px]',
+            isFetching ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
+          )}
+        >
+          <Spinner className="size-[60px]" />
+        </div>
+        <table
+          className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
+          style={{
+            wordBreak,
+            width: `${tableWidth}px`,
+          }}
+        >
+          <tbody>
+            {reactTable.getRowModel().rows.map((row) => (
+              <ResultsTableBodyRow
+                key={row.id}
+                row={row}
+                pageSize={pagination.pageSize}
+                headVars={head.vars}
+                injectVarName={config?.redteam?.injectVar || 'prompt'}
+                maxTextLength={maxTextLength}
+                lightboxOpen={lightboxOpen}
+                lightboxImage={lightboxImage}
+                toggleLightbox={toggleLightbox}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="pagination sticky bottom-0 z-10 flex shrink-0 items-center gap-4 flex-wrap justify-between bg-background border-t border-border w-screen px-4 -mx-4 shadow-lg py-2">
+        <div>
+          Showing{' '}
+          {filteredResultsCount === 0 ? (
+            <span className="font-semibold">0</span>
+          ) : (
+            <>
+              <span className="font-semibold">
+                {pagination.pageIndex * pagination.pageSize + 1}
+              </span>{' '}
+              to{' '}
+              <span className="font-semibold">
+                {Math.min((pagination.pageIndex + 1) * pagination.pageSize, filteredResultsCount)}
+              </span>{' '}
+              of <span className="font-semibold">{filteredResultsCount}</span>
+            </>
+          )}{' '}
+          results
+        </div>
+
+        {filteredResultsCount > 0 && (
+          <div>
+            Page{' '}
+            <span className="font-semibold">{reactTable.getState().pagination.pageIndex + 1}</span>{' '}
+            of <span className="font-semibold">{pageCount}</span>
+          </div>
         )}
 
-      <table
-        className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''}`}
-        style={{
-          wordBreak,
-        }}
-      >
-        <thead className={`${isCollapsed ? 'collapsed' : ''} ${stickyHeader ? 'sticky' : ''}`}>
-          {stickyHeader && isCollapsed && (
-            <div className="header-dismiss">
-              <IconButton
-                onClick={() => setStickyHeader(false)}
-                size="small"
-                sx={{ color: 'text.primary' }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </div>
-          )}
-          {reactTable.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="header">
-              {headerGroup.headers.map((header) => (
-                <th
-                  key={header.id}
-                  colSpan={header.colSpan}
-                  style={{
-                    width: header.getSize(),
-                  }}
-                >
-                  {header.isPlaceholder
-                    ? null
-                    : flexRender(header.column.columnDef.header, header.getContext())}
-                  <div
-                    onMouseDown={header.getResizeHandler()}
-                    onTouchStart={header.getResizeHandler()}
-                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                  />
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {reactTable.getRowModel().rows.map((row, rowIndex) => {
-            let colBorderDrawn = false;
-
-            return (
-              <tr key={row.id} id={`row-${row.index % pagination.pageSize}`}>
-                {row.getVisibleCells().map((cell) => {
-                  const isMetadataCol =
-                    cell.column.id.startsWith('Variable') || cell.column.id === 'description';
-                  const shouldDrawColBorder = !isMetadataCol && !colBorderDrawn;
-                  if (shouldDrawColBorder) {
-                    colBorderDrawn = true;
-                  }
-                  const shouldDrawRowBorder = rowIndex === 0 && !isMetadataCol;
-
-                  let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
-                  const value = cell.getValue();
-                  if (
-                    typeof value === 'string' &&
-                    (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
-                      value.match(/^\/[0-9A-Za-z+/]{4}.*/))
-                  ) {
-                    const imgSrc = value.startsWith('data:')
-                      ? value
-                      : `data:image/jpeg;base64,${value}`;
-                    cellContent = (
-                      <>
-                        <img
-                          src={imgSrc}
-                          alt="Base64 encoded image"
-                          style={{
-                            maxWidth: '100%',
-                            height: 'auto',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => toggleLightbox(imgSrc)}
-                        />
-                        {lightboxOpen && lightboxImage === imgSrc && (
-                          <div className="lightbox" onClick={() => toggleLightbox()}>
-                            <img
-                              src={lightboxImage}
-                              alt="Lightbox"
-                              style={{
-                                maxWidth: '90%',
-                                maxHeight: '90vh',
-                                objectFit: 'contain',
-                              }}
-                            />
-                          </div>
-                        )}
-                      </>
-                    );
-                  }
-
-                  return (
-                    <td
-                      key={cell.id}
-                      style={{
-                        width: cell.column.getSize(),
-                      }}
-                      className={`${isMetadataCol ? 'variable' : ''} ${
-                        shouldDrawRowBorder ? 'first-prompt-row' : ''
-                      } ${shouldDrawColBorder ? 'first-prompt-col' : 'second-prompt-column'}`}
-                    >
-                      {cellContent}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {pageCount > 1 && (
-        <Box
-          className="pagination"
-          mx={1}
-          sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
-        >
-          <Button
-            onClick={() => {
-              setPagination((prev) => ({
-                ...prev,
-                pageIndex: Math.max(prev.pageIndex - 1, 0),
-              }));
-              clearRowIdFromUrl();
-              window.scrollTo(0, 0);
-            }}
-            disabled={reactTable.getState().pagination.pageIndex === 0}
-            variant="contained"
-          >
-            Previous
-          </Button>
-          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            Page
-            <TextField
-              size="small"
-              type="number"
-              value={reactTable.getState().pagination.pageIndex + 1}
-              onChange={(e) => {
-                const page = e.target.value ? Number(e.target.value) - 1 : 0;
-                setPagination((prev) => ({
-                  ...prev,
-                  pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
-                }));
-                clearRowIdFromUrl();
-              }}
-              InputProps={{
-                style: { width: '60px', textAlign: 'center' },
-              }}
-              variant="outlined"
-            />
-            <span>of {pageCount}</span>
-          </Typography>
-
-          <Button
-            onClick={() => {
-              setPagination((prev) => ({
-                ...prev,
-                pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
-              }));
-              clearRowIdFromUrl();
-              window.scrollTo(0, 0);
-            }}
-            disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
-            variant="contained"
-          >
-            Next
-          </Button>
-          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <div className="flex items-center gap-2">
+          {/* PAGE SIZE SELECTOR */}
+          <div className="flex items-center gap-2">
+            <span>Results per page:</span>
             <Select
-              value={pagination.pageSize}
-              onChange={(e) => {
+              value={String(pagination.pageSize)}
+              onValueChange={(value) => {
                 setPagination((prev) => ({
                   ...prev,
-                  pageSize: Number(e.target.value),
+                  pageSize: Number(value),
                 }));
                 window.scrollTo(0, 0);
               }}
-              displayEmpty
-              inputProps={{ 'aria-label': 'Results per page' }}
-              size="small"
-              sx={{ m: 1, minWidth: 80 }}
+              disabled={filteredResultsCount <= 10}
             >
-              <MenuItem value={10}>10</MenuItem>
-              <MenuItem value={50}>50</MenuItem>
-              <MenuItem value={100}>100</MenuItem>
-              <MenuItem value={500}>500</MenuItem>
-              <MenuItem value={1000}>1000</MenuItem>
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="50" disabled={filteredResultsCount <= 10}>
+                  50
+                </SelectItem>
+                <SelectItem value="100" disabled={filteredResultsCount <= 50}>
+                  100
+                </SelectItem>
+                <SelectItem value="500" disabled={filteredResultsCount <= 100}>
+                  500
+                </SelectItem>
+                <SelectItem value="1000" disabled={filteredResultsCount <= 500}>
+                  1000
+                </SelectItem>
+              </SelectContent>
             </Select>
-            <span>results per page</span>
-          </Typography>
-        </Box>
-      )}
-    </div>
+          </div>
+
+          {/* PAGE NAVIGATOR */}
+          <div
+            className={cn(
+              'flex items-center gap-2',
+              pageCount <= 1 && 'opacity-50 pointer-events-none',
+            )}
+          >
+            <span>Go to:</span>
+            <NumberInput
+              value={pagination.pageIndex + 1}
+              onChange={(v) => {
+                const page = v === undefined ? null : v - 1;
+                if (page !== null && page >= 0 && page < pageCount) {
+                  setPagination((prev) => ({
+                    ...prev,
+                    pageIndex: Math.min(Math.max(page, 0), pageCount - 1),
+                  }));
+                  clearRowIdFromUrl();
+                }
+              }}
+              className="w-[60px] h-8 text-center"
+              min={1}
+              max={pageCount || 1}
+              disabled={pageCount === 1}
+            />
+          </div>
+
+          {/* PAGE NAVIGATION BUTTONS */}
+          <div className="flex">
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-r-none"
+              onClick={() => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: Math.max(prev.pageIndex - 1, 0),
+                }));
+                clearRowIdFromUrl();
+                window.scrollTo(0, 0);
+              }}
+              disabled={reactTable.getState().pagination.pageIndex === 0}
+            >
+              <ArrowLeft className="size-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="rounded-l-none -ml-px"
+              onClick={() => {
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: Math.min(prev.pageIndex + 1, pageCount - 1),
+                }));
+                clearRowIdFromUrl();
+                window.scrollTo(0, 0);
+              }}
+              disabled={reactTable.getState().pagination.pageIndex + 1 >= pageCount}
+            >
+              <ArrowRight className="size-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+      <CustomMetricsDialog
+        open={customMetricsDialogOpen}
+        onClose={() => setCustomMetricsDialogOpen(false)}
+      />
+    </>
   );
 }
 

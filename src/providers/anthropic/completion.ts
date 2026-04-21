@@ -1,10 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvString, getEnvInt, getEnvFloat } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider } from './generic';
+
+import type { EnvOverrides } from '../../types/env';
+import type { ProviderResponse } from '../../types/index';
 import type { AnthropicCompletionOptions } from './types';
 
 export class AnthropicCompletionProvider extends AnthropicGenericProvider {
@@ -49,12 +51,12 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
       model: this.modelName,
       prompt: `${Anthropic.HUMAN_PROMPT} ${prompt} ${Anthropic.AI_PROMPT}`,
       max_tokens_to_sample:
-        this.config?.max_tokens_to_sample || getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
+        this.config?.max_tokens_to_sample ?? getEnvInt('ANTHROPIC_MAX_TOKENS', 1024),
       temperature: this.config.temperature ?? getEnvFloat('ANTHROPIC_TEMPERATURE', 0),
       stop_sequences: stop,
     };
 
-    logger.debug(`Calling Anthropic API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Anthropic API', { params });
 
     const cache = await getCache();
     const cacheKey = `anthropic:${JSON.stringify(params)}`;
@@ -66,7 +68,8 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
           output: JSON.parse(cachedResponse as string),
-          tokenUsage: {},
+          tokenUsage: createEmptyTokenUsage(),
+          cached: true,
         };
       }
     }
@@ -79,7 +82,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAnthropic API response: ${JSON.stringify(response)}`);
+    logger.debug('\tAnthropic API response', { response });
     if (isCacheEnabled()) {
       try {
         await cache.set(cacheKey, JSON.stringify(response.completion));
@@ -90,7 +93,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     try {
       return {
         output: response.completion,
-        tokenUsage: {}, // TODO: add token usage once Anthropic API supports it
+        tokenUsage: createEmptyTokenUsage(), // Legacy Completion API doesn't expose token usage in its response type
       };
     } catch (err) {
       return {

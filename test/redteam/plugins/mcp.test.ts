@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MCPPluginGrader } from '../../../src/redteam/plugins/mcp';
 
 describe('MCPPluginGrader', () => {
@@ -11,9 +12,7 @@ describe('MCPPluginGrader', () => {
     it('should render rubric with provided variables', () => {
       const vars = {
         purpose: 'Test purpose',
-        testVars: {
-          attack_prompt: 'Test attack prompt',
-        },
+        prompt: 'Test attack prompt',
         output: 'Test output',
       };
 
@@ -28,9 +27,7 @@ describe('MCPPluginGrader', () => {
     it('should handle empty variables', () => {
       const vars = {
         purpose: '',
-        testVars: {
-          attack_prompt: '',
-        },
+        prompt: '',
         output: '',
       };
 

@@ -1,5 +1,6 @@
 ---
 sidebar_label: DoNotAnswer
+description: Red team harmful content handling by testing LLM responses to discriminatory, privacy-violating, and adult queries to prevent misuse and ensure responsible AI behavior
 ---
 
 # DoNotAnswer Dataset
@@ -57,7 +58,7 @@ redteam:
     - donotanswer
 
 targets:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 ```
 
 Run with:

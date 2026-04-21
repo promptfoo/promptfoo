@@ -1,35 +1,48 @@
-import { renderHook, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsState } from './useSettingsState';
 
-const mockStore = {
-  maxTextLength: 500,
-  setMaxTextLength: vi.fn(),
-  wordBreak: 'break-word',
-  setWordBreak: vi.fn(),
-  showInferenceDetails: true,
-  setShowInferenceDetails: vi.fn(),
-  renderMarkdown: true,
-  setRenderMarkdown: vi.fn(),
-  prettifyJson: true,
-  setPrettifyJson: vi.fn(),
-  showPrompts: false,
-  setShowPrompts: vi.fn(),
-  showPassFail: true,
-  setShowPassFail: vi.fn(),
-  stickyHeader: true,
-  setStickyHeader: vi.fn(),
-  maxImageWidth: 500,
-  setMaxImageWidth: vi.fn(),
-  maxImageHeight: 300,
-  setMaxImageHeight: vi.fn(),
-};
+const { mockStoreRef } = vi.hoisted(() => ({
+  mockStoreRef: { current: undefined as unknown },
+}));
+
+vi.mock('../../store', () => ({
+  useResultsViewSettingsStore: () => mockStoreRef.current,
+}));
+
+function createMockStore() {
+  return {
+    maxTextLength: 500,
+    setMaxTextLength: vi.fn(),
+    wordBreak: 'break-word',
+    setWordBreak: vi.fn(),
+    showInferenceDetails: true,
+    setShowInferenceDetails: vi.fn(),
+    renderMarkdown: true,
+    setRenderMarkdown: vi.fn(),
+    prettifyJson: true,
+    setPrettifyJson: vi.fn(),
+    showPrompts: false,
+    setShowPrompts: vi.fn(),
+    showPassFail: true,
+    setShowPassFail: vi.fn(),
+    showPassReasons: false,
+    setShowPassReasons: vi.fn(),
+    stickyHeader: true,
+    setStickyHeader: vi.fn(),
+    maxImageWidth: 500,
+    setMaxImageWidth: vi.fn(),
+    maxImageHeight: 300,
+    setMaxImageHeight: vi.fn(),
+  };
+}
 
 describe('useSettingsState', () => {
+  let mockStore: ReturnType<typeof createMockStore>;
+
   beforeEach(() => {
-    vi.mock('../../store', () => ({
-      useResultsViewSettingsStore: () => mockStore,
-    }));
+    mockStore = createMockStore();
+    mockStoreRef.current = mockStore;
     vi.clearAllMocks();
   });
 
@@ -101,6 +114,7 @@ describe('useSettingsState', () => {
     expect(mockStore.setPrettifyJson).toHaveBeenCalledWith(true);
     expect(mockStore.setShowPrompts).toHaveBeenCalledWith(false);
     expect(mockStore.setShowPassFail).toHaveBeenCalledWith(true);
+    expect(mockStore.setShowPassReasons).toHaveBeenCalledWith(false);
     expect(mockStore.setShowInferenceDetails).toHaveBeenCalledWith(true);
     expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(500);
     expect(mockStore.setMaxImageWidth).toHaveBeenCalledWith(500);

@@ -55,16 +55,12 @@
       "indexes": {
         "configs_created_at_idx": {
           "name": "configs_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         },
         "configs_type_idx": {
           "name": "configs_type_idx",
-          "columns": [
-            "type"
-          ],
+          "columns": ["type"],
           "isUnique": false
         }
       },
@@ -102,9 +98,7 @@
       "indexes": {
         "datasets_created_at_idx": {
           "name": "datasets_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         }
       },
@@ -263,65 +257,47 @@
       "indexes": {
         "eval_result_eval_id_idx": {
           "name": "eval_result_eval_id_idx",
-          "columns": [
-            "eval_id"
-          ],
+          "columns": ["eval_id"],
           "isUnique": false
         },
         "eval_result_test_idx": {
           "name": "eval_result_test_idx",
-          "columns": [
-            "test_idx"
-          ],
+          "columns": ["test_idx"],
           "isUnique": false
         },
         "eval_result_response_idx": {
           "name": "eval_result_response_idx",
-          "columns": [
-            "response"
-          ],
+          "columns": ["response"],
           "isUnique": false
         },
         "eval_result_grading_result_reason_idx": {
           "name": "eval_result_grading_result_reason_idx",
-          "columns": [
-            "json_extract(\"grading_result\", '$.reason')"
-          ],
+          "columns": ["json_extract(\"grading_result\", '$.reason')"],
           "isUnique": false
         },
         "eval_result_grading_result_comment_idx": {
           "name": "eval_result_grading_result_comment_idx",
-          "columns": [
-            "json_extract(\"grading_result\", '$.comment')"
-          ],
+          "columns": ["json_extract(\"grading_result\", '$.comment')"],
           "isUnique": false
         },
         "eval_result_test_case_vars_idx": {
           "name": "eval_result_test_case_vars_idx",
-          "columns": [
-            "json_extract(\"test_case\", '$.vars')"
-          ],
+          "columns": ["json_extract(\"test_case\", '$.vars')"],
           "isUnique": false
         },
         "eval_result_test_case_metadata_idx": {
           "name": "eval_result_test_case_metadata_idx",
-          "columns": [
-            "json_extract(\"metadata\", '$')"
-          ],
+          "columns": ["json_extract(\"metadata\", '$')"],
           "isUnique": false
         },
         "eval_result_named_scores_idx": {
           "name": "eval_result_named_scores_idx",
-          "columns": [
-            "json_extract(\"named_scores\", '$')"
-          ],
+          "columns": ["json_extract(\"named_scores\", '$')"],
           "isUnique": false
         },
         "eval_result_metadata_idx": {
           "name": "eval_result_metadata_idx",
-          "columns": [
-            "json_extract(\"metadata\", '$')"
-          ],
+          "columns": ["json_extract(\"metadata\", '$')"],
           "isUnique": false
         }
       },
@@ -330,12 +306,8 @@
           "name": "eval_results_eval_id_evals_id_fk",
           "tableFrom": "eval_results",
           "tableTo": "evals",
-          "columnsFrom": [
-            "eval_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["eval_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -343,12 +315,8 @@
           "name": "eval_results_prompt_id_prompts_id_fk",
           "tableFrom": "eval_results",
           "tableTo": "prompts",
-          "columnsFrom": [
-            "prompt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["prompt_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -421,16 +389,12 @@
       "indexes": {
         "evals_created_at_idx": {
           "name": "evals_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         },
         "evals_author_idx": {
           "name": "evals_author_idx",
-          "columns": [
-            "author"
-          ],
+          "columns": ["author"],
           "isUnique": false
         }
       },
@@ -460,16 +424,12 @@
       "indexes": {
         "evals_to_datasets_eval_id_idx": {
           "name": "evals_to_datasets_eval_id_idx",
-          "columns": [
-            "eval_id"
-          ],
+          "columns": ["eval_id"],
           "isUnique": false
         },
         "evals_to_datasets_dataset_id_idx": {
           "name": "evals_to_datasets_dataset_id_idx",
-          "columns": [
-            "dataset_id"
-          ],
+          "columns": ["dataset_id"],
           "isUnique": false
         }
       },
@@ -478,12 +438,8 @@
           "name": "evals_to_datasets_eval_id_evals_id_fk",
           "tableFrom": "evals_to_datasets",
           "tableTo": "evals",
-          "columnsFrom": [
-            "eval_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["eval_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -491,22 +447,15 @@
           "name": "evals_to_datasets_dataset_id_datasets_id_fk",
           "tableFrom": "evals_to_datasets",
           "tableTo": "datasets",
-          "columnsFrom": [
-            "dataset_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["dataset_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "evals_to_datasets_eval_id_dataset_id_pk": {
-          "columns": [
-            "eval_id",
-            "dataset_id"
-          ],
+          "columns": ["eval_id", "dataset_id"],
           "name": "evals_to_datasets_eval_id_dataset_id_pk"
         }
       },
@@ -534,16 +483,12 @@
       "indexes": {
         "evals_to_prompts_eval_id_idx": {
           "name": "evals_to_prompts_eval_id_idx",
-          "columns": [
-            "eval_id"
-          ],
+          "columns": ["eval_id"],
           "isUnique": false
         },
         "evals_to_prompts_prompt_id_idx": {
           "name": "evals_to_prompts_prompt_id_idx",
-          "columns": [
-            "prompt_id"
-          ],
+          "columns": ["prompt_id"],
           "isUnique": false
         }
       },
@@ -552,12 +497,8 @@
           "name": "evals_to_prompts_eval_id_evals_id_fk",
           "tableFrom": "evals_to_prompts",
           "tableTo": "evals",
-          "columnsFrom": [
-            "eval_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["eval_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -565,22 +506,15 @@
           "name": "evals_to_prompts_prompt_id_prompts_id_fk",
           "tableFrom": "evals_to_prompts",
           "tableTo": "prompts",
-          "columnsFrom": [
-            "prompt_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["prompt_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "evals_to_prompts_eval_id_prompt_id_pk": {
-          "columns": [
-            "eval_id",
-            "prompt_id"
-          ],
+          "columns": ["eval_id", "prompt_id"],
           "name": "evals_to_prompts_eval_id_prompt_id_pk"
         }
       },
@@ -608,16 +542,12 @@
       "indexes": {
         "evals_to_tags_eval_id_idx": {
           "name": "evals_to_tags_eval_id_idx",
-          "columns": [
-            "eval_id"
-          ],
+          "columns": ["eval_id"],
           "isUnique": false
         },
         "evals_to_tags_tag_id_idx": {
           "name": "evals_to_tags_tag_id_idx",
-          "columns": [
-            "tag_id"
-          ],
+          "columns": ["tag_id"],
           "isUnique": false
         }
       },
@@ -626,12 +556,8 @@
           "name": "evals_to_tags_eval_id_evals_id_fk",
           "tableFrom": "evals_to_tags",
           "tableTo": "evals",
-          "columnsFrom": [
-            "eval_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["eval_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -639,22 +565,15 @@
           "name": "evals_to_tags_tag_id_tags_id_fk",
           "tableFrom": "evals_to_tags",
           "tableTo": "tags",
-          "columnsFrom": [
-            "tag_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tag_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
         "evals_to_tags_eval_id_tag_id_pk": {
-          "columns": [
-            "eval_id",
-            "tag_id"
-          ],
+          "columns": ["eval_id", "tag_id"],
           "name": "evals_to_tags_eval_id_tag_id_pk"
         }
       },
@@ -690,9 +609,7 @@
       "indexes": {
         "prompts_created_at_idx": {
           "name": "prompts_created_at_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         }
       },
@@ -729,17 +646,12 @@
       "indexes": {
         "tags_name_idx": {
           "name": "tags_name_idx",
-          "columns": [
-            "name"
-          ],
+          "columns": ["name"],
           "isUnique": false
         },
         "tags_name_value_unique": {
           "name": "tags_name_value_unique",
-          "columns": [
-            "name",
-            "value"
-          ],
+          "columns": ["name", "value"],
           "isUnique": true
         }
       },

@@ -1,5 +1,6 @@
-import type { ProviderOptions } from '../types/providers';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+
+import type { ProviderOptions } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 type JfrogMlCompletionOptions = OpenAiCompletionOptions & {

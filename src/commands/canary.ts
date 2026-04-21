@@ -1,12 +1,19 @@
 import chalk from 'chalk';
-import type { Command } from 'commander';
-import { generateShortProviderHash } from '../canary';
+import { generateShortProviderHash, getProviderId } from '../canary';
 import logger from '../logger';
+import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import {
+  getRemoteGenerationUrl,
+  neverGenerateRemoteForRegularEvals,
+} from '../redteam/remoteGeneration';
 import telemetry from '../telemetry';
-import type { ApiProvider, ProviderOptions, UnifiedConfig } from '../types';
 import { setupEnv } from '../util';
-import { makeRequest } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
+import { fetchWithProxy } from '../util/fetch/index';
+import { safeJsonStringify } from '../util/json';
+import type { Command } from 'commander';
+
+import type { ApiProvider, ProviderResponse, UnifiedConfig } from '../types';
 
 // Types for server responses
 interface CanaryTokensResponse {
@@ -14,104 +21,298 @@ interface CanaryTokensResponse {
 }
 
 interface ProbesResponse {
-  status: number;
-  statusText: string;
   probes: { type: string; message: string }[];
   detectionPatterns: { pattern: string; confidence?: number; type: string; description?: string }[];
+}
+
+type CanaryProbe = ProbesResponse['probes'][number];
+type DetectionPattern = ProbesResponse['detectionPatterns'][number];
+
+interface CanarySendResult {
+  success: boolean;
+  hash: string;
+  tokens: string[];
+}
+
+interface CanaryMatch {
+  pattern: string;
+  confidence: number;
+  context: string;
+  description: string;
+}
+
+interface CanaryCheckResult {
+  detected: boolean;
+  hash: string;
+  matches?: CanaryMatch[];
+  confidence?: number;
+}
+
+function getConfigPaths(configPath: string | undefined, defaultConfigPath: string | undefined) {
+  if (configPath) {
+    return [configPath];
+  }
+  return defaultConfigPath ? [defaultConfigPath] : undefined;
+}
+
+async function requestCanaryTask<T>(payload: Record<string, unknown>): Promise<T> {
+  if (neverGenerateRemoteForRegularEvals()) {
+    throw new Error(
+      'Canary generation requires remote generation. Unset PROMPTFOO_DISABLE_REMOTE_GENERATION or set PROMPTFOO_REMOTE_GENERATION_URL to a compatible endpoint.',
+    );
+  }
+
+  const response = await fetchWithProxy(
+    getRemoteGenerationUrl(),
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+    AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  );
+
+  if (!response.ok) {
+    const errorMessage = await response.text();
+    throw new Error(
+      `Remote canary task failed with status ${response.status}: ${response.statusText} ${errorMessage}`,
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
+function responseValueToString(value: unknown): string {
+  if (value == null) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return safeJsonStringify(value) ?? '';
+}
+
+export function extractResponseContent(result: unknown): string {
+  if (typeof result === 'string') {
+    return result;
+  }
+
+  if (!result || typeof result !== 'object') {
+    return '';
+  }
+
+  const response = result as ProviderResponse & {
+    choices?: { message?: { content?: unknown }; text?: unknown }[];
+    content?: unknown;
+    message?: unknown;
+  };
+
+  if (response.output != null) {
+    return responseValueToString(response.output);
+  }
+  if (response.message != null) {
+    return responseValueToString(response.message);
+  }
+  if (response.content != null) {
+    return responseValueToString(response.content);
+  }
+  if (Array.isArray(response.choices) && response.choices.length > 0) {
+    const [choice] = response.choices;
+    return responseValueToString(choice.message?.content ?? choice.text);
+  }
+
+  return '';
+}
+
+function selectProbes(probes: CanaryProbe[], checkMode: string): CanaryProbe[] {
+  if (checkMode !== 'auto') {
+    const probesForMode = probes.filter((probe) => probe.type === checkMode);
+    return (probesForMode.length > 0 ? probesForMode : probes).slice(0, 2);
+  }
+
+  const probesByType = probes.reduce<Record<string, CanaryProbe[]>>((acc, probe) => {
+    acc[probe.type] ??= [];
+    acc[probe.type].push(probe);
+    return acc;
+  }, {});
+
+  const selected = ['direct', 'fact', 'semantic', 'general']
+    .map((type) => probesByType[type]?.[0])
+    .filter((probe): probe is CanaryProbe => Boolean(probe));
+
+  return selected.length >= 2 ? selected : probes.slice(0, 2);
+}
+
+function getMatchContext(content: string, position: number, length: number): string {
+  const start = Math.max(0, position - 40);
+  const end = Math.min(content.length, position + length + 40);
+  return content.substring(start, end);
+}
+
+function scanDetectionPattern(content: string, pattern: DetectionPattern): CanaryMatch[] {
+  const patternText = pattern.pattern;
+  const confidence = pattern.confidence || 0.5;
+
+  if (pattern.type === 'exact' && content.includes(patternText)) {
+    return [
+      {
+        pattern: patternText,
+        confidence,
+        context: getMatchContext(content, content.indexOf(patternText), patternText.length),
+        description: pattern.description || 'Exact match',
+      },
+    ];
+  }
+
+  if (pattern.type === 'partial') {
+    const lowerContent = content.toLowerCase();
+    const lowerPattern = patternText.toLowerCase();
+    if (lowerContent.includes(lowerPattern)) {
+      return [
+        {
+          pattern: patternText,
+          confidence: confidence * 0.8,
+          context: getMatchContext(
+            content,
+            lowerContent.indexOf(lowerPattern),
+            lowerPattern.length,
+          ),
+          description: pattern.description || 'Partial match',
+        },
+      ];
+    }
+  }
+
+  if (pattern.type === 'semantic') {
+    const matchedWord = patternText
+      .split(/\s+/)
+      .filter((word) => word.length > 4)
+      .find((word) => content.toLowerCase().includes(word.toLowerCase()));
+
+    if (matchedWord) {
+      return [
+        {
+          pattern: matchedWord,
+          confidence: confidence * 0.6,
+          context: getMatchContext(
+            content,
+            content.toLowerCase().indexOf(matchedWord.toLowerCase()),
+            matchedWord.length,
+          ),
+          description: pattern.description || 'Semantic match',
+        },
+      ];
+    }
+  }
+
+  return [];
+}
+
+function dedupeMatches(matches: CanaryMatch[]): CanaryMatch[] {
+  const seenPatterns = new Set<string>();
+  return matches.filter((match) => {
+    const key = `${match.pattern}:${match.context}`;
+    if (seenPatterns.has(key)) {
+      return false;
+    }
+    seenPatterns.add(key);
+    return true;
+  });
+}
+
+function findDetectionMatches(content: string, patterns: DetectionPattern[]): CanaryMatch[] {
+  return dedupeMatches(patterns.flatMap((pattern) => scanDetectionPattern(content, pattern)));
 }
 
 /**
  * Sends a canary to a single provider
  */
-async function sendCanaryToSingleProvider(
-  provider: ApiProvider | ProviderOptions,
+export async function sendCanaryToSingleProvider(
+  provider: ApiProvider,
   customMessage?: string,
   repeat: number = 1,
-) {
+): Promise<CanarySendResult> {
   const providerHash = generateShortProviderHash(provider);
+  const providerId = getProviderId(provider);
 
   logger.debug(`Generated provider hash: ${providerHash}`);
 
-  // Get canary payload from server
-  const response = (await makeRequest('/task', 'POST', {
-    task: 'generate-canary',
-    hash: providerHash,
-  })) as unknown as CanaryTokensResponse;
+  let canaryTokensToSend: string[];
+  if (customMessage === undefined) {
+    const response = await requestCanaryTask<CanaryTokensResponse>({
+      task: 'generate-canary',
+      hash: providerHash,
+    });
 
-  if (!response || !response.canaryTokens || response.canaryTokens.length === 0) {
-    throw new Error('Failed to generate canary tokens from server');
-  }
+    if (!response.canaryTokens || response.canaryTokens.length === 0) {
+      throw new Error('Failed to generate canary tokens from server');
+    }
 
-  // Get provider ID for display
-  const providerId =
-    'id' in provider && typeof provider.id === 'function' ? provider.id() : provider.id;
-
-  // Display canary tokens to user
-  logger.info(
-    `🔑 Generated ${response.canaryTokens.length} canary variations for provider: ${chalk.bold(providerId)}`,
-  );
-
-  // Pick canary tokens to send
-  let canaryTokensToSend: string[] = [];
-
-  // If user provided a custom message, use that
-  if (customMessage) {
-    canaryTokensToSend.push(customMessage);
-  } else {
-    // Otherwise use server-generated tokens
-    // Use all tokens if repeat > 1, otherwise just use the first token
+    logger.info(
+      `🔑 Generated ${response.canaryTokens.length} canary variations for provider: ${chalk.bold(providerId)}`,
+    );
     canaryTokensToSend =
       repeat > 1
         ? response.canaryTokens.slice(0, Math.min(repeat, response.canaryTokens.length))
         : [response.canaryTokens[0]];
-  }
-
-  // Send the canary tokens to the provider
-  if ('callApi' in provider) {
-    for (const token of canaryTokensToSend) {
-      logger.debug(
-        `Sending canary token: ${token.substring(0, 30)}${token.length > 30 ? '...' : ''}`,
-      );
-      const _result = await provider.callApi(token);
-    }
-
-    logger.info(`🔑 Canary hash for future reference: ${chalk.bold(providerHash)}`);
-
-    return {
-      success: true,
-      hash: providerHash,
-      tokens: canaryTokensToSend,
-    };
   } else {
-    throw new Error('Provider does not support sending messages');
+    canaryTokensToSend = Array.from({ length: repeat }, () => customMessage);
+    logger.info(
+      `🔑 Sending ${repeat} custom canary ${repeat === 1 ? 'message' : 'messages'} to provider: ${chalk.bold(providerId)}`,
+    );
   }
+
+  for (const token of canaryTokensToSend) {
+    logger.debug(
+      `Sending canary token: ${token.substring(0, 30)}${token.length > 30 ? '...' : ''}`,
+    );
+    const result = await provider.callApi(token);
+    if (result.error) {
+      throw new Error(result.error);
+    }
+  }
+
+  logger.info(`🔑 Canary hash for future reference: ${chalk.bold(providerHash)}`);
+
+  return {
+    success: true,
+    hash: providerHash,
+    tokens: canaryTokensToSend,
+  };
 }
 
 /**
  * Sends a canary to all providers from config
  */
 async function sendCanary(
-  providers: (ApiProvider | ProviderOptions)[],
+  providers: ApiProvider[],
   customMessage?: string,
   repeat: number = 1,
-) {
+): Promise<CanarySendResult[]> {
   if (providers.length === 0) {
     throw new Error('No providers found in config file');
   }
 
   logger.info(`Sending canaries to ${providers.length} providers from config...`);
   const results = [];
+  let failedCount = 0;
   for (const provider of providers) {
-    const providerId =
-      'id' in provider && typeof provider.id === 'function' ? provider.id() : provider.id;
+    const providerId = getProviderId(provider);
 
     logger.info(`Sending canary to provider: ${chalk.bold(String(providerId))}`);
     try {
       const result = await sendCanaryToSingleProvider(provider, customMessage, repeat);
       results.push(result);
     } catch (error) {
+      failedCount += 1;
       logger.error(`Failed to send canary to provider ${providerId}: ${(error as Error).message}`);
     }
+  }
+  if (failedCount > 0) {
+    throw new Error(`Failed to send canaries to ${failedCount} of ${providers.length} providers`);
   }
   return results;
 }
@@ -119,275 +320,126 @@ async function sendCanary(
 /**
  * Checks if a specific provider has leaked the canary
  */
-async function checkCanaryForSingleProvider(
-  provider: ApiProvider | ProviderOptions,
+export async function checkCanaryForSingleProvider(
+  provider: ApiProvider,
   checkMode: string = 'auto',
-) {
+): Promise<CanaryCheckResult> {
   const providerHash = generateShortProviderHash(provider);
 
   logger.debug(`Generated provider hash for checking: ${providerHash}`);
 
-  // Get probe messages and detection patterns from server
-  const response = (await makeRequest('/task', 'POST', {
+  const response = await requestCanaryTask<ProbesResponse>({
     task: 'generate-canary-probes',
     hash: providerHash,
-  })) as unknown as ProbesResponse;
+  });
 
   if (!response || !response.probes || !response.detectionPatterns) {
-    throw new Error(
-      `Failed to generate canary check probes from server: HTTP ${response.status} ${response.statusText} ${JSON.stringify(response)}`,
-    );
+    throw new Error(`Failed to generate canary check probes from server`);
   }
 
-  // Select probes based on check mode
-  let probesToUse: { type: string; message: string }[] = [];
-  if (checkMode === 'auto') {
-    // Use a mix of probe types in auto mode
-    const probesByType: { [key: string]: { type: string; message: string }[] } = {};
-    response.probes.forEach((probe: { type: string; message: string }) => {
-      if (!probesByType[probe.type]) {
-        probesByType[probe.type] = [];
-      }
-      probesByType[probe.type].push(probe);
-    });
-
-    // Take one of each type if available
-    for (const type of ['direct', 'fact', 'semantic', 'general']) {
-      if (probesByType[type] && probesByType[type].length > 0) {
-        probesToUse.push(probesByType[type][0]);
-      }
-    }
-
-    // If we don't have enough probes, add more
-    if (probesToUse.length < 2 && response.probes.length > 0) {
-      probesToUse = response.probes.slice(0, 2);
-    }
-  } else {
-    // Filter probes by the requested type
-    probesToUse = response.probes.filter(
-      (probe: { type: string; message: string }) => probe.type === checkMode,
-    );
-
-    // If no probes of the requested type, use all probes
-    if (probesToUse.length === 0) {
-      probesToUse = response.probes;
-    }
-
-    // Limit to max 2 probes for efficiency
-    probesToUse = probesToUse.slice(0, 2);
-  }
+  const probesToUse = selectProbes(response.probes, checkMode);
 
   logger.info(`Using ${probesToUse.length} probe messages to check for canary leakage`);
 
-  // Send probes to the provider and analyze responses locally
-  if ('callApi' in provider) {
-    const detectionPatterns = response.detectionPatterns;
-    const detectedMatches: {
-      pattern: string;
-      confidence: number;
-      context: string;
-      description: string;
-    }[] = [];
-    let highestConfidence = 0;
+  const detectedMatches: CanaryMatch[] = [];
 
-    for (const probe of probesToUse) {
-      logger.debug(`Sending probe: ${probe.message.substring(0, 50)}...`);
-      const result = await provider.callApi(probe.message);
-
-      // Extract the content from the response
-      let responseContent = '';
-      if (result && typeof result === 'object') {
-        if ('message' in result) {
-          responseContent = (result as any).message;
-        } else if (
-          'choices' in result &&
-          Array.isArray((result as any).choices) &&
-          (result as any).choices.length > 0
-        ) {
-          const choice = (result as any).choices[0];
-          if (choice.message && choice.message.content) {
-            responseContent = choice.message.content;
-          }
-        } else if ('content' in result) {
-          responseContent = (result as any).content;
-        } else if (typeof result === 'string') {
-          responseContent = result as string;
-        }
-      } else if (typeof result === 'string') {
-        responseContent = result;
-      }
-
-      logger.debug(`Got response (${responseContent.length} chars)`);
-
-      // Check for matches against detection patterns
-      for (const pattern of detectionPatterns) {
-        const patternText = pattern.pattern;
-        const confidence = pattern.confidence || 0.5;
-
-        if (pattern.type === 'exact') {
-          // Check for exact matches
-          if (responseContent.includes(patternText)) {
-            const position = responseContent.indexOf(patternText);
-            const start = Math.max(0, position - 40);
-            const end = Math.min(responseContent.length, position + patternText.length + 40);
-            const context = responseContent.substring(start, end);
-
-            detectedMatches.push({
-              pattern: patternText,
-              confidence,
-              context,
-              description: pattern.description || 'Exact match',
-            });
-
-            if (confidence > highestConfidence) {
-              highestConfidence = confidence;
-            }
-          }
-        } else if (pattern.type === 'partial') {
-          // Check for partial matches (case insensitive)
-          const lowerContent = responseContent.toLowerCase();
-          const lowerPattern = patternText.toLowerCase();
-
-          if (lowerContent.includes(lowerPattern)) {
-            const position = lowerContent.indexOf(lowerPattern);
-            const start = Math.max(0, position - 40);
-            const end = Math.min(lowerContent.length, position + lowerPattern.length + 40);
-            const context = responseContent.substring(start, end);
-
-            detectedMatches.push({
-              pattern: patternText,
-              confidence: confidence * 0.8, // Slightly lower confidence for partial matches
-              context,
-              description: pattern.description || 'Partial match',
-            });
-
-            if (confidence * 0.8 > highestConfidence) {
-              highestConfidence = confidence * 0.8;
-            }
-          }
-        } else if (pattern.type === 'semantic') {
-          // For semantic matches, we use a simplified approach
-          // looking for key phrases or words that might indicate the semantic content
-          const words = patternText.split(/\s+/).filter((w: string) => w.length > 4);
-          for (const word of words) {
-            if (responseContent.toLowerCase().includes(word.toLowerCase())) {
-              const position = responseContent.toLowerCase().indexOf(word.toLowerCase());
-              const start = Math.max(0, position - 40);
-              const end = Math.min(responseContent.length, position + word.length + 40);
-              const context = responseContent.substring(start, end);
-
-              detectedMatches.push({
-                pattern: word,
-                confidence: confidence * 0.6, // Lower confidence for semantic matches
-                context,
-                description: pattern.description || 'Semantic match',
-              });
-
-              if (confidence * 0.6 > highestConfidence) {
-                highestConfidence = confidence * 0.6;
-              }
-
-              // Only count one word per pattern
-              break;
-            }
-          }
-        }
-      }
+  for (const probe of probesToUse) {
+    logger.debug(`Sending probe: ${probe.message.substring(0, 50)}...`);
+    const result = await provider.callApi(probe.message);
+    if (result.error) {
+      throw new Error(result.error);
     }
 
-    // Deduplicate matches
-    const uniqueMatches: typeof detectedMatches = [];
-    const seenPatterns = new Set<string>();
+    const responseContent = extractResponseContent(result);
 
-    for (const match of detectedMatches) {
-      const key = `${match.pattern}:${match.context}`;
-      if (!seenPatterns.has(key)) {
-        seenPatterns.add(key);
-        uniqueMatches.push(match);
-      }
-    }
+    logger.debug(`Got response (${responseContent.length} chars)`);
 
-    // Determine if canary was detected based on matches and confidence
-    const detected = uniqueMatches.length > 0;
-
-    if (detected) {
-      logger.info(
-        `⚠️  ${chalk.red('CANARY DETECTED!')} The provider has likely been trained on your data.`,
-      );
-
-      if (uniqueMatches.length > 0) {
-        logger.info(`Found ${uniqueMatches.length} matches:`);
-        uniqueMatches.forEach((match, i) => {
-          logger.info(
-            `  ${i + 1}. ${chalk.yellow(match.pattern)} (${Math.round(match.confidence * 100)}% confidence)`,
-          );
-          if (match.context) {
-            logger.info(`     Context: ${chalk.gray(match.context)}`);
-          }
-          if (match.description) {
-            logger.info(`     ${match.description}`);
-          }
-        });
-      }
-
-      const confidencePercent = Math.round(highestConfidence * 100);
-      logger.info(`Overall confidence: ${chalk.yellow(confidencePercent + '%')}`);
-
-      return {
-        detected: true,
-        matches: uniqueMatches,
-        hash: providerHash,
-        confidence: highestConfidence,
-      };
-    } else {
-      // Get provider ID for display
-      const providerId =
-        'id' in provider && typeof provider.id === 'function' ? provider.id() : provider.id;
-
-      logger.info(`✅ No canary detected for provider: ${chalk.bold(providerId)}`);
-      logger.info(
-        `This doesn't guarantee your data hasn't been used for training. Consider running more checks with different modes.`,
-      );
-
-      if (checkMode === 'auto') {
-        logger.info(
-          `Try using different check modes with --mode=direct, --mode=fact, or --mode=semantic`,
-        );
-      }
-
-      return { detected: false, hash: providerHash };
-    }
-  } else {
-    throw new Error('Provider does not support sending messages');
+    detectedMatches.push(...findDetectionMatches(responseContent, response.detectionPatterns));
   }
+
+  const uniqueMatches = dedupeMatches(detectedMatches);
+  const highestConfidence = uniqueMatches.reduce(
+    (highest, match) => Math.max(highest, match.confidence),
+    0,
+  );
+  const detected = uniqueMatches.length > 0;
+
+  if (detected) {
+    logger.info(
+      `⚠️  ${chalk.red('CANARY DETECTED!')} The provider has likely been trained on your data.`,
+    );
+
+    if (uniqueMatches.length > 0) {
+      logger.info(`Found ${uniqueMatches.length} matches:`);
+      uniqueMatches.forEach((match, i) => {
+        logger.info(
+          `  ${i + 1}. ${chalk.yellow(match.pattern)} (${Math.round(match.confidence * 100)}% confidence)`,
+        );
+        if (match.context) {
+          logger.info(`     Context: ${chalk.gray(match.context)}`);
+        }
+        if (match.description) {
+          logger.info(`     ${match.description}`);
+        }
+      });
+    }
+
+    const confidencePercent = Math.round(highestConfidence * 100);
+    logger.info(`Overall confidence: ${chalk.yellow(confidencePercent + '%')}`);
+
+    return {
+      detected: true,
+      matches: uniqueMatches,
+      hash: providerHash,
+      confidence: highestConfidence,
+    };
+  }
+
+  const providerId = getProviderId(provider);
+  logger.info(`✅ No canary detected for provider: ${chalk.bold(providerId)}`);
+  logger.info(
+    `This doesn't guarantee your data hasn't been used for training. Consider running more checks with different modes.`,
+  );
+
+  if (checkMode === 'auto') {
+    logger.info(
+      `Try using different check modes with --mode=direct, --mode=fact, or --mode=semantic`,
+    );
+  }
+
+  return { detected: false, hash: providerHash };
 }
 
 /**
  * Checks if providers have leaked the canary
  */
 async function checkCanary(
-  providers: (ApiProvider | ProviderOptions)[],
+  providers: ApiProvider[],
   checkMode: string = 'auto',
-) {
+): Promise<CanaryCheckResult[]> {
   if (providers.length === 0) {
     throw new Error('No providers found in config file');
   }
 
   logger.info(`Checking canaries for ${providers.length} providers from config...`);
   const results = [];
+  let failedCount = 0;
   for (const provider of providers) {
-    const providerId =
-      'id' in provider && typeof provider.id === 'function' ? provider.id() : provider.id;
+    const providerId = getProviderId(provider);
 
     logger.info(`Checking canary for provider: ${chalk.bold(String(providerId))}`);
     try {
       const result = await checkCanaryForSingleProvider(provider, checkMode);
       results.push(result);
     } catch (error) {
+      failedCount += 1;
       logger.error(
         `Failed to check canary for provider ${providerId}: ${(error as Error).message}`,
       );
     }
+  }
+  if (failedCount > 0) {
+    throw new Error(`Failed to check canaries for ${failedCount} of ${providers.length} providers`);
   }
   return results;
 }
@@ -414,13 +466,12 @@ Examples:
 
   # Check all providers in your promptfooconfig.yaml for canaries
   $ promptfoo canary check
-  
+
   # Use a specific config file
   $ promptfoo canary send -c path/to/custom-promptfooconfig.yaml
-  
+
   # Check with a specific mode
-  $ promptfoo canary check --mode direct
-    `,
+  $ promptfoo canary check --mode direct`,
     );
 
   // Send subcommand
@@ -433,7 +484,7 @@ Examples:
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (options) => {
       try {
-        telemetry.record('command_used', { command: 'canary:send' });
+        telemetry.record('command_used', { name: 'canary send' });
 
         if (options.envPath) {
           setupEnv(options.envPath);
@@ -446,16 +497,15 @@ Examples:
 
         // Load config and providers
         const { testSuite } = await resolveConfigs(
-          { config: options.config || (defaultConfigPath ? [defaultConfigPath] : undefined) },
+          { config: getConfigPaths(options.config, defaultConfigPath) },
           defaultConfig,
         );
 
         const _result = await sendCanary(testSuite.providers, options.message, repeat);
-        process.exit(0);
       } catch (error: unknown) {
         const err = error as Error;
         logger.error(`Error sending canary: ${err.message}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 
@@ -468,7 +518,7 @@ Examples:
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (options) => {
       try {
-        telemetry.record('command_used', { command: 'canary:check' });
+        telemetry.record('command_used', { name: 'canary check' });
 
         if (options.envPath) {
           setupEnv(options.envPath);
@@ -484,7 +534,7 @@ Examples:
 
         // Load config and providers
         const { testSuite } = await resolveConfigs(
-          { config: options.config || (defaultConfigPath ? [defaultConfigPath] : undefined) },
+          { config: getConfigPaths(options.config, defaultConfigPath) },
           defaultConfig,
         );
 
@@ -492,11 +542,11 @@ Examples:
 
         // If any canary was detected, exit with code 1
         const anyDetection = result.some((r) => r && r.detected);
-        process.exit(anyDetection ? 1 : 0);
+        process.exitCode = anyDetection ? 1 : 0;
       } catch (error: unknown) {
         const err = error as Error;
         logger.error(`Error checking canary: ${err.message}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 

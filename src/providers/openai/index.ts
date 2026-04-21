@@ -1,12 +1,13 @@
-import type { EnvVarKey } from '../../envars';
 import { getEnvString } from '../../envars';
+
+import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
+} from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
 export class OpenAiGenericProvider implements ApiProvider {
@@ -22,7 +23,7 @@ export class OpenAiGenericProvider implements ApiProvider {
     const { config, id, env } = options;
     this.env = env;
     this.modelName = modelName;
-    this.config = config || {};
+    this.config = config ? { ...config } : {};
     this.id = id ? () => id : this.id;
   }
 
@@ -80,11 +81,15 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.config.apiKeyRequired ?? true;
   }
 
+  protected getMissingApiKeyErrorMessage(): string {
+    return `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`;
+  }
+
   // @ts-ignore: Params are not used in this implementation
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }

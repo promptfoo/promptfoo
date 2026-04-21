@@ -1,13 +1,15 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks';
-import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { mockProcessEnv } from '../util/utils';
 
-jest.mock('../../src/logger');
-jest.mock('../../src/providers/openai');
+import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
 
-describe('Databricks Mosaic AI Provider', () => {
-  const originalEnv = process.env;
+vi.mock('../../src/logger');
+
+describe('Databricks Foundation Model APIs Provider', () => {
+  const originalEnv = { ...process.env };
   const workspaceUrl = 'https://test-workspace.cloud.databricks.com';
   const defaultOptions: DatabricksMosaicAiProviderOptions = {
     config: {
@@ -16,89 +18,75 @@ describe('Databricks Mosaic AI Provider', () => {
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    process.env = { ...originalEnv };
-    delete process.env.DATABRICKS_WORKSPACE_URL;
-    delete process.env.DATABRICKS_TOKEN;
+    vi.clearAllMocks();
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    mockProcessEnv({ DATABRICKS_WORKSPACE_URL: undefined });
+    mockProcessEnv({ DATABRICKS_TOKEN: undefined });
   });
 
   afterEach(async () => {
     await clearCache();
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
   });
 
   describe('DatabricksMosaicAiChatCompletionProvider', () => {
-    it('should create provider for a specific model', () => {
+    it('should create provider for a custom deployed endpoint', () => {
       const provider = new DatabricksMosaicAiChatCompletionProvider(
-        'meta-llama-3.3-70b-instruct',
+        'my-custom-endpoint',
         defaultOptions,
       );
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'meta-llama-3.3-70b-instruct',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            apiBaseUrl: `${workspaceUrl}/serving-endpoints`,
-            apiKeyEnvar: 'DATABRICKS_TOKEN',
-          }),
-        }),
-      );
+      expect(provider.config.apiBaseUrl).toBe(`${workspaceUrl}/serving-endpoints`);
+      expect(provider.config.apiKeyEnvar).toBe('DATABRICKS_TOKEN');
     });
 
-    it('should create provider with workspace URL from config', () => {
+    it('should create provider for a pay-per-token endpoint', () => {
       const options: DatabricksMosaicAiProviderOptions = {
         config: {
           workspaceUrl,
+          isPayPerToken: true,
         },
       };
       const provider = new DatabricksMosaicAiChatCompletionProvider(
-        'meta-llama-3.3-70b-instruct',
+        'databricks-meta-llama-3-3-70b-instruct',
         options,
       );
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'meta-llama-3.3-70b-instruct',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            apiBaseUrl: `${workspaceUrl}/serving-endpoints`,
-            apiKeyEnvar: 'DATABRICKS_TOKEN',
-          }),
-        }),
-      );
+      expect(provider.config.apiBaseUrl).toBe(workspaceUrl);
+      expect(provider.config.apiKeyEnvar).toBe('DATABRICKS_TOKEN');
     });
 
     it('should create provider with workspace URL from environment variable', () => {
-      process.env.DATABRICKS_WORKSPACE_URL = workspaceUrl;
+      mockProcessEnv({ DATABRICKS_WORKSPACE_URL: workspaceUrl });
 
       const options: DatabricksMosaicAiProviderOptions = {
         config: {},
       };
-      const provider = new DatabricksMosaicAiChatCompletionProvider(
-        'meta-llama-3.3-70b-instruct',
-        options,
-      );
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'meta-llama-3.3-70b-instruct',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            apiBaseUrl: `${workspaceUrl}/serving-endpoints`,
-            apiKeyEnvar: 'DATABRICKS_TOKEN',
-          }),
-        }),
-      );
+      expect(provider.config.apiBaseUrl).toBe(`${workspaceUrl}/serving-endpoints`);
+      expect(provider.config.apiKeyEnvar).toBe('DATABRICKS_TOKEN');
+    });
+
+    it('should strip trailing slash from workspace URL', () => {
+      const options: DatabricksMosaicAiProviderOptions = {
+        config: {
+          workspaceUrl: `${workspaceUrl}/`,
+        },
+      };
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+
+      expect(provider.config.apiBaseUrl).toBe(`${workspaceUrl}/serving-endpoints`);
     });
 
     it('should throw error when no workspace URL is provided', () => {
       const options: DatabricksMosaicAiProviderOptions = {
         config: {},
       };
-      expect(
-        () => new DatabricksMosaicAiChatCompletionProvider('meta-llama-3.3-70b-instruct', options),
-      ).toThrow(
+      expect(() => new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options)).toThrow(
         'Databricks workspace URL is required. Set it in the config or DATABRICKS_WORKSPACE_URL environment variable.',
       );
     });
@@ -112,18 +100,13 @@ describe('Databricks Mosaic AI Provider', () => {
           DATABRICKS_TOKEN: 'test-token',
         },
       };
-      const provider = new DatabricksMosaicAiChatCompletionProvider(
-        'meta-llama-3.3-70b-instruct',
-        options,
-      );
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
 
       expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'meta-llama-3.3-70b-instruct',
+      // The env is passed to the parent constructor, check it's accessible
+      expect((provider as any).env).toEqual(
         expect.objectContaining({
-          env: expect.objectContaining({
-            DATABRICKS_TOKEN: 'test-token',
-          }),
+          DATABRICKS_TOKEN: 'test-token',
         }),
       );
     });
@@ -137,22 +120,120 @@ describe('Databricks Mosaic AI Provider', () => {
           top_p: 0.9,
         },
       };
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+      expect(provider.config.temperature).toBe(0.7);
+      expect(provider.config.max_tokens).toBe(100);
+      expect(provider.config.top_p).toBe(0.9);
+    });
+
+    it('should include usage context as extra body params', () => {
+      const options: DatabricksMosaicAiProviderOptions = {
+        config: {
+          workspaceUrl,
+          usageContext: {
+            project: 'test-project',
+            team: 'engineering',
+          },
+        },
+      };
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+
+      expect((provider.config as any).extraBodyParams).toEqual({
+        usage_context: {
+          project: 'test-project',
+          team: 'engineering',
+        },
+      });
+    });
+
+    it('should merge usage context with existing extra body params', () => {
+      const options: DatabricksMosaicAiProviderOptions = {
+        config: {
+          workspaceUrl,
+          usageContext: {
+            project: 'test-project',
+          },
+          extraBodyParams: {
+            custom_param: 'value',
+          },
+        },
+      };
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+
+      expect((provider.config as any).extraBodyParams).toEqual({
+        custom_param: 'value',
+        usage_context: {
+          project: 'test-project',
+        },
+      });
+    });
+
+    it('should pass through AI Gateway config', () => {
+      const options: DatabricksMosaicAiProviderOptions = {
+        config: {
+          workspaceUrl,
+          aiGatewayConfig: {
+            enableSafety: true,
+            piiHandling: 'mask',
+          },
+        },
+      };
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+
+      expect(provider.config.aiGatewayConfig).toEqual({
+        enableSafety: true,
+        piiHandling: 'mask',
+      });
+    });
+
+    it('should use custom apiKeyEnvar if provided', () => {
+      const options: DatabricksMosaicAiProviderOptions = {
+        config: {
+          workspaceUrl,
+          apiKeyEnvar: 'CUSTOM_DATABRICKS_KEY',
+        },
+      };
+      const provider = new DatabricksMosaicAiChatCompletionProvider('my-endpoint', options);
+
+      expect(provider.config.apiKeyEnvar).toBe('CUSTOM_DATABRICKS_KEY');
+    });
+  });
+
+  describe('getApiUrl method', () => {
+    it('should return custom URL for pay-per-token endpoints', () => {
+      const options: DatabricksMosaicAiProviderOptions = {
+        config: {
+          workspaceUrl,
+          isPayPerToken: true,
+        },
+      };
       const provider = new DatabricksMosaicAiChatCompletionProvider(
-        'meta-llama-3.3-70b-instruct',
+        'databricks-meta-llama-3-3-70b-instruct',
         options,
       );
 
-      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
-      expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-        'meta-llama-3.3-70b-instruct',
-        expect.objectContaining({
-          config: expect.objectContaining({
-            temperature: 0.7,
-            max_tokens: 100,
-            top_p: 0.9,
-          }),
-        }),
+      // Use type assertion to access protected method
+      const url = (provider as any).getApiUrl();
+
+      expect(url).toBe(
+        `${workspaceUrl}/serving-endpoints/databricks-meta-llama-3-3-70b-instruct/invocations`,
       );
+    });
+
+    it('should use parent class URL for custom endpoints', () => {
+      const provider = new DatabricksMosaicAiChatCompletionProvider(
+        'my-custom-endpoint',
+        defaultOptions,
+      );
+
+      // Since we're extending OpenAI provider, it should use the OpenAI URL pattern
+      const url = (provider as any).getApiUrl();
+
+      // For custom endpoints, getApiUrl returns the base URL (apiBaseUrl)
+      // The /chat/completions path is added later in the callApi method
+      expect(url).toBe(`${workspaceUrl}/serving-endpoints`);
     });
   });
 });

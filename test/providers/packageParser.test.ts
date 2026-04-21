@@ -1,30 +1,31 @@
-import { createRequire } from 'node:module';
 import path from 'path';
-import { importModule } from '../../src/esm';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { importModule, resolvePackageEntryPoint } from '../../src/esm';
 import {
-  parsePackageProvider,
-  loadFromPackage,
   isPackagePath,
+  loadFromPackage,
+  parsePackageProvider,
 } from '../../src/providers/packageParser';
+
 import type { ProviderOptions } from '../../src/types/providers';
 
-jest.mock('node:module', () => {
+vi.mock('../../src/esm', async (importOriginal) => {
   return {
-    createRequire: jest.fn(() => jest.fn((path: string) => path)),
+    ...(await importOriginal()),
+    importModule: vi.fn(async (_modulePath: string, functionName?: string) => {
+      const mockModule = {
+        default: vi.fn((data) => data.defaultField),
+        parseResponse: vi.fn((data) => data.specificField),
+      };
+      if (functionName) {
+        return mockModule[functionName as keyof typeof mockModule];
+      }
+      return mockModule;
+    }),
+    resolvePackageEntryPoint: vi.fn(),
   };
 });
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(async (modulePath: string, functionName?: string) => {
-    const mockModule = {
-      default: jest.fn((data) => data.defaultField),
-      parseResponse: jest.fn((data) => data.specificField),
-    };
-    if (functionName) {
-      return mockModule[functionName as keyof typeof mockModule];
-    }
-    return mockModule;
-  }),
-}));
 
 describe('isPackagePath', () => {
   it('should return true for package paths', () => {
@@ -41,21 +42,17 @@ describe('loadFromPackage', () => {
   const mockPackageName = 'testpackage';
   const mockFunctionName = 'getVariable';
   const mockProviderPath = `package:${mockPackageName}:${mockFunctionName}`;
-  const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
-  } as unknown as NodeJS.Require;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should successfully parse a valid package', async () => {
-    const mockFunction = jest.fn();
+    const mockFunction = vi.fn();
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    jest.mocked(mockRequire.resolve).mockReturnValue(mockPackagePath);
-    jest.mocked(createRequire).mockReturnValue(mockRequire);
-    jest.mocked(importModule).mockResolvedValue({ getVariable: mockFunction });
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ getVariable: mockFunction });
 
     const result = await loadFromPackage(mockProviderPath, mockBasePath);
 
@@ -65,6 +62,14 @@ describe('loadFromPackage', () => {
     expect(importModule).toHaveBeenCalledWith(mockPackagePath);
   });
 
+  it('should distinguish missing exports from falsy exported values', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ getVariable: false });
+
+    await expect(loadFromPackage(mockProviderPath, mockBasePath)).resolves.toBe(false);
+  });
+
   it('should throw an error for invalid provider format', async () => {
     await expect(loadFromPackage('invalid:format', mockBasePath)).rejects.toThrow(
       'Invalid package format: invalid:format. Expected format: package:packageName:exportedClassOrFunction',
@@ -72,10 +77,7 @@ describe('loadFromPackage', () => {
   });
 
   it('should throw an error if package is not found', async () => {
-    jest.mocked(mockRequire.resolve).mockImplementationOnce(() => {
-      throw new Error('Cannot find module');
-    });
-    jest.mocked(createRequire).mockReturnValue(mockRequire);
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(null);
 
     await expect(loadFromPackage(mockProviderPath, mockBasePath)).rejects.toThrow(
       `Package not found: ${mockPackageName}. Make sure it's installed in ${mockBasePath}`,
@@ -85,14 +87,13 @@ describe('loadFromPackage', () => {
   it('should handle nested provider names', async () => {
     const mockModule = {
       nested: {
-        getVariable: jest.fn(),
+        getVariable: vi.fn(),
       },
     };
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    jest.mocked(mockRequire.resolve).mockReturnValue(mockPackagePath);
-    jest.mocked(createRequire).mockReturnValue(mockRequire);
-    jest.mocked(importModule).mockResolvedValue(mockModule);
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue(mockModule);
 
     const result = await loadFromPackage(
       `package:${mockPackageName}:nested.getVariable`,
@@ -103,6 +104,16 @@ describe('loadFromPackage', () => {
     result('test input');
     expect(mockModule.nested.getVariable).toHaveBeenCalledWith('test input');
   });
+
+  it('should throw an error if entity is not found in module', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ someOtherExport: vi.fn() });
+
+    await expect(loadFromPackage(mockProviderPath, mockBasePath)).rejects.toThrow(
+      `Could not find entity: ${mockFunctionName} in module: ${mockPackagePath}`,
+    );
+  });
 });
 
 describe('parsePackageProvider', () => {
@@ -111,12 +122,9 @@ describe('parsePackageProvider', () => {
   const mockProviderName = 'Provider';
   const mockProviderPath = `package:${mockPackageName}:${mockProviderName}`;
   const mockOptions: ProviderOptions = { config: {} };
-  const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
-  } as unknown as NodeJS.Require;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should successfully parse a valid package provider', async () => {
@@ -128,9 +136,8 @@ describe('parsePackageProvider', () => {
     };
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    jest.mocked(mockRequire.resolve).mockReturnValue(mockPackagePath);
-    jest.mocked(createRequire).mockReturnValue(mockRequire);
-    jest.mocked(importModule).mockResolvedValue({ Provider: mockProvider });
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ Provider: mockProvider });
 
     const result = await parsePackageProvider(mockProviderPath, mockBasePath, mockOptions);
 
@@ -145,13 +152,20 @@ describe('parsePackageProvider', () => {
   });
 
   it('should throw an error if package is not found', async () => {
-    jest.mocked(mockRequire.resolve).mockImplementationOnce(() => {
-      throw new Error('Cannot find module');
-    });
-    jest.mocked(createRequire).mockReturnValue(mockRequire);
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(null);
 
     await expect(parsePackageProvider(mockProviderPath, mockBasePath, mockOptions)).rejects.toThrow(
       `Package not found: ${mockPackageName}. Make sure it's installed in ${mockBasePath}`,
+    );
+  });
+
+  it('should throw a clear error if provider export is not constructable', async () => {
+    const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ Provider: false });
+
+    await expect(parsePackageProvider(mockProviderPath, mockBasePath, mockOptions)).rejects.toThrow(
+      `Provider malformed: ${mockProviderPath} must export a provider constructor. Received: boolean`,
     );
   });
 
@@ -168,9 +182,8 @@ describe('parsePackageProvider', () => {
     };
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    jest.mocked(mockRequire.resolve).mockReturnValue(mockPackagePath);
-    jest.mocked(createRequire).mockReturnValue(mockRequire);
-    jest.mocked(importModule).mockResolvedValue(mockModule);
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue(mockModule);
 
     const result = await parsePackageProvider(
       `package:${mockPackageName}:nested.Provider`,
@@ -182,12 +195,11 @@ describe('parsePackageProvider', () => {
   });
 
   it('should pass options to the provider constructor', async () => {
-    const MockProvider = jest.fn();
+    const MockProvider = vi.fn();
 
     const mockPackagePath = path.join(mockBasePath, 'node_modules', mockPackageName, 'index.js');
-    jest.mocked(mockRequire.resolve).mockReturnValue(mockPackagePath);
-    jest.mocked(createRequire).mockReturnValue(mockRequire);
-    jest.mocked(importModule).mockResolvedValue({ Provider: MockProvider });
+    vi.mocked(resolvePackageEntryPoint).mockReturnValue(mockPackagePath);
+    vi.mocked(importModule).mockResolvedValue({ Provider: MockProvider });
 
     await parsePackageProvider(mockProviderPath, mockBasePath, mockOptions);
 

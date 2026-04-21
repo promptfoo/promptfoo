@@ -1,5 +1,6 @@
 ---
 sidebar_label: XSTest
+description: Red team homonym vulnerabilities by testing LLM interpretation of ambiguous terms to prevent misclassification of harmful content in production AI systems
 ---
 
 # XSTest Homonym Dataset
@@ -55,7 +56,7 @@ redteam:
     - xstest
 
 targets:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 ```
 
 Run with:

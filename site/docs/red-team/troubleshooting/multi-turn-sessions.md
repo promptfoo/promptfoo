@@ -1,5 +1,6 @@
 ---
 sidebar_label: Multi-Turn Session Management
+description: Red team multi-turn conversation attacks by exploiting session management vulnerabilities to protect AI systems from context manipulation and unauthorized state access
 ---
 
 # Session Management

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Video Inputs
 title: Video Jailbreaking Strategy
-description: Test how AI systems handle video-encoded text inputs that may bypass content filters
+description: Evaluate video-capable AI models against adversarial video inputs with embedded text designed to bypass safety filters
 ---
 
 # Video Jailbreaking
@@ -93,13 +93,7 @@ The `{{video}}` syntax in the examples is a Nunjucks template variable. When pro
 
 ## Requirements
 
-This strategy requires you to install the `fluent-ffmpeg` package for video creation:
-
-```bash
-npm i fluent-ffmpeg
-```
-
-You'll also need to have FFmpeg installed on your system:
+This strategy requires FFmpeg to be installed on your system:
 
 **On macOS:**
 
@@ -146,5 +140,7 @@ This strategy is worth implementing because:
 
 - [Audio Jailbreaking](/docs/red-team/strategies/audio) - Similar approach using speech audio
 - [Image Jailbreaking](/docs/red-team/strategies/image) - Similar approach using images
+- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Comprehensive guide for testing multi-modal models
+- [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating OpenAI Assistants
+description: Compare OpenAI Assistant configurations and measure performance across different prompts, models, and tools to optimize your AI application's accuracy and reliability
 ---
 
 # How to evaluate OpenAI Assistants
@@ -76,7 +77,7 @@ If you want to override the configuration of an assistant for a specific test, y
 providers:
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
-      model: gpt-4.1
+      model: gpt-5
       instructions: 'Enter a replacement for system-level instructions here'
       tools:
         - type: code_interpreter
@@ -101,7 +102,7 @@ providers:
   # Modified
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgB
     config:
-      model: gpt-4.1
+      model: gpt-5
       instructions: 'Always talk like a pirate'
 ```
 

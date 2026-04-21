@@ -1,13 +1,22 @@
-import { OpenAiGenericProvider } from '.';
 import { fetchWithCache } from '../../cache';
-import { getEnvString, getEnvFloat, getEnvInt } from '../../envars';
+import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
-import type { EnvOverrides } from '../../types/env';
 import { REQUEST_TIMEOUT_MS } from '../shared';
+import { OpenAiGenericProvider } from '.';
+import {
+  calculateOpenAICost,
+  formatOpenAiError,
+  getTokenUsage,
+  OPENAI_COMPLETION_MODELS,
+} from './util';
+
+import type { EnvOverrides } from '../../types/env';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { OpenAiCompletionOptions } from './types';
-import { calculateOpenAICost } from './util';
-import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_COMPLETION_MODELS = OPENAI_COMPLETION_MODELS;
@@ -36,9 +45,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     let stop: string;
@@ -65,11 +72,11 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       ...(this.config.passthrough || {}),
     };
 
-    logger.debug(`Calling OpenAI API: ${JSON.stringify(body)}`);
     let data,
-      cached = false;
+      cached = false,
+      latencyMs: number | undefined;
     try {
-      ({ data, cached } = (await fetchWithCache(
+      ({ data, cached, latencyMs } = (await fetchWithCache(
         `${this.getApiUrl()}/completions`,
         {
           method: 'POST',
@@ -82,6 +89,9 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
           body: JSON.stringify(body),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
       )) as unknown as any);
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
@@ -89,7 +99,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tOpenAI completions API response: ${JSON.stringify(data)}`);
+
     if (data.error) {
       return {
         error: formatOpenAiError(data),
@@ -100,6 +110,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
+        latencyMs,
         cost: calculateOpenAICost(
           this.modelName,
           this.config,

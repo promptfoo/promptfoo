@@ -1,5 +1,6 @@
 ---
 sidebar_label: Hijacking
+description: Red team AI system hijacking attacks by testing prompt redirection and role manipulation to prevent unauthorized task execution and scope violations
 ---
 
 # Hijacking Plugin
