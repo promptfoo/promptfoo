@@ -565,6 +565,9 @@ export class AIStudioEmbeddingProvider
   implements ApiEmbeddingProvider
 {
   id(): string {
+    if (this.customId) {
+      return this.customId();
+    }
     return `google:embedding:${this.modelName}`;
   }
 

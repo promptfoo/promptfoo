@@ -1958,6 +1958,13 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(provider.toString()).toBe('[Google AI Studio Embedding Provider gemini-embedding-001]');
   });
 
+  it('honors a caller-supplied custom id override', () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001', {
+      id: 'custom-embed',
+    });
+    expect(provider.id()).toBe('custom-embed');
+  });
+
   it('POSTs to the :embedContent endpoint and returns the values array', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2, 0.3], 7) as any);
 
