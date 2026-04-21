@@ -1,12 +1,15 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import {
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  renderVarsInObject,
+} from '../../util/index';
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
@@ -16,16 +19,22 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
+import type { AzureChatResponsesOptions, AzureProviderOptions } from './types';
 
 // Azure Responses API uses the v1 preview API version
 const AZURE_RESPONSES_API_VERSION = 'preview';
 
 export class AzureResponsesProvider extends AzureGenericProvider {
+  declare config: AzureChatResponsesOptions;
+
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
 
-  constructor(...args: ConstructorParameters<typeof AzureGenericProvider>) {
-    super(...args);
+  constructor(
+    deploymentName: string,
+    options: AzureProviderOptions<AzureChatResponsesOptions> = {},
+  ) {
+    super(deploymentName, options);
 
     // Initialize the shared response processor
     this.processor = new ResponsesProcessor({
@@ -106,14 +115,24 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     }
 
     const isReasoningModel = this.isReasoningModel();
+    const maxOutputTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const reasoningMaxOutputTokensDefault =
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
     const maxOutputTokens =
       config.max_output_tokens ??
-      (isReasoningModel
-        ? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS')
-        : getEnvInt('OPENAI_MAX_TOKENS', 1024));
+      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
+      ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
@@ -121,10 +140,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
 
     const instructions = config.instructions;
 
-    // Load response_format from external file if needed
-    const responseFormat = config.response_format
-      ? maybeLoadFromExternalFile(renderVarsInObject(config.response_format, context?.vars))
-      : undefined;
+    // Load response_format from external file if needed (handles nested schema loading)
+    const responseFormat = maybeLoadResponseFormatFromExternalFile(
+      config.response_format,
+      context?.vars,
+    );
 
     let textFormat;
     if (responseFormat) {
@@ -135,7 +155,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           },
         };
       } else if (responseFormat.type === 'json_schema') {
-        // Don't double-load the schema - it's already loaded above
+        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
         const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
@@ -144,7 +164,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           format: {
             type: 'json_schema',
             name: schemaName,
-            schema: schema, // Use the already-loaded schema
+            schema,
             strict: true,
           },
         };
@@ -164,9 +184,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     const body = {
       model: this.deploymentName,
       input,
-      ...(maxOutputTokens ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(temperature !== undefined ? { temperature } : {}),
+      ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
@@ -197,7 +217,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
     await this.ensureInitialized();
@@ -210,8 +230,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           'Example: AZURE_API_HOST=your-resource.openai.azure.com',
       );
     }
-
-    if (!this.authHeaders || !this.authHeaders['api-key']) {
+    if (!this.authHeaders['api-key'] && !this.authHeaders.Authorization) {
       throw new Error(
         'Azure API authentication failed. Set AZURE_API_KEY environment variable or configure apiKey in provider config.\n' +
           'You can also use Microsoft Entra ID authentication.',
@@ -225,7 +244,8 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       (this.config.response_format as string).startsWith('file://')
     ) {
       try {
-        maybeLoadFromExternalFile(this.config.response_format);
+        // Validate that the file can be loaded (will throw if file doesn't exist)
+        maybeLoadResponseFormatFromExternalFile(this.config.response_format, {});
       } catch (error) {
         throw new Error(
           `Failed to load response_format file: ${this.config.response_format}\n` +
@@ -242,11 +262,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     let timeout = REQUEST_TIMEOUT_MS;
     if (isDeepResearchModel) {
       const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
-      if (evalTimeout > 0) {
-        timeout = evalTimeout;
-      } else {
-        timeout = 600_000; // 10 minutes default for deep research
-      }
+      timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
       logger.debug(`Using timeout of ${timeout}ms for deep research model ${this.deploymentName}`);
     }
 

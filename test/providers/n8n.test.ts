@@ -29,6 +29,7 @@ describe('N8nProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('constructor', () => {
@@ -167,17 +168,21 @@ describe('N8nProvider', () => {
     it('should use custom headers', async () => {
       const mockResponse = createMockResponse({ output: 'Response' });
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.stubEnv('N8N_API_KEY', 'token123');
 
       const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
         config: {
           headers: {
-            Authorization: 'Bearer token123',
-            'X-Custom-Header': 'custom-value',
+            Authorization: 'Bearer {{env.N8N_API_KEY}}',
+            'X-Custom-Header': '{{userId}}',
           },
         },
       });
 
-      await provider.callApi('Hello');
+      await provider.callApi('Hello', {
+        vars: { userId: 'user-123' },
+        prompt: { raw: 'Hello', label: 'test' },
+      });
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://n8n.example.com/webhook/agent',
@@ -185,9 +190,30 @@ describe('N8nProvider', () => {
           headers: {
             'Content-Type': 'application/json',
             Authorization: 'Bearer token123',
-            'X-Custom-Header': 'custom-value',
+            'X-Custom-Header': 'user-123',
           },
         }),
+        expect.any(Number),
+        'json',
+      );
+    });
+
+    it('should omit request body for GET requests', async () => {
+      const mockResponse = createMockResponse({ output: 'Response' });
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const provider = new N8nProvider('https://n8n.example.com/webhook/agent', {
+        config: { method: 'GET' },
+      });
+
+      await provider.callApi('Hello');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://n8n.example.com/webhook/agent',
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        },
         expect.any(Number),
         'json',
       );

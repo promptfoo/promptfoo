@@ -1,16 +1,42 @@
+import { createRequire } from 'node:module';
 import { readFileSync } from 'fs';
 
 import { defineConfig } from 'tsdown';
 
+const require = createRequire(import.meta.url);
+const semver = require('semver') as typeof import('semver');
+
 // Read package.json for version constants
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 
+// Normalize the package.json engines range into comparator sets that the zero-dependency
+// CLI entrypoint can evaluate before importing any other modules.
+const enginesNode: string = packageJson.engines?.node ?? '>=20.0.0';
+let nodeEngineComparatorSets: Array<
+  Array<{ operator: '' | '=' | '>' | '>=' | '<' | '<='; version: string }>
+>;
+try {
+  nodeEngineComparatorSets = new semver.Range(enginesNode).set.map((comparatorSet) =>
+    comparatorSet.map((comparator) => ({
+      operator: comparator.operator,
+      version: comparator.semver.version,
+    })),
+  );
+} catch {
+  console.warn(
+    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=20.0.0.`,
+  );
+  nodeEngineComparatorSets = [[{ operator: '>=', version: '20.0.0' }]];
+}
+
 // Build-time constants injected into all builds
-// These replace the __PROMPTFOO_*__ placeholders in src/version.ts
+// These replace the __PROMPTFOO_*__ placeholders in source files
+// Note: tsdown define requires all values to be strings
 const versionDefines = {
   __PROMPTFOO_VERSION__: JSON.stringify(packageJson.version),
   __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
-  __PROMPTFOO_ENGINES_NODE__: JSON.stringify(packageJson.engines.node),
+  __PROMPTFOO_NODE_ENGINE_RANGE__: JSON.stringify(enginesNode),
+  __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: JSON.stringify(nodeEngineComparatorSets),
 };
 
 // All configs use clean: false. Use `npm run build:clean` for explicit cleaning.
@@ -27,6 +53,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
+    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -39,7 +66,7 @@ export default defineConfig([
   },
   // CLI binary (ESM only)
   {
-    entry: ['src/main.ts'],
+    entry: ['src/entrypoint.ts', 'src/main.ts'],
     format: ['esm'],
     target: 'node20',
     outDir: 'dist/src',
@@ -47,6 +74,7 @@ export default defineConfig([
     shims: true, // Provides __dirname, __filename shims automatically
     sourcemap: true,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
+    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -59,6 +87,7 @@ export default defineConfig([
       // Externalize all bare module imports so Node resolves CJS deps natively
       /^[a-z@][^:]*/,
       // Ensure critical native deps remain external
+      '@huggingface/transformers',
       'better-sqlite3',
       'playwright',
       'sharp',
@@ -79,6 +108,7 @@ export default defineConfig([
     shims: true, // Ensure library ESM build has shims
     clean: false,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
+    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"esm"',
@@ -98,6 +128,7 @@ export default defineConfig([
     sourcemap: true,
     clean: false,
     fixedExtension: true, // Use .cjs extension for CJS output
+    inlineOnly: false, // Disable warning about bundling dependencies
     define: {
       ...versionDefines,
       BUILD_FORMAT: '"cjs"',

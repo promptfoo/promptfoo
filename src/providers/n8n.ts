@@ -1,5 +1,6 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
+import { getNunjucksEngine } from '../util/templates';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
@@ -216,11 +217,22 @@ export class N8nProvider implements ApiProvider {
     return this.config.url || this.webhookUrl;
   }
 
+  private getTemplateVars(prompt: string, context?: CallApiContextParams): Record<string, any> {
+    const vars = context?.vars || {};
+    return {
+      prompt,
+      ...vars,
+      sessionId: this.currentSessionId || vars.sessionId,
+    };
+  }
+
   private buildRequestBody(
     prompt: string,
     context?: CallApiContextParams,
   ): Record<string, any> | string {
     const vars = context?.vars || {};
+    const templateVars = this.getTemplateVars(prompt, context);
+    const nunjucks = getNunjucksEngine();
 
     // Default body structure
     if (!this.config.body) {
@@ -239,13 +251,7 @@ export class N8nProvider implements ApiProvider {
 
     // Custom body template
     if (typeof this.config.body === 'string') {
-      // String template - render with Nunjucks
-      const nunjucks = require('nunjucks');
-      const rendered = nunjucks.renderString(this.config.body, {
-        prompt,
-        ...vars,
-        sessionId: this.currentSessionId || vars.sessionId,
-      });
+      const rendered = nunjucks.renderString(this.config.body, templateVars);
       try {
         return JSON.parse(rendered);
       } catch {
@@ -254,14 +260,9 @@ export class N8nProvider implements ApiProvider {
     }
 
     // Object body - render template values
-    const nunjucks = require('nunjucks');
     const renderValue = (value: any): any => {
       if (typeof value === 'string') {
-        return nunjucks.renderString(value, {
-          prompt,
-          ...vars,
-          sessionId: this.currentSessionId || vars.sessionId,
-        });
+        return nunjucks.renderString(value, templateVars);
       }
       if (Array.isArray(value)) {
         return value.map(renderValue);
@@ -277,6 +278,24 @@ export class N8nProvider implements ApiProvider {
     };
 
     return renderValue(this.config.body);
+  }
+
+  private buildHeaders(prompt: string, context?: CallApiContextParams): Record<string, string> {
+    const templateVars = this.getTemplateVars(prompt, context);
+    const nunjucks = getNunjucksEngine();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    for (const [key, value] of Object.entries(this.config.headers ?? {})) {
+      headers[key] = nunjucks.renderString(value, templateVars);
+    }
+
+    if (this.config.sessionHeader && this.currentSessionId) {
+      headers[this.config.sessionHeader] = this.currentSessionId;
+    }
+
+    return headers;
   }
 
   private parseResponse(data: any, text: string): any {
@@ -334,18 +353,19 @@ export class N8nProvider implements ApiProvider {
     const timeout = this.config.timeout || REQUEST_TIMEOUT_MS;
 
     const body = this.buildRequestBody(prompt, context);
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...this.config.headers,
+    const headers = this.buildHeaders(prompt, context);
+    const renderedBody = typeof body === 'string' ? body : JSON.stringify(body);
+    const fetchOptions: { method: string; headers: Record<string, string>; body?: string } = {
+      method,
+      headers,
     };
 
-    // Add session header if configured
-    if (this.config.sessionHeader && this.currentSessionId) {
-      headers[this.config.sessionHeader] = this.currentSessionId;
+    if (method !== 'GET') {
+      fetchOptions.body = renderedBody;
     }
 
     logger.debug(`[n8n] Calling ${method} ${url}`, {
-      body: typeof body === 'string' ? body : JSON.stringify(body),
+      body: method === 'GET' ? undefined : renderedBody,
     });
 
     let data: any;
@@ -353,16 +373,7 @@ export class N8nProvider implements ApiProvider {
     let latencyMs: number | undefined;
 
     try {
-      const response = await fetchWithCache(
-        url,
-        {
-          method,
-          headers,
-          body: typeof body === 'string' ? body : JSON.stringify(body),
-        },
-        timeout,
-        'json',
-      );
+      const response = await fetchWithCache(url, fetchOptions, timeout, 'json');
 
       data = response.data;
       cached = response.cached;

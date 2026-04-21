@@ -81,7 +81,7 @@ export class ScriptCompletionProvider implements ApiProvider {
 
       if (cachedResult) {
         logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
-        return JSON.parse(cachedResult as string);
+        return { ...JSON.parse(cachedResult as string), cached: true };
       }
     } else if (fileHashes.length === 0 && isCacheEnabled()) {
       logger.warn(
@@ -92,9 +92,12 @@ export class ScriptCompletionProvider implements ApiProvider {
     return new Promise<ProviderResponse>((resolve, reject) => {
       const command = scriptParts.shift();
       invariant(command, 'No command found in script path');
-      // These are not useful in the shell
+      // Remove properties not useful in shell scripts and non-serializable objects
+      // These can contain circular references (e.g., Timeout objects) that break JSON serialization
       delete context?.getCache;
       delete context?.logger;
+      delete context?.filters; // NunjucksFilterMap contains functions
+      delete context?.originalProvider; // ApiProvider object with methods
       const scriptArgs = scriptParts.concat([
         prompt,
         safeJsonStringify(this.options || {}) as string,
@@ -102,7 +105,7 @@ export class ScriptCompletionProvider implements ApiProvider {
       ]);
       const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
 
-      execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
+      const child = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
         if (error) {
           logger.debug(`Error running script ${this.scriptPath}: ${error.message}`);
           reject(error);
@@ -125,6 +128,10 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         resolve(result);
       });
+      // Close stdin immediately so child processes that read stdin don't hang.
+      // execFile pipes stdin by default but never writes to it, causing tools
+      // like opencode to block forever waiting for input.
+      child.stdin?.end();
     });
   }
 }

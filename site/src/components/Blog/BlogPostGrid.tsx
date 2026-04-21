@@ -13,14 +13,14 @@ export default function BlogPostGrid({
   posts,
   title = 'Latest Posts',
 }: BlogPostGridProps): React.ReactElement {
-  // Check if this is an archive page
-  const isArchivePage = title.includes('Archive');
+  // Check if this is a paginated page (not the first page)
+  const isPaginatedPage = title.includes('Older Posts');
 
-  // If it's an archive page, split the title to style the page number separately
+  // If it's a paginated page, split the title to style the page number separately
   let mainTitle = title;
   let pageNumber = null;
 
-  if (isArchivePage) {
+  if (isPaginatedPage) {
     const titleParts = title.split('•');
     mainTitle = titleParts[0].trim();
 
@@ -35,7 +35,7 @@ export default function BlogPostGrid({
 
   return (
     <div className={styles.blogPostGridContainer}>
-      <h2 className={styles.blogPostGridTitle} data-is-archive={isArchivePage}>
+      <h2 className={styles.blogPostGridTitle} data-is-paginated={isPaginatedPage}>
         {mainTitle}
         {pageNumber}
       </h2>

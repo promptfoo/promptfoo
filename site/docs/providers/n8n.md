@@ -1,5 +1,6 @@
 ---
 sidebar_label: n8n
+sidebar_position: 42
 title: n8n Provider
 description: Evaluate n8n AI agents and workflows by calling webhook endpoints with support for tool calls and sessions
 ---
@@ -46,14 +47,14 @@ providers:
 
 ### Config Options
 
-| Option              | Type          | Default     | Description                                |
-| ------------------- | ------------- | ----------- | ------------------------------------------ |
-| `url`               | string        | -           | Webhook URL (alternative to provider path) |
-| `method`            | string        | `POST`      | HTTP method                                |
-| `headers`           | object        | -           | Additional request headers                 |
-| `body`              | object/string | `{prompt}`  | Request body template                      |
-| `transformResponse` | string        | -           | JavaScript expression to extract output    |
-| `sessionField`      | string        | `sessionId` | Body field name for session ID             |
+| Option              | Type          | Default     | Description                                         |
+| ------------------- | ------------- | ----------- | --------------------------------------------------- |
+| `url`               | string        | -           | Webhook URL (alternative to provider path)          |
+| `method`            | string        | `POST`      | HTTP method                                         |
+| `headers`           | object        | -           | Additional request headers with Nunjucks templating |
+| `body`              | object/string | `{prompt}`  | Request body template                               |
+| `transformResponse` | string        | -           | JavaScript expression to extract output             |
+| `sessionField`      | string        | `sessionId` | Body field name for session ID                      |
 
 ## Response Formats
 

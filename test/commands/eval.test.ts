@@ -1,17 +1,17 @@
 import * as path from 'path';
 
 import { Command } from 'commander';
-import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
 import {
   doEval,
   evalCommand,
-  formatTokenUsage,
   showRedteamProviderLabelMissingWarning,
 } from '../../src/commands/eval';
 import { evaluate } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  getAuthor,
   promptForEmailUnverified,
 } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
@@ -20,7 +20,11 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
-import { ConfigPermissionError, checkCloudPermissions } from '../../src/util/cloud';
+import {
+  ConfigPermissionError,
+  checkCloudPermissions,
+  getEvalConfigFromCloud,
+} from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
@@ -36,6 +40,7 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
     cloudConfig: {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
+      getSharing: vi.fn().mockReturnValue(undefined),
     },
   };
 });
@@ -52,6 +57,7 @@ vi.mock('../../src/util/cloud', async () => ({
   ...(await vi.importActual('../../src/util/cloud')),
   getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
   checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
+  getEvalConfigFromCloud: vi.fn(),
 }));
 vi.mock('fs');
 vi.mock('path', async () => {
@@ -95,6 +101,9 @@ describe('evalCommand', () => {
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
+    vi.mocked(cloudConfig.getSharing).mockReset();
+    vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
+    vi.mocked(getEvalConfigFromCloud).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -103,6 +112,7 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
+    vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
@@ -119,6 +129,103 @@ describe('evalCommand', () => {
     const helpText = cmd.helpInformation();
     expect(helpText).toContain('-h, --help');
     expect(helpText).toContain('display help for command');
+  });
+
+  it('should mention cloud UUID support in --config option help text', () => {
+    const cmd = evalCommand(program, defaultConfig, defaultConfigPath);
+    const helpText = cmd.helpInformation();
+    expect(helpText).toContain(
+      'Path to configuration file or cloud config UUID. Automatically loads promptfooconfig.yaml',
+    );
+  });
+
+  it('should apply resolved author when --no-write is used', async () => {
+    const cmdObj = { table: false, write: false };
+    const config = {} as UnifiedConfig;
+    let capturedEvalRecord: Eval | undefined;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(getAuthor).mockReturnValue('ci-author@example.com');
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+      capturedEvalRecord = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
+  });
+
+  it('should load cloud eval config when config is a single UUID', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const cloudConfig = {
+      providers: [],
+      prompts: [],
+      tests: [],
+    } as UnifiedConfig;
+    const cmdObj = { config: [cloudConfigUuid] };
+
+    vi.mocked(getEvalConfigFromCloud).mockResolvedValue(cloudConfig);
+    const mockEvalRecord = new Eval(cloudConfig);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(getEvalConfigFromCloud).toHaveBeenCalledWith(cloudConfigUuid);
+    expect(resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ config: undefined }),
+      cloudConfig,
+    );
+  });
+
+  it('should bypass cloud eval config loading for local config paths', async () => {
+    const cmdObj = { config: ['./promptfooconfig.yaml'] };
+    const mockEvalRecord = new Eval(defaultConfig);
+    vi.mocked(evaluate).mockResolvedValue(mockEvalRecord);
+
+    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
+
+    expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should fail when multiple config values include a UUID', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const cmdObj = { config: [cloudConfigUuid, './promptfooconfig.yaml'] };
+
+    await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      'Cloud config UUID mode supports exactly one -c value. Use: promptfoo eval -c <cloud-config-uuid>',
+    );
+    expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should fail when --watch is used with cloud config UUID mode', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const cmdObj = { config: [cloudConfigUuid], watch: true };
+
+    await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      '--watch is not supported when using a cloud config UUID with -c. Use a local config file path for watch mode.',
+    );
+    expect(getEvalConfigFromCloud).not.toHaveBeenCalled();
+  });
+
+  it('should fail with explicit cloud UUID error when cloud fetch fails', async () => {
+    const cloudConfigUuid = '12345678-1234-4234-8234-123456789abc';
+    const cmdObj = { config: [cloudConfigUuid] };
+
+    vi.mocked(getEvalConfigFromCloud).mockRejectedValueOnce(
+      new Error('Cloud config is not enabled'),
+    );
+
+    await expect(doEval(cmdObj, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      `Failed to load cloud eval config "${cloudConfigUuid}". Cloud config is not enabled. Cloud UUID inputs do not fall back to local file paths. Check authentication and that the UUID exists.`,
+    );
   });
 
   it('should handle --no-cache option', async () => {
@@ -184,7 +291,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
   });
 
   it('should not share when share is explicitly set to false even if config has sharing enabled', async () => {
@@ -233,7 +340,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
   });
 
   it('should share when share is undefined and config has sharing enabled', async () => {
@@ -258,7 +365,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
   });
 
   it('should auto-share when connected to cloud even if sharing is not explicitly enabled', async () => {
@@ -288,7 +395,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
   });
 
   it('should not auto-share when connected to cloud if share is explicitly set to false', async () => {
@@ -515,41 +622,6 @@ describe('checkCloudPermissions', () => {
 
     // Verify that evaluate was called
     expect(evaluate).toHaveBeenCalled();
-  });
-});
-
-describe('formatTokenUsage', () => {
-  it('should format complete token usage data', () => {
-    const usage = {
-      total: 1000,
-      prompt: 400,
-      completion: 600,
-      cached: 200,
-      completionDetails: {
-        reasoning: 300,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    };
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('1,000 total / 400 prompt / 600 completion / 200 cached / 300 reasoning');
-  });
-
-  it('should handle partial token usage data', () => {
-    const usage = {
-      total: 1000,
-    };
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('1,000 total');
-  });
-
-  it('should handle empty token usage', () => {
-    const usage = {};
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('');
   });
 });
 
@@ -841,15 +913,33 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
     providers: [],
   } as UnifiedConfig;
 
+  let mockTokenUsageTracker: Mocked<TokenUsageTracker>;
+
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(isSharingEnabled).mockImplementation(function () {
-      return true;
-    });
+
+    // Set up TokenUsageTracker mock - required by generateEvalSummary
+    mockTokenUsageTracker = {
+      getProviderIds: vi.fn().mockReturnValue([]),
+      getProviderUsage: vi.fn(),
+      trackUsage: vi.fn(),
+      resetAllUsage: vi.fn(),
+      resetProviderUsage: vi.fn(),
+      getTotalUsage: vi.fn(),
+      cleanup: vi.fn(),
+    } as any;
+    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTokenUsageTracker);
+
+    // Set up required account mocks
+    vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
+    vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
+
+    // Set up cloud and sharing mocks
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(isSharingEnabled).mockReturnValue(true);
     vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/share/123');
+
+    // Set up config resolution
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -858,6 +948,13 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       },
       basePath: path.resolve('/'),
     });
+
+    // Set up cloud permissions check
+    vi.mocked(checkCloudPermissions).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   describe('Priority 1: Explicit disable (CLI --share=false, --no-share, or env var)', () => {
@@ -922,7 +1019,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should share when cmdObj.share = true, overriding commandLineOptions.share = false', async () => {
@@ -943,7 +1040,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
   });
 
@@ -966,7 +1063,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should not share when commandLineOptions.share = false, overriding cloud enabled', async () => {
@@ -1009,7 +1106,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should not share when config.sharing = false, overriding cloud enabled', async () => {
@@ -1049,7 +1146,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
   });
 
@@ -1071,7 +1168,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should not share when cloud is disabled and no other settings are specified', async () => {
@@ -1113,7 +1210,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should respect commandLineOptions.share = true even when config.sharing = false and cloud disabled', async () => {
@@ -1134,7 +1231,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should not call createShareableUrl when isSharingEnabled returns false', async () => {
@@ -1224,24 +1321,23 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
             cmdObj.noShare = cmdNoShare;
           }
 
-          const config = (cfgShare !== undefined ? { sharing: cfgShare } : {}) as UnifiedConfig;
+          const config = (cfgShare === undefined ? {} : { sharing: cfgShare }) as UnifiedConfig;
           const evalRecord = new Eval(config);
 
-          vi.mocked(cloudConfig.isEnabled).mockImplementation(function () {
-            return cloudEnabled;
-          });
+          // Use mockReturnValue for synchronous returns, mockResolvedValue for async
+          vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
           vi.mocked(resolveConfigs).mockResolvedValue({
             config,
             testSuite: { prompts: [], providers: [] },
             basePath: path.resolve('/'),
-            commandLineOptions: cloShare !== undefined ? { share: cloShare } : undefined,
+            commandLineOptions: cloShare === undefined ? undefined : { share: cloShare },
           });
           vi.mocked(evaluate).mockResolvedValue(evalRecord);
 
           await doEval(cmdObj, config, defaultConfigPath, {});
 
           if (expectedToShare) {
-            expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+            expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
           } else {
             expect(createShareableUrl).not.toHaveBeenCalled();
           }
