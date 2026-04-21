@@ -9,14 +9,15 @@ import {
   extractTrajectorySteps,
   summarizeTrajectoryForJudge,
 } from '../../src/assertions/trajectoryUtils';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const mockTraceData: TraceData = {
   traceId: 'test-trace-id',
@@ -159,6 +160,184 @@ describe('trajectory utilities', () => {
       { type: 'span', name: 'sql.query' },
       { type: 'search', name: 'refund policy' },
     ]);
+  });
+
+  it('normalizes OpenAI Agents sandbox exec_command tool spans as commands', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'sandbox-command',
+          name: 'tool exec_command',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'exec_command',
+            'tool.arguments': '{"cmd":"cat repo/tickets/TICKET-014.md","workdir":"/tmp/ws"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('cat repo/tickets/TICKET-014.md');
+    expect(steps[0].args).toEqual({
+      cmd: 'cat repo/tickets/TICKET-014.md',
+      workdir: '/tmp/ws',
+    });
+    expect(steps[0].aliases).toEqual(
+      expect.arrayContaining(['tool exec_command', 'exec_command', 'cat']),
+    );
+  });
+
+  it('normalizes local_shell tool spans as commands using the command arg', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'local-shell-span',
+          name: 'tool local_shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'local_shell',
+            'tool.arguments': '{"command":"ls -la /tmp","timeout":30}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('ls -la /tmp');
+    expect(steps[0].aliases).toEqual(
+      expect.arrayContaining(['tool local_shell', 'local_shell', 'ls']),
+    );
+  });
+
+  it('normalizes shell tool spans as commands', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'shell-span',
+          name: 'tool shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'shell',
+            'tool.arguments': '{"cmd":"echo hello"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('echo hello');
+    expect(steps[0].aliases).toEqual(expect.arrayContaining(['shell', 'echo']));
+  });
+
+  it('normalizes array-format command arguments from exec_command', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'array-cmd',
+          name: 'tool exec_command',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'exec_command',
+            'tool.arguments': '{"cmd":["python","-m","pytest"],"workdir":"/ws"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('python -m pytest');
+    expect(steps[0].aliases).toEqual(
+      expect.arrayContaining(['exec_command', 'python -m pytest', 'python']),
+    );
+  });
+
+  it('falls back to tool type when exec_command has no cmd or command arg', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'no-cmd',
+          name: 'tool exec_command',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': 'exec_command',
+            'tool.arguments': '{"workdir":"/tmp"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('tool');
+    expect(steps[0].name).toBe('exec_command');
+  });
+
+  it('matches command tool names case-insensitively with whitespace trimming', () => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'cased-shell',
+          name: 'tool Shell',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'tool.name': ' Shell ',
+            'tool.arguments': '{"cmd":"pwd"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('command');
+    expect(steps[0].name).toBe('pwd');
+  });
+
+  it.each([
+    ['ai.toolCall.args', '{"order_id":"123","include_history":false}'],
+    ['ai.toolCall.arguments', '{"order_id":"123","include_history":false}'],
+    ['ai.toolCall.input', '{"order_id":"123","include_history":false}'],
+  ])('normalizes Vercel AI SDK tool spans with %s', (argKey, argValue) => {
+    const steps = extractTrajectorySteps({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'vercel-tool-call',
+          name: 'ai.toolCall',
+          startTime: 1000,
+          endTime: 1100,
+          attributes: {
+            'ai.toolCall.name': 'search_orders',
+            [argKey]: argValue,
+            'ai.toolCall.result': '{"status":"ok"}',
+          },
+        },
+      ],
+    });
+
+    expect(steps).toHaveLength(1);
+    expect(steps[0].type).toBe('tool');
+    expect(steps[0].name).toBe('search_orders');
+    expect(steps[0].aliases).toEqual(expect.arrayContaining(['ai.toolCall', 'search_orders']));
+    expect(steps[0].args).toEqual({
+      order_id: '123',
+      include_history: false,
+    });
   });
 
   it('preserves original span order when timestamps are tied', () => {
@@ -816,6 +995,45 @@ describe('trajectory assertions', () => {
           'Tool "compose_*" matched expected arguments (exact) on tool:compose_reply. Args: {"tone":"friendly","citations":["doc_1","doc_2"]}',
         assertion: params.assertion,
       });
+    });
+
+    it('matches Vercel AI SDK spans end-to-end against expected args', () => {
+      const vercelTrace: TraceData = {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'vercel-span',
+            name: 'ai.toolCall',
+            startTime: 1000,
+            endTime: 1100,
+            attributes: {
+              'ai.toolCall.name': 'lookup_customer',
+              'ai.toolCall.args': '{"customer_id":"cust_1234","include_history":true}',
+              'ai.toolCall.result': '{"plan":"pro"}',
+            },
+          },
+        ],
+      };
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: vercelTrace },
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'lookup_customer',
+            args: { customer_id: 'cust_1234' },
+          },
+        },
+        renderedValue: {
+          name: 'lookup_customer',
+          args: { customer_id: 'cust_1234' },
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
     });
 
     it('fails when no matching tool arguments satisfy the expectation', () => {

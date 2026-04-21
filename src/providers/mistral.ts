@@ -161,6 +161,8 @@ interface MistralChatCompletionOptions {
   random_seed?: number;
   response_format?: { type: 'json_object' };
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {

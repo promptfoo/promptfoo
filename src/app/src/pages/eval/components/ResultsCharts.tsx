@@ -525,7 +525,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
     }
 
     // Group evaluations by createdAt and assign evaluation numbers
-    const evaluationGroups = progressData.reduce(
+    const evaluationGroups = progressData.reduce<Record<string, ProgressData[]>>(
       (groups, eval_) => {
         const date = new Date(eval_.createdAt).toISOString();
         if (!groups[date]) {
@@ -534,7 +534,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
         groups[date].push(eval_);
         return groups;
       },
-      {} as Record<string, ProgressData[]>,
+      {},
     );
 
     const evaluations = Object.values(evaluationGroups).flatMap((group, groupIndex) =>
@@ -544,25 +544,24 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       })),
     );
 
-    const datasets = evaluations.reduce(
-      (acc, eval_) => {
-        const passRate =
-          (eval_.metrics.testPassCount /
-            (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
-          100;
+    const datasets = evaluations.reduce<
+      Record<number, { x: number; y: number; evalData: ProgressData }[]>
+    >((acc, eval_) => {
+      const passRate =
+        (eval_.metrics.testPassCount /
+          (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
+        100;
 
-        if (!acc[eval_.evaluationNumber]) {
-          acc[eval_.evaluationNumber] = [];
-        }
-        acc[eval_.evaluationNumber].push({
-          x: eval_.evaluationNumber,
-          y: passRate,
-          evalData: eval_,
-        });
-        return acc;
-      },
-      {} as Record<number, { x: number; y: number; evalData: ProgressData }[]>,
-    );
+      if (!acc[eval_.evaluationNumber]) {
+        acc[eval_.evaluationNumber] = [];
+      }
+      acc[eval_.evaluationNumber].push({
+        x: eval_.evaluationNumber,
+        y: passRate,
+        evalData: eval_,
+      });
+      return acc;
+    }, {});
 
     const chartData = Object.values(datasets).flat();
 

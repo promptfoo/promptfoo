@@ -71,7 +71,32 @@ function makeConfig(configPath: string, evaluateOptions: Partial<EvaluateOptions
   );
 }
 
+function writeTempConfig(tmpDir: string, fileName: string, config: Record<string, unknown>) {
+  const configPath = path.join(tmpDir, fileName);
+  fs.writeFileSync(configPath, yaml.dump(config));
+  return configPath;
+}
+
+async function runEvalAndGetOptions(
+  cmdObj: Partial<CommandLineOptions & Command>,
+): Promise<EvaluateOptions> {
+  await doEval(
+    {
+      table: false,
+      write: false,
+      ...cmdObj,
+    },
+    {},
+    undefined,
+    {},
+  );
+
+  expect(evaluateMock).toHaveBeenCalled();
+  return evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+}
+
 describe('evaluateOptions behavior', () => {
+  let tmpDir: string;
   let configPath: string;
   let noDelayConfigPath: string;
   let noRepeatConfigPath: string;
@@ -81,7 +106,7 @@ describe('evaluateOptions behavior', () => {
   beforeAll(() => {
     process.exit = vi.fn() as any;
 
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-test-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-test-'));
 
     // Build a config file for the tests to use.
     configPath = path.join(tmpDir, 'promptfooconfig.yaml');
@@ -102,89 +127,62 @@ describe('evaluateOptions behavior', () => {
 
   afterAll(() => {
     process.exit = originalExit;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   describe('Reading values from config file', () => {
     it('should read evaluateOptions.maxConcurrency', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [noDelayConfigPath],
-      };
-
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
+      });
 
       expect(options.maxConcurrency).toBe(9);
     });
 
     it('should read evaluateOptions.repeat', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
-      };
-
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
+      });
 
       expect(options.repeat).toBe(99);
     });
 
     it('should read evaluateOptions.delay', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
-      };
-
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
+      });
 
       expect(options.delay).toBe(999);
     });
 
     it('should read evaluateOptions.showProgressBar', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
-      };
-
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
+      });
 
       expect(options.showProgressBar).toBe(false);
     });
 
     it('should read evaluateOptions.cache', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
-      };
-
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
+      });
 
       expect(options.cache).toBe(false);
     });
 
     it('should read evaluateOptions.timeoutMs', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
-      };
-
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
+      });
 
       expect(options.timeoutMs).toBe(9999);
     });
 
     it('should read evaluateOptions.maxEvalTimeMs', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
-      };
-
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
+      });
 
       expect(options.maxEvalTimeMs).toBe(99999);
     });
@@ -192,86 +190,47 @@ describe('evaluateOptions behavior', () => {
 
   describe('Prioritization of CLI options over config file options', () => {
     it('should prioritize maxConcurrency from command line options over config file options', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [noDelayConfigPath],
         maxConcurrency: 5,
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      expect(evaluateMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.any(Object),
-        expect.any(Object),
-      );
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.maxConcurrency).toBe(5);
     });
 
     it('should prioritize repeat from command line options over config file options', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
         repeat: 5,
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      expect(evaluateMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.any(Object),
-        expect.any(Object),
-      );
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.repeat).toBe(5);
     });
 
     it('should prioritize delay from command line options over config file options', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
         delay: 5,
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      expect(evaluateMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.any(Object),
-        expect.any(Object),
-      );
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.delay).toBe(5);
     });
 
     it('should prioritize showProgressBar from command line options over config file options', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
         progressBar: true,
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      expect(evaluateMock).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.any(Object),
-        expect.any(Object),
-      );
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.showProgressBar).toBe(true);
     });
 
     it('should prioritize cache from command line options over config file options', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [noRepeatConfigPath],
         cache: true,
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.cache).toBe(true);
     });
   });
@@ -300,65 +259,47 @@ describe('evaluateOptions behavior', () => {
 
   describe('Edge cases and interactions', () => {
     it('should handle delay >0 forcing concurrency to 1 even with CLI override', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
         maxConcurrency: 10, // This should be overridden to 1 due to delay
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.maxConcurrency).toBe(1); // Should be forced to 1 due to delay
     });
 
     it('should handle repeat >1 with cache value passed correctly', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath],
         cache: true,
         repeat: 3,
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.cache).toBe(true); // Cache value is passed as-is
       expect(options.repeat).toBe(3); // Repeat value is correctly set
       // Repeat no longer disables cache globally. Each repeat index uses its own cache namespace.
     });
 
     it('should handle undefined/null evaluateOptions gracefully', async () => {
-      const tempConfig = path.join(process.cwd(), 'temp-test-config.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          evaluateOptions: null, // Explicitly null
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['test'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'temp-test-config.yaml', {
+        evaluateOptions: null, // Explicitly null
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['test'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      await runEvalAndGetOptions({
         config: [tempConfig],
-      };
-
-      await doEval(cmdObj, {}, undefined, {});
-
-      expect(evaluateMock).toHaveBeenCalled();
-      fs.unlinkSync(tempConfig);
+      });
     });
 
     it('should handle mixed CLI and config values correctly', async () => {
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [configPath], // Has delay: 999, maxConcurrency: 9, etc.
         delay: 0, // CLI override
         repeat: 1, // CLI override
         // maxConcurrency not set, should use config value
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.delay).toBeUndefined(); // CLI delay 0 should result in undefined
       expect(options.repeat).toBe(1); // CLI override
       expect(options.maxConcurrency).toBe(9); // From config
@@ -367,64 +308,45 @@ describe('evaluateOptions behavior', () => {
 
   describe('commandLineOptions behavior', () => {
     it('should respect commandLineOptions.maxConcurrency from config', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-commandline-maxconcurrency.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            maxConcurrency: 10,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-maxconcurrency.yaml', {
+        commandLineOptions: {
+          maxConcurrency: 10,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.maxConcurrency).toBe(10);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should prioritize CLI --max-concurrency over commandLineOptions.maxConcurrency', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-commandline-maxconcurrency-override.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            maxConcurrency: 10,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-maxconcurrency-override.yaml', {
+        commandLineOptions: {
+          maxConcurrency: 10,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
         maxConcurrency: 20, // CLI override
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.maxConcurrency).toBe(20);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should prioritize commandLineOptions.maxConcurrency over evaluateOptions.maxConcurrency', async () => {
-      const tempConfig = path.join(
-        process.cwd(),
+      const tempConfig = writeTempConfig(
+        tmpDir,
         'test-commandline-vs-evaluateoptions-maxconcurrency.yaml',
-      );
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
+        {
           commandLineOptions: {
             maxConcurrency: 10,
           },
@@ -434,241 +356,164 @@ describe('evaluateOptions behavior', () => {
           providers: [{ id: 'openai:gpt-4o-mini' }],
           prompts: ['Test prompt'],
           tests: [{ vars: { input: 'test' } }],
-        }),
+        },
       );
-
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.maxConcurrency).toBe(10); // commandLineOptions wins
-      fs.unlinkSync(tempConfig);
     });
 
     it('should respect commandLineOptions.repeat from config', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-commandline-repeat.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            repeat: 5,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-repeat.yaml', {
+        commandLineOptions: {
+          repeat: 5,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.repeat).toBe(5);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should prioritize CLI --repeat over commandLineOptions.repeat', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-commandline-repeat-override.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            repeat: 5,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-repeat-override.yaml', {
+        commandLineOptions: {
+          repeat: 5,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
         repeat: 10, // CLI override
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.repeat).toBe(10);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should respect commandLineOptions.delay from config', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-commandline-delay.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            delay: 500,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-delay.yaml', {
+        commandLineOptions: {
+          delay: 500,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.delay).toBe(500);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should prioritize CLI --delay over commandLineOptions.delay', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-commandline-delay-override.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            delay: 500,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-delay-override.yaml', {
+        commandLineOptions: {
+          delay: 500,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
         delay: 1000, // CLI override
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.delay).toBe(1000);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should respect commandLineOptions.cache from config', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-commandline-cache.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            cache: false,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-cache.yaml', {
+        commandLineOptions: {
+          cache: false,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.cache).toBe(false);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should prioritize CLI --cache over commandLineOptions.cache', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-commandline-cache-override.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            cache: false,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-cache-override.yaml', {
+        commandLineOptions: {
+          cache: false,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
         cache: true, // CLI override
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.cache).toBe(true);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should respect commandLineOptions.generateSuggestions from config', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-generate-suggestions.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            generateSuggestions: true,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-generate-suggestions.yaml', {
+        commandLineOptions: {
+          generateSuggestions: true,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
-        table: false,
-        write: false,
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.generateSuggestions).toBe(true);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should prioritize CLI --suggest-prompts over commandLineOptions.generateSuggestions', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-generate-suggestions-override.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            generateSuggestions: false,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-generate-suggestions-override.yaml', {
+        commandLineOptions: {
+          generateSuggestions: false,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
-        table: false,
-        write: false,
+      const options = await runEvalAndGetOptions({
         config: [tempConfig],
         generateSuggestions: true, // CLI override
-      };
+      });
 
-      await doEval(cmdObj, {}, undefined, {});
-
-      const options = evaluateMock.mock.calls[0][2];
       expect(options.generateSuggestions).toBe(true);
-      fs.unlinkSync(tempConfig);
     });
 
     it('should respect commandLineOptions.table from config', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-table.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            table: false,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-table.yaml', {
+        commandLineOptions: {
+          table: false,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
       const cmdObj: Partial<CommandLineOptions & Command> = {
         write: false,
@@ -680,22 +525,17 @@ describe('evaluateOptions behavior', () => {
 
       // If this completes without error, the config was respected
       expect(evaluateMock).toHaveBeenCalled();
-      fs.unlinkSync(tempConfig);
     });
 
     it('should respect commandLineOptions.write = false from config', async () => {
-      const tempConfig = path.join(process.cwd(), 'test-write.yaml');
-      fs.writeFileSync(
-        tempConfig,
-        yaml.dump({
-          commandLineOptions: {
-            write: false,
-          },
-          providers: [{ id: 'openai:gpt-4o-mini' }],
-          prompts: ['Test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        }),
-      );
+      const tempConfig = writeTempConfig(tmpDir, 'test-write.yaml', {
+        commandLineOptions: {
+          write: false,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
 
       const cmdObj: Partial<CommandLineOptions & Command> = {
         table: false,
@@ -706,7 +546,6 @@ describe('evaluateOptions behavior', () => {
 
       // Verify eval completed successfully with write=false
       expect(evaluateMock).toHaveBeenCalled();
-      fs.unlinkSync(tempConfig);
     });
   });
 });

@@ -226,7 +226,7 @@ The prompt inserts the previous conversation into the test case, creating a full
 Try it yourself by using the [full example config](https://github.com/promptfoo/promptfoo/tree/main/examples/config-multi-turn).
 
 :::info
-When the `_conversation` variable is present, the eval will run single-threaded (concurrency of 1).
+When a prompt references `_conversation` as a Nunjucks variable, the eval will run single-threaded (concurrency of 1).
 :::
 
 ## Separating Chat Conversations

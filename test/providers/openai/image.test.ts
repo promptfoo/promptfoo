@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
+import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -144,7 +145,7 @@ describe('OpenAiImageProvider', () => {
       // Save original environment variable
       const originalEnv = process.env.OPENAI_API_KEY;
       // Clear the environment variable so we can test the error
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         // Create provider with no API key in config or environment
@@ -167,8 +168,8 @@ describe('OpenAiImageProvider', () => {
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
       const originalEnv = process.env.OPENAI_API_KEY;
       const originalCustomEnv = process.env.CUSTOM_IMAGE_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_IMAGE_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_IMAGE_API_KEY: undefined });
 
       try {
         const provider = new OpenAiImageProvider('dall-e-3', {

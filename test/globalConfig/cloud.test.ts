@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import { fetchWithProxy } from '../../src/util/fetch/index';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/util/fetch/index');
 vi.mock('../../src/logger');
@@ -288,9 +289,9 @@ describe('CloudConfig', () => {
 
     afterEach(() => {
       if (originalEnv === undefined) {
-        delete process.env.PROMPTFOO_API_KEY;
+        mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
       } else {
-        process.env.PROMPTFOO_API_KEY = originalEnv;
+        mockProcessEnv({ PROMPTFOO_API_KEY: originalEnv });
       }
     });
 
@@ -299,7 +300,7 @@ describe('CloudConfig', () => {
         id: 'test-id',
         cloud: { apiKey: 'config-key' },
       });
-      delete process.env.PROMPTFOO_API_KEY;
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
       const config = new CloudConfig();
       expect(config.getApiKey()).toBe('config-key');
     });
@@ -308,7 +309,7 @@ describe('CloudConfig', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
-      process.env.PROMPTFOO_API_KEY = 'env-key';
+      mockProcessEnv({ PROMPTFOO_API_KEY: 'env-key' });
       const config = new CloudConfig();
       expect(config.getApiKey()).toBe('env-key');
     });
@@ -318,7 +319,7 @@ describe('CloudConfig', () => {
         id: 'test-id',
         cloud: { apiKey: 'config-key' },
       });
-      process.env.PROMPTFOO_API_KEY = 'env-key';
+      mockProcessEnv({ PROMPTFOO_API_KEY: 'env-key' });
       const config = new CloudConfig();
       expect(config.getApiKey()).toBe('config-key');
     });
@@ -327,7 +328,7 @@ describe('CloudConfig', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
-      delete process.env.PROMPTFOO_API_KEY;
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
       const config = new CloudConfig();
       expect(config.getApiKey()).toBeUndefined();
     });
@@ -338,9 +339,9 @@ describe('CloudConfig', () => {
 
     afterEach(() => {
       if (originalEnv === undefined) {
-        delete process.env.PROMPTFOO_API_KEY;
+        mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
       } else {
-        process.env.PROMPTFOO_API_KEY = originalEnv;
+        mockProcessEnv({ PROMPTFOO_API_KEY: originalEnv });
       }
     });
 
@@ -349,7 +350,7 @@ describe('CloudConfig', () => {
         id: 'test-id',
         cloud: { apiKey: 'config-key' },
       });
-      delete process.env.PROMPTFOO_API_KEY;
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
       const config = new CloudConfig();
       expect(config.isEnabled()).toBe(true);
     });
@@ -358,7 +359,7 @@ describe('CloudConfig', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
-      process.env.PROMPTFOO_API_KEY = 'env-key';
+      mockProcessEnv({ PROMPTFOO_API_KEY: 'env-key' });
       const config = new CloudConfig();
       expect(config.isEnabled()).toBe(true);
     });
@@ -367,7 +368,7 @@ describe('CloudConfig', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
-      delete process.env.PROMPTFOO_API_KEY;
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
       const config = new CloudConfig();
       expect(config.isEnabled()).toBe(false);
     });
@@ -378,9 +379,9 @@ describe('CloudConfig', () => {
 
     afterEach(() => {
       if (originalEnv === undefined) {
-        delete process.env.PROMPTFOO_CLOUD_API_URL;
+        mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined });
       } else {
-        process.env.PROMPTFOO_CLOUD_API_URL = originalEnv;
+        mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: originalEnv });
       }
     });
 
@@ -389,7 +390,7 @@ describe('CloudConfig', () => {
         id: 'test-id',
         cloud: { apiHost: 'https://config-host.example.com' },
       });
-      delete process.env.PROMPTFOO_CLOUD_API_URL;
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined });
       const config = new CloudConfig();
       expect(config.getApiHost()).toBe('https://config-host.example.com');
     });
@@ -398,7 +399,7 @@ describe('CloudConfig', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
-      process.env.PROMPTFOO_CLOUD_API_URL = 'https://env-host.example.com';
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: 'https://env-host.example.com' });
       const config = new CloudConfig();
       expect(config.getApiHost()).toBe('https://env-host.example.com');
     });
@@ -408,7 +409,7 @@ describe('CloudConfig', () => {
         id: 'test-id',
         cloud: { apiHost: 'https://config-host.example.com' },
       });
-      process.env.PROMPTFOO_CLOUD_API_URL = 'https://env-host.example.com';
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: 'https://env-host.example.com' });
       const config = new CloudConfig();
       expect(config.getApiHost()).toBe('https://config-host.example.com');
     });
@@ -417,7 +418,7 @@ describe('CloudConfig', () => {
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
-      delete process.env.PROMPTFOO_CLOUD_API_URL;
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined });
       const config = new CloudConfig();
       expect(config.getApiHost()).toBe(API_HOST);
     });

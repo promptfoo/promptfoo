@@ -131,6 +131,26 @@ import { importModule } from '../../../src/esm';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import { loadAgentDefinition } from '../../../src/providers/openai/agents-loader';
 
+function resetOpenAiAgentsMocks() {
+  mockRun.mockReset().mockResolvedValue({
+    finalOutput: 'Agent answer',
+    usage: {
+      totalTokens: 12,
+      promptTokens: 7,
+      completionTokens: 5,
+    },
+    newItems: [],
+  });
+  mockGetOrCreateTrace.mockReset().mockImplementation(async (fn: () => Promise<unknown>) => fn());
+  mockRetryPolicies.never.mockReset().mockImplementation(() => vi.fn());
+  mockRetryPolicies.providerSuggested.mockReset().mockImplementation(() => vi.fn());
+  mockRetryPolicies.networkError.mockReset().mockImplementation(() => vi.fn());
+  mockRetryPolicies.retryAfter.mockReset().mockImplementation(() => vi.fn());
+  mockRetryPolicies.httpStatus.mockReset().mockImplementation(() => vi.fn());
+  mockRetryPolicies.any.mockReset().mockImplementation(() => vi.fn());
+  mockRetryPolicies.all.mockReset().mockImplementation(() => vi.fn());
+}
+
 describe('OpenAiAgentsProvider', () => {
   const mockImportModule = vi.mocked(importModule);
   const baseInputGuardrail = {
@@ -144,15 +164,7 @@ describe('OpenAiAgentsProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRun.mockResolvedValue({
-      finalOutput: 'Agent answer',
-      usage: {
-        totalTokens: 12,
-        promptTokens: 7,
-        completionTokens: 5,
-      },
-      newItems: [],
-    });
+    resetOpenAiAgentsMocks();
     cliState.basePath = undefined;
   });
 
