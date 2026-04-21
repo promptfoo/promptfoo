@@ -187,9 +187,6 @@ export function poisonCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (documents: DocumentLike[], opts: Omit<PoisonOptions, 'documents'>) => {
       setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam poison',
-      });
       telemetry.record('redteam poison', {});
 
       try {
@@ -199,7 +196,7 @@ export function poisonCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`An unexpected error occurred: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

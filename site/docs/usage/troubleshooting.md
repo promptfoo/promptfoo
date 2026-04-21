@@ -1,6 +1,6 @@
 ---
 sidebar_position: 60
-description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, and native builds in your LLM testing pipeline
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, native builds, and network/proxy setup in your LLM testing pipeline
 ---
 
 # Troubleshooting
@@ -12,6 +12,26 @@ Before troubleshooting specific issues, you can access detailed logs to help dia
 - **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
 - **Custom log directory**: Set the `PROMPTFOO_LOG_DIR` environment variable to write logs to a different directory (e.g., `PROMPTFOO_LOG_DIR=./logs promptfoo eval`)
 - **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
+
+### Live Debug Toggle
+
+During `promptfoo redteam run`, you can toggle debug logging on and off in real-time without restarting:
+
+- **Press `v`** at any time to toggle verbose/debug output
+- Works only in interactive terminal mode (not in CI or when output is piped)
+- Useful for investigating issues mid-run without overwhelming log output
+
+When you start a scan, you'll see:
+
+```
+  Tip: Press v to toggle debug output
+```
+
+Press `v` to enable debug logs and see detailed request metadata, provider response summaries, and grading status. Sensitive payloads, credentials, and raw response bodies may be redacted or summarized. Press `v` again to return to clean output.
+
+:::tip
+This is especially helpful when a scan seems stuck or you want to understand what's happening with a specific test case.
+:::
 
 ## Out of memory error
 
@@ -159,11 +179,46 @@ npm install --build-from-source
 npm rebuild
 ```
 
+## Network and proxy issues
+
+If you're behind a corporate proxy or firewall and having trouble connecting to LLM APIs:
+
+### Configure proxy settings
+
+Set standard proxy environment variables before running promptfoo:
+
+```bash
+# Set proxy for HTTPS requests (most common)
+export HTTPS_PROXY=http://proxy.company.com:8080
+
+# With authentication if needed
+export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+# Exclude specific hosts from proxying
+export NO_PROXY=localhost,127.0.0.1,internal.domain.com
+```
+
+### Custom CA certificates
+
+For environments with custom certificate authorities:
+
+```bash
+export PROMPTFOO_CA_CERT_PATH=/path/to/ca-bundle.crt
+```
+
+### Verify your configuration
+
+Run `promptfoo debug` to see detected proxy settings and verify your network configuration is correct.
+
+See the [FAQ](/docs/faq/#how-do-i-configure-promptfoo-for-corporate-networks-or-proxies) for complete proxy and SSL configuration details.
+
 ## OpenAI API key is not set
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
 
-If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `llm-rubric` or `similar` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+For default text-only model grading and synthesis, you can also install `@openai/codex-sdk`, sign in through the Codex CLI, and let Promptfoo use `openai:codex-sdk` automatically when no higher-priority API credentials are set. This does not cover embedding or moderation providers.
+
+If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `similar` or `moderation` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) or configure an embedding/moderation provider explicitly.
 
 Follow the instructions to override the grader, e.g., using the `defaultTest` property:
 

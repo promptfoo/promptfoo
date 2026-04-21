@@ -1,10 +1,4 @@
-import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
 import { Command } from 'commander';
-import { getGlobalDispatcher } from 'undici';
-
-import { VERSION } from './version';
-import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
@@ -13,6 +7,7 @@ import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
+import { evalSetupCommand } from './commands/evalSetup';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
 import { generateAssertionsCommand } from './commands/generate/assertions';
@@ -20,6 +15,7 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
+import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
 import { setupRetryCommand } from './commands/retry';
@@ -27,8 +23,13 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import { closeDbIfOpen } from './database/index';
-import logger, { closeLogger, initializeRunLogging, setLogLevel } from './logger';
+import logger, { initializeRunLogging } from './logger';
+import {
+  addCommonOptionsRecursively,
+  isMainModule,
+  setupEnvFilesFromArgv,
+  shutdownGracefully,
+} from './mainUtils';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
@@ -37,55 +38,18 @@ import { pluginsCommand as redteamPluginsCommand } from './redteam/commands/plug
 import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
-import { simbaCommand } from './redteam/commands/simba';
-import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
-import { setupEnv } from './util/index';
-
-/**
- * Adds verbose and env-file options to all commands recursively
- */
-export function addCommonOptionsRecursively(command: Command) {
-  const hasVerboseOption = command.options.some(
-    (option) => option.short === '-v' || option.long === '--verbose',
-  );
-  if (!hasVerboseOption) {
-    command.option('-v, --verbose', 'Show debug logs', false);
-  }
-
-  const hasEnvFileOption = command.options.some(
-    (option) => option.long === '--env-file' || option.long === '--env-path',
-  );
-  if (!hasEnvFileOption) {
-    command.option('--env-file, --env-path <path>', 'Path to .env file');
-  }
-
-  command.hook('preAction', (thisCommand) => {
-    if (thisCommand.opts().verbose) {
-      setLogLevel('debug');
-      logger.debug('Verbose mode enabled via --verbose flag');
-    }
-
-    const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
-    if (envPath) {
-      setupEnv(envPath);
-      logger.debug(`Loading environment from ${envPath}`);
-    }
-  });
-
-  command.commands.forEach((subCommand) => {
-    addCommonOptionsRecursively(subCommand);
-  });
-}
+import { VERSION } from './version';
 
 async function main() {
+  setupEnvFilesFromArgv();
   initializeRunLogging();
 
   // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
   if (!process.env.PROMPTFOO_DISABLE_UPDATE && typeof process.env.CI !== 'undefined') {
-    process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
+    Object.assign(process.env, { PROMPTFOO_DISABLE_UPDATE: 'true' });
   }
 
   await checkForUpdates();
@@ -98,14 +62,20 @@ async function main() {
     .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
-    .on('option:*', function () {
-      logger.error('Invalid option(s)');
+    .on('option:*', function (this: Command) {
+      const unknownArgs = this.args.filter((arg) => arg.startsWith('-'));
+      if (unknownArgs.length > 0) {
+        logger.error(`Invalid option(s): ${unknownArgs.join(', ')}`);
+      } else {
+        logger.error('Invalid option(s)');
+      }
       program.help();
       process.exitCode = 1;
     });
 
   // Main commands
-  evalCommand(program, defaultConfig, defaultConfigPath);
+  const evalCmd = evalCommand(program, defaultConfig, defaultConfigPath);
+  evalSetupCommand(evalCmd);
   initCommand(program);
   viewCommand(program);
   mcpCommand(program);
@@ -124,10 +94,11 @@ async function main() {
   feedbackCommand(program);
   importCommand(program);
   listCommand(program);
+  logsCommand(program);
   modelScanCommand(program);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
-  showCommand(program);
+  void showCommand(program);
 
   generateDatasetCommand(generateCommand, defaultConfig, defaultConfigPath);
   generateAssertionsCommand(generateCommand, defaultConfig, defaultConfigPath);
@@ -148,7 +119,6 @@ async function main() {
   redteamReportCommand(redteamBaseCommand);
   redteamSetupCommand(redteamBaseCommand);
   redteamPluginsCommand(redteamBaseCommand);
-  simbaCommand(redteamBaseCommand, defaultConfig);
   // Add common options to all commands recursively
   addCommonOptionsRecursively(program);
 
@@ -165,24 +135,34 @@ async function main() {
 
 // ESM replacement for require.main === module check
 // Check if this module is being run directly (not imported)
+// The isMainModule check may throw in CJS builds where import.meta.url is not available
+let isMain = false;
 try {
-  if (resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1] || '')) {
-    checkNodeVersion();
-    main().finally(async () => {
-      logger.debug('Shutting down gracefully...');
-      await telemetry.shutdown();
-      logger.debug('Shutdown complete');
-
-      closeLogger();
-      closeDbIfOpen();
-      try {
-        const dispatcher = getGlobalDispatcher();
-        await dispatcher.destroy();
-      } catch {
-        // Silently handle dispatcher destroy errors
-      }
-    });
-  }
+  isMain = isMainModule(import.meta.url, process.argv[1]);
 } catch {
-  // In CJS builds, this will fail silently - CJS entry point is handled differently
+  // In CJS builds, import.meta.url throws - CJS entry point is handled differently
+}
+
+if (isMain) {
+  let mainError: unknown;
+  try {
+    await main();
+  } catch (error) {
+    mainError = error;
+    // Set exit code immediately so watchdog timeouts preserve the error state
+    process.exitCode = 1;
+  } finally {
+    try {
+      await shutdownGracefully();
+    } catch (shutdownError) {
+      // Log shutdown error but preserve the original main error if it exists
+      logger.error(
+        `Shutdown error: ${shutdownError instanceof Error ? shutdownError.message : shutdownError}`,
+      );
+    }
+  }
+  // Re-throw the original error after cleanup is complete
+  if (mainError) {
+    throw mainError;
+  }
 }

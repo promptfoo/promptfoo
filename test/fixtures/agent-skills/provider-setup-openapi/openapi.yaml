@@ -1,0 +1,283 @@
+openapi: 3.1.0
+info:
+  title: Invoice Assistant API
+  version: 1.0.0
+servers:
+  - url: https://api.example.test
+paths:
+  /v1/invoices/search:
+    get:
+      operationId: searchInvoices
+      summary: Search invoice assistant responses.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /v1/invoices/apikey-search:
+    get:
+      operationId: apiKeySearchInvoices
+      summary: Search invoice assistant responses with header API-key auth.
+      security:
+        - invoiceApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /v1/invoices/query-key-search:
+    get:
+      operationId: queryApiKeySearchInvoices
+      summary: Search invoice assistant responses with query API-key auth.
+      security:
+        - invoiceQueryApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /v1/invoices/cookie-search:
+    get:
+      operationId: cookieSearchInvoices
+      summary: Search invoice assistant responses with cookie API-key auth.
+      security:
+        - invoiceCookieApiKey: []
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /v1/invoices/header-search:
+    get:
+      operationId: headerSearchInvoices
+      summary: Search invoice assistant responses with tenant header context.
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/TenantHeader'
+        - $ref: '#/components/parameters/ApiVersion'
+      responses:
+        '200':
+          description: Search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /v1/invoices/cookie-param-search:
+    get:
+      operationId: cookieParamSearchInvoices
+      summary: Search invoice assistant responses with cookie context.
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/InvoiceContextCookie'
+      responses:
+        '200':
+          description: Search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /v1/invoices/{invoice_id}/chat:
+    post:
+      operationId: chatWithInvoice
+      summary: Ask the invoice assistant about one invoice.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: invoice_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceChatRequest'
+      responses:
+        '200':
+          description: Assistant response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceChatResponse'
+  /v1/invoices/ask:
+    post:
+      operationId: askInvoiceQuestion
+      summary: Ask a tenant-scoped invoice question.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvoiceQuestionRequest'
+      responses:
+        '200':
+          description: Question response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+  /v1/invoices/{invoice_id}/notes:
+    parameters:
+      - $ref: '#/components/parameters/InvoiceId'
+      - $ref: '#/components/parameters/TenantId'
+    post:
+      operationId: createInvoiceNote
+      summary: Create a note on one invoice.
+      security:
+        - bearerAuth: []
+      requestBody:
+        $ref: '#/components/requestBodies/InvoiceNoteRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/CreatedInvoiceNote'
+components:
+  parameters:
+    SearchQuery:
+      name: q
+      in: query
+      required: true
+      schema:
+        type: string
+    UserId:
+      name: user_id
+      in: query
+      required: true
+      schema:
+        type: string
+    InvoiceId:
+      name: invoice_id
+      in: path
+      required: true
+      schema:
+        type: string
+    TenantId:
+      name: tenant_id
+      in: query
+      required: true
+      schema:
+        type: string
+    TenantHeader:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema:
+        type: string
+        example: tenant-alpha
+    ApiVersion:
+      name: api-version
+      in: query
+      required: true
+      schema:
+        type: string
+        enum:
+          - '2026-04-01'
+    InvoiceContextCookie:
+      name: invoice-context
+      in: cookie
+      required: true
+      schema:
+        type: string
+        example: context-alpha
+  requestBodies:
+    InvoiceNoteRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InvoiceNoteRequest'
+  responses:
+    CreatedInvoiceNote:
+      description: Created note response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InvoiceChatResponse'
+  schemas:
+    InvoiceChatRequest:
+      type: object
+      required:
+        - user_id
+        - message
+      properties:
+        user_id:
+          type: string
+        message:
+          type: string
+    InvoiceChatResponse:
+      type: object
+      required:
+        - output
+      properties:
+        output:
+          type: string
+    InvoiceNoteRequest:
+      type: object
+      required:
+        - user_id
+        - message
+      properties:
+        user_id:
+          type: string
+        message:
+          type: string
+    InvoiceQuestionRequest:
+      type: object
+      required:
+        - tenant_id
+        - question
+      properties:
+        tenant_id:
+          type: string
+        question:
+          type: string
+    SearchResponse:
+      type: object
+      required:
+        - answer
+      properties:
+        answer:
+          type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    invoiceApiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    invoiceQueryApiKey:
+      type: apiKey
+      in: query
+      name: api_key
+    invoiceCookieApiKey:
+      type: apiKey
+      in: cookie
+      name: invoice_session

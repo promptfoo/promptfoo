@@ -1,0 +1,12 @@
+{
+  "$schema": "https://promptfoo.dev/config-schema.json",
+  "description": "Smoke test - JSON config format",
+  "providers": ["echo"],
+  "prompts": ["Hello {{name}}"],
+  "tests": [
+    {
+      "vars": { "name": "JSON" },
+      "assert": [{ "type": "contains", "value": "Hello" }, { "type": "contains", "value": "JSON" }]
+    }
+  ]
+}

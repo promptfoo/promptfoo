@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Spinner } from '@app/components/ui/spinner';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useToast } from '@app/hooks/useToast';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
 
 interface EmailVerificationDialogProps {
   open: boolean;
@@ -105,51 +108,51 @@ export function EmailVerificationDialog({
   return (
     <Dialog
       open={open}
-      onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      disableEscapeKeyDown={isSubmitting}
-      slotProps={{
-        backdrop: {
-          onClick: isSubmitting ? (event) => event.stopPropagation() : undefined,
-        },
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !isSubmitting) {
+          onClose();
+        }
       }}
     >
-      <DialogTitle>Email Required</DialogTitle>
-      <DialogContent>
-        <Box sx={{ mb: 2 }}>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-            {message}
-          </Typography>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Email Required</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <p className="text-muted-foreground">{message}</p>
 
-          <TextField
-            autoFocus
-            fullWidth
-            label="Work Email Address"
-            type="email"
-            value={email}
-            onChange={handleEmailChange}
-            onKeyDown={handleKeyPress}
-            error={!!emailError}
-            helperText={emailError}
-            disabled={isSubmitting}
-            placeholder="your.email@company.com"
-          />
-        </Box>
+          <div className="space-y-2">
+            <Label htmlFor="email">Work Email Address</Label>
+            <Input
+              id="email"
+              autoFocus
+              type="email"
+              value={email}
+              onChange={handleEmailChange}
+              onKeyDown={handleKeyPress}
+              disabled={isSubmitting}
+              placeholder="your.email@company.com"
+              className={emailError ? 'border-destructive' : ''}
+            />
+            {emailError && <HelperText error>{emailError}</HelperText>}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting || !email.trim()}>
+            {isSubmitting ? (
+              <>
+                <Spinner className="mr-2 size-4" />
+                Verifying...
+              </>
+            ) : (
+              'Verify Email'
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose} disabled={isSubmitting}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={isSubmitting || !email.trim()}
-          startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
-        >
-          {isSubmitting ? 'Verifying...' : 'Verify Email'}
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

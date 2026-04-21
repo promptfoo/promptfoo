@@ -1,10 +1,10 @@
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
-import { matchesLlmRubric } from '../../src/matchers';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/llmGrading');
 
 describe('handleLlmRubric', () => {
   beforeEach(() => {
@@ -407,6 +407,30 @@ describe('handleLlmRubric', () => {
       params.assertion,
       undefined,
       undefined,
+    );
+  });
+
+  it('should pass through renderedGradingPrompt metadata from matchesLlmRubric', async () => {
+    const params = {
+      ...defaultParams,
+      renderedValue: 'test rubric',
+    };
+
+    const expectedResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+      metadata: {
+        renderedGradingPrompt: '[{"role":"system","content":"grading instructions"}]',
+      },
+    };
+
+    mockMatchesLlmRubric.mockResolvedValue(expectedResult);
+
+    const result = await handleLlmRubric(params);
+
+    expect(result.metadata?.renderedGradingPrompt).toBe(
+      '[{"role":"system","content":"grading instructions"}]',
     );
   });
 });

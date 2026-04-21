@@ -155,6 +155,20 @@
       "when": 1761694564206,
       "tag": "0021_mysterious_madelyne_pryor",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1765906817572,
+      "tag": "0022_sleepy_ultimo",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1767985150681,
+      "tag": "0023_wooden_mandrill",
+      "breakpoints": true
     }
   ]
 }

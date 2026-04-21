@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
 // Hoisted mock functions
@@ -24,6 +24,15 @@ vi.mock('child_process', async (importOriginal) => {
 vi.mock('../../src/cache', () => ({
   getCache: mockGetCache,
   isCacheEnabled: mockIsCacheEnabled,
+}));
+
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
 }));
 
 vi.mock('fs');
@@ -57,6 +66,9 @@ describe('GolangProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockExecFile.mockReset();
+    mockGetCache.mockReset();
+    mockIsCacheEnabled.mockReset();
 
     // Reset all mocks to default behavior
     mockGetCache.mockResolvedValue({
@@ -288,7 +300,8 @@ describe('GolangProvider', () => {
 
       expect(mockCache.get).toHaveBeenCalledWith(expect.stringContaining('golang:'));
       expect(mockExecFile).not.toHaveBeenCalled();
-      expect(result).toEqual({ output: 'cached result' });
+      expect(result.cached).toBe(true);
+      expect(result).toEqual({ output: 'cached result', cached: true });
     });
 
     it('should handle cache errors', async () => {
@@ -580,7 +593,8 @@ describe('GolangProvider', () => {
       mockExistsSync.mockImplementation(function (p: fs.PathLike) {
         const pathStr = p.toString();
         checkedPaths.push(pathStr);
-        return pathStr.endsWith('/absolute/path/to/go.mod');
+        // Return true for go.mod and wrapper.go files
+        return pathStr.endsWith('/absolute/path/to/go.mod') || pathStr.includes('wrapper.go');
       });
 
       mockDirname.mockImplementation(function (p: string) {

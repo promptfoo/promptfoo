@@ -1,14 +1,16 @@
 import React from 'react';
-import EditIcon from '@mui/icons-material/Edit';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Spinner } from '@app/components/ui/spinner';
+import { Textarea } from '@app/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@app/components/ui/tooltip';
+import { Pencil, Play } from 'lucide-react';
 
 interface CodeDisplayProps {
   content: string;
@@ -39,7 +41,7 @@ interface PromptEditorProps {
   onMouseEnter: (element: string) => void;
   onMouseLeave: () => void;
   CodeDisplay: CodeDisplayComponent;
-  subtitleTypographySx: object;
+  subtitleTypographyClassName: string;
   readOnly?: boolean;
 }
 
@@ -59,89 +61,86 @@ export function PromptEditor({
   onMouseEnter,
   onMouseLeave,
   CodeDisplay,
-  subtitleTypographySx,
+  subtitleTypographyClassName,
   readOnly = false,
 }: PromptEditorProps) {
   return (
-    <Box mb={2}>
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-        <Typography variant="subtitle1" sx={subtitleTypographySx}>
-          Prompt
-        </Typography>
-        <Box display="flex" gap={1}>
-          {!readOnly && !editMode && (
-            <Tooltip title="Edit & Replay">
-              <IconButton
-                size="small"
-                onClick={() => onEditModeChange(true)}
-                sx={{
-                  color: 'text.secondary',
-                  '&:hover': {
-                    color: 'primary.main',
-                  },
-                }}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          )}
-          {!readOnly && editMode && (
-            <>
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={replayLoading ? <CircularProgress size={16} /> : <PlayArrowIcon />}
-                onClick={onReplay}
-                disabled={replayLoading || !editedPrompt.trim()}
-              >
-                Replay
-              </Button>
-              <Button
-                size="small"
-                onClick={() => {
-                  onCancel();
-                  onEditModeChange(false);
-                  onPromptChange(prompt);
-                }}
-              >
-                Cancel
-              </Button>
-            </>
-          )}
-        </Box>
-      </Box>
-      {editMode ? (
-        <TextField
-          fullWidth
-          multiline
-          variant="outlined"
-          value={editedPrompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          sx={{
-            '& .MuiInputBase-root': {
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-            },
-          }}
-          minRows={4}
-          maxRows={20}
-        />
-      ) : (
-        <CodeDisplay
-          content={prompt}
-          title=""
-          onCopy={onCopy}
-          copied={copied}
-          onMouseEnter={() => onMouseEnter('prompt')}
-          onMouseLeave={onMouseLeave}
-          showCopyButton={hoveredElement === 'prompt' || copied}
-        />
-      )}
-      {replayError && (
-        <Alert severity="error" sx={{ mt: 1 }}>
-          {replayError}
-        </Alert>
-      )}
-    </Box>
+    <TooltipProvider>
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className={subtitleTypographyClassName}>Prompt</h4>
+          <div className="flex gap-2">
+            {!readOnly && !editMode && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEditModeChange(true)}
+                    className="size-8 text-muted-foreground hover:text-primary"
+                    aria-label="Edit & Replay"
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit & Replay</TooltipContent>
+              </Tooltip>
+            )}
+            {!readOnly && editMode && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={onReplay}
+                  disabled={replayLoading || !editedPrompt.trim()}
+                >
+                  {replayLoading ? (
+                    <Spinner className="size-4 mr-2" />
+                  ) : (
+                    <Play className="size-4 mr-2" />
+                  )}
+                  Replay
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onCancel();
+                    onEditModeChange(false);
+                    onPromptChange(prompt);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+        {editMode ? (
+          <Textarea
+            value={editedPrompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            className="font-mono text-sm min-h-[100px] max-h-[400px]"
+            rows={4}
+          />
+        ) : (
+          <CodeDisplay
+            content={prompt}
+            title=""
+            onCopy={onCopy}
+            copied={copied}
+            onMouseEnter={() => onMouseEnter('prompt')}
+            onMouseLeave={onMouseLeave}
+            showCopyButton={hoveredElement === 'prompt' || copied}
+          />
+        )}
+        {replayError && (
+          <Alert variant="destructive" className="mt-2">
+            <AlertContent>
+              <AlertDescription>{replayError}</AlertDescription>
+            </AlertContent>
+          </Alert>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

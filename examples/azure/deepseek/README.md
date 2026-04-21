@@ -1,4 +1,4 @@
-# deepseek (Azure DeepSeek Models)
+# azure/deepseek (Azure DeepSeek Models)
 
 This example demonstrates how to use DeepSeek models on Azure AI Foundry with promptfoo, including the DeepSeek-R1 reasoning model.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example azure/deepseek
+cd azure/deepseek
 ```
 
 ## Setup
