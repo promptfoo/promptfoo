@@ -13,5 +13,6 @@ Helpers and model-graded matcher implementations used by `src/assertions/`, `src
 
 - Preserve existing matcher signatures, result shapes, score/pass semantics, and token accounting unless you intentionally migrate every caller and update tests.
 - When adding or changing a matcher, update the matching wrapper in `src/assertions/` if needed and run the corresponding tests in `test/matchers/` and `test/assertions/`.
+- If matcher behavior changes an assertion contract, follow `src/assertions/AGENTS.md`.
 - For provider resolution and rubric helpers (`providers.ts`, `rubric.ts`), also run `test/matchers/utils.test.ts`.
 - For shared utility helpers (`shared.ts`), run `test/matchers/similarity.test.ts` and any external matcher tests that import those helpers.

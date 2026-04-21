@@ -1,4 +1,4 @@
-body,language,[openai:gpt-4.1-mini] Rephrase this in {{language}}: {{body}},[openai:gpt-4.1-mini] Translate this to conversational {{language}}: {{body}}
+body,language,[openai:chat:gpt-5.4-mini] Rephrase this in {{language}}: {{body}},[openai:chat:gpt-5.4-mini] Translate this to conversational {{language}}: {{body}}
 Hello world,French,"[PASS] (1.00)
 
 Bonjour le monde.

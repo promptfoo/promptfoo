@@ -1,20 +1,20 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Open-source model comparison: Mistral, Mixtral, Llama, Gemma'
+description: 'Open-source model comparison: DeepSeek, Mistral, Llama, Qwen'
 
 prompts:
   - 'Respond to this user input: {{message}}'
 
 providers:
-  - id: openrouter:mistralai/mistral-nemo
+  - id: openrouter:deepseek/deepseek-v3.2
     config:
       temperature: 0.5
-  - id: openrouter:mistralai/mixtral-8x22b-instruct
+  - id: openrouter:mistralai/mistral-small-3.2-24b-instruct
     config:
       temperature: 0.5
-  - id: openrouter:meta-llama/llama-4-scout-17b-16e-instruct
+  - id: openrouter:meta-llama/llama-4-maverick
     config:
       temperature: 0.5
-  - id: openrouter:google/gemma-2-27b-it
+  - id: openrouter:qwen/qwen3-32b
     config:
       temperature: 0.5
 

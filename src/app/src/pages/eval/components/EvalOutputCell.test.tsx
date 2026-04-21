@@ -282,6 +282,29 @@ describe('EvalOutputCell', () => {
     expect(dialogContent).toHaveTextContent('Assertion 2 (relevance): another value');
   });
 
+  it('falls back to overall grading result when component results are empty', async () => {
+    const propsWithEmptyComponentResults: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        gradingResult: {
+          comment: 'Initial comment',
+          componentResults: [],
+          pass: true,
+          reason: 'Test reason',
+          score: 0.8,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithEmptyComponentResults} />);
+
+    expect(screen.getByText('PASS')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /edit comment/i }));
+    expect(screen.getByTestId('context-text')).toHaveTextContent('Test output text');
+  });
+
   it('uses assertion type when metric is not available', async () => {
     const user = userEvent.setup();
     const propsWithoutMetrics: MockEvalOutputCellProps = {
@@ -827,6 +850,64 @@ describe('EvalOutputCell', () => {
     expect(tooltipElement).toBeInTheDocument();
   });
 
+  it('displays total and prompt/completion token counts when reasoning tokens are absent', () => {
+    const propsWithStandardTokens: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        tokenUsage: {
+          prompt: 11,
+          completion: 22,
+          total: 33,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithStandardTokens} />);
+
+    expect(screen.getByText('33 (11+22)')).toBeInTheDocument();
+  });
+
+  it('renders JSON diffs with added and removed fragments when showDiffs is enabled', () => {
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        firstOutput={{
+          ...defaultProps.firstOutput,
+          text: '{"status":"old"}',
+        }}
+        output={{
+          ...defaultProps.output,
+          text: '{"status":"new"}',
+        }}
+        showDiffs={true}
+      />,
+    );
+
+    expect(container.querySelector('del')?.textContent).toContain('old');
+    expect(container.querySelector('ins')?.textContent).toContain('new');
+  });
+
+  it('renders word diffs for non-JSON outputs without sentence punctuation', () => {
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        firstOutput={{
+          ...defaultProps.firstOutput,
+          text: 'alpha beta',
+        }}
+        output={{
+          ...defaultProps.output,
+          text: 'alpha gamma',
+        }}
+        showDiffs={true}
+      />,
+    );
+
+    expect(container.querySelector('del')?.textContent).toContain('beta');
+    expect(container.querySelector('ins')?.textContent).toContain('gamma');
+  });
+
   it('does not highlight text when shouldHighlightSearchText is true but searchText is empty', () => {
     mockTableStoreState.shouldHighlightSearchText = true;
 
@@ -843,6 +924,59 @@ describe('EvalOutputCell', () => {
     renderWithProviders(<EvalOutputCell {...defaultProps} searchText={invalidRegex} />);
 
     expect(screen.getByText('Test output text')).toBeInTheDocument();
+  });
+
+  it('preserves media rendering while search highlighting is active', () => {
+    mockTableStoreState.shouldHighlightSearchText = true;
+    const dataUri = 'data:image/png;base64,primary-image-data';
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{
+          ...defaultProps.output,
+          text: dataUri,
+        }}
+        searchText="primary"
+      />,
+    );
+
+    expect(screen.getByRole('img')).toHaveAttribute('src', dataUri);
+    expect(container.querySelector('.search-highlight')).toBeNull();
+  });
+
+  it('ignores zero-length regex matches without hanging', () => {
+    mockTableStoreState.shouldHighlightSearchText = true;
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell {...defaultProps} searchText="(?=Test)" />,
+    );
+
+    expect(screen.getByText('Test output text')).toBeInTheDocument();
+    expect(container.querySelector('.search-highlight')).toBeNull();
+  });
+
+  it('preserves diff output when searchText is an invalid regex', () => {
+    mockTableStoreState.shouldHighlightSearchText = true;
+
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        firstOutput={{
+          ...defaultProps.firstOutput,
+          text: 'alpha beta',
+        }}
+        output={{
+          ...defaultProps.output,
+          text: 'alpha gamma',
+        }}
+        showDiffs={true}
+        searchText="("
+      />,
+    );
+
+    expect(container.querySelector('del')?.textContent).toContain('beta');
+    expect(container.querySelector('ins')?.textContent).toContain('gamma');
   });
 
   it('handles zero-length regex matches gracefully', () => {
@@ -1377,6 +1511,86 @@ describe('EvalOutputCell highlight toggle functionality', () => {
     const highlightButtonAfterRerender = screen.getByLabelText('Toggle test highlight');
     await user.click(highlightButtonAfterRerender);
     expect(mockOnRating).toHaveBeenCalledWith(undefined, undefined, 'Original comment');
+  });
+
+  it('preserves a locally toggled highlight when rating changes immediately afterward', async () => {
+    const props = createPropsWithComment('Original comment');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    await userEvent.click(screen.getByLabelText('Toggle test highlight'));
+    mockOnRating.mockClear();
+
+    await userEvent.click(screen.getByLabelText('Mark test failed'));
+
+    await waitFor(() => {
+      expect(mockOnRating).toHaveBeenCalledWith(false, undefined, '!highlight Original comment');
+    });
+  });
+
+  it('does not persist a canceled comment draft when rating changes afterward', async () => {
+    const user = userEvent.setup();
+    const props = createPropsWithComment('Original comment');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    const commentInput = screen.getByRole('textbox');
+    await user.clear(commentInput);
+    await user.type(commentInput, 'Canceled draft');
+    await user.click(screen.getByRole('button', { name: /cancel/i }));
+    mockOnRating.mockClear();
+
+    await user.click(screen.getByLabelText('Mark test failed'));
+
+    await waitFor(() => {
+      expect(mockOnRating).toHaveBeenCalledWith(false, undefined, 'Original comment');
+    });
+  });
+
+  it('uses a saved comment edit when rating changes before the parent refreshes', async () => {
+    const user = userEvent.setup();
+    const props = createPropsWithComment('Original comment');
+    renderWithProviders(<EvalOutputCell {...props} />);
+
+    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    const commentInput = screen.getByRole('textbox');
+    await user.clear(commentInput);
+    await user.type(commentInput, 'Saved edit');
+    await user.click(screen.getByRole('button', { name: /save/i }));
+    mockOnRating.mockClear();
+
+    await user.click(screen.getByLabelText('Mark test failed'));
+
+    await waitFor(() => {
+      expect(mockOnRating).toHaveBeenCalledWith(false, undefined, 'Saved edit');
+    });
+  });
+
+  it('resets unsaved local comment text when switching to another output with the same comment value', async () => {
+    const user = userEvent.setup();
+    const firstProps = createPropsWithComment('');
+    const secondProps = {
+      ...firstProps,
+      output: {
+        ...firstProps.output,
+        id: 'second-output',
+      },
+    };
+
+    const { rerender } = renderWithProviders(<EvalOutputCell {...firstProps} />);
+
+    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    const commentInput = screen.getByRole('textbox');
+    await user.type(commentInput, 'Unsaved local note');
+    expect(commentInput).toHaveValue('Unsaved local note');
+
+    rerender(<EvalOutputCell {...secondProps} />);
+    mockOnRating.mockClear();
+
+    await user.click(screen.getByLabelText('Mark test failed'));
+
+    await waitFor(() => {
+      expect(mockOnRating).toHaveBeenCalledWith(false, undefined, '');
+    });
   });
 });
 

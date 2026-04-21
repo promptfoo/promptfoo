@@ -6,7 +6,7 @@ const config: UnifiedConfig = {
     'Rephrase this in {{language}}: {{body}}',
     'Translate this to conversational {{language}}: {{body}}',
   ],
-  providers: ['openai:gpt-5-mini'],
+  providers: ['openai:chat:gpt-5.4-mini'],
   tests: [
     {
       vars: {

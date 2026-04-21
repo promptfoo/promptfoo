@@ -450,7 +450,7 @@ describe('extractConfigBadges', () => {
     });
 
     it('extracts Anthropic effort badge for all levels', () => {
-      for (const effort of ['low', 'medium', 'high', 'max']) {
+      for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
         const config = { config: { effort } };
         const badges = extractConfigBadges('anthropic:claude-opus-4-6', config);
         expect(badges).toContainEqual(expect.objectContaining({ label: 'effort', value: effort }));

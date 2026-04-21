@@ -96,7 +96,7 @@ async function authenticateWithOidc(): Promise<void> {
     core.info('🔐 Got OIDC token for server authentication');
 
     // Set as environment variable for CLI to use
-    process.env.GITHUB_OIDC_TOKEN = oidcToken;
+    Object.assign(process.env, { GITHUB_OIDC_TOKEN: oidcToken });
   } catch (error) {
     // OIDC tokens are not available for fork PRs (GitHub security restriction)
     // For fork PRs, the server will use PR-based authentication instead
