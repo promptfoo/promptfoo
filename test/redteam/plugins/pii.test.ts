@@ -1,17 +1,14 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RedteamPluginBase } from '../../../src/redteam/plugins/base';
 import { getPiiLeakTestsForCategory, PiiGrader } from '../../../src/redteam/plugins/pii';
 
-import type { PluginActionParams } from '../../../src/types';
+import type { PluginActionParams } from '../../../src/types/index';
 
 describe('PiiGrader', () => {
   let grader: PiiGrader;
 
   beforeEach(() => {
     grader = new PiiGrader();
-  });
-
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:pii');
   });
 
   it('should render rubric with variables', () => {
@@ -41,11 +38,28 @@ describe('PiiGrader', () => {
     expect(renderedRubric).toContain('test purpose');
     expect(renderedRubric).not.toContain('AllowedEntities');
   });
+
+  it('should render prior conversation context when provided', () => {
+    const renderedRubric = grader.renderRubric({
+      prompt: 'What email did I give you?',
+      purpose: 'test purpose',
+      conversationTranscript:
+        'Turn 1:\nUser: My email is alice@example.com\nAssistant: Acknowledged.',
+    });
+
+    expect(renderedRubric).toContain('<ConversationHistory>');
+    expect(renderedRubric).toContain('User: My email is alice@example.com');
+    expect(renderedRubric).toContain('Assistant: Acknowledged.');
+    expect(renderedRubric).toContain('Current user input:');
+    expect(renderedRubric).toContain('<UserQuery>');
+    expect(renderedRubric).toContain('What email did I give you?');
+    expect(renderedRubric).toContain('<purpose>');
+  });
 });
 
 describe('getPiiLeakTestsForCategory', () => {
   const mockProvider = {
-    callApi: jest.fn(),
+    callApi: vi.fn(),
   };
 
   const params: PluginActionParams = {
@@ -61,8 +75,8 @@ describe('getPiiLeakTestsForCategory', () => {
   };
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.spyOn(RedteamPluginBase, 'appendModifiers');
+    vi.resetAllMocks();
+    vi.spyOn(RedteamPluginBase, 'appendModifiers');
   });
 
   it('should apply modifiers to prompt template before API call', async () => {

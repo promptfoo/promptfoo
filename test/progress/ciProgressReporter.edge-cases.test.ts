@@ -1,27 +1,31 @@
-import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
+import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
+import { mockConsole, mockProcessEnv } from '../util/utils';
 
 // Mock the logger
-jest.mock('../../src/logger', () => ({
-  info: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-// Mock console.log for GitHub Actions annotations
-const originalConsoleLog = console.log;
-const consoleLogMock = jest.fn();
-
 describe('CIProgressReporter - Edge Cases', () => {
+  let consoleLogMock: ReturnType<typeof mockConsole>;
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
-    console.log = consoleLogMock;
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    consoleLogMock = mockConsole('log');
+    restoreEnv = mockProcessEnv({ GITHUB_ACTIONS: undefined });
   });
 
   afterEach(() => {
-    jest.useRealTimers();
-    console.log = originalConsoleLog;
-    delete process.env.GITHUB_ACTIONS;
+    vi.useRealTimers();
+    consoleLogMock.mockRestore();
+    restoreEnv();
   });
 
   describe('Zero and Single Test Cases', () => {
@@ -43,7 +47,7 @@ describe('CIProgressReporter - Edge Cases', () => {
     it('should handle single test', () => {
       const reporter = new CIProgressReporter(1);
       reporter.start();
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       reporter.update(1);
 
@@ -61,7 +65,7 @@ describe('CIProgressReporter - Edge Cases', () => {
     it('should handle updates out of order', () => {
       const reporter = new CIProgressReporter(100);
       reporter.start();
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Update to 50% first
       reporter.update(50);
@@ -69,7 +73,7 @@ describe('CIProgressReporter - Edge Cases', () => {
         expect.stringContaining('[Evaluation] ✓ 50% complete'),
       );
 
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Then update to 25% - should not log again
       reporter.update(25);
@@ -100,7 +104,7 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.update(-10);
 
       // Advance time for periodic update
-      jest.advanceTimersByTime(30000);
+      vi.advanceTimersByTime(30000);
 
       // Should not crash - periodic update should handle negative completed count
       expect(logger.info).toHaveBeenCalledWith(
@@ -111,13 +115,13 @@ describe('CIProgressReporter - Edge Cases', () => {
     it('should handle multiple updates to same percentage', () => {
       const reporter = new CIProgressReporter(100);
       reporter.start();
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Multiple updates that result in 25%
       reporter.update(25);
       expect(logger.info).toHaveBeenCalledTimes(1);
 
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       reporter.update(25);
       reporter.update(25);
 
@@ -132,11 +136,11 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.start();
 
       // Fast progress but not complete
-      jest.advanceTimersByTime(50); // 50ms
+      vi.advanceTimersByTime(50); // 50ms
       reporter.update(30);
 
       // Trigger periodic update
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
 
       // Should handle very small elapsed time gracefully
       expect(logger.info).toHaveBeenCalledWith(
@@ -150,12 +154,12 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.start();
 
       // Very slow progress: 1 test per minute
-      jest.advanceTimersByTime(60000); // 1 minute
+      vi.advanceTimersByTime(60000); // 1 minute
       reporter.update(1);
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Trigger periodic update
-      jest.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(1000);
 
       // 99,999 tests remaining at 1 test/minute = 99,999 minutes > 24 hours
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('ETA: >24 hours'));
@@ -166,7 +170,7 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.start();
 
       // Don't update progress
-      jest.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(5000);
 
       // Should not log periodic update with 0 completed tests
       expect(logger.info).toHaveBeenCalledTimes(1); // Only start message
@@ -181,12 +185,12 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.start();
 
       // Should only have one interval (previous ones cleared)
-      expect(jest.getTimerCount()).toBe(1);
+      expect(vi.getTimerCount()).toBe(1);
 
       reporter.finish();
 
       // Should clear the interval
-      expect(jest.getTimerCount()).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('should handle finish without start', () => {
@@ -203,7 +207,7 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.start();
       reporter.finish();
 
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Update after finish
       reporter.update(50);
@@ -220,10 +224,10 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.update(50);
       reporter.finish();
 
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Advance time - interval should be cleared
-      jest.advanceTimersByTime(2000);
+      vi.advanceTimersByTime(2000);
 
       // Should not log periodic update
       expect(logger.info).not.toHaveBeenCalled();
@@ -236,11 +240,11 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.start();
 
       // Very slow progress: 1 test in 20 minutes = 0.05 tests/minute
-      jest.advanceTimersByTime(1200000); // 20 minutes
+      vi.advanceTimersByTime(1200000); // 20 minutes
       reporter.update(1);
 
-      jest.clearAllMocks();
-      jest.advanceTimersByTime(1000);
+      vi.clearAllMocks();
+      vi.advanceTimersByTime(1000);
 
       // Should show "calculating..." for very slow rates (< 0.1 tests/minute)
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('ETA: calculating...'));
@@ -265,22 +269,30 @@ describe('CIProgressReporter - Edge Cases', () => {
 
   describe('GitHub Actions Special Characters', () => {
     it('should escape newlines and :: in error messages', () => {
-      process.env.GITHUB_ACTIONS = 'true';
-      const reporter = new CIProgressReporter(100);
+      const restoreGithubActions = mockProcessEnv({ GITHUB_ACTIONS: 'true' });
+      try {
+        const reporter = new CIProgressReporter(100);
 
-      reporter.error('Error with\nnewline and :: annotation');
+        reporter.error('Error with\nnewline and :: annotation');
 
-      expect(consoleLogMock).toHaveBeenCalledWith('::error::Error with newline and   annotation');
+        expect(consoleLogMock).toHaveBeenCalledWith('::error::Error with newline and   annotation');
+      } finally {
+        restoreGithubActions();
+      }
     });
 
     it('should handle very long error messages', () => {
-      process.env.GITHUB_ACTIONS = 'true';
-      const reporter = new CIProgressReporter(100);
+      const restoreGithubActions = mockProcessEnv({ GITHUB_ACTIONS: 'true' });
+      try {
+        const reporter = new CIProgressReporter(100);
 
-      const longError = 'A'.repeat(1000);
-      reporter.error(longError);
+        const longError = 'A'.repeat(1000);
+        reporter.error(longError);
 
-      expect(consoleLogMock).toHaveBeenCalledWith(expect.stringContaining('::error::'));
+        expect(consoleLogMock).toHaveBeenCalledWith(expect.stringContaining('::error::'));
+      } finally {
+        restoreGithubActions();
+      }
     });
   });
 
@@ -295,9 +307,9 @@ describe('CIProgressReporter - Edge Cases', () => {
       }
 
       // Should only have logged 3 milestones
-      const milestoneLogs = (logger.info as jest.Mock).mock.calls.filter((call) =>
-        call[0].includes('[Evaluation] ✓'),
-      );
+      const milestoneLogs = vi
+        .mocked(logger.info)
+        .mock.calls.filter((call) => call[0].includes('[Evaluation] ✓'));
       expect(milestoneLogs.length).toBe(3); // 25%, 50%, 75%
     });
 
@@ -306,11 +318,11 @@ describe('CIProgressReporter - Edge Cases', () => {
       reporter.start();
       reporter.update(50);
 
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Trigger multiple intervals rapidly
       for (let i = 0; i < 10; i++) {
-        jest.advanceTimersByTime(100);
+        vi.advanceTimersByTime(100);
       }
 
       // Should log 10 periodic updates

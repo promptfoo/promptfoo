@@ -1,10 +1,12 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString, isCI } from '../../src/envars';
 import {
   checkEmailStatus,
   checkEmailStatusAndMaybeExit,
   clearUserEmail,
+  getAuthMethod,
   getAuthor,
   getUserEmail,
   getUserId,
@@ -22,38 +24,44 @@ import telemetry from '../../src/telemetry';
 import { fetchWithTimeout } from '../../src/util/fetch/index';
 
 // Mock fetchWithTimeout before any imports that might use telemetry
-jest.mock('../../src/util/fetch', () => ({
-  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+vi.mock('../../src/util/fetch', () => ({
+  fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
-jest.mock('@inquirer/input');
-jest.mock('../../src/envars');
-jest.mock('../../src/telemetry', () => {
+vi.mock('@inquirer/input');
+vi.mock('../../src/envars');
+vi.mock('../../src/telemetry', () => {
   const mockTelemetry = {
-    record: jest.fn().mockResolvedValue(undefined),
-    identify: jest.fn(),
-    saveConsent: jest.fn().mockResolvedValue(undefined),
+    record: vi.fn().mockResolvedValue(undefined),
+    identify: vi.fn(),
+    saveConsent: vi.fn().mockResolvedValue(undefined),
     disabled: false,
   };
   return {
-    __esModule: true,
     default: mockTelemetry,
-    Telemetry: jest.fn().mockImplementation(() => mockTelemetry),
+    Telemetry: vi.fn().mockImplementation(() => mockTelemetry),
   };
 });
-jest.mock('../../src/util/fetch/index.ts');
-jest.mock('../../src/telemetry');
-jest.mock('../../src/util');
+vi.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/globalConfig/globalConfig');
+vi.mock('../../src/util');
+vi.mock('../../src/logger');
 
 describe('accounts', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.stubEnv('PROMPTFOO_API_KEY', undefined);
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('getUserId', () => {
     it('should return existing ID from global config', () => {
       const existingId = 'existing-test-id';
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: existingId,
         account: { email: 'test@example.com' },
       });
@@ -65,7 +73,7 @@ describe('accounts', () => {
     });
 
     it('should generate new ID and save to config when no ID exists', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
 
@@ -83,7 +91,7 @@ describe('accounts', () => {
     });
 
     it('should generate new ID when global config is null', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue(null as any);
+      vi.mocked(readGlobalConfig).mockReturnValue(null as any);
 
       const result = getUserId();
 
@@ -98,7 +106,7 @@ describe('accounts', () => {
     });
 
     it('should generate new ID when global config is undefined', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue(undefined as any);
+      vi.mocked(readGlobalConfig).mockReturnValue(undefined as any);
 
       const result = getUserId();
 
@@ -113,7 +121,7 @@ describe('accounts', () => {
     });
 
     it('should generate new ID when config exists but has no id property', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
 
@@ -133,7 +141,7 @@ describe('accounts', () => {
 
   describe('getUserEmail', () => {
     it('should return email from global config', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
@@ -141,7 +149,7 @@ describe('accounts', () => {
     });
 
     it('should return null if no email in config', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
       expect(getUserEmail()).toBeNull();
@@ -150,6 +158,10 @@ describe('accounts', () => {
 
   describe('setUserEmail', () => {
     it('should write email to global config', () => {
+      // Must mock readGlobalConfig to ensure clean state (no leftover account properties from other tests)
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
       const email = 'test@example.com';
       setUserEmail(email);
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
@@ -160,7 +172,7 @@ describe('accounts', () => {
 
   describe('clearUserEmail', () => {
     it('should remove email from global config when email exists', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
@@ -171,7 +183,7 @@ describe('accounts', () => {
     });
 
     it('should handle clearing when no account exists', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
       clearUserEmail();
@@ -181,7 +193,7 @@ describe('accounts', () => {
     });
 
     it('should handle clearing when global config is empty', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      vi.mocked(readGlobalConfig).mockReturnValue({});
       clearUserEmail();
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
         account: {},
@@ -190,24 +202,76 @@ describe('accounts', () => {
   });
 
   describe('getAuthor', () => {
-    it('should return env var if set', () => {
-      jest.mocked(getEnvString).mockReturnValue('author@env.com');
-      expect(getAuthor()).toBe('author@env.com');
+    it('should use override when not logged into cloud', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor('override@example.com')).toBe('override@example.com');
     });
 
-    it('should fall back to user email if no env var', () => {
-      jest.mocked(getEnvString).mockReturnValue('');
-      jest.mocked(readGlobalConfig).mockReturnValue({
+    it('should fall back to user email when no override and not logged into cloud', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
       expect(getAuthor()).toBe('test@example.com');
     });
 
+    it('should fall back to env var when no override and no user email', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor()).toBe('author@env.com');
+    });
+
     it('should return null if no author found', () => {
-      jest.mocked(getEnvString).mockReturnValue('');
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor()).toBeNull();
+    });
+
+    it('should prefer cloud identity over override when logged into cloud', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
+        account: { email: 'cloud@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor('override@example.com')).toBe('cloud@example.com');
+    });
+
+    it('should prefer cloud identity over env var when logged into cloud', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'cloud@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor()).toBe('cloud@example.com');
+    });
+
+    it('should fall back to override when logged into cloud but no stored email', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor('override@example.com')).toBe('override@example.com');
+    });
+
+    it('should fall back to env var when logged into cloud but no stored email', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor()).toBe('author@env.com');
+    });
+
+    it('should return null when logged into cloud, no stored email, no override, no env', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'test-api-key' },
       });
       expect(getAuthor()).toBeNull();
     });
@@ -215,20 +279,20 @@ describe('accounts', () => {
 
   describe('promptForEmailUnverified', () => {
     beforeEach(() => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
     });
 
     it('should use CI email if in CI environment', async () => {
-      jest.mocked(isCI).mockReturnValue(true);
+      vi.mocked(isCI).mockReturnValue(true);
       await promptForEmailUnverified();
       expect(telemetry.saveConsent).not.toHaveBeenCalled();
     });
 
     it('should not prompt for email if already set', async () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'existing@example.com' },
       });
@@ -241,7 +305,7 @@ describe('accounts', () => {
     });
 
     it('should prompt for email and save valid input', async () => {
-      jest.mocked(input).mockResolvedValue('new@example.com');
+      vi.mocked(input).mockResolvedValue('new@example.com');
 
       await promptForEmailUnverified();
 
@@ -257,7 +321,7 @@ describe('accounts', () => {
 
       beforeEach(async () => {
         await promptForEmailUnverified();
-        validateFn = jest.mocked(input).mock.calls[0][0].validate as (
+        validateFn = vi.mocked(input).mock.calls[0][0].validate as (
           input: string,
         ) => Promise<string | boolean>;
       });
@@ -280,7 +344,7 @@ describe('accounts', () => {
         for (const email of invalidEmails) {
           const result = await validateFn(email);
           expect(typeof result).toBe('string');
-          expect(result).toBe('Please enter a valid email address');
+          expect(result).toBe('Invalid email address');
         }
       });
 
@@ -304,33 +368,25 @@ describe('accounts', () => {
   });
 
   describe('checkEmailStatusAndMaybeExit', () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    let mockExit: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
+      mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     });
 
-    it('should use CI email when in CI environment', async () => {
-      jest.mocked(isCI).mockReturnValue(true);
-
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+    it('should bypass email verification checks for the CI placeholder email', async () => {
+      vi.mocked(isCI).mockReturnValue(true);
 
       await checkEmailStatusAndMaybeExit();
 
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
-        undefined,
-        500,
-      );
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+      expect(mockExit).not.toHaveBeenCalled();
     });
 
     it('should use user email when not in CI environment', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
@@ -339,7 +395,7 @@ describe('accounts', () => {
         status: 200,
         statusText: 'OK',
       });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       await checkEmailStatusAndMaybeExit();
 
@@ -351,8 +407,8 @@ describe('accounts', () => {
     });
 
     it('should exit if limit exceeded', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
@@ -361,7 +417,7 @@ describe('accounts', () => {
         status: 200,
         statusText: 'OK',
       });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       await checkEmailStatusAndMaybeExit();
 
@@ -371,9 +427,40 @@ describe('accounts', () => {
       );
     });
 
+    it('should exit if email verification is required', async () => {
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+
+      const mockResponse = new Response(
+        JSON.stringify({
+          status: 'email_verification_required',
+          error: 'Please verify your email address and try again.',
+        }),
+        {
+          status: 200,
+          statusText: 'OK',
+        },
+      );
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+      await checkEmailStatusAndMaybeExit();
+
+      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Please verify your email address and try again.',
+        expect.objectContaining({
+          status: 'email_verification_required',
+          hasEmail: true,
+        }),
+      );
+    });
+
     it('should display warning message when status is show_usage_warning', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
@@ -386,7 +473,7 @@ describe('accounts', () => {
           statusText: 'OK',
         },
       );
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       await checkEmailStatusAndMaybeExit();
 
@@ -396,8 +483,8 @@ describe('accounts', () => {
     });
 
     it('should return bad_email and not exit when status is risky_email or disposable_email', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
@@ -406,7 +493,7 @@ describe('accounts', () => {
         status: 200,
         statusText: 'OK',
       });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       const result = await checkEmailStatusAndMaybeExit();
 
@@ -416,12 +503,12 @@ describe('accounts', () => {
     });
 
     it('should handle fetch errors', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
         account: { email: 'test@example.com' },
       });
-      jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
 
       await checkEmailStatusAndMaybeExit();
 
@@ -434,12 +521,12 @@ describe('accounts', () => {
 
   describe('checkEmailStatus', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should return no_email status when no email is provided', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({});
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({});
 
       const result = await checkEmailStatus();
 
@@ -450,22 +537,12 @@ describe('accounts', () => {
       });
     });
 
-    it('should use CI email when in CI environment', async () => {
-      jest.mocked(isCI).mockReturnValue(true);
-
-      const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        statusText: 'OK',
-      });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+    it('should treat the CI placeholder email as pre-validated', async () => {
+      vi.mocked(isCI).mockReturnValue(true);
 
       const result = await checkEmailStatus();
 
-      expect(fetchWithTimeout).toHaveBeenCalledWith(
-        expect.stringContaining('/api/users/status?email=ci-placeholder%40promptfoo.dev'),
-        undefined,
-        500,
-      );
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
       expect(result).toEqual({
         status: 'ok',
         hasEmail: true,
@@ -475,8 +552,8 @@ describe('accounts', () => {
     });
 
     it('should return exceeded_limit status', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
 
@@ -484,7 +561,7 @@ describe('accounts', () => {
         status: 200,
         statusText: 'OK',
       });
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       const result = await checkEmailStatus();
 
@@ -497,8 +574,8 @@ describe('accounts', () => {
     });
 
     it('should return show_usage_warning status with message', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
 
@@ -510,7 +587,7 @@ describe('accounts', () => {
           statusText: 'OK',
         },
       );
-      jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
       const result = await checkEmailStatus();
 
@@ -523,11 +600,11 @@ describe('accounts', () => {
     });
 
     it('should handle fetch errors gracefully', async () => {
-      jest.mocked(isCI).mockReturnValue(false);
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(isCI).mockReturnValue(false);
+      vi.mocked(readGlobalConfig).mockReturnValue({
         account: { email: 'test@example.com' },
       });
-      jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
 
       const result = await checkEmailStatus();
 
@@ -544,8 +621,8 @@ describe('accounts', () => {
 
     describe('with validate option', () => {
       beforeEach(() => {
-        jest.mocked(isCI).mockReturnValue(false);
-        jest.mocked(readGlobalConfig).mockReturnValue({
+        vi.mocked(isCI).mockReturnValue(false);
+        vi.mocked(readGlobalConfig).mockReturnValue({
           account: { email: 'test@example.com' },
         });
       });
@@ -555,7 +632,7 @@ describe('accounts', () => {
           status: 200,
           statusText: 'OK',
         });
-        jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+        vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
         await checkEmailStatus({ validate: true });
 
@@ -564,12 +641,27 @@ describe('accounts', () => {
         });
       });
 
+      it('should skip remote validation for the CI placeholder email', async () => {
+        vi.mocked(isCI).mockReturnValue(true);
+
+        const result = await checkEmailStatus({ validate: true });
+
+        expect(fetchWithTimeout).not.toHaveBeenCalled();
+        expect(telemetry.saveConsent).not.toHaveBeenCalled();
+        expect(result).toEqual({
+          status: 'ok',
+          hasEmail: true,
+          email: 'ci-placeholder@promptfoo.dev',
+          message: undefined,
+        });
+      });
+
       it('should call saveConsent for invalid email when validate is true', async () => {
         const mockResponse = new Response(JSON.stringify({ status: 'risky_email' }), {
           status: 200,
           statusText: 'OK',
         });
-        jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+        vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
         await checkEmailStatus({ validate: true });
 
@@ -578,12 +670,36 @@ describe('accounts', () => {
         });
       });
 
+      it('should not mark email as validated when verification is required', async () => {
+        const mockResponse = new Response(
+          JSON.stringify({
+            status: 'email_verification_required',
+            error: 'Please verify your email address and try again.',
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+          },
+        );
+        vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+
+        const result = await checkEmailStatus({ validate: true });
+
+        expect(result).toEqual({
+          status: 'email_verification_required',
+          hasEmail: true,
+          email: 'test@example.com',
+          message: 'Please verify your email address and try again.',
+        });
+        expect(telemetry.saveConsent).not.toHaveBeenCalled();
+      });
+
       it('should not call saveConsent when validate is not provided', async () => {
         const mockResponse = new Response(JSON.stringify({ status: 'ok' }), {
           status: 200,
           statusText: 'OK',
         });
-        jest.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
+        vi.mocked(fetchWithTimeout).mockResolvedValue(mockResponse);
 
         await checkEmailStatus();
 
@@ -594,35 +710,110 @@ describe('accounts', () => {
 
   describe('isLoggedIntoCloud', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
-    it('should return true when user has email and not in CI', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
-        account: { email: 'test@example.com' },
+    it('should return true when API key is present (not in CI)', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        cloud: { apiKey: 'test-api-key' },
       });
-      jest.mocked(isCI).mockReturnValue(false);
+      vi.mocked(isCI).mockReturnValue(false);
       expect(isLoggedIntoCloud()).toBe(true);
     });
 
-    it('should return false when user has no email', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
-      jest.mocked(isCI).mockReturnValue(false);
-      expect(isLoggedIntoCloud()).toBe(false);
-    });
-
-    it('should return false when in CI environment', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({});
-      jest.mocked(isCI).mockReturnValue(true);
-      expect(isLoggedIntoCloud()).toBe(false);
-    });
-
-    it('should return false when user has email but in CI environment', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
-        account: { email: 'test@example.com' },
+    it('should return true when API key is present (in CI)', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        cloud: { apiKey: 'test-api-key' },
       });
-      jest.mocked(isCI).mockReturnValue(true);
+      vi.mocked(isCI).mockReturnValue(true);
+      expect(isLoggedIntoCloud()).toBe(true);
+    });
+
+    it('should return false when no API key is present (not in CI)', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        cloud: {},
+      });
+      vi.mocked(isCI).mockReturnValue(false);
       expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return false when no API key is present (in CI)', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        cloud: {},
+      });
+      vi.mocked(isCI).mockReturnValue(true);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return false when cloud config is missing', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({});
+      vi.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+
+    it('should return true with email and API key (backwards compatibility)', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+      vi.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(true);
+    });
+
+    it('should return false with email but no API key', () => {
+      // Having email alone is not sufficient for cloud authentication
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+        cloud: {},
+      });
+      vi.mocked(isCI).mockReturnValue(false);
+      expect(isLoggedIntoCloud()).toBe(false);
+    });
+  });
+
+  describe('getAuthMethod', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('should return "api-key" when API key is present', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthMethod()).toBe('api-key');
+    });
+
+    it('should return "api-key" when both API key and email are present', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthMethod()).toBe('api-key');
+    });
+
+    it('should return "email" when only email is present (no API key)', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        account: { email: 'test@example.com' },
+        cloud: {},
+      });
+      expect(getAuthMethod()).toBe('email');
+    });
+
+    it('should return "none" when neither API key nor email is present', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        cloud: {},
+      });
+      expect(getAuthMethod()).toBe('none');
+    });
+
+    it('should return "none" when cloud config is missing', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({});
+      expect(getAuthMethod()).toBe('none');
+    });
+
+    it('should return "none" when global config is null', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue(null as any);
+      expect(getAuthMethod()).toBe('none');
     });
   });
 });

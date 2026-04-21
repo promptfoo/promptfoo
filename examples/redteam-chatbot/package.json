@@ -10,7 +10,7 @@
   "author": "Promptfoo",
   "license": "MIT",
   "dependencies": {
-    "express": "^5.1.0",
-    "promptfoo": "^0.118.15"
+    "express": "^5.2.1",
+    "promptfoo": "^0.121.0"
   }
 }

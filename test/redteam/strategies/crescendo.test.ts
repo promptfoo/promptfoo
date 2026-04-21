@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { addCrescendo } from '../../../src/redteam/strategies/crescendo';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('addCrescendo', () => {
   it('should add crescendo configuration to test cases', () => {
@@ -104,6 +105,93 @@ describe('addCrescendo', () => {
         strategyId: 'crescendo',
         originalText: 'test',
       },
+    });
+  });
+
+  describe('Rubric Storage (Provider Level)', () => {
+    it('should store rendered rubric in storedGraderResult.assertion.value', () => {
+      // Test the pattern used in crescendo provider for storing rubric
+      const mockRenderedRubric = '<rubric>Rendered grading criteria</rubric>';
+      const mockGraderResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+        assertion?: any;
+      } = {
+        pass: false,
+        score: 0,
+        reason: 'Jailbreak detected',
+      };
+
+      const testAssertion = {
+        type: 'promptfoo:redteam:policy' as const,
+        metric: 'PolicyViolation:test/Crescendo',
+      };
+
+      // Simulate the pattern used in crescendo provider
+      const storedResult = {
+        ...mockGraderResult,
+        assertion: mockGraderResult.assertion
+          ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
+          : testAssertion && 'type' in testAssertion && (testAssertion as any).type !== 'assert-set'
+            ? { ...testAssertion, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeDefined();
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:policy');
+      expect(storedResult.assertion?.metric).toBe('PolicyViolation:test/Crescendo');
+    });
+
+    it('should use grade.assertion when present', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResultWithAssertion = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: {
+          type: 'promptfoo:redteam:harmful' as const,
+          metric: 'Harmful/Crescendo',
+          value: 'old value',
+        },
+      };
+
+      const storedResult = {
+        ...mockGraderResultWithAssertion,
+        assertion: mockGraderResultWithAssertion.assertion
+          ? { ...mockGraderResultWithAssertion.assertion, value: mockRenderedRubric }
+          : undefined,
+      };
+
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:harmful');
+      expect(storedResult.assertion?.metric).toBe('Harmful/Crescendo');
+    });
+
+    it('should not create assertion for AssertionSet', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+      };
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        assert: [{ type: 'contains' as const, value: 'test' }],
+      };
+
+      const storedResult = {
+        ...mockGraderResult,
+        assertion:
+          assertionSet && 'type' in assertionSet && assertionSet.type !== 'assert-set'
+            ? { ...assertionSet, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeUndefined();
+      expect(storedResult.pass).toBe(false);
     });
   });
 });

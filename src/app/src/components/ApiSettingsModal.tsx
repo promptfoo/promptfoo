@@ -1,38 +1,51 @@
 import React, { useEffect, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { type ApiHealthStatus, useApiHealth } from '@app/hooks/useApiHealth';
+import { cn } from '@app/lib/utils';
 import useApiConfig from '@app/stores/apiConfig';
-import CircleIcon from '@mui/icons-material/Circle';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { AlertCircle, CheckCircle, Circle, RefreshCw } from 'lucide-react';
 
-const StatusIndicator = ({ status }: { status: ApiHealthStatus }) => {
-  const statusConfig: Record<ApiHealthStatus, { color: string; text: string }> = {
-    connected: { color: 'success.main', text: 'Connected to promptfoo API' },
-    blocked: { color: 'error.main', text: 'Cannot connect to promptfoo API' },
-    loading: { color: 'info.main', text: 'Checking connection...' },
-    unknown: { color: 'grey.500', text: 'Checking connection status...' },
-    disabled: { color: 'grey.400', text: 'Remote generation is disabled' },
+const StatusIndicator = ({ status }: { status: ApiHealthStatus | 'loading' }) => {
+  const statusConfig: Record<
+    ApiHealthStatus | 'loading',
+    { colorClass: string; text: string; Icon: typeof Circle }
+  > = {
+    connected: {
+      colorClass: 'text-emerald-500',
+      text: 'Connected to promptfoo API',
+      Icon: CheckCircle,
+    },
+    blocked: {
+      colorClass: 'text-red-500',
+      text: 'Cannot connect to promptfoo API',
+      Icon: AlertCircle,
+    },
+    loading: { colorClass: 'text-blue-500', text: 'Checking connection...', Icon: Circle },
+    unknown: { colorClass: 'text-gray-400', text: 'Checking connection status...', Icon: Circle },
+    disabled: { colorClass: 'text-gray-400', text: 'Remote generation is disabled', Icon: Circle },
   };
 
   const config = statusConfig[status];
+  const Icon = config.Icon;
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <CircleIcon sx={{ color: config.color, fontSize: '12px' }} />
-      <Typography variant="body2">{config.text}</Typography>
-    </Box>
+    <div className="flex items-center gap-2">
+      <Icon className={cn('size-3', config.colorClass)} />
+      <span className="text-sm">{config.text}</span>
+    </div>
   );
 };
 
@@ -42,7 +55,11 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
 }: T) {
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   const [tempApiBaseUrl, setTempApiBaseUrl] = useState(apiBaseUrl || '');
-  const { status, message, checkHealth, isChecking } = useApiHealth();
+  const {
+    data: { status, message },
+    refetch: checkHealth,
+    isLoading: isChecking,
+  } = useApiHealth();
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -71,61 +88,76 @@ export default function ApiSettingsModal<T extends { open: boolean; onClose: () 
     }
   };
 
-  const isFormDisabled = status === 'loading' || isChecking || isSaving;
+  const isFormDisabled = isChecking || isSaving;
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="xs"
-      fullWidth
-      aria-labelledby="api-settings-dialog-title"
-    >
-      <DialogTitle id="api-settings-dialog-title">API and Sharing Settings</DialogTitle>
-      <DialogContent>
-        <Box sx={{ mb: 3 }}>
-          <Box
-            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}
-          >
-            <StatusIndicator status={status} />
-            <Tooltip title="Check connection">
-              <span>
-                <IconButton onClick={checkHealth} size="small" disabled={isChecking}>
-                  {isChecking ? <CircularProgress size={20} /> : <RefreshIcon />}
-                </IconButton>
-              </span>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>API and Sharing Settings</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <StatusIndicator status={isChecking ? 'loading' : status} />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => checkHealth()}
+                  disabled={isChecking}
+                  className="size-8"
+                  aria-label="Check connection"
+                >
+                  {isChecking ? <Spinner size="sm" /> : <RefreshCw className="size-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Check connection</TooltipContent>
             </Tooltip>
-          </Box>
-          {message && status !== 'unknown' && status !== 'loading' && (
-            <Alert severity={status === 'connected' ? 'success' : 'error'} sx={{ mt: 1 }}>
-              {message}
+          </div>
+
+          {message && status !== 'unknown' && !isChecking && (
+            <Alert variant={status === 'connected' ? 'success' : 'destructive'}>
+              {status === 'connected' ? (
+                <CheckCircle className="size-4" />
+              ) : (
+                <AlertCircle className="size-4" />
+              )}
+              <AlertContent>
+                <AlertDescription>{message}</AlertDescription>
+              </AlertContent>
             </Alert>
           )}
-        </Box>
 
-        <Typography variant="h6">API</Typography>
-        <TextField
-          label="API Base URL"
-          helperText="The promptfoo API the webview will connect to"
-          value={tempApiBaseUrl}
-          onChange={handleApiBaseUrlChange}
-          fullWidth
-          margin="normal"
-          disabled={isFormDisabled}
-        />
+          <div className="space-y-2">
+            <h3 className="text-base font-semibold">API</h3>
+            <div className="space-y-1.5">
+              <Label htmlFor="api-base-url">API Base URL</Label>
+              <Input
+                id="api-base-url"
+                value={tempApiBaseUrl}
+                onChange={handleApiBaseUrlChange}
+                disabled={isFormDisabled}
+                placeholder="Enter API base URL"
+              />
+              <p className="text-xs text-muted-foreground">
+                The promptfoo API the webview will connect to
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isFormDisabled}>
+            Close
+          </Button>
+          <Button onClick={handleSave} disabled={isFormDisabled}>
+            {isSaving && <Spinner size="sm" className="mr-2" />}
+            Save
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button
-          onClick={handleSave}
-          disabled={isFormDisabled}
-          startIcon={isSaving && <CircularProgress size={20} />}
-        >
-          Save
-        </Button>
-        <Button onClick={onClose} disabled={isFormDisabled}>
-          Close
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 }

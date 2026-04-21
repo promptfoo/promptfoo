@@ -1,11 +1,11 @@
 ---
 sidebar_label: TrueFoundry
-description: Configure TrueFoundry's LLM Gateway to access 1000+ LLMs with enterprise-grade security, observability, and governance through a unified API
+description: Configure TrueFoundry's enterprise-grade AI Gateway (LLM, MCP, and Agent Gateway) to connect, observe, and govern agentic AI applications from a single control plane
 ---
 
 # TrueFoundry
 
-[TrueFoundry](https://www.truefoundry.com/ai-gateway) is an LLM gateway that provides unified access to 1000+ LLMs through a single API with enterprise-grade security, observability, and governance. TrueFoundry's gateway is OpenAI-compatible and integrates seamlessly with promptfoo for testing and evaluation.
+[TrueFoundry](https://www.truefoundry.com/ai-gateway) provides an enterprise-grade AI Gateway that encompasses an LLM Gateway, MCP Gateway, and Agent Gateway. This enables enterprises to connect, observe, and govern agentic AI applications across providers from a single control plane. TrueFoundry's gateway is OpenAI-compatible and integrates seamlessly with promptfoo for testing and evaluation.
 
 The TrueFoundry provider supports:
 
@@ -276,7 +276,7 @@ Here's a comprehensive example demonstrating TrueFoundry's capabilities:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: TrueFoundry LLM Gateway evaluation
+description: TrueFoundry AI Gateway evaluation
 
 providers:
   - id: truefoundry:openai-main/gpt-5
@@ -358,4 +358,4 @@ Key observability features:
 - [TrueFoundry Blog](https://www.truefoundry.com/blog)
 - [OpenAI Provider Documentation](/docs/providers/openai/) (for additional configuration options)
 
-For more information about TrueFoundry's LLM Gateway, visit [truefoundry.com/ai-gateway](https://www.truefoundry.com/ai-gateway).
+For more information about TrueFoundry's AI Gateway, visit [truefoundry.com/ai-gateway](https://www.truefoundry.com/ai-gateway).

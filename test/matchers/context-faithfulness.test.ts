@@ -1,14 +1,14 @@
-import { matchesContextFaithfulness } from '../../src/matchers';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesContextFaithfulness } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextFaithfulness', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest
-      .spyOn(DefaultGradingProvider, 'callApi')
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi')
       .mockImplementationOnce(() => {
         return Promise.resolve({
           output: 'Statement 1\nStatement 2\nStatement 3\n',
@@ -24,7 +24,7 @@ describe('matchesContextFaithfulness', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when the faithfulness score is above the threshold', async () => {
@@ -33,7 +33,7 @@ describe('matchesContextFaithfulness', () => {
     const context = 'Context text';
     const threshold = 0.5;
 
-    const mockCallApi = jest
+    const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
         return Promise.resolve({
@@ -48,7 +48,9 @@ describe('matchesContextFaithfulness', () => {
         });
       });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: true,
@@ -71,7 +73,7 @@ describe('matchesContextFaithfulness', () => {
     const context = 'Context text';
     const threshold = 0.7;
 
-    const mockCallApi = jest
+    const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
         return Promise.resolve({
@@ -86,7 +88,9 @@ describe('matchesContextFaithfulness', () => {
         });
       });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: false,
@@ -118,6 +122,87 @@ describe('matchesContextFaithfulness', () => {
       cached: 0,
       completionDetails: expect.any(Object),
       numRequests: 0,
+    });
+  });
+
+  it('should fail when no verdict markers are returned', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const mockCallApi = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output:
+            'I apologize, but I cannot create statements or provide an analysis based on the given context.',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
+      pass: false,
+      reason: 'Faithfulness 0.00 is < 0.5',
+      score: 0,
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should clamp score when verdict count exceeds statement count', async () => {
+    const query = 'Query text';
+    const output = 'Output text';
+    const context = 'Context text';
+    const threshold = 0.5;
+
+    const mockCallApi = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'Statement 1\nStatement 2\nStatement 3',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      })
+      .mockImplementationOnce(() => {
+        return Promise.resolve({
+          output: 'verdict: no\nverdict: no\nverdict: no\nverdict: no\nverdict: no',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        });
+      });
+
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockImplementation(mockCallApi);
+
+    await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
+      pass: false,
+      reason: 'Faithfulness 0.00 is < 0.5',
+      score: 0,
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
     });
   });
 

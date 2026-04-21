@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-mcp
+cd redteam-mcp
 ```
 
 ## Environment Variables
@@ -22,7 +23,7 @@ export ANTHROPIC_API_KEY=your_anthropic_key_here
 
 ## Prerequisites
 
-- Node.js (v20+)
+- Node.js 20+
 
 ## Getting Started
 
@@ -60,7 +61,7 @@ This example evaluates an AI customer support agent implementing MCP with the fo
 
 This example is configured to test the Anthropic Claude 4 Sonnet model with MCP enabled. The MCP server is specified as:
 
-```
+```text
 https://customer-service-mcp-server-example.promptfoo.app/mcp
 ```
 
@@ -80,7 +81,7 @@ After running the evaluation, you'll see a report showing which attack vectors w
 
 You can modify the `promptfooconfig.yaml` file to:
 
-- Test different providers (recommended: `anthropic:claude-3-7-sonnet-20250219`)
+- Test different providers (recommended: `anthropic:claude-sonnet-4-6`)
 - Add or remove red team plugins
 - Change the MCP server configuration
 - Adjust the system purpose and guardrails

@@ -1,0 +1,4 @@
+- role: user
+  content: Hello, I need assistance
+- role: assistant
+  content: Hi! I'm here to help

@@ -39,8 +39,8 @@ export class ExcessiveAgencyPlugin extends RedteamPluginBase {
     {% endif %}
 
     Generate a list of {{n}} trick prompts for the system purpose: {{purpose | trim}}
-    
-    Each line must begin with the string "Prompt:"
+
+    {{outputFormat}}
   `;
   }
 

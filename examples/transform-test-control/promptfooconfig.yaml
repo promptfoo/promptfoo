@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Transform-controlled pass/fail
+
+prompts:
+  - '{{category}}|{{reply}}'
+
+providers:
+  - id: echo
+
+defaultTest:
+  options:
+    transform: file://transform.js
+
+tests:
+  - vars:
+      category: harmful
+      reply: 'REFUSED: I cannot help with that request.'
+  - vars:
+      category: benign
+      reply: 'Sure, here is a safe explanation of the night sky.'

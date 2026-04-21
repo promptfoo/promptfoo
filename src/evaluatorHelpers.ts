@@ -20,24 +20,27 @@ import {
   type Prompt,
   type TestCase,
   type TestSuite,
+  type UnifiedConfig,
+  type VarValue,
 } from './types/index';
-import { renderVarsInObject } from './util/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
+import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
-import { getNunjucksEngine } from './util/templates';
+import { filterFiniteScores } from './util/numeric';
+import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
-
-import type EvalResult from './models/evalResult';
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
-    const { default: PDFParser } = await import('pdf-parse');
+    const { PDFParse } = await import('pdf-parse');
     const dataBuffer = fs.readFileSync(pdfPath);
-    const data = await PDFParser(dataBuffer);
-    return data.text.trim();
+    const parser = new PDFParse({ data: dataBuffer });
+    const result = await parser.getText();
+    await parser.destroy();
+    return result.text.trim();
   } catch (error) {
     if (error instanceof Error && error.message.includes("Cannot find module 'pdf-parse'")) {
       throw new Error('pdf-parse is not installed. Please install it with: npm install pdf-parse');
@@ -49,16 +52,22 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
 }
 
 export function resolveVariables(
-  variables: Record<string, string | object>,
-): Record<string, string | object> {
-  let resolved = true;
+  variables: Record<string, VarValue>,
+  skipResolveVars?: string[],
+  varsResolvedFromSkipped?: Set<string>,
+): Record<string, VarValue> {
+  let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
     resolved = true;
     for (const key of Object.keys(variables)) {
-      if (typeof variables[key] !== 'string') {
+      if (
+        skipResolveVars?.includes(key) ||
+        varsResolvedFromSkipped?.has(key) ||
+        typeof variables[key] !== 'string'
+      ) {
         continue;
       }
       const value = variables[key] as string;
@@ -70,6 +79,9 @@ export function resolveVariables(
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
           variables[key] = value.replace(placeholder, variables[varName] as string);
+          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
+            varsResolvedFromSkipped?.add(key);
+          }
           resolved = false; // Indicate that we've made a replacement and should check again
         }
       }
@@ -92,12 +104,21 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
   return prompt;
 }
 
+function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
+  return extractVariablesFromTemplate(template).some((variableName) => {
+    const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
+    return Boolean(
+      rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
+    );
+  });
+}
+
 /**
  * Collects metadata about file variables in the vars object.
  * @param vars The variables object containing potential file references
  * @returns An object mapping variable names to their file metadata
  */
-export function collectFileMetadata(vars: Record<string, string | object>): FileMetadata {
+export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadata {
   const fileMetadata: FileMetadata = {};
 
   for (const [varName, value] of Object.entries(vars)) {
@@ -130,11 +151,99 @@ export function collectFileMetadata(vars: Record<string, string | object>): File
   return fileMetadata;
 }
 
+/**
+ * Gets MIME type from file extension
+ *
+ * Supported formats:
+ * - JPEG/JPG (image/jpeg)
+ * - PNG (image/png)
+ * - GIF (image/gif)
+ * - WebP (image/webp)
+ * - BMP (image/bmp)
+ * - SVG (image/svg+xml)
+ * - TIFF (image/tiff)
+ * - ICO (image/x-icon)
+ * - AVIF (image/avif)
+ * - HEIC/HEIF (image/heic)
+ *
+ * @param extension File extension (with or without dot)
+ * @returns MIME type string (defaults to image/jpeg for unknown formats)
+ */
+function getMimeTypeFromExtension(extension: string): string {
+  const normalizedExt = extension.toLowerCase().replace(/^\./, '');
+  const mimeTypes: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    bmp: 'image/bmp',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    tif: 'image/tiff',
+    tiff: 'image/tiff',
+    ico: 'image/x-icon',
+    avif: 'image/avif',
+    heic: 'image/heic',
+    heif: 'image/heif',
+  };
+  return mimeTypes[normalizedExt] || 'image/jpeg';
+}
+
+/**
+ * Detects MIME type from base64 magic numbers for additional accuracy
+ *
+ * Magic numbers (base64-encoded file signatures):
+ * - JPEG: /9j/ (0xFFD8FF)
+ * - PNG: iVBORw0KGgo (0x89504E47)
+ * - GIF: R0lGODlh or R0lGODdh (GIF87a/GIF89a)
+ * - WebP: UklGR (RIFF)
+ * - BMP: Qk0 or Qk1 (BM)
+ * - TIFF: SUkq or TU0A (II* or MM*)
+ * - ICO: AAABAA (0x00000100)
+ *
+ * @param base64Data Base64 encoded image data
+ * @returns MIME type string or null if format cannot be detected
+ */
+function detectMimeFromBase64(base64Data: string): string | null {
+  // Check magic numbers at the start of base64 data
+  if (base64Data.startsWith('/9j/')) {
+    return 'image/jpeg';
+  } else if (base64Data.startsWith('iVBORw0KGgo')) {
+    return 'image/png';
+  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
+    return 'image/gif';
+  } else if (base64Data.startsWith('UklGR')) {
+    return 'image/webp';
+  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
+    return 'image/bmp';
+  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
+    return 'image/tiff';
+  } else if (base64Data.startsWith('AAABAA')) {
+    return 'image/x-icon';
+  }
+  // Return null if format cannot be detected - caller will log warning
+  return null;
+}
+
+/**
+ * Renders a prompt template with variable substitution using Nunjucks.
+ *
+ * @param prompt - The prompt template to render
+ * @param vars - Variables to substitute into the template
+ * @param nunjucksFilters - Optional custom Nunjucks filters
+ * @param provider - Optional API provider for context
+ * @param skipRenderVars - Optional array of variable names to skip special loading and template
+ *                         rendering for. This is critical for red team testing where injection
+ *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
+ *                         evaluated by Promptfoo before reaching the target.
+ * @returns The rendered prompt string
+ */
 export async function renderPrompt(
   prompt: Prompt,
-  vars: Record<string, string | object>,
+  vars: Record<string, VarValue>,
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
+  skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
 
@@ -142,6 +251,10 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
+    if (skipRenderVars?.includes(varName)) {
+      continue;
+    }
+
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
@@ -169,7 +282,7 @@ export async function renderPrompt(
           varName,
           basePrompt,
           vars,
-        ])) as { output?: any; error?: string };
+        ])) as { output?: unknown; error?: string };
         if (pythonScriptOutput.error) {
           throw new Error(`Error running Python script ${filePath}: ${pythonScriptOutput.error}`);
         }
@@ -207,7 +320,37 @@ export async function renderPrompt(
         logger.debug(`Loading ${fileType} as base64: ${filePath}`);
         try {
           const fileBuffer = fs.readFileSync(filePath);
-          vars[varName] = fileBuffer.toString('base64');
+          const base64Data = fileBuffer.toString('base64');
+
+          if (fileType === 'image') {
+            // For images, generate data URL with proper MIME type
+            // Use extension first, then magic number detection for accuracy
+            let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+            const extension = path.extname(filePath);
+            const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+
+            // For better accuracy, use magic number detection
+            const detectedType = detectMimeFromBase64(base64Data);
+            if (detectedType) {
+              // Use detected type if available and different from extension-based guess
+              if (detectedType !== mimeType) {
+                logger.debug(
+                  `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
+                );
+                mimeType = detectedType;
+              }
+            } else if (extensionWasUnknown) {
+              // Could not detect format and extension was unknown/ambiguous
+              logger.warn(
+                `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
+              );
+            }
+
+            vars[varName] = `data:${mimeType};base64,${base64Data}`;
+          } else {
+            // Keep existing behavior for video/audio files (raw base64)
+            vars[varName] = base64Data;
+          }
         } catch (error) {
           throw new Error(
             `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
@@ -218,9 +361,14 @@ export async function renderPrompt(
       }
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
-      const javascriptOutput = (await (
-        await loadFromPackage(value, basePath)
-      )(varName, basePrompt, vars, provider)) as {
+      const requiredModule = await loadFromPackage(value, basePath);
+      if (typeof requiredModule !== 'function') {
+        throw new Error(
+          `Variable source malformed: ${value} must export a function. Received: ${typeof requiredModule}`,
+        );
+      }
+
+      const javascriptOutput = (await requiredModule(varName, basePrompt, vars, provider)) as {
         output?: string;
         error?: string;
       };
@@ -265,12 +413,13 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string') {
+    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
-  resolveVariables(vars);
+  const varsResolvedFromSkipped = new Set<string>();
+  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -360,12 +509,21 @@ export async function renderPrompt(
   } catch {
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => [
-        key,
-        typeof value === 'string'
-          ? nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)
-          : value,
-      ]),
+      Object.entries(vars).map(([key, value]) => {
+        if (
+          typeof value !== 'string' ||
+          skipRenderVars?.includes(key) ||
+          varsResolvedFromSkipped.has(key)
+        ) {
+          return [key, value];
+        }
+
+        if (referencesUndefinedVariables(value, vars)) {
+          return [key, value];
+        }
+
+        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
+      }),
     );
 
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
@@ -381,27 +539,73 @@ export async function renderPrompt(
 // Extension Hooks
 // ================================
 
-type BeforeAllExtensionHookContext = {
+/**
+ * Context passed to beforeAll extension hooks.
+ * Called once before the evaluation starts.
+ */
+export type BeforeAllExtensionHookContext = {
+  /** The test suite configuration (mutable) */
   suite: TestSuite;
 };
 
-type BeforeEachExtensionHookContext = {
+/**
+ * Context passed to beforeEach extension hooks.
+ * Called before each test case is evaluated.
+ */
+export type BeforeEachExtensionHookContext = {
+  /** The test case about to be evaluated (mutable) */
   test: TestCase;
 };
 
-type AfterEachExtensionHookContext = {
+/**
+ * Context passed to afterEach extension hooks.
+ * Called after each test case is evaluated.
+ *
+ * When the hook returns the modified context, `result.namedScores`,
+ * `result.metadata`, and `result.response.metadata` will be shallow-merged
+ * into the evaluation result and persisted.
+ */
+export type AfterEachExtensionHookContext = {
+  /** The test case that was evaluated */
   test: TestCase;
+  /** The result of the evaluation (namedScores, metadata, and response.metadata are mutable) */
   result: EvaluateResult;
 };
 
-type AfterAllExtensionHookContext = {
+/**
+ * Context passed to afterAll extension hooks.
+ * Called once after all evaluations complete.
+ *
+ * @example
+ * ```javascript
+ * // extension.js
+ * module.exports = {
+ *   afterAll: async (context) => {
+ *     console.log(`Eval ${context.evalId} completed`);
+ *     console.log(`Results: ${context.results.length} tests`);
+ *     // Send to monitoring, database, etc.
+ *   }
+ * };
+ * ```
+ */
+export type AfterAllExtensionHookContext = {
+  /** The test suite configuration */
   suite: TestSuite;
-  results: EvalResult[];
+  /** All evaluation results as plain data objects */
+  results: EvaluateResult[];
+  /** Completed prompts with metrics */
   prompts: CompletedPrompt[];
+  /** Unique identifier for this evaluation run */
+  evalId: string;
+  /** The full evaluation configuration */
+  config: Partial<UnifiedConfig>;
 };
 
-// Maps hook names to their context types.
-type HookContextMap = {
+/**
+ * Maps hook names to their context types.
+ * Used for type-safe extension hook invocation.
+ */
+export type ExtensionHookContextMap = {
   beforeAll: BeforeAllExtensionHookContext;
   beforeEach: BeforeEachExtensionHookContext;
   afterEach: AfterEachExtensionHookContext;
@@ -419,11 +623,39 @@ type HookContextMap = {
  *  - The updated context object, if the extension hook returns a valid context object. The updated context,
  *    if defined, must conform to the type T; otherwise, a validation error is thrown.
  */
-export async function runExtensionHook<HookName extends keyof HookContextMap>(
+/**
+ * Valid hook names that can be used to filter which hooks an extension runs for.
+ * If an extension specifies one of these as its function name (e.g., file://path:beforeAll),
+ * it will only run for that specific hook and use the NEW calling convention: (context, { hookName }).
+ * If an extension specifies a custom function name (e.g., file://path:myHandler),
+ * it will run for ALL hooks and use the LEGACY calling convention: (hookName, context).
+ */
+const EXTENSION_HOOK_NAMES = new Set(['beforeAll', 'beforeEach', 'afterEach', 'afterAll']);
+
+/**
+ * Extracts the hook name from an extension path.
+ * Format: file://path/to/file.js:hookName or file://path/to/file.py:hook_name
+ * @returns The hook name or undefined if not specified
+ */
+export function getExtensionHookName(extension: string): string | undefined {
+  if (!extension.startsWith('file://')) {
+    return undefined;
+  }
+  const lastColonIndex = extension.lastIndexOf(':');
+  // Check if colon is part of Windows drive letter (position 8 after file://) or not present
+  if (lastColonIndex > 8) {
+    const functionName = extension.slice(lastColonIndex + 1);
+    // Return undefined for empty strings (e.g., "file://hooks.js:")
+    return functionName || undefined;
+  }
+  return undefined;
+}
+
+export async function runExtensionHook<HookName extends keyof ExtensionHookContextMap>(
   extensions: string[] | null | undefined,
   hookName: HookName,
-  context: HookContextMap[HookName],
-): Promise<HookContextMap[HookName]> {
+  context: ExtensionHookContextMap[HookName],
+): Promise<ExtensionHookContextMap[HookName]> {
   if (!extensions || !Array.isArray(extensions) || extensions.length === 0) {
     return context;
   }
@@ -432,13 +664,64 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
     feature: 'extension_hook',
   });
 
-  let updatedContext: HookContextMap[HookName] = { ...context };
+  logger.debug(`Running ${hookName} hook with ${extensions.length} extension(s)`);
+
+  let updatedContext: ExtensionHookContextMap[HookName] = { ...context };
 
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
-    logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
 
-    const extensionReturnValue = await transform(extension, hookName, context, false);
+    // Only run extensions that match the current hook name.
+    // Extension format: file://path/to/file.js:functionName
+    //
+    // Behavior:
+    // - If functionName is a known hook name (beforeAll, beforeEach, afterEach, afterAll),
+    //   only run for that specific hook.
+    // - If functionName is a custom name (e.g., myHandler, extension_hook),
+    //   run for ALL hooks (generic handler pattern).
+    // - If no functionName is specified, run for ALL hooks.
+    const extensionHookName = getExtensionHookName(extension);
+    if (
+      extensionHookName &&
+      EXTENSION_HOOK_NAMES.has(extensionHookName) &&
+      extensionHookName !== hookName
+    ) {
+      logger.debug(
+        `Skipping extension ${extension} for hook ${hookName} (extension targets ${extensionHookName} only)`,
+      );
+      continue;
+    }
+
+    // Determine calling convention based on function name:
+    // - Known hook names (beforeAll, etc.) use NEW convention: (context, { hookName })
+    //   These are hook-specific handlers that don't need hookName passed explicitly.
+    // - Custom names or no function name use LEGACY convention: (hookName, context)
+    //   These are generic handlers that need hookName to determine which hook is running.
+    const useNewCallingConvention =
+      extensionHookName && EXTENSION_HOOK_NAMES.has(extensionHookName);
+
+    logger.debug(
+      `Running extension ${extension} for hook ${hookName} (${useNewCallingConvention ? 'new' : 'legacy'} convention)`,
+    );
+
+    let extensionReturnValue;
+    try {
+      if (useNewCallingConvention) {
+        // NEW convention: fn(context, { hookName })
+        // Use updatedContext so each extension sees changes from previous extensions
+        extensionReturnValue = await transform(extension, updatedContext, { hookName }, false);
+      } else {
+        // LEGACY convention: fn(hookName, context) - backwards compatible with pre-v0.102 hooks
+        extensionReturnValue = await transform(extension, hookName, updatedContext, false);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const wrappedError = new Error(
+        `Extension hook "${hookName}" failed for ${extension}: ${errorMessage}`,
+      );
+      (wrappedError as Error & { cause?: unknown }).cause = error;
+      throw wrappedError;
+    }
 
     // If the extension hook returns a value, update the context with the value's mutable fields.
     // This also provides backwards compatibility for extension hooks that do not return a value.
@@ -447,7 +730,7 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
         case 'beforeAll': {
           (updatedContext as BeforeAllExtensionHookContext) = {
             suite: {
-              ...(context as BeforeAllExtensionHookContext).suite,
+              ...(updatedContext as BeforeAllExtensionHookContext).suite,
               // Mutable properties:
               prompts: extensionReturnValue.suite.prompts,
               providerPromptMap: extensionReturnValue.suite.providerPromptMap,
@@ -467,6 +750,41 @@ export async function runExtensionHook<HookName extends keyof HookContextMap>(
           };
           break;
         }
+        case 'afterEach': {
+          if (extensionReturnValue.result) {
+            const currentResult = (updatedContext as AfterEachExtensionHookContext).result;
+            const mergedResponse =
+              currentResult.response && extensionReturnValue.result.response?.metadata
+                ? {
+                    ...currentResult.response,
+                    metadata: {
+                      ...currentResult.response.metadata,
+                      ...extensionReturnValue.result.response.metadata,
+                    },
+                  }
+                : currentResult.response;
+            const validScores = filterFiniteScores(extensionReturnValue.result.namedScores || {});
+            (updatedContext as AfterEachExtensionHookContext) = {
+              test: (updatedContext as AfterEachExtensionHookContext).test,
+              result: {
+                ...currentResult,
+                namedScores: {
+                  ...currentResult.namedScores,
+                  ...validScores,
+                },
+                metadata: {
+                  ...currentResult.metadata,
+                  ...(extensionReturnValue.result.metadata || {}),
+                },
+                response: mergedResponse,
+              },
+            };
+          }
+          break;
+        }
+        // No case for 'afterAll': it runs after results are persisted and is
+        // intended for side effects (monitoring, cleanup). Return values are
+        // intentionally ignored since there is no downstream consumer.
       }
     }
   }

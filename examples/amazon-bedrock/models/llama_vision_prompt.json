@@ -1,0 +1,19 @@
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "image",
+        "source": {
+          "type": "base64",
+          "media_type": "image/jpeg",
+          "data": "{{image}}"
+        }
+      },
+      {
+        "type": "text",
+        "text": "What animal is in this image? Describe it briefly."
+      }
+    ]
+  }
+]

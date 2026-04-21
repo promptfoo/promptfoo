@@ -1,0 +1,11 @@
+- vars:
+    name: Henry
+  assert:
+    - type: contains
+      value: Henry
+
+- vars:
+    name: Ivy
+  assert:
+    - type: contains
+      value: Ivy

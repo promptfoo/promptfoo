@@ -3,16 +3,8 @@ import path from 'path';
 import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
-import RedteamBestOfNProvider from '../redteam/providers/bestOfN';
-import { CrescendoProvider as RedteamCrescendoProvider } from '../redteam/providers/crescendo';
-import RedteamCustomProvider from '../redteam/providers/custom';
-import RedteamGoatProvider from '../redteam/providers/goat';
-import RedteamIterativeProvider from '../redteam/providers/iterative';
-import RedteamImageIterativeProvider from '../redteam/providers/iterativeImage';
-import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
-import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { createAbliterationProvider } from './abliteration';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
@@ -25,6 +17,8 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
+import { AzureVideoProvider } from './azure/video';
+import { AwsBedrockConverseProvider } from './bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
@@ -33,18 +27,29 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere'
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
+import {
+  ElevenLabsAgentsProvider,
+  ElevenLabsAlignmentProvider,
+  ElevenLabsHistoryProvider,
+  ElevenLabsIsolationProvider,
+  ElevenLabsSTTProvider,
+  ElevenLabsTTSProvider,
+} from './elevenlabs';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
+import { GeminiImageProvider } from './google/gemini-image';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
+import { GoogleVideoProvider } from './google/video';
+import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
+  HuggingfaceChatCompletionProvider,
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceSentenceSimilarityProvider,
   HuggingfaceTextClassificationProvider,
@@ -72,6 +77,7 @@ import { OpenAiImageProvider } from './openai/image';
 import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
+import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
@@ -90,24 +96,28 @@ import { SequenceProvider } from './sequence';
 import { SimulatedUser } from './simulatedUser';
 import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
+import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
+import { createVercelProvider } from './vercel';
 import { VoyageEmbeddingProvider } from './voyage';
-import { WatsonXProvider } from './watsonx';
+import { WatsonXChatProvider, WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
+import { createXAIResponsesProvider } from './xai/responses';
+import { createXAIVideoProvider } from './xai/video';
+import { createXAIVoiceProvider } from './xai/voice';
 
 import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
+import type { ProviderOptions } from '../types/providers';
+import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
-interface ProviderFactory {
-  test: (providerPath: string) => boolean;
-  create: (
-    providerPath: string,
-    providerOptions: ProviderOptions,
-    context: LoadApiProviderContext,
-  ) => Promise<ApiProvider>;
+function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
+  const configuredModel = providerOptions.config?.model;
+  return typeof configuredModel === 'string' && configuredModel.trim().length > 0
+    ? configuredModel
+    : undefined;
 }
 
 export const providerMap: ProviderFactory[] = [
@@ -116,49 +126,16 @@ export const providerMap: ProviderFactory[] = [
   createScriptBasedProviderFactory('python', 'py', PythonProvider),
   createScriptBasedProviderFactory('ruby', 'rb', RubyProvider),
   {
-    test: (providerPath: string) => providerPath === 'agentic:memory-poisoning',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new MemoryPoisoningProvider(providerOptions);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath.startsWith('adaline:'),
+    test: (providerPath: string) => providerPath.startsWith('abliteration:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
-      const splits = providerPath.split(':');
-      if (splits.length < 4) {
-        throw new Error(
-          `Invalid adaline provider path: ${providerPath}. path format should be 'adaline:<provider_name>:<model_type>:<model_name>' eg. 'adaline:openai:chat:gpt-4o'`,
-        );
-      }
-      const providerName = splits[1];
-      const modelType = splits[2];
-      const modelName = splits[3];
-
-      try {
-        const { AdalineGatewayChatProvider, AdalineGatewayEmbeddingProvider } = await import(
-          './adaline.gateway'
-        );
-        if (modelType === 'embedding' || modelType === 'embeddings') {
-          return new AdalineGatewayEmbeddingProvider(providerName, modelName, providerOptions);
-        }
-        return new AdalineGatewayChatProvider(providerName, modelName, providerOptions);
-      } catch (error: any) {
-        if (error.code === 'MODULE_NOT_FOUND' && error.message.includes('@adaline/')) {
-          throw new Error(
-            'The Adaline Gateway provider requires @adaline packages. Please install them with:\n' +
-              'npm install @adaline/anthropic @adaline/azure @adaline/gateway @adaline/google @adaline/groq @adaline/open-router @adaline/openai @adaline/provider @adaline/together-ai @adaline/types @adaline/vertex',
-          );
-        }
-        throw error;
-      }
+      return createAbliterationProvider(providerPath, {
+        config: providerOptions,
+        env: context.env,
+      });
     },
   },
   {
@@ -195,17 +172,48 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
+      providerPath.startsWith('opencode:') || providerPath === 'opencode',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenCodeSDKProvider } = await import('./opencode-sdk');
+
+      // opencode:sdk or opencode - uses OpenCode's configured default model
+      // Model selection is configured via OpenCode CLI: opencode config set model <provider/model>
+      return new OpenCodeSDKProvider({
+        ...providerOptions,
+        id: providerPath,
+        config: providerOptions.config,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('openclaw:') || providerPath === 'openclaw',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createOpenClawProvider } = await import('./openclaw');
+      return createOpenClawProvider(providerPath, providerOptions, context.env);
+    },
+  },
+  {
+    test: (providerPath: string) =>
       providerPath.startsWith('anthropic:claude-agent-sdk') ||
       providerPath.startsWith('anthropic:claude-code'),
     create: async (
       _providerPath: string,
       providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
+      _context: LoadApiProviderContext,
     ) => {
       const { ClaudeCodeSDKProvider } = await import('./claude-agent-sdk');
       return new ClaudeCodeSDKProvider({
         ...providerOptions,
-        env: context.env,
       });
     },
   },
@@ -247,28 +255,34 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
-      providerPath.startsWith('azure:') ||
-      providerPath.startsWith('azureopenai:') ||
-      providerPath === 'azure:moderation',
+      providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      // Handle azure:moderation directly
-      if (providerPath === 'azure:moderation') {
-        const { deploymentName, modelName } = providerOptions.config || {};
-        return new AzureModerationProvider(
-          deploymentName || modelName || 'text-content-safety',
-          providerOptions,
-        );
-      }
-
-      // Handle other Azure providers
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const deploymentName = splits[2];
 
+      if (modelType === 'moderation') {
+        if (providerPath.startsWith('azureopenai:')) {
+          throw new Error(
+            'Azure OpenAI does not support moderation. Use azure:moderation instead, which routes to Azure Content Safety.',
+          );
+        }
+        const resolvedDeployment =
+          deploymentName ||
+          providerOptions.config?.deploymentName ||
+          providerOptions.config?.modelName ||
+          'text-content-safety';
+        if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(resolvedDeployment)) {
+          throw new Error(
+            `Unknown Azure moderation model: ${resolvedDeployment}. Supported models: ${AzureModerationProvider.MODERATION_MODEL_IDS.join(', ')}`,
+          );
+        }
+        return new AzureModerationProvider(resolvedDeployment, providerOptions);
+      }
       if (modelType === 'chat') {
         return new AzureChatCompletionProvider(deploymentName, providerOptions);
       }
@@ -290,8 +304,11 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'video') {
+        return new AzureVideoProvider(deploymentName || 'sora', providerOptions);
+      }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:moderation:<model name>, azure:responses:<model name>, azure:video:<deployment name>`,
       );
     },
   },
@@ -314,10 +331,40 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
+      // Handle Converse API
+      if (modelType === 'converse') {
+        return new AwsBedrockConverseProvider(modelName, providerOptions);
+      }
+
       // Handle nova-sonic model
       if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
         const { NovaSonicProvider } = await import('./bedrock/nova-sonic');
         return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
+      }
+
+      // Handle Luma Ray video model
+      // Supports: bedrock:luma.ray-v2:0 or bedrock:video:luma.ray-v2:0
+      // Note: Luma model IDs include version after colon (e.g., luma.ray-v2:0)
+      if (modelType.includes('luma.ray') || modelName.includes('luma.ray')) {
+        const { LumaRayVideoProvider } = await import('./bedrock/luma-ray');
+        // For bedrock:luma.ray-v2:0, reconstruct full model name from splits[1:]
+        // For bedrock:video:luma.ray-v2:0, use modelName directly
+        const videoModelName = modelName.includes('luma.ray')
+          ? modelName
+          : splits.slice(1).join(':') || 'luma.ray-v2:0';
+        return new LumaRayVideoProvider(videoModelName, providerOptions);
+      }
+
+      // Handle Nova Reel video model
+      // Supports: bedrock:video:amazon.nova-reel-v1:1 or bedrock:amazon.nova-reel-v1:1
+      // Only match if modelType contains nova-reel OR (modelType is 'video' AND modelName contains nova-reel or is empty)
+      if (
+        modelType.includes('amazon.nova-reel') ||
+        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
+      ) {
+        const { NovaReelVideoProvider } = await import('./bedrock/nova-reel');
+        const videoModelName = modelName || 'amazon.nova-reel-v1:1';
+        return new NovaReelVideoProvider(videoModelName, providerOptions);
       }
 
       // Handle Bedrock Agents
@@ -442,6 +489,20 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('cloudflare-gateway:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createCloudflareGatewayProvider } = await import('./cloudflare-gateway');
+      return createCloudflareGatewayProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('cohere:'),
     create: async (
       providerPath: string,
@@ -501,6 +562,56 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new EchoProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('elevenlabs:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const capability = splits[1]; // tts, stt, agents, history, isolation, alignment
+      const _additionalId = splits.length > 2 ? splits.slice(2).join(':') : undefined;
+
+      // Route to appropriate provider based on capability
+      switch (capability) {
+        case 'tts':
+          return new ElevenLabsTTSProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'stt':
+          return new ElevenLabsSTTProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'agents':
+          return new ElevenLabsAgentsProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'history':
+          return new ElevenLabsHistoryProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'isolation':
+          return new ElevenLabsIsolationProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'alignment':
+          return new ElevenLabsAlignmentProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        default:
+          throw new Error(
+            `ElevenLabs capability "${capability}" is not supported. Available: tts, stt, agents, history, isolation, alignment`,
+          );
+      }
     },
   },
   {
@@ -588,7 +699,26 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      // Handle groq:responses:<model> format for Responses API
+      if (providerPath.startsWith('groq:responses:')) {
+        const modelName = providerPath.slice('groq:responses:'.length);
+        if (!modelName) {
+          throw new Error(
+            `Invalid groq:responses provider path: "${providerPath}". ` +
+              'Use format groq:responses:<model> (e.g., groq:responses:llama-3.3-70b-versatile)',
+          );
+        }
+        return new GroqResponsesProvider(modelName, providerOptions);
+      }
+
+      // Handle groq:<model> format for Chat Completions API
+      const modelName = providerPath.slice('groq:'.length);
+      if (!modelName) {
+        throw new Error(
+          `Invalid groq provider path: "${providerPath}". ` +
+            'Use format groq:<model> (e.g., groq:llama-3.3-70b-versatile)',
+        );
+      }
       return new GroqProvider(modelName, providerOptions);
     },
   },
@@ -740,33 +870,94 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
       // Load OpenAI module
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+      const configuredModel = getConfiguredOpenAiModel(providerOptions);
 
+      // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
+      if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
+        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
+        const codexModel = modelName || configuredModel;
+        const codexProviderId = providerOptions.id ?? providerPath;
+        return new OpenAICodexAppServerProvider({
+          ...providerOptions,
+          id: codexProviderId,
+          config: codexModel
+            ? {
+                ...providerOptions.config,
+                model: codexModel,
+              }
+            : providerOptions.config,
+          env: {
+            ...context.env,
+            ...providerOptions.env,
+          },
+        });
+      }
+
+      // Codex SDK providers (openai:codex-sdk or openai:codex)
+      if (modelType === 'codex-sdk' || modelType === 'codex') {
+        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
+        const codexModel = modelName || configuredModel;
+        const codexProviderId = providerOptions.id ?? providerPath;
+        return new OpenAICodexSDKProvider({
+          ...providerOptions,
+          id: codexProviderId,
+          config: codexModel
+            ? {
+                ...providerOptions.config,
+                model: codexModel,
+              }
+            : providerOptions.config,
+          env: context.env,
+        });
+      }
       if (modelType === 'chat') {
-        return new OpenAiChatCompletionProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
+        return new OpenAiChatCompletionProvider(
+          modelName || configuredModel || 'gpt-4.1-2025-04-14',
+          providerOptions,
+        );
       }
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new OpenAiEmbeddingProvider(modelName || 'text-embedding-3-large', providerOptions);
+        return new OpenAiEmbeddingProvider(
+          modelName || configuredModel || 'text-embedding-3-large',
+          providerOptions,
+        );
       }
       if (modelType === 'completion') {
-        return new OpenAiCompletionProvider(modelName || 'gpt-3.5-turbo-instruct', providerOptions);
+        return new OpenAiCompletionProvider(
+          modelName || configuredModel || 'gpt-3.5-turbo-instruct',
+          providerOptions,
+        );
       }
       if (modelType === 'moderation') {
-        return new OpenAiModerationProvider(modelName || 'omni-moderation-latest', providerOptions);
+        return new OpenAiModerationProvider(
+          modelName || configuredModel || 'omni-moderation-latest',
+          providerOptions,
+        );
       }
       if (modelType === 'realtime') {
         return new OpenAiRealtimeProvider(
-          modelName || 'gpt-4o-realtime-preview-2024-12-17',
+          modelName || configuredModel || 'gpt-4o-realtime-preview-2024-12-17',
           providerOptions,
         );
       }
       if (modelType === 'responses') {
-        return new OpenAiResponsesProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
+        return new OpenAiResponsesProvider(
+          modelName || configuredModel || 'gpt-4.1-2025-04-14',
+          providerOptions,
+        );
+      }
+      if (modelType === 'transcription') {
+        const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
+        return new OpenAiTranscriptionProvider(
+          modelName || configuredModel || 'gpt-4o-transcribe-diarize',
+          providerOptions,
+        );
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
@@ -780,15 +971,26 @@ export const providerMap: ProviderFactory[] = [
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
+      if (modelType === 'agents') {
+        const { OpenAiAgentsProvider } = await import('./openai/agents');
+        return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+      }
+      if (modelType === 'chatkit') {
+        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
+        return new OpenAiChatKitProvider(modelName || '', providerOptions);
+      }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
       }
       if (modelType === 'image') {
         return new OpenAiImageProvider(modelName, providerOptions);
       }
+      if (modelType === 'video') {
+        return new OpenAiVideoProvider(modelName || 'sora-2', providerOptions);
+      }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -842,6 +1044,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('quiverai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createQuiverAiProvider } = await import('./quiverai');
+      return createQuiverAiProvider(providerPath, providerOptions, context.env);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('replicate:'),
     create: async (
       providerPath: string,
@@ -861,6 +1074,33 @@ export const providerMap: ProviderFactory[] = [
       return new ReplicateProvider(
         modelName ? modelType + ':' + modelName : modelType,
         providerOptions,
+      );
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('modelslab:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { ModelsLabImageProvider } = await import('./modelslab');
+      const splits = providerPath.split(':');
+      const modelType = splits[1];
+      const modelName = splits.slice(2).join(':');
+      if (modelType === 'image') {
+        if (!modelName) {
+          throw new Error(
+            `Invalid modelslab provider path: ${providerPath}. Model name is required. Use: modelslab:image:<model_name>`,
+          );
+        }
+        return new ModelsLabImageProvider(modelName, {
+          ...providerOptions,
+          env: providerOptions.env ?? context.env,
+        });
+      }
+      throw new Error(
+        `Invalid modelslab provider path: ${providerPath}. Use: modelslab:image:<model_name>`,
       );
     },
   },
@@ -946,6 +1186,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('vercel:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createVercelProvider(providerPath, {
+        ...providerOptions,
+        env: context.env,
+      });
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('vertex:'),
     create: async (
       providerPath: string,
@@ -954,6 +1207,14 @@ export const providerMap: ProviderFactory[] = [
     ) => {
       const splits = providerPath.split(':');
       const firstPart = splits[1];
+      if (firstPart === 'video') {
+        const modelName = splits.slice(2).join(':');
+        return new GoogleVideoProvider(modelName, {
+          ...providerOptions,
+          id: providerPath,
+          config: { ...providerOptions.config, vertexai: true },
+        });
+      }
       if (firstPart === 'chat') {
         return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
       }
@@ -982,6 +1243,15 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
+      const modelType = splits[1];
+
+      // Support watsonx:chat:<model> for chat API
+      if (modelType === 'chat') {
+        const modelName = splits.slice(2).join(':');
+        return new WatsonXChatProvider(modelName, providerOptions);
+      }
+
+      // Default: watsonx:<model> for text generation
       const modelName = splits.slice(1).join(':');
       return new WatsonXProvider(modelName, providerOptions);
     },
@@ -1010,6 +1280,30 @@ export const providerMap: ProviderFactory[] = [
       // Handle xai:image:<model> format
       if (modelType === 'image') {
         return createXAIImageProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle xai:video:<model> format for Grok Imagine video generation
+      if (modelType === 'video') {
+        return createXAIVideoProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle xai:responses:<model> format for Agent Tools API
+      if (modelType === 'responses') {
+        return createXAIResponsesProvider(providerPath, {
+          ...providerOptions,
+          env: context.env,
+        });
+      }
+
+      // Handle xai:voice:<model> format for Voice Agent API
+      if (modelType === 'voice') {
+        return createXAIVoiceProvider(providerPath, {
           ...providerOptions,
           env: context.env,
         });
@@ -1050,13 +1344,26 @@ export const providerMap: ProviderFactory[] = [
           // This is a Live API request
           return new GoogleLiveProvider(modelName, providerOptions);
         } else if (serviceType === 'image') {
-          // This is an Image Generation request
+          // This is an Imagen image generation request
           return new GoogleImageProvider(modelName, providerOptions);
+        } else if (serviceType === 'video') {
+          // This is a Veo video generation request
+          return new GoogleVideoProvider(modelName, {
+            ...providerOptions,
+            id: providerPath,
+          });
         }
       }
 
       // Default to regular Google API
       const modelName = splits[1];
+
+      // Check if this is a Gemini native image generation model
+      // These models have 'image' in their name (e.g., gemini-2.5-flash-image, gemini-3.1-flash-image-preview)
+      if (modelName.includes('-image')) {
+        return new GeminiImageProvider(modelName, providerOptions);
+      }
+
       return new AIStudioChatProvider(modelName, providerOptions);
     },
   },
@@ -1157,88 +1464,6 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:best-of-n',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamBestOfNProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:crescendo',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamCrescendoProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) =>
-      providerPath === 'promptfoo:redteam:custom' ||
-      providerPath.startsWith('promptfoo:redteam:custom:'),
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamCustomProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:goat',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamGoatProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:mischievous-user',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamMischievousUserProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIterativeProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:image',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamImageIterativeProvider(providerOptions.config);
-    },
-  },
-  {
-    test: (providerPath: string) => providerPath === 'promptfoo:redteam:iterative:tree',
-    create: async (
-      _providerPath: string,
-      providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
-    ) => {
-      return new RedteamIterativeTreeProvider(providerOptions.config);
-    },
-  },
-  {
     test: (providerPath: string) => providerPath === 'promptfoo:simulated-user',
     create: async (
       _providerPath: string,
@@ -1298,10 +1523,13 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       if (splits.length < 3) {
         throw new Error(
-          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+          `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:chat:<model name>, huggingface:text-generation:<model name>, huggingface:feature-extraction:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>, huggingface:sentence-similarity:<model name>`,
         );
       }
       const modelName = splits.slice(2).join(':');
+      if (splits[1] === 'chat') {
+        return new HuggingfaceChatCompletionProvider(modelName, providerOptions);
+      }
       if (splits[1] === 'feature-extraction') {
         return new HuggingfaceFeatureExtractionProvider(modelName, providerOptions);
       }
@@ -1318,8 +1546,46 @@ export const providerMap: ProviderFactory[] = [
         return new HuggingfaceTokenExtractionProvider(modelName, providerOptions);
       }
       throw new Error(
-        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:feature-extraction:<model name>, huggingface:text-generation:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>`,
+        `Invalid Huggingface provider path: ${providerPath}. Use one of the following providers: huggingface:chat:<model name>, huggingface:text-generation:<model name>, huggingface:feature-extraction:<model name>, huggingface:text-classification:<model name>, huggingface:token-classification:<model name>, huggingface:sentence-similarity:<model name>`,
       );
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('transformers:') || providerPath.startsWith('transformers.js:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      // Validate dependency is available early, before parsing config
+      const { validateTransformersDependency } = await import('./transformersAvailability');
+      await validateTransformersDependency();
+
+      const splits = providerPath.split(':');
+      if (splits.length < 3) {
+        throw new Error(
+          `Invalid Transformers.js provider path: ${providerPath}. ` +
+            'Format: transformers:<task>:<model>\n' +
+            'Supported tasks: feature-extraction, text-generation\n' +
+            'Example: transformers:feature-extraction:Xenova/all-MiniLM-L6-v2',
+        );
+      }
+      const taskType = splits[1];
+      const modelName = splits.slice(2).join(':');
+
+      switch (taskType) {
+        case 'feature-extraction':
+        case 'embeddings':
+          return new TransformersEmbeddingProvider(modelName, providerOptions);
+        case 'text-generation':
+          return new TransformersTextGenerationProvider(modelName, providerOptions);
+        default:
+          throw new Error(
+            `Unsupported Transformers.js task type: ${taskType}. ` +
+              'Supported tasks: feature-extraction (alias: embeddings), text-generation',
+          );
+      }
     },
   },
   {
@@ -1396,3 +1662,61 @@ export const providerMap: ProviderFactory[] = [
     },
   },
 ];
+
+function isRedteamProviderPath(providerPath: string): boolean {
+  return (
+    providerPath === 'agentic:memory-poisoning' || providerPath.startsWith('promptfoo:redteam:')
+  );
+}
+
+const providerFamilies: ProviderFamily[] = [
+  {
+    canHandle: isRedteamProviderPath,
+    factories: async () => {
+      const { redteamProviderFactories } = await import('../redteam/providers/registry');
+      return redteamProviderFactories;
+    },
+  },
+];
+
+export async function getProviderFactories(
+  providerPath: string,
+): Promise<readonly ProviderFactory[]> {
+  const matchingFamilies = providerFamilies.filter((family) => family.canHandle(providerPath));
+
+  // Hot path: return the module-scoped providerMap directly for the common
+  // no-family-match case instead of copying ~100 entries into a fresh array.
+  // The return type is readonly so callers cannot mutate the shared array.
+  if (matchingFamilies.length === 0) {
+    return providerMap;
+  }
+
+  // Wrap each family load so a broken dynamic import (renamed file, circular
+  // cycle, downstream ESM resolution error) surfaces with the requested
+  // providerPath and the family boundary identified — without this, a
+  // regression in the lazy-load path looks like a raw ERR_MODULE_NOT_FOUND
+  // pointing at an internal file with no connection to the user's config.
+  //
+  // `cause` is assigned as a property rather than passed through the
+  // two-argument Error constructor so this file type-checks under both the
+  // root (ES2022) and the app (ES2020) tsconfig libs — the app build pulls
+  // backend files in via path aliases and the ES2020 lib does not declare
+  // the two-argument Error overload.
+  const extraFactorySets = await Promise.all(
+    matchingFamilies.map(async (family) => {
+      try {
+        return await family.factories();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const wrapped = new Error(
+          `Failed to load provider family for '${providerPath}': ${message}`,
+        );
+        if (err instanceof Error) {
+          (wrapped as Error & { cause?: unknown }).cause = err;
+        }
+        throw wrapped;
+      }
+    }),
+  );
+  return [...providerMap, ...extraFactorySets.flat()];
+}

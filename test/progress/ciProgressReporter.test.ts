@@ -1,27 +1,31 @@
-import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
+import { CIProgressReporter } from '../../src/progress/ciProgressReporter';
+import { mockConsole, mockProcessEnv } from '../util/utils';
 
 // Mock the logger
-jest.mock('../../src/logger', () => ({
-  info: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    info: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-// Mock console.log for GitHub Actions annotations
-const originalConsoleLog = console.log;
-const consoleLogMock = jest.fn();
-
 describe('CIProgressReporter', () => {
+  let consoleLogMock: ReturnType<typeof mockConsole>;
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.useFakeTimers();
-    console.log = consoleLogMock;
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    consoleLogMock = mockConsole('log');
+    restoreEnv = mockProcessEnv({ GITHUB_ACTIONS: undefined });
   });
 
   afterEach(() => {
-    jest.useRealTimers();
-    console.log = originalConsoleLog;
-    delete process.env.GITHUB_ACTIONS;
+    vi.useRealTimers();
+    consoleLogMock.mockRestore();
+    restoreEnv();
   });
 
   it('should log start message', () => {
@@ -34,7 +38,7 @@ describe('CIProgressReporter', () => {
   it('should log milestone updates at 25%, 50%, 75%', () => {
     const reporter = new CIProgressReporter(100);
     reporter.start();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Update to 25%
     reporter.update(25);
@@ -59,10 +63,10 @@ describe('CIProgressReporter', () => {
     const reporter = new CIProgressReporter(100, 1000); // 1 second interval
     reporter.start();
     reporter.update(30);
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Advance time by 1 second
-    jest.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1000);
 
     expect(logger.info).toHaveBeenCalledWith(
       expect.stringContaining('[CI Progress] Evaluation running for'),
@@ -76,7 +80,7 @@ describe('CIProgressReporter', () => {
     const reporter = new CIProgressReporter(100);
     reporter.start();
     reporter.update(100);
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     reporter.finish();
 
@@ -86,16 +90,20 @@ describe('CIProgressReporter', () => {
   });
 
   it('should emit GitHub Actions annotations when GITHUB_ACTIONS is set', () => {
-    process.env.GITHUB_ACTIONS = 'true';
-    const reporter = new CIProgressReporter(100);
+    const restoreGithubActions = mockProcessEnv({ GITHUB_ACTIONS: 'true' });
+    try {
+      const reporter = new CIProgressReporter(100);
 
-    reporter.update(25);
-    expect(consoleLogMock).toHaveBeenCalledWith('::notice::Evaluation 25% complete');
+      reporter.update(25);
+      expect(consoleLogMock).toHaveBeenCalledWith('::notice::Evaluation 25% complete');
 
-    reporter.finish();
-    expect(consoleLogMock).toHaveBeenCalledWith(
-      expect.stringContaining('::notice::Evaluation completed: 25/100 tests in'),
-    );
+      reporter.finish();
+      expect(consoleLogMock).toHaveBeenCalledWith(
+        expect.stringContaining('::notice::Evaluation completed: 25/100 tests in'),
+      );
+    } finally {
+      restoreGithubActions();
+    }
   });
 
   it('should handle errors', () => {
@@ -106,11 +114,15 @@ describe('CIProgressReporter', () => {
   });
 
   it('should emit GitHub Actions error annotation', () => {
-    process.env.GITHUB_ACTIONS = 'true';
-    const reporter = new CIProgressReporter(100);
+    const restoreGithubActions = mockProcessEnv({ GITHUB_ACTIONS: 'true' });
+    try {
+      const reporter = new CIProgressReporter(100);
 
-    reporter.error('Test error');
-    expect(consoleLogMock).toHaveBeenCalledWith('::error::Test error');
+      reporter.error('Test error');
+      expect(consoleLogMock).toHaveBeenCalledWith('::error::Test error');
+    } finally {
+      restoreGithubActions();
+    }
   });
 
   it('should clear interval on finish', () => {
@@ -118,12 +130,12 @@ describe('CIProgressReporter', () => {
     reporter.start();
 
     // Verify interval is set
-    expect(jest.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(1);
 
     reporter.finish();
 
     // Verify interval is cleared
-    expect(jest.getTimerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('should format elapsed time correctly', () => {
@@ -131,7 +143,7 @@ describe('CIProgressReporter', () => {
     reporter.start();
 
     // Advance time by 65 seconds
-    jest.advanceTimersByTime(65000);
+    vi.advanceTimersByTime(65000);
 
     reporter.finish();
 

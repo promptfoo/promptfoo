@@ -1,12 +1,13 @@
 import crypto from 'crypto';
 
-import z from 'zod';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
-import { transform } from '../util/transform';
+import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
+import { StringOrFunctionSchema } from '../validators/shared';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -16,8 +17,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
-import type { TransformContext } from '../util/transform';
+import type { TransformContext, TransformFunction } from '../types/transform';
 
 /**
  * Sleep utility function for implementing delays
@@ -26,50 +26,59 @@ import type { TransformContext } from '../util/transform';
  */
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+function stringifyTransformResult(result: unknown): string | undefined {
+  if (result === undefined || result === null) {
+    logger.debug('Transform function returned null or undefined, using original prompt');
+    return undefined;
+  }
+  if (typeof result === 'string') {
+    return result;
+  }
+  return typeof result === 'object' ? JSON.stringify(result) : String(result);
+}
+
 const SUPPORTED_MODEL_TYPES = ['openai', 'llama', 'huggingface', 'jumpstart', 'custom'] as const;
 /**
  * Zod schema for validating SageMaker options
  */
-const SageMakerConfigSchema = z
-  .object({
-    // AWS credentials options
-    accessKeyId: z.string().optional(),
-    profile: z.string().optional(),
-    region: z.string().optional(),
-    secretAccessKey: z.string().optional(),
-    sessionToken: z.string().optional(),
+const SageMakerConfigSchema = z.strictObject({
+  // AWS credentials options
+  accessKeyId: z.string().optional(),
+  profile: z.string().optional(),
+  region: z.string().optional(),
+  secretAccessKey: z.string().optional(),
+  sessionToken: z.string().optional(),
 
-    // SageMaker specific options
-    endpoint: z.string().optional(),
-    contentType: z.string().optional(),
-    acceptType: z.string().optional(),
+  // SageMaker specific options
+  endpoint: z.string().optional(),
+  contentType: z.string().optional(),
+  acceptType: z.string().optional(),
 
-    // Model parameters
-    maxTokens: z.number().optional(),
-    temperature: z.number().optional(),
-    topP: z.number().optional(),
-    stopSequences: z.array(z.string()).optional(),
+  // Model parameters
+  maxTokens: z.number().optional(),
+  temperature: z.number().optional(),
+  topP: z.number().optional(),
+  stopSequences: z.array(z.string()).optional(),
 
-    // Provider behavior options
-    delay: z.number().optional(), // Delay between API calls in milliseconds
-    transform: z.string().optional(), // Transform function or file path to transform prompts
+  // Provider behavior options
+  delay: z.number().optional(), // Delay between API calls in milliseconds
+  transform: StringOrFunctionSchema.optional(), // Transform expression, file path, or function
 
-    // Model type for request/response handling
-    // TODO(Will): What is custom? User uploaded model?
-    // - Jumpstart is a model service, not a model type.
-    modelType: z.enum(SUPPORTED_MODEL_TYPES).optional(),
+  // Model type for request/response handling
+  // TODO(Will): What is custom? User uploaded model?
+  // - Jumpstart is a model service, not a model type.
+  modelType: z.enum(SUPPORTED_MODEL_TYPES).optional(),
 
-    // Response format options
-    responseFormat: z
-      .object({
-        type: z.string().optional(),
-        path: z.string().optional(), // JavaScript expression to extract content (formerly JSONPath)
-      })
-      .optional(),
+  // Response format options
+  responseFormat: z
+    .strictObject({
+      type: z.string().optional(),
+      path: z.string().optional(), // JavaScript expression to extract content (formerly JSONPath)
+    })
+    .optional(),
 
-    basePath: z.string().optional(),
-  })
-  .strict();
+  basePath: z.string().optional(),
+});
 
 type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 
@@ -86,7 +95,7 @@ abstract class SageMakerGenericProvider {
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
-  transform?: string; // Transform function for modifying prompts before sending
+  transform?: string | TransformFunction;
 
   // Custom provider ID, separate from the id() method
   private providerId?: string;
@@ -101,7 +110,7 @@ abstract class SageMakerGenericProvider {
       SageMakerConfigSchema.parse(config);
     } catch (error) {
       logger.warn(
-        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${fromError(error).message}`,
+        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${error instanceof z.ZodError ? z.prettifyError(error) : error}`,
       );
     }
 
@@ -234,115 +243,87 @@ abstract class SageMakerGenericProvider {
         uuid: `sagemaker-${this.endpointName}-${Date.now()}`,
       };
 
-      // Get the transform function from config or provider
-      const transformFn = this.transform || context?.originalProvider?.transform;
-
-      if (!transformFn) {
-        return prompt;
-      }
+      const transformFn = this.transform;
 
       logger.debug(`Applying transform to prompt for SageMaker endpoint ${this.getEndpointName()}`);
 
-      // For inline transform functions, do direct evaluation
+      // Inline string expressions are evaluated directly here because SageMaker exposes
+      // the inline identifier as `prompt` rather than `output`; routing them through
+      // `src/util/transform` would rename the identifier and break existing configs.
+      // Direct TransformFunction values and file:// references delegate to the shared
+      // `transform()` utility.
       if (typeof transformFn === 'string' && !transformFn.startsWith('file://')) {
-        try {
-          // SECURITY WARNING: Using new Function() with dynamic content can be risky
-          // This is safe only if transform content comes from trusted sources (like config files)
-          // and not from user input or external API responses
+        // SECURITY WARNING: Using new Function() with dynamic content can be risky
+        // This is safe only if transform content comes from trusted sources (like config files)
+        // and not from user input or external API responses
+        let result: unknown;
+        if (transformFn.includes('=>')) {
+          const fn = new Function(
+            'prompt',
+            'context',
+            `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`,
+          );
+          result = await Promise.resolve(fn(prompt, transformContext));
+        } else {
+          const fn = new Function(
+            'prompt',
+            'context',
+            `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
+          );
+          result = await Promise.resolve(fn(prompt, transformContext));
+        }
 
-          // Simple transform function
-          if (transformFn.includes('=>')) {
-            // Arrow function format: prompt => ...
-            // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
-            const fn = new Function(
-              'prompt',
-              'context',
-              `try { return (${transformFn})(prompt, context); } catch(e) { throw new Error("Transform function error: " + e.message); }`,
-            );
-            const result = fn(prompt, transformContext);
-
-            // Handle all possible return types, including falsy values (empty string, 0, etc.)
-            if (result === undefined || result === null) {
-              // Only skip undefined/null, allowing empty strings, false, 0, etc.
-              logger.debug('Transform function returned null or undefined, using original prompt');
-              return prompt;
-            }
-
-            if (typeof result === 'string') {
-              return result; // Return string results directly (even empty strings)
-            } else if (typeof result === 'object') {
-              return JSON.stringify(result); // Convert objects to JSON
-            } else {
-              // Handle other types (numbers, booleans) by converting to string
-              return String(result);
-            }
-          } else {
-            // Regular function format
-            // We're wrapping the code in a try/catch and ensuring it's coming from a trusted source
-            const fn = new Function(
-              'prompt',
-              'context',
-              `try { ${transformFn} } catch(e) { throw new Error("Transform function error: " + e.message); }`,
-            );
-            const result = fn(prompt, transformContext);
-
-            // Handle all possible return types, including falsy values (empty string, 0, etc.)
-            if (result === undefined || result === null) {
-              // Only skip undefined/null, allowing empty strings, false, 0, etc.
-              logger.debug('Transform function returned null or undefined, using original prompt');
-              return prompt;
-            }
-
-            if (typeof result === 'string') {
-              return result; // Return string results directly (even empty strings)
-            } else if (typeof result === 'object') {
-              return JSON.stringify(result); // Convert objects to JSON
-            } else {
-              // Handle other types (numbers, booleans) by converting to string
-              return String(result);
-            }
-          }
-        } catch (transformError) {
-          logger.error(`Error executing inline transform: ${transformError}`);
+        const transformedPrompt = stringifyTransformResult(result);
+        if (transformedPrompt !== undefined) {
+          return transformedPrompt;
         }
       } else {
-        // Use the transform utility for file transforms
-        try {
-          const { TransformInputType } = await import('../util/transform');
-          const transformed = await transform(
-            transformFn,
-            prompt,
-            transformContext,
-            false,
-            TransformInputType.OUTPUT,
-          );
+        const transformed = await transform(
+          transformFn,
+          prompt,
+          transformContext,
+          false,
+          TransformInputType.OUTPUT,
+        );
 
-          // Handle all possible return types, including falsy values (empty string, 0, etc.)
-          if (transformed === undefined || transformed === null) {
-            // Only skip undefined/null, allowing empty strings, false, 0, etc.
-            logger.debug('Transform function returned null or undefined, using original prompt');
-            return prompt;
-          }
-
-          if (typeof transformed === 'string') {
-            return transformed; // Return string results directly (even empty strings)
-          } else if (typeof transformed === 'object') {
-            return JSON.stringify(transformed); // Convert objects to JSON
-          } else {
-            // Handle other types (numbers, booleans) by converting to string
-            return String(transformed);
-          }
-        } catch (transformError) {
-          logger.error(`Error using transform utility: ${transformError}`);
+        const transformedPrompt = stringifyTransformResult(transformed);
+        if (transformedPrompt !== undefined) {
+          return transformedPrompt;
         }
       }
 
       // Fall back to the original prompt if the transform result is not usable
       logger.warn(`Transform did not produce a valid result, using original prompt`);
       return prompt;
-    } catch (_) {
-      logger.error(`Error applying transform to prompt: ${_}`);
-      return prompt; // Return original prompt on error
+    } catch (error) {
+      // User-supplied function transforms must surface their errors so programming
+      // mistakes don't silently run the endpoint against the untransformed prompt.
+      // Inline-string and file:// transforms keep the legacy best-effort contract
+      // (log and fall through) so existing SageMaker configs aren't regressed.
+      if (typeof this.transform === 'function') {
+        throw error;
+      }
+      logger.error(`Error applying transform to prompt: ${error}`);
+      return prompt;
+    }
+  }
+
+  /**
+   * Run `applyTransformation` and convert a function-transform throw into a
+   * `ProviderResponse.error` so the evaluator sees a uniform error row instead
+   * of an uncaught rejection.
+   */
+  protected async runTransformSafely(
+    input: string,
+    context: CallApiContextParams | undefined,
+    errorPrefix: string,
+  ): Promise<{ ok: true; value: string } | { ok: false; error: string }> {
+    try {
+      return { ok: true, value: await this.applyTransformation(input, context) };
+    } catch (transformError) {
+      const message = `${errorPrefix}: ${getTransformErrorMessage(transformError)}`;
+      logger.error(message);
+      return { ok: false, error: message };
     }
   }
 
@@ -363,7 +344,6 @@ abstract class SageMakerGenericProvider {
       if (pathExpression.startsWith('file://')) {
         try {
           // Use the transform utility for file-based transforms
-          const { TransformInputType } = await import('../util/transform');
           const transformedResult = await transform(
             pathExpression,
             responseJson,
@@ -462,7 +442,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
    * Format the request payload based on model type
    */
   formatPayload(prompt: string): string {
-    const maxTokens = this.config.maxTokens || getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') || 1024;
+    const maxTokens = this.config.maxTokens ?? getEnvInt('AWS_SAGEMAKER_MAX_TOKENS') ?? 1024;
     const temperature =
       typeof this.config.temperature === 'number'
         ? this.config.temperature
@@ -699,8 +679,15 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    // Apply transformation to the prompt if a transform is specified
-    const transformedPrompt = await this.applyTransformation(prompt, context);
+    const transformResult = await this.runTransformSafely(
+      prompt,
+      context,
+      'SageMaker transform error',
+    );
+    if (!transformResult.ok) {
+      return { error: transformResult.error };
+    }
+    const transformedPrompt = transformResult.value;
     const isTransformed = transformedPrompt !== prompt;
 
     if (isTransformed) {
@@ -737,7 +724,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
             parsedResult.metadata.originalPrompt = prompt;
           }
 
-          return parsedResult;
+          return { ...parsedResult, cached: true };
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker response: ${_}`);
           // Continue with API call if parsing fails
@@ -816,6 +803,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           completion: completionTokens,
           total: promptTokens + completionTokens,
           cached: 0, // No caching for this request
+          numRequests: 1,
         },
         metadata: {
           latencyMs: _latency,
@@ -901,8 +889,15 @@ export class SageMakerEmbeddingProvider
     // Get the delay value - the context delay takes precedence over the provider's delay
     const delayMs = context?.originalProvider?.delay || this.delay;
 
-    // Apply transformation to the text if a transform is specified
-    const transformedText = await this.applyTransformation(text, context);
+    const transformResult = await this.runTransformSafely(
+      text,
+      context,
+      'SageMaker embedding transform error',
+    );
+    if (!transformResult.ok) {
+      return { error: transformResult.error };
+    }
+    const transformedText = transformResult.value;
     const isTransformed = transformedText !== text;
 
     if (isTransformed) {
@@ -935,7 +930,7 @@ export class SageMakerEmbeddingProvider
             parsedResult.tokenUsage.cached = parsedResult.tokenUsage.prompt || 0;
           }
 
-          return parsedResult;
+          return { ...parsedResult, cached: true };
         } catch (_) {
           logger.warn(`Failed to parse cached SageMaker embedding response: ${_}`);
           // Continue with API call if parsing fails
@@ -1043,6 +1038,7 @@ export class SageMakerEmbeddingProvider
               tokenUsage: {
                 prompt: Math.ceil(text.length / 4), // Approximate token count
                 cached: 0,
+                numRequests: 1,
               },
               metadata: {
                 transformed: isTransformed,
@@ -1087,6 +1083,7 @@ export class SageMakerEmbeddingProvider
         tokenUsage: {
           prompt: Math.ceil(text.length / 4), // Approximate token count
           cached: 0,
+          numRequests: 1,
         },
         metadata: {
           transformed: isTransformed,
