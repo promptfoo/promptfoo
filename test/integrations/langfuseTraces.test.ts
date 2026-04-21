@@ -196,11 +196,7 @@ describe('langfuseTraces', () => {
         options: {
           disableVarExpansion: true,
         },
-        providerOutput: {
-          output: 'Paris is the capital of France.',
-          cost: 0.001,
-          latency: 500,
-        },
+        providerOutput: 'Paris is the capital of France.',
       });
     });
 
@@ -364,9 +360,8 @@ describe('langfuseTraces', () => {
       expect(tests[0].vars?.__langfuse_output).toEqual({
         choices: [{ message: { content: 'Hi there!' } }],
       });
-      // providerOutput should use extracted string
-      const providerOutput = tests[0].providerOutput as { output: string };
-      expect(providerOutput?.output).toBe('Hi there!');
+      // providerOutput should be the exact extracted output string for assertion-only grading
+      expect(tests[0].providerOutput).toBe('Hi there!');
     });
 
     it('should handle traces with Anthropic format', async () => {
@@ -408,8 +403,7 @@ describe('langfuseTraces', () => {
       expect(tests[0].vars?.input).toEqual({ custom_field: 'custom input' });
       expect(tests[0].vars?.output).toEqual({ custom_response: 'custom output' });
       // providerOutput should stringify unknown objects
-      const providerOutput = tests[0].providerOutput as { output: string };
-      expect(providerOutput?.output).toBe(JSON.stringify({ custom_response: 'custom output' }));
+      expect(tests[0].providerOutput).toBe(JSON.stringify({ custom_response: 'custom output' }));
     });
 
     it('should use LANGFUSE_HOST as fallback for base URL', async () => {

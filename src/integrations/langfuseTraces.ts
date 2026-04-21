@@ -345,12 +345,8 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
   // If we have an output, set providerOutput for assertion-only evaluation
   // This allows evaluating stored outputs without re-running the LLM
   if (outputValue !== undefined && outputValue !== null) {
-    testCase.providerOutput = {
-      output: typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue),
-      tokenUsage: undefined,
-      cost: trace.totalCost,
-      latency: trace.latency ? trace.latency * 1000 : undefined, // Convert to ms
-    };
+    testCase.providerOutput =
+      typeof outputValue === 'string' ? outputValue : JSON.stringify(outputValue);
   }
 
   return testCase;

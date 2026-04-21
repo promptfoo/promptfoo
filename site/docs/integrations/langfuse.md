@@ -148,13 +148,21 @@ description: Evaluate production traces
 # Load traces tagged 'production' from Langfuse
 tests: langfuse://traces?tags=production&limit=50
 
+prompts:
+  - '{{input}}'
+
+providers:
+  - echo
+
 # Run assertions on stored outputs (no LLM calls needed)
 defaultTest:
   assert:
     - type: llm-rubric
       value: 'Response is helpful and on-topic'
-    - type: cost
-      threshold: 0.01
+    - type: javascript
+      value: |
+        const cost = Number(context.vars.__langfuse_cost ?? 0);
+        return cost <= 0.01;
 ```
 
 Run the evaluation:
@@ -240,9 +248,11 @@ defaultTest:
         ];
         return !piiPatterns.some(p => p.test(output));
 
-    # Cost check
-    - type: cost
-      threshold: 0.05
+    # Cost check using the Langfuse trace cost
+    - type: javascript
+      value: |
+        const cost = Number(context.vars.__langfuse_cost ?? 0);
+        return cost <= 0.05;
 ```
 
 #### Session continuity
@@ -312,13 +322,15 @@ defaultTest:
   assert:
     - type: llm-rubric
       value: 'Response quality is consistent with expectations'
-    - type: latency
-      threshold: 5000 # 5 seconds max
+    - type: javascript
+      value: |
+        const latencyMs = Number(context.vars.__langfuse_latency ?? 0) * 1000;
+        return latencyMs <= 5000;
 ```
 
 ### Using with the echo provider
 
-For assertion-only evaluation without re-running prompts, use the `echo` provider to pass through the stored output:
+Langfuse trace test cases include `providerOutput`, so promptfoo skips the provider call and grades the stored output directly. Use the `echo` provider as a harmless placeholder when your config only evaluates stored traces:
 
 ```yaml title="promptfooconfig.yaml"
 description: Assertion-only evaluation
