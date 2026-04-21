@@ -5,7 +5,12 @@ import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
-import { getDefaultNFanout, HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
+import {
+  getDefaultNFanout,
+  HARM_PLUGINS,
+  MULTI_INPUT_VAR,
+  PII_PLUGINS,
+} from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
@@ -20,6 +25,8 @@ import { Strategies, validateStrategies } from '../../src/redteam/strategies/ind
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
 import { mockProcessEnv, stripAnsi } from '../util/utils';
+
+import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
@@ -641,6 +648,122 @@ describe('synthesize', () => {
           }),
         ]),
       );
+    });
+
+    it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
+      const inputs = {
+        document: {
+          config: {
+            injectionPlacements: ['comment'],
+            inputPurpose: 'Summarize an uploaded policy draft',
+          },
+          description: 'DOCX document to summarize',
+          type: 'docx',
+        },
+        question: {
+          config: {
+            benign: true,
+          },
+          description: 'Benign user question',
+          type: 'text',
+        },
+      } satisfies Inputs;
+      const stalePayload = 'stale pre-strategy payload';
+      const strategyPayload = 'strategy-mutated payload';
+      const strategyQuestion = 'Please summarize the uploaded document.';
+      const wrapperSummary = 'Fresh strategy wrapper summary';
+      const injectedInstruction = 'Fresh strategy injected instruction';
+      const baseMultiInputPrompt = JSON.stringify({
+        document: stalePayload,
+        question: 'base question',
+      });
+      const strategyMultiInputPrompt = JSON.stringify({
+        document: strategyPayload,
+        question: strategyQuestion,
+      });
+
+      mockProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          bodyText: 'Fresh strategy document body',
+          injectedInstruction,
+          injectionPlacement: 'comment',
+          wrapperSummary,
+        }),
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            inputMaterialization: {
+              document: {
+                injectedInstruction: 'stale injected instruction',
+                injectionPlacement: 'body',
+                inputPurpose: 'Summarize an uploaded policy draft',
+                wrapperSummary: 'stale wrapper summary',
+              },
+            },
+            pluginConfig: { inputs },
+            pluginId: 'prompt-extraction',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: baseMultiInputPrompt,
+            document: 'stale-document-data-uri',
+            question: 'base question',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'prompt-extraction',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases: any[]) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [MULTI_INPUT_VAR]: strategyMultiInputPrompt,
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'jailbreak:meta',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+        prompts: ['{{document}} {{question}}'],
+        provider: mockProvider,
+        purpose: 'Summarize uploaded documents',
+        strategies: [{ id: 'jailbreak:meta' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'jailbreak:meta',
+      );
+
+      expect(strategyTestCase).toBeDefined();
+      expect(mockProvider.callApi).toHaveBeenCalledWith(expect.stringContaining(strategyPayload));
+      expect(mockProvider.callApi).not.toHaveBeenCalledWith(expect.stringContaining(stalePayload));
+      expect(strategyTestCase?.vars?.document).toEqual(
+        expect.stringMatching(
+          /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,
+        ),
+      );
+      expect(strategyTestCase?.vars?.question).toBe(strategyQuestion);
+      expect(strategyTestCase?.metadata?.inputMaterialization).toMatchObject({
+        document: {
+          injectedInstruction,
+          injectionPlacement: 'comment',
+          inputPurpose: 'Summarize an uploaded policy draft',
+          wrapperSummary,
+        },
+      });
     });
 
     it('should find exact strategy ID for custom strategy', async () => {

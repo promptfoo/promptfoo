@@ -18,9 +18,11 @@ import {
 
 import type { EnvOverrides } from '../../types/env';
 import type {
+  ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
   GuardrailResponse,
+  ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
 import type { CompletionOptions } from './types';
@@ -545,6 +547,110 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   }
 
   // cleanup() is inherited from GoogleGenericProvider
+}
+
+/**
+ * Google AI Studio embedding provider.
+ *
+ * Calls the Gemini API `:embedContent` endpoint and normalizes the response
+ * into `ProviderEmbeddingResponse`.
+ *
+ * Exposes the three standard knobs the Gemini API accepts: `taskType`
+ * (optimizes the vector for a particular use case), `outputDimensionality`
+ * (truncates the vector; useful for storage cost), and `title` (only
+ * meaningful when `taskType` is `RETRIEVAL_DOCUMENT`).
+ */
+export class AIStudioEmbeddingProvider
+  extends AIStudioChatProvider
+  implements ApiEmbeddingProvider
+{
+  id(): string {
+    if (this.customId) {
+      return this.customId();
+    }
+    return `google:embedding:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Google AI Studio Embedding Provider ${this.modelName}]`;
+  }
+
+  async callApi(_prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
+    return {
+      error: `Provider ${this.id()} is an embedding provider; use a non-embedding google: provider for chat completions.`,
+    };
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      return {
+        error:
+          'Google API key is not set. Set the GOOGLE_API_KEY or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
+      };
+    }
+
+    if (typeof text !== 'string') {
+      return {
+        error: `Invalid input type for embedding API. Expected string, got ${typeof text}.`,
+      };
+    }
+
+    const config = this.config as CompletionOptions & {
+      taskType?: string;
+      outputDimensionality?: number;
+      title?: string;
+    };
+
+    const body: Record<string, any> = {
+      content: { parts: [{ text }] },
+      ...(config.taskType !== undefined && { taskType: config.taskType }),
+      ...(config.outputDimensionality !== undefined && {
+        outputDimensionality: config.outputDimensionality,
+      }),
+      ...(config.title !== undefined && { title: config.title }),
+    };
+
+    let data: any;
+    let cached = false;
+    try {
+      const endpoint = this.getApiEndpoint('embedContent');
+      const headers = await this.getAuthHeaders();
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
+      ({ data, cached } = (await fetchWithCache(
+        endpoint,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
+        REQUEST_TIMEOUT_MS,
+        'json',
+      )) as unknown as { data: any; cached: boolean });
+    } catch (err) {
+      logger.error(`Google AI Studio embedding API call error: ${String(err)}`);
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    const values: number[] | undefined = data?.embedding?.values;
+    if (!values) {
+      return {
+        error: `No embedding found in Google AI Studio response: ${JSON.stringify(data)}`,
+      };
+    }
+
+    const promptTokens: number | undefined = data?.usageMetadata?.promptTokenCount;
+    return {
+      embedding: values,
+      tokenUsage: cached
+        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 0 }
+        : { total: promptTokens ?? 0, numRequests: 1 },
+      cached,
+    };
+  }
 }
 
 export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');
