@@ -12,6 +12,7 @@ describe('attackProviders', () => {
       expect(ATTACK_PROVIDER_IDS).toContain('hydra');
       expect(ATTACK_PROVIDER_IDS).toContain('crescendo');
       expect(ATTACK_PROVIDER_IDS).toContain('goat');
+      expect(ATTACK_PROVIDER_IDS).toContain('odcv');
       expect(ATTACK_PROVIDER_IDS).toContain('custom');
     });
 
@@ -42,6 +43,11 @@ describe('attackProviders', () => {
       it('should return true for goat variants', () => {
         expect(isAttackProvider('goat')).toBe(true);
         expect(isAttackProvider('promptfoo:redteam:goat')).toBe(true);
+      });
+
+      it('should return true for odcv variants', () => {
+        expect(isAttackProvider('odcv')).toBe(true);
+        expect(isAttackProvider('promptfoo:redteam:odcv')).toBe(true);
       });
 
       it('should return true for custom variants', () => {
@@ -138,6 +144,7 @@ describe('attackProviders', () => {
         expect(getAttackProviderFullId('hydra')).toBe('promptfoo:redteam:hydra');
         expect(getAttackProviderFullId('crescendo')).toBe('promptfoo:redteam:crescendo');
         expect(getAttackProviderFullId('goat')).toBe('promptfoo:redteam:goat');
+        expect(getAttackProviderFullId('odcv')).toBe('promptfoo:redteam:odcv');
       });
     });
   });
@@ -147,6 +154,7 @@ describe('attackProviders', () => {
       expect(isMultiTurnStrategy('hydra')).toBe(true);
       expect(isMultiTurnStrategy('crescendo')).toBe(true);
       expect(isMultiTurnStrategy('goat')).toBe(true);
+      expect(isMultiTurnStrategy('odcv')).toBe(true);
     });
 
     it('should handle various ID formats', () => {

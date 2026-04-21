@@ -1,7 +1,7 @@
 import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useModelAuditConfigStore } from './useModelAuditConfigStore';
+import { DEFAULT_SCAN_OPTIONS, useModelAuditConfigStore } from './useModelAuditConfigStore';
 
 vi.mock('@app/utils/api');
 
@@ -342,6 +342,105 @@ describe('useModelAuditConfigStore', () => {
       });
 
       expect(result.current.scanOptions).toEqual(newOptions);
+    });
+  });
+
+  describe('DEFAULT_SCAN_OPTIONS', () => {
+    it('should have correct default values', () => {
+      expect(DEFAULT_SCAN_OPTIONS).toEqual({
+        blacklist: [],
+        timeout: 3600,
+        scanners: [],
+        excludeScanner: [],
+      });
+    });
+
+    it('should have empty blacklist by default', () => {
+      expect(DEFAULT_SCAN_OPTIONS.blacklist).toEqual([]);
+      expect(DEFAULT_SCAN_OPTIONS.blacklist).toHaveLength(0);
+    });
+
+    it('should have default timeout of 3600 seconds', () => {
+      expect(DEFAULT_SCAN_OPTIONS.timeout).toBe(3600);
+    });
+
+    it('should have empty scanners array by default', () => {
+      expect(DEFAULT_SCAN_OPTIONS.scanners).toEqual([]);
+      expect(DEFAULT_SCAN_OPTIONS.scanners).toHaveLength(0);
+    });
+
+    it('should have empty excludeScanner array by default', () => {
+      expect(DEFAULT_SCAN_OPTIONS.excludeScanner).toEqual([]);
+      expect(DEFAULT_SCAN_OPTIONS.excludeScanner).toHaveLength(0);
+    });
+
+    it('should be used as initial state in store', () => {
+      const { result } = renderHook(() => useModelAuditConfigStore());
+
+      // Reset to ensure we're testing initial state
+      act(() => {
+        result.current.setScanOptions(DEFAULT_SCAN_OPTIONS);
+      });
+
+      expect(result.current.scanOptions).toMatchObject({
+        blacklist: [],
+        timeout: 3600,
+        scanners: [],
+        excludeScanner: [],
+      });
+    });
+
+    it('should maintain array references when used in store initialization', () => {
+      const { result } = renderHook(() => useModelAuditConfigStore());
+
+      act(() => {
+        result.current.setScanOptions(DEFAULT_SCAN_OPTIONS);
+      });
+
+      // Ensure the arrays are actual arrays and not null/undefined
+      expect(Array.isArray(result.current.scanOptions.blacklist)).toBe(true);
+      expect(Array.isArray(result.current.scanOptions.scanners)).toBe(true);
+      expect(Array.isArray(result.current.scanOptions.excludeScanner)).toBe(true);
+    });
+
+    it('should be exportable for use in other components', () => {
+      // Test that DEFAULT_SCAN_OPTIONS is properly exported
+      expect(DEFAULT_SCAN_OPTIONS).toBeDefined();
+      expect(typeof DEFAULT_SCAN_OPTIONS).toBe('object');
+    });
+
+    it('should preserve backward compatibility with old scan options', () => {
+      // Ensure DEFAULT_SCAN_OPTIONS contains all required fields
+      const requiredFields = ['blacklist', 'timeout'];
+      requiredFields.forEach((field) => {
+        expect(DEFAULT_SCAN_OPTIONS).toHaveProperty(field);
+      });
+
+      // New fields should also be present
+      expect(DEFAULT_SCAN_OPTIONS).toHaveProperty('scanners');
+      expect(DEFAULT_SCAN_OPTIONS).toHaveProperty('excludeScanner');
+    });
+
+    it('should be used when merging with partial scan options', () => {
+      const { result } = renderHook(() => useModelAuditConfigStore());
+
+      const partialOptions = {
+        timeout: 1200,
+      };
+
+      act(() => {
+        result.current.setScanOptions({
+          ...DEFAULT_SCAN_OPTIONS,
+          ...partialOptions,
+        });
+      });
+
+      expect(result.current.scanOptions).toMatchObject({
+        blacklist: [],
+        timeout: 1200,
+        scanners: [],
+        excludeScanner: [],
+      });
     });
   });
 });

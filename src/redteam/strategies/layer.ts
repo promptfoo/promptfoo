@@ -176,6 +176,7 @@ function getMetricSuffix(stepId: string): string {
     hydra: 'Hydra',
     crescendo: 'Crescendo',
     goat: 'GOAT',
+    odcv: 'ODCV',
     custom: 'Custom',
     // Multi-attempt single-turn strategies
     iterative: 'Iterative',

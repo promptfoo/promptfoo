@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
 import { Checkbox } from '@app/components/ui/checkbox';
 import { Label } from '@app/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@app/components/ui/radio-group';
+import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../StatefulnessRadioGroup';
 import { PRESET_IDS, STRATEGY_PRESETS } from './types';
 
 interface RecommendedOptionsProps {
@@ -47,36 +47,11 @@ export function RecommendedOptions({
 
           {isMultiTurnEnabled && (
             <div className="pl-6">
-              <p className="mb-3 text-sm text-muted-foreground">
-                Does your system maintain conversation state?
-              </p>
-              <RadioGroup
+              <p className="mb-3 text-sm font-medium">{STATEFULNESS_QUESTION}</p>
+              <StatefulnessRadioGroup
                 value={String(isStatefulValue)}
                 onValueChange={(value) => onStatefulChange(value === 'true')}
-                className="flex flex-col gap-2"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="true" id="stateful-yes-rec" />
-                  <Label
-                    htmlFor="stateful-yes-rec"
-                    inline
-                    className="cursor-pointer text-sm font-normal"
-                  >
-                    Yes - my system is stateful and maintains conversation history
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="false" id="stateful-no-rec" />
-                  <Label
-                    htmlFor="stateful-no-rec"
-                    inline
-                    className="cursor-pointer text-sm font-normal"
-                  >
-                    No - my system is not stateful, the full conversation history must be sent on
-                    every request
-                  </Label>
-                </div>
-              </RadioGroup>
+              />
             </div>
           )}
         </div>

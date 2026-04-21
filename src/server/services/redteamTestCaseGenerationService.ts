@@ -312,6 +312,7 @@ async function handleOdcvStrategy(
     email: ctx.email,
     purpose: ctx.purpose ?? undefined,
     variant: ctx.strategyConfigRecord['variant'] ?? 'incentivized',
+    inputs: ctx.strategyConfigRecord['inputs'] ?? undefined,
   };
 
   const response = await fetchWithRetries(

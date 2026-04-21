@@ -9,7 +9,7 @@ export async function addOdcvTestCases(
 ): Promise<TestCase[]> {
   logger.debug('Adding ODCV test cases');
   return testCases.map((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
+    const originalText = String(testCase.vars?.[injectVar] ?? '');
     const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
     const inputs = pluginConfig?.inputs as Record<string, string> | undefined;
 

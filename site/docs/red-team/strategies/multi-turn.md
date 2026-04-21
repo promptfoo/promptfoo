@@ -34,7 +34,7 @@ When the strategy hits a refusal, it backtracks to an earlier point in the conve
 
 ## Use in Promptfoo
 
-Promptfoo supports three types of multi-turn [strategies](/docs/red-team/strategies/):
+Promptfoo supports several multi-turn [strategies](/docs/red-team/strategies/):
 
 #### 1. Crescendo
 
@@ -48,7 +48,11 @@ Hydra coordinates an attacker agent that branches across multiple conversational
 
 The [GOAT strategy](/docs/red-team/strategies/goat/) is based on [Meta's GOAT research](https://arxiv.org/abs/2311.04300). It stands for Generalized Offensive Adversarial Testing and uses a set of attack templates and iteratively refines them over multiple turns to bypass defenses.
 
-#### 4. Mischievous User
+#### 4. ODCV
+
+The [ODCV strategy](/docs/red-team/strategies/odcv/) tests whether agents violate constraints when requests are framed as necessary for business KPIs, revenue, quotas, or mandates.
+
+#### 5. Mischievous User
 
 Simulates a persistent, creative user who tries different phrasings and approaches over several turns to elicit a harmful or policy-violating response from the model.
 
@@ -63,6 +67,7 @@ redteam:
   strategies:
     - crescendo
     - goat
+    - odcv
     - jailbreak:hydra
     - mischievous-user
 ```
@@ -86,6 +91,11 @@ redteam:
         maxTurns: 5
         stateful: false
         continueAfterSuccess: false
+    - id: odcv
+      config:
+        maxTurns: 5
+        variant: incentivized
+        stateful: false
     - id: mischievous-user
       config:
         maxTurns: 5
@@ -187,6 +197,7 @@ The backtracking automation also saves an enormous amount of time compared to ma
 ## Related Concepts
 
 - [GOAT Strategy](goat.md) - Multi-turn jailbreak with a generative offensive agent tester
+- [ODCV Strategy](odcv.md) - Business-pressure constraint violation testing
 - [Mischievous User Strategy](mischievous-user.md) - Multi-turn conversations with a mischievous user
 - [Iterative Jailbreaks](iterative.md) - Single-turn version of this approach
 - [Tree-based Jailbreaks](tree.md) - Alternative approach to jailbreaking

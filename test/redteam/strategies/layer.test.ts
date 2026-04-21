@@ -510,6 +510,36 @@ describe('addLayerTestCases', () => {
       }
     });
 
+    it('should detect odcv as attack provider', async () => {
+      const testCases: TestCaseWithPlugin[] = [
+        {
+          vars: { input: 'test' },
+          metadata: { pluginId: 'test-plugin' },
+        },
+      ];
+
+      const result = await addLayerTestCases(
+        testCases,
+        'input',
+        { steps: ['odcv', 'audio'] },
+        mockStrategies,
+        mockLoadStrategy,
+      );
+
+      expect(result).toHaveLength(1);
+      const provider = result[0].provider;
+      expect(typeof provider).toBe('object');
+      if (typeof provider === 'object' && provider !== null && 'id' in provider) {
+        expect(provider.id).toBe('promptfoo:redteam:odcv');
+        expect(provider.config).toEqual(
+          expect.objectContaining({
+            injectVar: 'input',
+            _perTurnLayers: ['audio'],
+          }),
+        );
+      }
+    });
+
     it('should detect jailbreak (base iterative) as attack provider', async () => {
       const testCases: TestCaseWithPlugin[] = [
         {
@@ -677,6 +707,7 @@ describe('addLayerTestCases', () => {
         { step: 'jailbreak:hydra', expectedSuffix: 'Hydra' },
         { step: 'crescendo', expectedSuffix: 'Crescendo' },
         { step: 'goat', expectedSuffix: 'GOAT' },
+        { step: 'odcv', expectedSuffix: 'ODCV' },
         { step: 'jailbreak', expectedSuffix: 'Jailbreak' }, // base jailbreak -> Jailbreak
         { step: 'jailbreak:meta', expectedSuffix: 'Meta' },
         { step: 'jailbreak:tree', expectedSuffix: 'Tree' },
