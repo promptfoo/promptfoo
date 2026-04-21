@@ -174,45 +174,21 @@ tests:
 
 ## Accessing provider metadata
 
-Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http) includes response status and headers; other providers may include grounding metadata, custom fields, etc. Access metadata via `context.metadata`:
+Providers can include metadata in their responses. The [HTTP provider](/docs/providers/http), for example, includes response status and headers. Access metadata via `context.metadata`, which is a shortcut for `context.providerResponse.metadata`.
 
 ```yaml
 tests:
   - vars:
       query: 'What is the weather?'
     assert:
-      # Check HTTP response status (HTTP provider)
       - type: javascript
         value: 'context.metadata?.http?.status === 200'
 
-      # Check for successful response (use nullish coalescing for safety)
       - type: javascript
         value: '(context.metadata?.http?.status ?? 0) >= 200 && (context.metadata?.http?.status ?? 0) < 300'
 
-      # Check custom metadata fields set by your provider
       - type: javascript
         value: '(context.metadata?.customField ?? 0) <= 10'
-```
-
-For more complex checks, you can use multiline assertions:
-
-```yaml
-assert:
-  - type: javascript
-    value: |
-      const meta = context.metadata;
-
-      // Check HTTP status if available
-      const status = meta?.http?.status;
-      if (status && (status < 200 || status >= 300)) {
-        return {
-          pass: false,
-          score: 0,
-          reason: `HTTP request failed with status ${status}`
-        };
-      }
-
-      return true;
 ```
 
 Common metadata fields (varies by provider):
@@ -223,9 +199,31 @@ Common metadata fields (varies by provider):
 - `groundingMetadata` - Search grounding info ([Google providers](/docs/providers/vertex))
 - `redteamFinalPrompt` - Final prompt used in red team attacks
 
-:::note
-The `context.metadata` property is a shortcut for `context.providerResponse.metadata`. Both work identically.
-:::
+## Passing assertion-specific parameters
+
+If you want to reuse the same JavaScript assertion with different parameters in a single test case, prefer assertion-level `config` over test `vars`. Test vars are shared across all assertions and appear as report columns, while `config` stays attached to one assertion and is available as `context.config`.
+
+```yaml
+tests:
+  - description: 'Reuse one assertion script with two thresholds'
+    vars:
+      topic: 'bananas'
+    assert:
+      - type: javascript
+        value: file://assertions/min-length.js
+        config:
+          minLength: 5
+      - type: javascript
+        value: file://assertions/min-length.js
+        config:
+          minLength: 20
+```
+
+```js
+module.exports = (output, context) => {
+  return output.length >= context.config.minLength;
+};
+```
 
 ## External script
 
@@ -465,6 +463,16 @@ if (context.trace && maxDepth(context.trace.spans) > 5) {
 ### ES modules
 
 ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
+
+## Negation
+
+Use `not-javascript` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-javascript
+    value: output.includes('error')
+```
 
 ## Other assertion types
 

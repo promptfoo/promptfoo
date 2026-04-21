@@ -114,7 +114,7 @@ export class CIProgressReporter {
         // More than 24 hours
         etaDisplay = '>24 hours';
       } else {
-        etaDisplay = `${Math.round(eta)} minute${Math.round(eta) !== 1 ? 's' : ''}`;
+        etaDisplay = `${Math.round(eta)} minute${Math.round(eta) === 1 ? '' : 's'}`;
       }
     }
 

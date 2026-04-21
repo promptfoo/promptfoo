@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, MockedFunction, vi } from 'vitest';
+import { createCompletedPrompt, createEvaluateTableOutput } from '../../factories/eval';
 import type { Request, Response } from 'express';
-
-import type { CompletedPrompt } from '../../../src/types/index';
 
 // Mock dependencies first
 vi.mock('../../../src/database', async (importOriginal) => {
@@ -44,12 +43,11 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     head: {
       vars: ['var1', 'var2'],
       prompts: [
-        {
+        createCompletedPrompt('test prompt', {
           provider: 'openai',
           label: 'prompt1',
-          raw: 'test prompt',
           display: 'test',
-        } as CompletedPrompt,
+        }),
       ],
     },
     body: [
@@ -58,16 +56,14 @@ describe('evalRouter - GET /:id/table with export formats', () => {
         testIdx: 0,
         vars: ['value1', 'value2'],
         outputs: [
-          {
-            pass: true,
+          createEvaluateTableOutput({
             text: 'output text',
-            cost: 0,
-            failureReason: undefined,
             id: 'output-id',
             latencyMs: 100,
             provider: 'openai:gpt-3.5-turbo',
             gradingResult: {
               pass: true,
+              score: 1,
               reason: 'Test passed',
               comment: 'Good response',
             },
@@ -78,7 +74,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
                 { role: 'assistant', content: 'response' },
               ],
             },
-          },
+          }),
         ],
       },
     ],
@@ -134,7 +130,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     mockedEvalTableToCsv.mockReturnValue(mockCsvData);
 
     // Simulate the route handler (simplified version)
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,
@@ -159,7 +155,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     mockedEvalTableToJson.mockReturnValue(mockJsonData);
 
     // Simulate the route handler (simplified version)
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,
@@ -186,7 +182,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
 
     mockedEvalTableToCsv.mockReturnValue(expectedCsvWithRedteam);
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,
@@ -207,7 +203,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   it('should return standard table response when no format is specified', async () => {
     mockReq.query = {}; // No format specified
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: 50, // Default limit
@@ -256,7 +252,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     const mockCsvData = 'var1,var2,[openai] prompt1\nvalue1,value2,[PASS] output text';
     mockedEvalTableToCsv.mockReturnValue(mockCsvData);
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,
@@ -340,7 +336,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
 
     mockReq.query = { format: 'csv' };
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,
@@ -359,7 +355,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   it('should handle pagination parameters correctly for exports', async () => {
     mockReq.query = { format: 'csv', limit: '100', offset: '50' };
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
 
     // When format is specified, should ignore pagination and get all data
     await eval_!.getTablePage({
@@ -386,7 +382,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
       filter: ['provider:openai', 'status:fail'],
     };
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
 
     await eval_!.getTablePage({
       offset: 0,
@@ -408,7 +404,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
   it('should return 404 when evaluation not found', async () => {
     mockedEvalFindById.mockResolvedValue(undefined);
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     if (!eval_) {
       (mockRes as Response).status(404).json({ error: 'Eval not found' });
     }
@@ -421,7 +417,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     const emptyTable = {
       head: {
         vars: ['var1'],
-        prompts: [{ provider: 'openai', label: 'test' } as CompletedPrompt],
+        prompts: [createCompletedPrompt('test', { provider: 'openai', label: 'test' })],
       },
       body: [],
       totalCount: 0,
@@ -442,7 +438,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     const mockCsvData = 'var1,[openai] test\n';
     mockedEvalTableToCsv.mockReturnValue(mockCsvData);
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,
@@ -493,7 +489,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
 
     mockReq.query = { format: 'csv' };
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,
@@ -546,7 +542,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     mockReq.query = { format: 'csv' };
     mockedEvalTableToCsv.mockReturnValue('large csv data');
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,
@@ -567,7 +563,7 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     mockReq.query = { format: 'csv' };
     mockedEvalTableToCsv.mockReturnValue('csv data');
 
-    const eval_ = await Eval.findById(mockReq.params!.id);
+    const eval_ = await Eval.findById(mockReq.params!.id as string);
     const table = await eval_!.getTablePage({
       offset: 0,
       limit: Number.MAX_SAFE_INTEGER,

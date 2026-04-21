@@ -1,6 +1,6 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card, CardContent } from '@app/components/ui/card';
 import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
@@ -14,7 +14,7 @@ import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 
-import type { ScanResult } from '../model-audit/ModelAudit.types';
+import type { ScannerCatalogEntry, ScanResult } from '../model-audit/ModelAudit.types';
 
 export default function ModelAuditSetupPage() {
   const navigate = useNavigate();
@@ -41,11 +41,57 @@ export default function ModelAuditSetupPage() {
   } = useModelAuditConfigStore();
 
   const { fetchHistoricalScans } = useModelAuditHistoryStore();
+  const [scannerCatalog, setScannerCatalog] = useState<ScannerCatalogEntry[]>([]);
+  const [isLoadingScanners, setIsLoadingScanners] = useState(false);
+  const [scannerCatalogError, setScannerCatalogError] = useState<string | null>(null);
 
   useEffect(() => {
     useModelAuditConfigStore.persist.rehydrate();
     checkInstallation();
   }, [checkInstallation]);
+
+  useEffect(() => {
+    if (!showOptionsDialog) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadScannerCatalog() {
+      setIsLoadingScanners(true);
+      setScannerCatalogError(null);
+
+      try {
+        const response = await callApi('/model-audit/scanners');
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => null);
+          throw new Error(errorBody?.error || 'Unable to load scanner catalog');
+        }
+
+        const data = (await response.json()) as { scanners?: ScannerCatalogEntry[] };
+        if (!cancelled) {
+          setScannerCatalog(Array.isArray(data.scanners) ? data.scanners : []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setScannerCatalog([]);
+          setScannerCatalogError(
+            error instanceof Error ? error.message : 'Unable to load scanners',
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingScanners(false);
+        }
+      }
+    }
+
+    loadScannerCatalog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showOptionsDialog]);
 
   const handleScan = useCallback(async () => {
     setIsScanning(true);
@@ -111,8 +157,8 @@ export default function ModelAuditSetupPage() {
       <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
         <div className="container max-w-6xl mx-auto px-4 py-10">
           <div className="flex items-start gap-4">
-            <div className="shrink-0 w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <SettingsIcon className="h-7 w-7 text-primary" />
+            <div className="shrink-0 size-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <SettingsIcon className="size-7 text-primary" />
             </div>
             <div className="flex-1">
               <h1 className="text-2xl font-bold tracking-tight">Model Audit Setup</h1>
@@ -145,7 +191,7 @@ export default function ModelAuditSetupPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                      <CheckCircleIcon className="h-4 w-4" />
+                      <CheckCircleIcon className="size-4" />
                       <span className="text-sm font-medium">Ready</span>
                     </div>
                   </TooltipTrigger>
@@ -155,14 +201,14 @@ export default function ModelAuditSetupPage() {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-1.5">
-                      <ErrorIcon className="h-4 w-4 text-destructive" />
+                      <ErrorIcon className="size-4 text-destructive" />
                       <span className="text-sm font-medium text-destructive">Not Installed</span>
                       <button
                         type="button"
                         onClick={() => checkInstallation()}
                         className="p-1 hover:bg-muted rounded"
                       >
-                        <RefreshIcon className="h-4 w-4 text-muted-foreground" />
+                        <RefreshIcon className="size-4 text-muted-foreground" />
                       </button>
                     </div>
                   </TooltipTrigger>
@@ -182,16 +228,18 @@ export default function ModelAuditSetupPage() {
           <CardContent className="pt-6">
             {error && (
               <Alert variant="destructive" className="mb-6">
-                <AlertDescription className="flex items-center justify-between">
-                  <span>{error}</span>
-                  <button
-                    type="button"
-                    onClick={() => setError(null)}
-                    className="text-sm underline hover:no-underline"
-                  >
-                    Dismiss
-                  </button>
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{error}</span>
+                    <button
+                      type="button"
+                      onClick={() => setError(null)}
+                      className="text-sm underline hover:no-underline"
+                    >
+                      Dismiss
+                    </button>
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             )}
 
@@ -211,7 +259,7 @@ export default function ModelAuditSetupPage() {
 
             {/* Inline Results */}
             {scanResults && (
-              <div className="mt-10 pt-8 border-t">
+              <div className="mt-10 pt-8 border-t border-border">
                 <h2 className="text-2xl font-semibold tracking-tight mb-6">Scan Results</h2>
                 <ResultsTab
                   scanResults={scanResults}
@@ -227,6 +275,9 @@ export default function ModelAuditSetupPage() {
           onClose={() => setShowOptionsDialog(false)}
           scanOptions={scanOptions}
           onOptionsChange={setScanOptions}
+          scannerCatalog={scannerCatalog}
+          isLoadingScanners={isLoadingScanners}
+          scannerCatalogError={scannerCatalogError}
         />
 
         {scanResults && (

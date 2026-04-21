@@ -78,6 +78,7 @@ export function isImageInput(input: TextInput | ImageInput): input is ImageInput
 
 interface OpenAIModerationConfig {
   apiKey?: string;
+  apiKeyEnvar?: string;
   headers?: Record<string, string>;
   passthrough?: Record<string, any>;
 }
@@ -184,9 +185,7 @@ export class OpenAiModerationProvider
   ): Promise<ProviderModerationResponse> {
     const apiKey = this.getApiKey();
     if (this.requiresApiKey() && !apiKey) {
-      return handleApiError(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      return handleApiError(this.getMissingApiKeyErrorMessage());
     }
 
     const useCache = isCacheEnabled();
@@ -199,7 +198,7 @@ export class OpenAiModerationProvider
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
-        return JSON.parse(cachedResponse as string);
+        return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
 
@@ -220,7 +219,7 @@ export class OpenAiModerationProvider
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache(
+      const { data, status, statusText } = await fetchWithCache<OpenAIModerationResponse>(
         `${this.getApiUrl()}/moderations`,
         {
           method: 'POST',

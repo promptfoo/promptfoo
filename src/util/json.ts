@@ -77,6 +77,7 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
         truncated[k] = truncateValue(v);
         count++;
       }
+      cache.delete(val);
       return truncated;
     }
 
@@ -98,19 +99,22 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
  * @returns JSON string representation, or undefined if serialization fails
  */
 export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): string | undefined {
-  const cache = new Set();
+  const ancestors: any[] = [];
   const space = prettyPrint ? 2 : undefined;
 
   try {
     return (
       JSON.stringify(
         value,
-        (_key, val) => {
+        function (this: any, _key, val) {
           if (typeof val === 'object' && val !== null) {
-            if (cache.has(val)) {
+            while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+              ancestors.pop();
+            }
+            if (ancestors.includes(val)) {
               return;
             }
-            cache.add(val);
+            ancestors.push(val);
           }
           return val;
         },
@@ -149,6 +153,20 @@ export function convertSlashCommentsToHash(str: string): string {
               state = 'doubleQuote';
               result += char;
             } else if (char === '/' && nextChar === '/') {
+              // Avoid treating URL schemes as comments (e.g., http://, https://).
+              let tokenStart = 0;
+              for (let j = i - 1; j >= 0; j--) {
+                if (/\s/.test(line[j])) {
+                  tokenStart = j + 1;
+                  break;
+                }
+              }
+              const tokenPrefix = line.slice(tokenStart, i + 2);
+              if (tokenPrefix.includes('://')) {
+                result += char;
+                break;
+              }
+
               // Count consecutive slashes
               let slashCount = 2;
               while (i + slashCount < line.length && line[i + slashCount] === '/') {

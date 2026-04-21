@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Isolated test suites per provider
+
+prompts:
+  - 'Answer concisely: {{question}}'
+
+providers:
+  - id: openai:gpt-4.1-mini
+    label: fast-model
+  - id: openai:gpt-4.1
+    label: smart-model
+
+tests:
+  # Quick tests - only run on fast-model (cheaper, faster)
+  - description: Quick facts test
+    vars:
+      question: 'What is 2 + 2?'
+    providers:
+      - fast-model
+    assert:
+      - type: contains
+        value: '4'
+      - type: latency
+        threshold: 3000
+
+  # Complex tests - only run on smart-model (more capable)
+  - description: Complex reasoning test
+    vars:
+      question: 'Explain why the sky appears blue using physics concepts.'
+    providers:
+      - smart-model
+    assert:
+      - type: llm-rubric
+        value: 'Accurately explains Rayleigh scattering and wavelength concepts'
+
+  # Basic test - runs on both providers (no filter)
+  - description: Basic capability test
+    vars:
+      question: 'What is the capital of France?'
+    assert:
+      - type: contains
+        value: 'Paris'

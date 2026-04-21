@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { DEFAULT_OPENAI_TARGET_ID, OPENAI_TARGET_PLACEHOLDER } from '../constants';
 import { SetupSection } from '../SetupSection';
 
 import type { ProviderOptions } from '../../types';
 
 interface FoundationModelConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   providerType: string;
 }
 
@@ -34,16 +35,16 @@ const FoundationModelConfiguration = ({
     const providerConfigs = {
       openai: {
         name: 'OpenAI',
-        defaultModel: 'openai:gpt-4o',
-        placeholder: 'openai:gpt-4o, openai:gpt-4o-mini, openai:o1-preview',
+        defaultModel: DEFAULT_OPENAI_TARGET_ID,
+        placeholder: OPENAI_TARGET_PLACEHOLDER,
         docUrl: 'https://www.promptfoo.dev/docs/providers/openai',
         envVar: 'OPENAI_API_KEY',
       },
       anthropic: {
         name: 'Anthropic',
-        defaultModel: 'anthropic:messages:claude-3-5-sonnet-20241022',
+        defaultModel: 'anthropic:messages:claude-sonnet-4-5-20250929',
         placeholder:
-          'anthropic:messages:claude-3-5-sonnet-20241022, anthropic:messages:claude-3-5-haiku-20241022',
+          'anthropic:messages:claude-sonnet-4-5-20250929, anthropic:messages:claude-haiku-4-5-20251001',
         docUrl: 'https://www.promptfoo.dev/docs/providers/anthropic',
         envVar: 'ANTHROPIC_API_KEY',
       },
@@ -98,8 +99,8 @@ const FoundationModelConfiguration = ({
       },
       openrouter: {
         name: 'OpenRouter',
-        defaultModel: 'openrouter:openai/gpt-4o',
-        placeholder: 'openrouter:openai/gpt-4o, openrouter:anthropic/claude-3.5-sonnet',
+        defaultModel: 'openrouter:openai/gpt-5.4',
+        placeholder: 'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-4.7',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openrouter',
         envVar: 'OPENROUTER_API_KEY',
       },
@@ -213,6 +214,20 @@ const FoundationModelConfiguration = ({
               />
               <p className="text-sm text-muted-foreground">
                 Optional - defaults to {providerInfo.envVar} environment variable
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="api-base-url">API Base URL</Label>
+              <Input
+                id="api-base-url"
+                type="url"
+                value={selectedTarget.config?.apiBaseUrl ?? ''}
+                onChange={(e) => updateCustomTarget('apiBaseUrl', e.target.value || undefined)}
+                placeholder="https://api.openai.com/v1"
+              />
+              <p className="text-sm text-muted-foreground">
+                For proxies, local models (Ollama, LMStudio), or custom API endpoints
               </p>
             </div>
           </div>
