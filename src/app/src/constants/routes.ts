@@ -21,6 +21,7 @@ export const EVAL_ROUTES = {
   ROOT: '/eval',
   LIST: '/evals',
   DETAIL: (id: string) => `/eval/${id}`,
+  RESULT_RATING: (evalId: string, resultId: string) => `/eval/${evalId}/results/${resultId}/rating`,
 } as const;
 
 // Red Team routes
@@ -40,5 +41,7 @@ export const ROUTES = {
   DATASETS: '/datasets',
   DATASET_DETAIL: (id: string) => `/datasets?id=${id}`,
   HISTORY: '/history',
+  MEDIA: '/media',
+  MEDIA_DETAIL: (hash: string) => `/media?hash=${encodeURIComponent(hash)}`,
   LOGIN: '/login',
 } as const;

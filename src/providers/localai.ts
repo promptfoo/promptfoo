@@ -5,6 +5,14 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
 
+function parseEnvFloat(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
 interface LocalAiCompletionOptions {
   apiBaseUrl?: string;
   temperature?: number;
@@ -14,6 +22,7 @@ class LocalAiGenericProvider implements ApiProvider {
   modelName: string;
   apiBaseUrl: string;
   config: LocalAiCompletionOptions;
+  env?: EnvOverrides;
 
   constructor(
     modelName: string,
@@ -21,6 +30,7 @@ class LocalAiGenericProvider implements ApiProvider {
   ) {
     const { id, config, env } = options;
     this.modelName = modelName;
+    this.env = env;
     this.apiBaseUrl =
       config?.apiBaseUrl ||
       env?.LOCALAI_BASE_URL ||
@@ -50,7 +60,11 @@ export class LocalAiChatProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       messages,
-      temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
+      temperature:
+        this.config.temperature ??
+        parseEnvFloat(this.env?.LOCALAI_TEMPERATURE) ??
+        getEnvFloat('LOCALAI_TEMPERATURE') ??
+        0.7,
     };
 
     let data;
@@ -130,7 +144,11 @@ export class LocalAiCompletionProvider extends LocalAiGenericProvider {
     const body = {
       model: this.modelName,
       prompt,
-      temperature: this.config.temperature || getEnvFloat('LOCALAI_TEMPERATURE') || 0.7,
+      temperature:
+        this.config.temperature ??
+        parseEnvFloat(this.env?.LOCALAI_TEMPERATURE) ??
+        getEnvFloat('LOCALAI_TEMPERATURE') ??
+        0.7,
     };
 
     let data;

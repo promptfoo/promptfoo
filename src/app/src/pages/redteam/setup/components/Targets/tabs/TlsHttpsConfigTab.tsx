@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -67,13 +67,17 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
   const [clientCertOpen, setClientCertOpen] = useState(hasClientCert);
   const [advancedOpen, setAdvancedOpen] = useState(hasAdvanced);
 
-  // Re-sync section state when the target changes (e.g., switching targets).
-  if (prevTargetKey.current !== targetKey) {
+  // Re-sync section state when switching targets without overriding manual toggles
+  // while editing the same target.
+  useEffect(() => {
+    if (prevTargetKey.current === targetKey) {
+      return;
+    }
     prevTargetKey.current = targetKey;
     setCaOpen(hasCA);
     setClientCertOpen(hasClientCert);
     setAdvancedOpen(hasAdvanced);
-  }
+  }, [targetKey, hasCA, hasClientCert, hasAdvanced]);
 
   return (
     <>
@@ -263,14 +267,14 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     certPath: certType !== 'pem' && certType !== 'jks' ? undefined : tls?.certPath,
                     key: certType !== 'pem' && certType !== 'jks' ? undefined : tls?.key,
                     keyPath: certType !== 'pem' && certType !== 'jks' ? undefined : tls?.keyPath,
-                    pfx: certType !== 'pfx' ? undefined : tls?.pfx,
-                    pfxPath: certType !== 'pfx' ? undefined : tls?.pfxPath,
+                    pfx: certType === 'pfx' ? tls?.pfx : undefined,
+                    pfxPath: certType === 'pfx' ? tls?.pfxPath : undefined,
                     passphrase:
                       certType !== 'pfx' && certType !== 'jks' && certType !== 'pem'
                         ? undefined
                         : tls?.passphrase,
-                    jksPath: certType !== 'jks' ? undefined : tls?.jksPath,
-                    keyAlias: certType !== 'jks' ? undefined : tls?.keyAlias,
+                    jksPath: certType === 'jks' ? tls?.jksPath : undefined,
+                    keyAlias: certType === 'jks' ? tls?.keyAlias : undefined,
                   });
                 }}
               >

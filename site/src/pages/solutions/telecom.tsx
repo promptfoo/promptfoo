@@ -176,7 +176,7 @@ export default function Telecom() {
         </section>
 
         {/* Voice AI Section - THE DIFFERENTIATOR */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>Voice AI Testing</p>
             <h2 className={styles.sectionTitle}>Test voice AI with the same rigor as text</h2>
@@ -285,7 +285,7 @@ export default function Telecom() {
         </section>
 
         {/* Account Security Showcase */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <div className={clsx(styles.showcaseRow, styles.showcaseRowReverse)}>
               <div className={styles.showcaseText}>
@@ -386,7 +386,7 @@ export default function Telecom() {
         </section>
 
         {/* Enterprise Benefits */}
-        <section className={styles.benefitsSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.benefitsSection}>
           <div className="container">
             <h2 className={styles.sectionTitle}>Built for carrier scale</h2>
 

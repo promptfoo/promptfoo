@@ -1,0 +1,90 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1040 480"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Exact match compared with semantic judging</title>
+  <desc id="desc">
+    Two password reset answers use different wording. Exact matching fails because the strings
+    differ, while an LLM judge passes them because the meaning satisfies the rubric.
+  </desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-18%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#0f172a" flood-opacity="0.12" />
+    </filter>
+    <style>
+      text {
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      .title {
+        font-size: 20px;
+        font-weight: 800;
+        fill: #0f172a;
+      }
+      .label {
+        font-size: 15px;
+        font-weight: 700;
+        fill: #0f172a;
+      }
+      .body {
+        font-size: 13px;
+        fill: #475569;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        fill: #334155;
+      }
+    </style>
+  </defs>
+
+  <rect width="1040" height="480" rx="24" fill="#f8fafc" />
+  <text x="52" y="60" class="title">Why exact match is too brittle</text>
+  <text x="52" y="86" class="body">
+    The wording differs, but the answer satisfies the same password reset rubric.
+  </text>
+
+  <g filter="url(#shadow)">
+    <rect x="52" y="126" width="438" height="292" rx="18" fill="#ffffff" stroke="#fecaca" />
+  </g>
+  <rect x="52" y="126" width="438" height="52" rx="18" fill="#fee2e2" />
+  <text x="82" y="158" class="label" fill="#991b1b">Exact string match</text>
+
+  <text x="82" y="210" class="body" font-weight="700">Expected</text>
+  <text x="82" y="234" class="mono">Click "Forgot password"</text>
+  <text x="82" y="254" class="mono">and verify by email or SMS.</text>
+  <text x="82" y="292" class="body" font-weight="700">Actual</text>
+  <text x="82" y="316" class="mono">Use the Forgot password link,</text>
+  <text x="82" y="336" class="mono">then enter the email or SMS code.</text>
+  <rect x="82" y="374" width="132" height="32" rx="16" fill="#dc2626" />
+  <text x="148" y="395" text-anchor="middle" font-size="13" font-weight="800" fill="#ffffff">
+    FAIL
+  </text>
+  <text x="230" y="395" class="body">different tokens</text>
+
+  <g filter="url(#shadow)">
+    <rect x="550" y="126" width="438" height="292" rx="18" fill="#ffffff" stroke="#bbf7d0" />
+  </g>
+  <rect x="550" y="126" width="438" height="52" rx="18" fill="#dcfce7" />
+  <text x="580" y="158" class="label" fill="#166534">LLM judge</text>
+
+  <text x="580" y="210" class="body" font-weight="700">Rubric</text>
+  <text x="580" y="234" class="mono">Must mention Forgot password</text>
+  <text x="580" y="254" class="mono">and email/SMS verification.</text>
+  <text x="580" y="292" class="body" font-weight="700">Semantic check</text>
+  <text x="580" y="316" class="mono">Same action + verification step.</text>
+  <text x="580" y="336" class="mono">Valid paraphrase.</text>
+  <rect x="580" y="374" width="132" height="32" rx="16" fill="#16a34a" />
+  <text x="646" y="395" text-anchor="middle" font-size="13" font-weight="800" fill="#ffffff">
+    PASS
+  </text>
+  <text x="728" y="395" class="body">same meaning</text>
+</svg>

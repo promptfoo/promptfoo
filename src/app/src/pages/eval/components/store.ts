@@ -11,6 +11,7 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
+import logger from '../../../../../logger';
 import { hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
@@ -428,6 +429,14 @@ interface SettingsState {
   columnStates: Record<string, ColumnState>;
   setColumnState: (evalId: string, state: ColumnState) => void;
 
+  /**
+   * Maps a schema hash (sorted var names joined) to the list of hidden var names for that schema.
+   * This allows different "shapes" of evals to have different column visibility preferences.
+   * Evals with the same set of variables share visibility state.
+   */
+  hiddenVarNamesBySchema: Record<string, string[]>;
+  setHiddenVarNamesForSchema: (schemaHash: string, hiddenVarNames: string[]) => void;
+
   maxImageWidth: number;
   setMaxImageWidth: (maxImageWidth: number) => void;
   maxImageHeight: number;
@@ -471,13 +480,33 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
           },
         })),
 
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: (schemaHash: string, hiddenVarNames: string[]) =>
+        set((prevState) => ({
+          hiddenVarNamesBySchema: {
+            ...prevState.hiddenVarNamesBySchema,
+            [schemaHash]: hiddenVarNames,
+          },
+        })),
+
       maxImageWidth: 256,
       setMaxImageWidth: (maxImageWidth: number) => set(() => ({ maxImageWidth })),
       maxImageHeight: 256,
       setMaxImageHeight: (maxImageHeight: number) => set(() => ({ maxImageHeight })),
     }),
-    // Default storage is localStorage
-    { name: 'eval-settings' },
+    {
+      name: 'eval-settings',
+      version: 2,
+      migrate: (persistedState, version) => {
+        const state = persistedState as Record<string, unknown>;
+        if (version < 2) {
+          // Remove old global hiddenVarNames, initialize new schema-based storage
+          delete state.hiddenVarNames;
+          state.hiddenVarNamesBySchema = {};
+        }
+        return state as typeof persistedState;
+      },
+    },
   ),
 );
 
@@ -638,7 +667,7 @@ export const useTableStore = create<TableState>()(
       });
 
       try {
-        console.log(`Fetching data for eval ${id} with options:`, options);
+        logger.debug('[EvalStore] Fetching eval table data', { evalId: id, options });
 
         const url = new URL(
           `/eval/${id}/table`,
@@ -671,10 +700,8 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        const resp = await callApi(
-          // Remove the origin as it was only added to satisfy the URL constructor.
-          url.toString().replace(window.location.origin, ''),
-        );
+        // Remove the origin as it was only added to satisfy the URL constructor.
+        const resp = await callApi(url.toString().replace(window.location.origin, ''));
 
         if (resp.ok) {
           const data = (await resp.json()) as EvalTableDTO;
