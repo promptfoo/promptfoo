@@ -8,6 +8,10 @@ import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
+const FILE_URL_FUNCTION_EXTENSIONS = [...JAVASCRIPT_EXTENSIONS, '.py', '.rb'];
+const FUNCTION_REFERENCE_PATTERN =
+  /^[A-Za-z_$][A-Za-z0-9_$]*(?:(?:\.|::)[A-Za-z_$][A-Za-z0-9_$]*)*$/;
+
 interface LoadFunctionOptions {
   filePath: string;
   functionName?: string;
@@ -105,15 +109,36 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
+  const colonIndexes = [...urlWithoutProtocol.matchAll(/:/g)]
+    .map((match) => match.index)
+    .filter((index): index is number => index !== undefined && index > 1);
+
+  for (const colonIndex of colonIndexes.reverse()) {
+    const filePath = urlWithoutProtocol.slice(0, colonIndex);
+    const candidateFn = urlWithoutProtocol.slice(colonIndex + 1);
+    const extension = path.extname(filePath).toLowerCase();
+
+    if (
+      FILE_URL_FUNCTION_EXTENSIONS.includes(extension) &&
+      FUNCTION_REFERENCE_PATTERN.test(candidateFn)
+    ) {
+      return {
+        filePath,
+        functionName: candidateFn,
+      };
+    }
+  }
+
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
   if (lastColonIndex > 1) {
     const candidateFn = urlWithoutProtocol.slice(lastColonIndex + 1);
     // Only treat as function name if it looks like an identifier or dotted
-    // reference (e.g., "myFunc", "Class.method", "namespace.func").
+    // reference (e.g., "myFunc", "Class.method", "namespace.func",
+    // "MyModule::Nested.method").
     // Rejects file extensions (.js, .py, etc.), path segments (/foo), and numbers.
     if (
-      /^[A-Za-z_$][A-Za-z0-9_$.]*$/.test(candidateFn) &&
+      FUNCTION_REFERENCE_PATTERN.test(candidateFn) &&
       !/\.(js|cjs|mjs|ts|cts|mts|py|rb|json|yaml|yml)$/i.test(candidateFn)
     ) {
       return {

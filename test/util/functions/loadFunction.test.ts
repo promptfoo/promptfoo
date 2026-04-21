@@ -308,4 +308,18 @@ describe('parseFileUrl', () => {
       functionName: 'validators.checkLength',
     });
   });
+
+  it('should handle Ruby namespace method references', () => {
+    expect(parseFileUrl('file://assert.rb:MyModule::Nested.check')).toEqual({
+      filePath: 'assert.rb',
+      functionName: 'MyModule::Nested.check',
+    });
+  });
+
+  it('should handle colons in Ruby filenames with a namespace method suffix', () => {
+    expect(parseFileUrl('file:///tmp/assert:one.rb:MyModule::Nested.check')).toEqual({
+      filePath: '/tmp/assert:one.rb',
+      functionName: 'MyModule::Nested.check',
+    });
+  });
 });
