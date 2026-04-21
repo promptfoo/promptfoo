@@ -33,6 +33,7 @@ describe('isApiProvider', () => {
       { id: null },
       { id: undefined },
       { id: 42 },
+      { id: () => 'missing-call-api' },
       'string-provider',
       42,
       true,

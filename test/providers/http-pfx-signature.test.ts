@@ -28,6 +28,7 @@ describe('PFX signature paths (generateSignature)', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    mockStat.mockReset();
   });
 
   it('throws when PFX password is missing', async () => {
