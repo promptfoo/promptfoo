@@ -1,42 +1,7 @@
-import * as path from 'path';
-
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
+import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
 
 import type { ApiProvider } from '../types/providers';
-
-function canonicalizeProviderId(id: string): string {
-  // Handle file:// prefix
-  if (id.startsWith('file://')) {
-    const filePath = id.slice('file://'.length);
-    return path.isAbsolute(filePath) ? id : `file://${path.resolve(filePath)}`;
-  }
-
-  // Handle other executable prefixes with file paths
-  const executablePrefixes = ['exec:', 'python:', 'golang:'];
-  for (const prefix of executablePrefixes) {
-    if (id.startsWith(prefix)) {
-      const filePath = id.slice(prefix.length);
-      if (filePath.includes('/') || filePath.includes('\\')) {
-        return `${prefix}${path.resolve(filePath)}`;
-      }
-      return id;
-    }
-  }
-
-  // For JavaScript/TypeScript files without file:// prefix
-  if (
-    (id.endsWith('.js') || id.endsWith('.ts') || id.endsWith('.mjs')) &&
-    (id.includes('/') || id.includes('\\'))
-  ) {
-    return `file://${path.resolve(id)}`;
-  }
-
-  return id;
-}
-
-function getProviderLabel(provider: any): string | undefined {
-  return provider?.label && typeof provider.label === 'string' ? provider.label : undefined;
-}
 
 export function providerToIdentifier(
   provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
@@ -50,7 +15,7 @@ export function providerToIdentifier(
   }
 
   // Check for label first on any provider type
-  const label = getProviderLabel(provider);
+  const { label } = normalizeProviderRef(provider);
   if (label) {
     return label;
   }

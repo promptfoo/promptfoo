@@ -1,8 +1,9 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockIntersectionObserver } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { MediaItem } from './types';
 
@@ -68,18 +69,16 @@ const mockItems = [makeItem('aaa111', 'First item'), makeItem('bbb222', 'Second 
 
 function mockApiResponses(items: MediaItem[] = mockItems) {
   vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-    const urlStr = String(url);
-
-    if (urlStr.includes('/blobs/library/evals')) {
+    if (url.includes('/blobs/library/evals')) {
       return {
         ok: true,
         json: async () => ({ success: true, data: [] }),
       } as Response;
     }
 
-    if (urlStr.includes('/blobs/library')) {
+    if (url.includes('/blobs/library')) {
       // Check for hash param (deep-link fetch)
-      const hashMatch = urlStr.match(/hash=([^&]+)/);
+      const hashMatch = url.match(/hash=([^&]+)/);
       if (hashMatch) {
         const hash = decodeURIComponent(hashMatch[1]);
         const item = items.find((i) => i.hash === hash);
@@ -118,19 +117,7 @@ function mockApiResponses(items: MediaItem[] = mockItems) {
 describe('Media page URL state machine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock IntersectionObserver as a proper class
-    vi.stubGlobal(
-      'IntersectionObserver',
-      class {
-        observe = vi.fn();
-        unobserve = vi.fn();
-        disconnect = vi.fn();
-      },
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
+    mockIntersectionObserver();
   });
 
   it('renders the media grid with items', async () => {
@@ -176,17 +163,15 @@ describe('Media page URL state machine', () => {
     const deepLinkedItem = makeItem('ccc333', 'Deep linked item');
 
     vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-      const urlStr = String(url);
-
-      if (urlStr.includes('/blobs/library/evals')) {
+      if (url.includes('/blobs/library/evals')) {
         return {
           ok: true,
           json: async () => ({ success: true, data: [] }),
         } as Response;
       }
 
-      if (urlStr.includes('/blobs/library')) {
-        const hashMatch = urlStr.match(/hash=([^&]+)/);
+      if (url.includes('/blobs/library')) {
+        const hashMatch = url.match(/hash=([^&]+)/);
         if (hashMatch) {
           return {
             ok: true,
@@ -230,17 +215,15 @@ describe('Media page URL state machine', () => {
 
   it('deep-link error: shows error for non-existent hash', async () => {
     vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-      const urlStr = String(url);
-
-      if (urlStr.includes('/blobs/library/evals')) {
+      if (url.includes('/blobs/library/evals')) {
         return {
           ok: true,
           json: async () => ({ success: true, data: [] }),
         } as Response;
       }
 
-      if (urlStr.includes('/blobs/library')) {
-        const hashMatch = urlStr.match(/hash=([^&]+)/);
+      if (url.includes('/blobs/library')) {
+        const hashMatch = url.match(/hash=([^&]+)/);
         if (hashMatch) {
           return {
             ok: true,
@@ -323,13 +306,11 @@ describe('Media page URL state machine', () => {
 
   it('shows error when library API returns non-OK response', async () => {
     vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-      const urlStr = String(url);
-
-      if (urlStr.includes('/blobs/library/evals')) {
+      if (url.includes('/blobs/library/evals')) {
         return { ok: true, json: async () => ({ success: true, data: [] }) } as Response;
       }
 
-      if (urlStr.includes('/blobs/library')) {
+      if (url.includes('/blobs/library')) {
         return { ok: false, status: 500, json: async () => ({}) } as Response;
       }
 
@@ -345,13 +326,11 @@ describe('Media page URL state machine', () => {
 
   it('shows error when evals API returns non-OK response', async () => {
     vi.mocked(callApi).mockImplementation(async (url: string, _opts?: any) => {
-      const urlStr = String(url);
-
-      if (urlStr.includes('/blobs/library/evals')) {
+      if (url.includes('/blobs/library/evals')) {
         return { ok: false, status: 500, json: async () => ({}) } as Response;
       }
 
-      if (urlStr.includes('/blobs/library')) {
+      if (url.includes('/blobs/library')) {
         return {
           ok: true,
           json: async () => ({

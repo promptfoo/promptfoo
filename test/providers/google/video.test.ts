@@ -8,6 +8,7 @@ import {
   validateDuration,
   validateResolution,
 } from '../../../src/providers/google/video';
+import { mockProcessEnv } from '../../util/utils';
 
 // Mock the Google client
 const mockRequest = vi.fn();
@@ -79,11 +80,11 @@ describe('GoogleVideoProvider', () => {
           process.env.GOOGLE_PROJECT_ID,
       );
     });
-    process.env.GOOGLE_PROJECT_ID = 'test-project';
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.VERTEX_PROJECT_ID;
+    mockProcessEnv({ GOOGLE_PROJECT_ID: 'test-project' });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
 
     // Default mock for blob storage
     mockStoreBlob.mockResolvedValue({
@@ -99,11 +100,11 @@ describe('GoogleVideoProvider', () => {
   });
 
   afterEach(() => {
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_PROJECT_ID;
-    delete process.env.VERTEX_PROJECT_ID;
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
     // Reset fs mocks to prevent leakage between tests
     vi.mocked(fs.existsSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
@@ -240,8 +241,8 @@ describe('GoogleVideoProvider', () => {
 
   describe('callApi', () => {
     it('should return error when Google AI Studio API key is missing', async () => {
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_PROJECT_ID;
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
       mockResolveProjectId.mockRejectedValue(new Error('No project ID found'));
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
 
@@ -252,8 +253,8 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should return error when Vertex project ID is missing and ADC fails', async () => {
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_PROJECT_ID;
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
       mockResolveProjectId.mockRejectedValue(new Error('No project ID found'));
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
@@ -268,8 +269,8 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should resolve project ID from ADC when not explicitly set', async () => {
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_PROJECT_ID;
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
       // ADC can resolve the project ID
       mockResolveProjectId.mockResolvedValue('adc-resolved-project');
 
@@ -395,8 +396,8 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should create and poll Veo jobs through Google AI Studio with an API key', async () => {
-      delete process.env.GOOGLE_PROJECT_ID;
-      process.env.GOOGLE_API_KEY = 'test-api-key';
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
 
       const operationName = 'models/veo-3.1-generate-preview/operations/test-op';
       const videoUri = 'https://generativelanguage.googleapis.com/v1beta/files/test-video';

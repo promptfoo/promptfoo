@@ -8,18 +8,27 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 
 ## Project Structure
 
-| Directory        | Purpose                       | Local Docs                |
-| ---------------- | ----------------------------- | ------------------------- |
-| `src/`           | Core library                  | -                         |
-| `src/app/`       | Web UI (React 19/Vite/MUI v7) | `src/app/AGENTS.md`       |
-| `src/commands/`  | CLI commands                  | `src/commands/AGENTS.md`  |
-| `src/providers/` | LLM providers                 | `src/providers/AGENTS.md` |
-| `src/redteam/`   | Security testing              | `src/redteam/AGENTS.md`   |
-| `src/server/`    | Backend server                | `src/server/AGENTS.md`    |
-| `test/`          | Tests (Vitest)                | `test/AGENTS.md`          |
-| `site/`          | Docs site (Docusaurus)        | `site/AGENTS.md`          |
-| `examples/`      | Example configs               | `examples/AGENTS.md`      |
-| `drizzle/`       | DB migrations                 | `drizzle/AGENTS.md`       |
+| Directory           | Purpose                         | Local Docs                   |
+| ------------------- | ------------------------------- | ---------------------------- |
+| `.agents/`          | Codex marketplace metadata      | `.agents/AGENTS.md`          |
+| `.github/`          | GitHub Actions and workflows    | `.github/AGENTS.md`          |
+| `code-scan-action/` | Code scan GitHub Action wrapper | `code-scan-action/AGENTS.md` |
+| `docs/agents/`      | Reusable coding-agent docs      | `docs/agents/AGENTS.md`      |
+| `plugins/`          | Agent plugin bundles            | `plugins/AGENTS.md`          |
+| `src/`              | Core library                    | -                            |
+| `src/app/`          | Web UI (React 19/Vite/MUI v7)   | `src/app/AGENTS.md`          |
+| `src/assertions/`   | Assertion handlers              | `src/assertions/AGENTS.md`   |
+| `src/codeScan/`     | Code scan scanner               | `src/codeScan/AGENTS.md`     |
+| `src/commands/`     | CLI commands                    | `src/commands/AGENTS.md`     |
+| `src/matchers/`     | Assertion matcher helpers       | `src/matchers/AGENTS.md`     |
+| `src/providers/`    | LLM providers                   | `src/providers/AGENTS.md`    |
+| `src/redteam/`      | Security testing                | `src/redteam/AGENTS.md`      |
+| `src/server/`       | Backend server                  | `src/server/AGENTS.md`       |
+| `src/ui/`           | Terminal UI components          | `src/ui/AGENTS.md`           |
+| `test/`             | Tests (Vitest)                  | `test/AGENTS.md`             |
+| `site/`             | Docs site (Docusaurus)          | `site/AGENTS.md`             |
+| `examples/`         | Example configs                 | `examples/AGENTS.md`         |
+| `drizzle/`          | DB migrations                   | `drizzle/AGENTS.md`          |
 
 **Read the relevant AGENTS.md when working in that directory.**
 
@@ -47,13 +56,13 @@ npm run f                  # Format only changed files
 npm run test:watch         # Run tests in watch mode
 npm run test:integration   # Run integration tests
 npm run test:redteam:integration  # Run red team integration tests
-npm run test:app -- -- src/pages/path/to/test.test.tsx --run  # Run a specific frontend test file from repo root
+npm run test:app -- src/pages/path/to/test.test.tsx --run  # Run a specific frontend test file from repo root
 npx vitest path/to/test    # Run a specific backend test file
 
 # Development
 npm run dev                # Start both server and app
-npm run dev:app            # Start only frontend (localhost:5173)
-npm run dev:server         # Start only server (localhost:3000)
+npm run dev:app            # Start only frontend (localhost:3000)
+npm run dev:server         # Start only server/API (localhost:15500)
 npm run local -- eval      # Test with local build
 
 # Database
@@ -83,6 +92,8 @@ npm run local eval --max-concurrency 1     # Wrong - flags go to npm
 
 **Don't run `npm run local -- view`** unless explicitly asked. Assume the user already has `npm run dev` running. The `view` command serves static production builds without hot reload.
 
+When starting `npm run dev`, keep it attached in a live terminal session; backgrounding with `&`/`nohup` can exit silently in agent shells. The expected local URLs are `http://localhost:3000/` for the Web UI and `http://localhost:15500` for the server/API. Do not assume Vite's default `5173`; confirm the actual ports from startup output or with `lsof -nP -iTCP:3000 -iTCP:15500 -sTCP:LISTEN`.
+
 ### Using Environment Variables
 
 The repository includes a `.env` file for API keys. To use it:
@@ -107,7 +118,7 @@ PROMPTFOO_DISABLE_REMOTE_GENERATION=true npm run local -- eval -c config.yaml
 **Always use `--no-cache` during development** to ensure fresh results:
 
 ```bash
-npm run local -- eval -c examples/my-example/promptfooconfig.yaml --env-file .env --no-cache
+npm run local -- eval -c examples/my-example/promptfooconfig.yaml --no-cache
 ```
 
 **Export and inspect results** to verify pass/fail/errors:
@@ -116,7 +127,32 @@ npm run local -- eval -c examples/my-example/promptfooconfig.yaml --env-file .en
 npm run local -- eval -c path/to/config.yaml -o output.json --no-cache
 ```
 
-Review the output file for `success`, `score`, and `error` fields.
+Add `--env-file .env` or another explicit env file only when the eval needs local
+secrets and the file exists.
+
+Review the output file for `success`, `score`, and `error` fields. With the default
+pass-rate threshold, exit code 0 means the eval met the threshold; still inspect the
+JSON for per-test failures, errors, and scores, especially when the threshold has been
+lowered. This is the standard command for verifying a PR end-to-end.
+
+Keep local secrets in the repo's gitignored `.env` (or another path the user points at
+with `--env-file`); never echo them into logs or commit messages.
+
+## End-to-End Work Expectations
+
+When asked only to review or audit a PR, keep the work read-only: inspect the branch, diff, PR comments, and CI as needed; run non-mutating tests or QA when useful; and report findings without committing, pushing, or changing files unless the user explicitly asks for fixes.
+
+When asked to fix, improve, or land a PR, own the full loop: check out the branch, inspect the diff and PR comments, merge or rebase on current `origin/main` when requested, run focused tests, run the relevant real workflow, commit, push, and watch CI until it is green or the remaining failure is clearly unrelated.
+
+For behavior changes, do not stop at unit tests. Run the actual CLI or example with the local build. For eval and redteam work, prefer:
+
+```bash
+npm run local -- eval -c path/to/promptfooconfig.yaml --no-cache -o output.json
+```
+
+Add `--env-file .env` only when the eval needs local credentials and the file exists.
+
+Inspect exported JSON for `success`, `score`, `error`, provider outputs, traces, and redteam findings. If you claim a redteam ran, report the plugins, strategies, interesting failures, and the evidence reviewed.
 
 ## Debugging & Troubleshooting
 
@@ -156,9 +192,11 @@ LOG_LEVEL=debug npm run local -- eval -c config.yaml
 npm run local -- eval -c config.yaml --no-cache
 ```
 
-**View results in web UI:** First check if a server is running on port 3000, then ask user before starting. Use `npm run dev` for localhost:3000.
+**View results in web UI:** First check if the Web UI is running on port 3000, then ask user before starting. Use `npm run dev` for localhost:3000.
 
-**Cache:** Located at `~/.cache/promptfoo`. **NEVER delete or clear the cache without explicit permission.** Use `--no-cache` flag instead.
+**Cache:** Located at `~/.promptfoo/cache` by default, unless overridden with
+`PROMPTFOO_CACHE_PATH` or `PROMPTFOO_CONFIG_DIR`. **NEVER delete or clear the cache
+without explicit permission.** Use `--no-cache` flag instead.
 
 **Database:** Located at `~/.promptfoo/promptfoo.db` (SQLite). You may read from it but **NEVER delete it**.
 
@@ -187,6 +225,34 @@ git push -u origin feature/your-branch-name # Push branch
 
 See `docs/agents/git-workflow.md` for full workflow.
 See `docs/agents/pr-conventions.md` for PR title format and scope selection (especially THE REDTEAM RULE).
+
+## Pull Request Creation
+
+- **Default to full (non-draft) PRs.** Omit `--draft` from `gh pr create` unless the
+  user explicitly asks for a draft, or the PR is for an unpublished security advisory
+  (see "Security-Sensitive PRs" below). `docs/agents/pr-conventions.md` lists the full
+  set of draft exceptions.
+- **Never attribute commits or PR bodies to Claude / Claude Code.** No
+  `Co-Authored-By: Claude…` trailers, no "Generated with Claude Code" footers. Use
+  your configured git identity only.
+- **Update the existing PR instead of opening a new one** when iterating on a branch
+  that already has an open PR. Push to the same branch. Only run `gh pr create` if the
+  user explicitly asks for a new PR or the existing PR is closed.
+- **Don't let `npm audit fix` drift ride along with an unrelated change.** If
+  `package-lock.json` changes outside the scope of the PR, revert the drift and ship
+  it separately so reviewers can reason about each change independently.
+
+## Security-Sensitive PRs
+
+- **Before opening any public PR for a CVE/GHSA:** confirm the advisory has been
+  published and the coordinated-disclosure embargo has lifted. See `SECURITY.md` for
+  the disclosure policy. If the advisory is still private, use the GHSA private
+  collaboration flow (or a temporary private fork) until the release that contains the
+  fix is cut.
+- Do **not** put the CVE/GHSA identifier, exploit description, or vulnerable-version
+  range in a PR title, body, or branch name before disclosure.
+- Every security fix should land with a regression test that exercises the original
+  attack vector.
 
 ## Screenshots for Pull Requests
 
@@ -277,6 +343,12 @@ See `test/AGENTS.md` for testing patterns.
 - **Test both success and error cases** for all functionality
 - **Document provider configurations** following examples in existing code
 
+## Adversarial and Redteam Bias
+
+For security, model scanning, redteam, and coding-agent work, test like an attacker first. Look for false negatives, bypasses, hidden payloads, unsafe tool use, prompt injection, exfiltration, cache misuse, and evidence gaps. When a bypass is found, add a focused regression test before or alongside the fix.
+
+For demo/example apps used to show red teaming, do not harden away all interesting findings unless explicitly asked. A slightly vulnerable sample app is useful when the goal is to demonstrate Promptfoo's ability to find real breaks.
+
 ## Review Guidelines
 
 - Prioritize security regressions first, especially injection risks, unsafe handling of user-controlled or adversarial content, credential exposure, SSRF, path traversal, unsafe deserialization, and authorization mistakes.
@@ -287,7 +359,7 @@ See `test/AGENTS.md` for testing patterns.
 - Verify findings on the current branch tip after syncing with the latest `main`.
 - Treat existing PR comments and bot reviews as hints; confirm they still apply before reporting them. If CI is failing, inspect the failing job logs and separate unrelated base-branch failures from PR regressions.
 - Ignore formatting, import ordering, naming, and other style-only issues already enforced by CI or repository tooling.
-- If a pull request touches `src/redteam/`, verify the title follows THE REDTEAM RULE in `docs/agents/pr-conventions.md` and uses `(redteam)` scope. Treat a title violation as P1.
+- If a pull request is primarily about redteam functionality, verify the title follows THE REDTEAM RULE in `docs/agents/pr-conventions.md` and uses `(redteam)` scope. Incidental `src/redteam/` touches in broad maintenance PRs do not require `(redteam)` scope.
 
 ## Documentation Testing
 
@@ -304,15 +376,16 @@ See `site/AGENTS.md` for documentation guidelines.
 
 Read these when relevant to your task:
 
-| Document                               | When to Read                   |
-| -------------------------------------- | ------------------------------ |
-| `docs/agents/pr-conventions.md`        | Creating pull requests         |
-| `docs/agents/git-workflow.md`          | Git operations                 |
-| `docs/agents/dependency-management.md` | Updating packages              |
-| `docs/agents/logging.md`               | Adding logging to code         |
-| `docs/agents/python.md`                | Python providers/scripts       |
-| `docs/agents/database-security.md`     | Writing database queries       |
-| `src/app/AGENTS.md`                    | Frontend React development     |
-| `src/providers/AGENTS.md`              | Adding/modifying LLM providers |
-| `test/AGENTS.md`                       | Writing tests                  |
-| `site/AGENTS.md`                       | Documentation site changes     |
+| Document                               | When to Read                              |
+| -------------------------------------- | ----------------------------------------- |
+| `docs/agents/pr-conventions.md`        | Creating pull requests                    |
+| `docs/agents/git-workflow.md`          | Git operations                            |
+| `docs/agents/dependency-management.md` | Updating packages                         |
+| `docs/agents/logging.md`               | Adding logging to code                    |
+| `docs/agents/python.md`                | Python providers/scripts                  |
+| `docs/agents/database-security.md`     | Writing database queries                  |
+| `src/app/AGENTS.md`                    | Frontend React development                |
+| `src/providers/AGENTS.md`              | Adding/modifying LLM providers            |
+| `test/AGENTS.md`                       | Writing tests                             |
+| `site/AGENTS.md`                       | Documentation site changes                |
+| `.github/AGENTS.md`                    | GitHub Actions / release workflow changes |

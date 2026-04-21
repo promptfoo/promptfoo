@@ -2,7 +2,7 @@
 description: Agent with MCP Server and OAuth Authentication
 
 targets:
-  - id: openai:gpt-5
+  - id: openai:chat:gpt-5.4
     config:
       mcp:
         enabled: true

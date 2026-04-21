@@ -21,12 +21,13 @@ import {
   readTestFiles,
   readTests,
 } from '../../src/util/testCaseReader';
+import { createMockProvider } from '../factories/provider';
 
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
-import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
+import type { ProviderOptions } from '../../src/types/providers';
 
 // Spy on logger.warn for tests that check warnings
-vi.spyOn(logger, 'warn');
+vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 vi.mock('../../src/util/fetch', () => ({
@@ -539,32 +540,34 @@ describe('readStandaloneTestsFile', () => {
     // Only run if read-excel-file is actually installed (in dev environment)
     try {
       await import('read-excel-file/node');
-      const fs = require('fs');
-
-      if (fs.existsSync(exampleFile)) {
-        const result = await readStandaloneTestsFile(exampleFile);
-
-        // Verify the structure matches expected test cases
-        expect(result).toHaveLength(4); // Based on the known test data
-        expect(result[0]).toMatchObject({
-          vars: expect.objectContaining({
-            language: expect.any(String),
-            body: expect.any(String),
-          }),
-          assert: expect.any(Array),
-        });
-
-        // Verify specific test case content
-        const frenchTest = result.find((test) => test.vars?.language === 'French');
-        expect(frenchTest).toBeDefined();
-        expect(frenchTest?.vars?.body).toBe('Hello world');
-      } else {
-        console.log('Skipping integration test - example Excel file not found');
-      }
-    } catch (error) {
+    } catch {
       // Skip test if read-excel-file is not installed
-      console.log('Skipping integration test - read-excel-file not available:', error);
+      return;
     }
+
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    if (!actualFs.existsSync(exampleFile)) {
+      return;
+    }
+
+    vi.mocked(fs.existsSync).mockImplementation((filePath) => actualFs.existsSync(filePath));
+
+    const result = await readStandaloneTestsFile(exampleFile);
+
+    // Verify the structure matches expected test cases
+    expect(result).toHaveLength(4); // Based on the known test data
+    expect(result[0]).toMatchObject({
+      vars: expect.objectContaining({
+        language: expect.any(String),
+        body: expect.any(String),
+      }),
+      assert: expect.any(Array),
+    });
+
+    // Verify specific test case content
+    const frenchTest = result.find((test) => test.vars?.language === 'French');
+    expect(frenchTest).toBeDefined();
+    expect(frenchTest?.vars?.body).toBe('Hello world');
   });
 
   it('should handle Python files with default function name', async () => {
@@ -793,7 +796,7 @@ describe('readTest', () => {
 
   describe('readTest with provider', () => {
     it('should load provider when provider is a string', async () => {
-      const mockProvider = { callApi: vi.fn(), id: vi.fn().mockReturnValue('mock-provider') };
+      const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const testCase: TestCase = {
@@ -809,10 +812,7 @@ describe('readTest', () => {
     });
 
     it('should load provider when provider is an object with id', async () => {
-      const mockProvider = {
-        callApi: vi.fn(),
-        id: vi.fn().mockReturnValue('mock-provider'),
-      } as ApiProvider;
+      const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const providerInput: ProviderOptions & { callApi: ReturnType<typeof vi.fn> } = {

@@ -351,9 +351,28 @@ providers:
 | -------------------- | -------------------------------- |
 | `bash`               | Shell command execution          |
 | `edit`               | File editing                     |
+| `read`               | Reading files                    |
+| `glob`               | Finding files by pattern         |
+| `grep`               | Searching file contents          |
+| `list`               | Listing directories              |
+| `task`               | Subtask execution                |
+| `lsp`                | Code intelligence queries        |
+| `skill`              | Loading SKILL.md files           |
 | `webfetch`           | Web fetching                     |
+| `websearch`          | Web search                       |
+| `codesearch`         | Codebase search                  |
+| `todowrite`          | Writing to todo list             |
+| `question`           | Interactive user prompts         |
 | `doom_loop`          | Prevents infinite agent loops    |
 | `external_directory` | Access outside working directory |
+
+Additional tools added by future OpenCode releases can be configured using the same shape — unknown keys are forwarded unchanged.
+
+:::note
+
+Promptfoo converts the object form above into the `PermissionRuleset` array the OpenCode v2 API expects (`[{ permission: "bash", pattern: "*", action: "allow" }, ...]`). You configure permissions in the friendly object form and the provider handles the conversion per request.
+
+:::
 
 :::tip Security Recommendation
 

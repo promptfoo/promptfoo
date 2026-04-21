@@ -15,6 +15,7 @@ import {
   getTraceparent,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { providerRegistry } from '../providerRegistry';
 
@@ -1806,10 +1807,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Merge configs (prompt config takes precedence)
-    const config: OpenAICodexSDKConfig = {
+    const mergedConfig: OpenAICodexSDKConfig = {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
 
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;

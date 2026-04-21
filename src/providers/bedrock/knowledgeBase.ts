@@ -2,6 +2,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider } from './base';
 import { createBedrockRequestHandler, hasProxyEnv } from './util';
@@ -183,7 +184,12 @@ export class AwsBedrockKnowledgeBaseProvider
       },
     };
 
-    logger.debug('Calling Amazon Bedrock Knowledge Base API', { params });
+    logger.debug('Calling Amazon Bedrock Knowledge Base API', {
+      knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+      modelArn: knowledgeBaseConfiguration.modelArn,
+      promptLength: prompt.length,
+      hasRetrievalConfiguration: Boolean(knowledgeBaseConfiguration.retrievalConfiguration),
+    });
 
     const cache = await getCache();
 
@@ -197,12 +203,17 @@ export class AwsBedrockKnowledgeBaseProvider
     };
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
-    const cacheKey = `bedrock-kb:${Buffer.from(configStr).toString('base64')}:${prompt}`;
+    const cacheKey = `bedrock-kb:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+      JSON.stringify({
+        configStr,
+        prompt,
+      }),
+    )}`;
 
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}`);
+        logger.debug('Returning cached Bedrock Knowledge Base response');
         const parsedResponse = JSON.parse(cachedResponse as string);
         return {
           output: parsedResponse.output,
@@ -219,7 +230,11 @@ export class AwsBedrockKnowledgeBaseProvider
 
       const response = await client.send(command);
 
-      logger.debug('Amazon Bedrock Knowledge Base API response', { response });
+      logger.debug('Amazon Bedrock Knowledge Base API response', {
+        hasOutput: typeof response?.output?.text === 'string',
+        outputLength: response?.output?.text?.length ?? 0,
+        citationCount: Array.isArray(response?.citations) ? response.citations.length : 0,
+      });
 
       let output = '';
       if (response && response.output && response.output.text) {

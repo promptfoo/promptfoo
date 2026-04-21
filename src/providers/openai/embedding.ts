@@ -34,13 +34,14 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     let cached = false;
     let latencyMs: number | undefined;
     try {
+      const apiKey = this.getApiKey();
       const response = await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             ...this.config.headers,
           },

@@ -10,13 +10,16 @@ import {
 } from '@app/components/ui/navigation-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES, MODEL_AUDIT_ROUTES, REDTEAM_ROUTES, ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { Info, Settings } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import ApiSettingsModal from './ApiSettingsModal';
-import DarkMode from './DarkMode';
 import InfoModal from './InfoModal';
 import Logo from './Logo';
+import ThemeSelector from './ThemeSelector';
+
+const LEGACY_MODEL_AUDIT_HISTORY_ROUTE = `${MODEL_AUDIT_ROUTES.ROOT}/history`;
 
 interface NavLinkProps {
   href: string;
@@ -28,12 +31,12 @@ function NavLink({ href, label }: NavLinkProps) {
 
   // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
   let isActive: boolean;
-  if (href === '/model-audit') {
+  if (href === MODEL_AUDIT_ROUTES.ROOT) {
     isActive =
-      location.pathname === '/model-audit' ||
-      (location.pathname.startsWith('/model-audit/') &&
-        !location.pathname.startsWith('/model-audit/setup') &&
-        !location.pathname.startsWith('/model-audit/history'));
+      location.pathname === MODEL_AUDIT_ROUTES.ROOT ||
+      (location.pathname.startsWith(`${MODEL_AUDIT_ROUTES.ROOT}/`) &&
+        !location.pathname.startsWith(MODEL_AUDIT_ROUTES.SETUP) &&
+        !location.pathname.startsWith(LEGACY_MODEL_AUDIT_HISTORY_ROUTE));
   } else {
     isActive = location.pathname.startsWith(href);
   }
@@ -114,17 +117,17 @@ function NavDropdown({ label, items, isActiveCheck }: NavDropdownProps) {
 
 const createMenuItems: MenuItem[] = [
   {
-    href: '/setup',
+    href: ROUTES.SETUP,
     label: 'Eval',
     description: 'Create and configure evaluation tests',
   },
   {
-    href: '/redteam/setup',
+    href: REDTEAM_ROUTES.SETUP,
     label: 'Red Team',
     description: 'Set up security testing scenarios',
   },
   {
-    href: '/model-audit/setup',
+    href: MODEL_AUDIT_ROUTES.SETUP,
     label: 'Model Audit',
     description: 'Configure and run a model security scan',
   },
@@ -132,28 +135,28 @@ const createMenuItems: MenuItem[] = [
 
 const resultsMenuItems: MenuItem[] = [
   {
-    href: '/eval',
+    href: EVAL_ROUTES.ROOT,
     label: 'Latest Eval',
     description: 'View your most recent evaluation results',
   },
   {
-    href: '/evals',
+    href: EVAL_ROUTES.LIST,
     label: 'All Evals',
     description: 'Browse and manage all evaluation runs',
   },
   {
-    href: '/reports',
+    href: REDTEAM_ROUTES.REPORTS,
     label: 'Red Team Vulnerability Reports',
     description: 'View findings from red teams',
   },
   {
-    href: '/media',
+    href: ROUTES.MEDIA,
     label: 'Media Library',
     description: 'Browse generated images, videos, and audio',
   },
 ];
 
-export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () => void }) {
+export default function Navigation() {
   const [showInfoModal, setShowInfoModal] = useState<boolean>(false);
   const [showApiSettingsModal, setShowApiSettingsModal] = useState<boolean>(false);
 
@@ -173,7 +176,7 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
                   label="New"
                   items={createMenuItems}
                   isActiveCheck={(pathname) =>
-                    ['/setup', '/redteam/setup', '/model-audit/setup'].some((route) =>
+                    [ROUTES.SETUP, REDTEAM_ROUTES.SETUP, MODEL_AUDIT_ROUTES.SETUP].some((route) =>
                       pathname.startsWith(route),
                     )
                   }
@@ -182,18 +185,18 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
                   label="View Results"
                   items={resultsMenuItems}
                   isActiveCheck={(pathname) =>
-                    ['/eval', '/evals', '/reports', '/media'].some((route) =>
-                      pathname.startsWith(route),
+                    [EVAL_ROUTES.ROOT, EVAL_ROUTES.LIST, REDTEAM_ROUTES.REPORTS, ROUTES.MEDIA].some(
+                      (route) => pathname.startsWith(route),
                     )
                   }
                 />
               </NavigationMenuList>
             </NavigationMenu>
             <nav className="hidden items-center gap-1 md:flex">
-              <NavLink href="/model-audit" label="Model Audit" />
-              <NavLink href="/prompts" label="Prompts" />
-              <NavLink href="/datasets" label="Datasets" />
-              <NavLink href="/history" label="History" />
+              <NavLink href={MODEL_AUDIT_ROUTES.ROOT} label="Model Audit" />
+              <NavLink href={ROUTES.PROMPTS} label="Prompts" />
+              <NavLink href={ROUTES.DATASETS} label="Datasets" />
+              <NavLink href={ROUTES.HISTORY} label="History" />
             </nav>
           </div>
 
@@ -229,7 +232,7 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
               </Tooltip>
             )}
 
-            <DarkMode onToggleDarkMode={onToggleDarkMode} />
+            <ThemeSelector />
           </div>
         </div>
       </header>

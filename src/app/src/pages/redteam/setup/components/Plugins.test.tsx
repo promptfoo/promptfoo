@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -54,7 +54,15 @@ vi.mock('./PluginConfigDialog', () => ({
 
 vi.mock('./TestCaseDialog', () => ({
   TestCaseDialog: () => <div data-testid="test-case-dialog" />,
-  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
     <button type="button" {...props}>
       {children ?? 'Generate test case'}
     </button>
@@ -946,7 +954,9 @@ describe('Plugins', () => {
 
       // Simulate keyboard navigation (ArrowRight to move to next tab)
       await act(async () => {
-        fireEvent.keyDown(pluginsTab, { key: 'ArrowRight' });
+        const user = userEvent.setup();
+        pluginsTab.focus();
+        await user.keyboard('{ArrowRight}');
       });
 
       // Radix Tabs handles keyboard navigation

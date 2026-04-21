@@ -145,26 +145,14 @@ describe('ElevenLabsClient', () => {
       await vi.runAllTimersAsync();
       const error = await promise;
       expect(error).toBeInstanceOf(ElevenLabsRateLimitError);
-      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('should retry on network error', async () => {
-      mockFetch
-        .mockRejectedValueOnce(new Error('Network error'))
-        .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: new Headers({ 'content-type': 'application/json' }),
-          json: async () => ({ success: true }),
-        } as Response);
+    it('should make one attempt by default on network error', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-      const promise = client.post<{ success: boolean }>('/test', {});
-      await vi.runAllTimersAsync();
-      const result = await promise;
-
-      expect(result).toEqual({ success: true });
-      expect(mockFetch).toHaveBeenCalledTimes(3);
+      await expect(client.post<{ success: boolean }>('/test', {})).rejects.toThrow('Network error');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('should make one attempt when retries is set to 0', async () => {
@@ -179,8 +167,50 @@ describe('ElevenLabsClient', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it('should throw ElevenLabsAPIError on 500', async () => {
-      // Mock all retry attempts (retries: 2 means 3 total attempts)
+    it('should retry non-idempotent POSTs only when explicitly allowed', async () => {
+      mockFetch
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ success: true }),
+        } as Response);
+
+      const promise = client.post<{ success: boolean }>(
+        '/test',
+        {},
+        { allowRetriesForNonIdempotent: true },
+      );
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toEqual({ success: true });
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('should retry POSTs when an idempotency-key header is present', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('Network error')).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ success: true }),
+      } as Response);
+
+      const promise = client.post<{ success: boolean }>(
+        '/test',
+        {},
+        { headers: { 'Idempotency-Key': 'req-123' } },
+      );
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result).toEqual({ success: true });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('should throw ElevenLabsAPIError on 500 without retrying', async () => {
       const errorResponse = {
         ok: false,
         status: 500,
@@ -193,7 +223,7 @@ describe('ElevenLabsClient', () => {
       await vi.runAllTimersAsync();
       const error = await promise;
       expect(error).toBeInstanceOf(ElevenLabsAPIError);
-      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 

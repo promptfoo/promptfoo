@@ -5,6 +5,7 @@ import os from 'os';
 import path from 'path';
 
 import react from '@vitejs/plugin-react';
+import { configDefaults } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
 import {
   browserModulesPlugin,
@@ -23,15 +24,48 @@ const maxForks = process.env.CI
 
 const API_PORT = process.env.API_PORT || '15500';
 
+const ignoredTestConsolePatterns = [
+  /^Warning: .*not wrapped in act/,
+  /^An update to .*not wrapped in act/,
+  /^(Warning: )?The current testing environment is not configured to support act/,
+  /^Warning: Received NaN for the `children` attribute/,
+  /^Error checking ModelAudit installation:/,
+  /^Error loading eval:/,
+  /^Failed to fetch datasets:/,
+  /^Error parsing file:/,
+  /^deeply nested key "metrics\.score" returned undefined/,
+  /^Logout failed/,
+  /^Error during logout:/,
+  /^Error fetching user email:/,
+  /^Failed to parse YAML:/,
+  /^Invalid JSON configuration:/,
+  /^Error fetching eval data:/,
+  /^Error fetching metadata keys:/,
+  /^Error parsing CSV:/,
+  /^No worst strategy found for plugin/,
+  /^Failed to delete eval:/,
+  /^EnterpriseBanner: No evalId provided/,
+  /^Error checking cloud status:/,
+  /^Error setting email:/,
+  /^Error checking email status:/,
+  /^Error clearing email:/,
+  /^Error fetching cloud config:/,
+  /^Failed to copy text:/,
+  /^Failed to check share domain:/,
+  /^Failed to generate share URL/,
+  /^Error during target purpose discovery:/,
+];
+
+const showTestConsoleOutput =
+  process.env.PROMPTFOO_TEST_SHOW_OUTPUT === 'true' ||
+  process.env.PROMPTFOO_APP_TEST_SHOW_OUTPUT === 'true';
+
 // These environment variables are inherited from the parent process (main promptfoo server)
 // We set VITE_ prefixed variables here so Vite can expose them to the client code
-if (process.env.NODE_ENV === 'development') {
-  process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
-    process.env.PROMPTFOO_REMOTE_API_BASE_URL || `http://localhost:${API_PORT}`;
-} else {
-  process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
-    process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
-}
+const remoteApiBaseUrl =
+  process.env.PROMPTFOO_REMOTE_API_BASE_URL ||
+  (process.env.NODE_ENV === 'development' ? `http://localhost:${API_PORT}` : '');
+Object.assign(process.env, { VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL: remoteApiBaseUrl });
 
 // https://vitejs.dev/config/
 // Export a plain object here to avoid CI-only type conflicts from multiple Vite installs in the monorepo.
@@ -95,6 +129,24 @@ export default {
     // Limit concurrent tests within each worker to prevent memory spikes
     maxConcurrency: 5,
 
+    // Keep ad hoc benchmarks out of ordinary unit-test runs; they print timing diagnostics by design.
+    exclude: [...configDefaults.exclude, 'src/**/__benchmarks__/**'],
+
+    // Run tests in random order to catch test isolation issues early.
+    sequence: {
+      shuffle: true,
+    },
+
+    onConsoleLog(log: string, type: 'stdout' | 'stderr') {
+      if (
+        !showTestConsoleOutput &&
+        type === 'stderr' &&
+        ignoredTestConsolePatterns.some((pattern) => pattern.test(log.trimStart()))
+      ) {
+        return false;
+      }
+    },
+
     // Fail fast on first error in CI
     bail: process.env.CI ? 1 : 0,
 
@@ -108,40 +160,12 @@ export default {
         'src/**/*.d.ts',
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
+        'src/**/*.spec.ts',
+        'src/**/*.spec.tsx',
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],
       all: true,
-    },
-
-    // Suppress known test warnings that don't indicate real problems
-    onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
-      if (type === 'stderr') {
-        const suppressPatterns = [
-          // React act() warnings from library-level async updates
-          /An update to \w+ inside a test was not wrapped in act/,
-          /The current testing environment is not configured to support act/,
-
-          // DOM/React warnings (not fixable — library or jsdom issues)
-          /validateDOMNesting/,
-          /ReactDOM\.render is no longer supported/,
-          /unmountComponentAtNode is deprecated/,
-          /A component is changing an? (?:uncontrolled|controlled) input to be (?:controlled|uncontrolled)/,
-          /Function components cannot be given refs/,
-          /React does not recognize the `.*` prop on a DOM element/,
-          /No worst strategy found for plugin/,
-
-          // Test data issues
-          /Received NaN for the.*children/,
-          /Encountered two children with the same key/,
-        ];
-
-        if (suppressPatterns.some((pattern) => pattern.test(log))) {
-          return false;
-        }
-      }
-
-      return undefined;
     },
   },
   define: {

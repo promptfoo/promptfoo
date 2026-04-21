@@ -27,7 +27,7 @@ When you start a scan, you'll see:
   Tip: Press v to toggle debug output
 ```
 
-Press `v` to enable debug logs and see detailed API requests, provider responses, and grading results. Press `v` again to return to clean output.
+Press `v` to enable debug logs and see detailed request metadata, provider response summaries, and grading status. Sensitive payloads, credentials, and raw response bodies may be redacted or summarized. Press `v` again to return to clean output.
 
 :::tip
 This is especially helpful when a scan seems stuck or you want to understand what's happening with a specific test case.
