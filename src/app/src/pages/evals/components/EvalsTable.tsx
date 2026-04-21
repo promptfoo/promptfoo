@@ -350,6 +350,15 @@ export default function EvalsTable({
           const evalId = row.original.evalId;
           const isIncomplete =
             status !== 'complete' && expected != null && row.original.numTests < expected;
+          const isRunningIncomplete = status === 'running' && isIncomplete;
+
+          if (isRunningIncomplete) {
+            return (
+              <Badge variant="secondary" truncate>
+                Running
+              </Badge>
+            );
+          }
 
           if (isIncomplete) {
             const isResuming = resumingEvalId === evalId;
@@ -453,7 +462,6 @@ export default function EvalsTable({
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
         initialSorting={[{ id: 'createdAt', desc: true }]}
-        initialPageSize={50}
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}
         toolbarActions={deleteButton}

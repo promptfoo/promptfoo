@@ -47,10 +47,7 @@ describe('Eval canceled status', () => {
     // Read the raw DB row to verify the results column
     const db = getDb();
     const row = db
-      .all<{ results: string }>(
-        // biome-ignore lint/style/noUnusedTemplateLiteral: raw SQL template
-        `SELECT results FROM evals WHERE id = '${eval_.id}'`,
-      )
+      .all<{ results: string }>(`SELECT results FROM evals WHERE id = '${eval_.id}'`)
       .at(0);
 
     expect(row).toBeDefined();

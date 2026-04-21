@@ -7,7 +7,7 @@ pre {
 }
 
 #results-table-container {
-  overflow: scroll;
+  overflow: auto;
   margin: 0 -1rem;
   padding: 0 1rem;
 }

@@ -100,6 +100,11 @@ describe('POST /api/eval/:id/resume', () => {
     // Verify a job was created
     const jobId = response.body.data.id;
     expect(evalJobs.has(jobId)).toBe(true);
+    expect(mockDoEvaluate).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.any(Eval),
+      expect.objectContaining({ eventSource: 'web', resume: true }),
+    );
   });
 
   it('should allow resume for canceled evals', async () => {

@@ -49,10 +49,7 @@ describe('config-schema.json', () => {
 
   it('should be a valid JSON Schema', () => {
     const valid = ajv.validateSchema(schema);
-    if (!valid) {
-      console.error('Schema validation errors:', ajv.errors);
-    }
-    expect(valid).toBe(true);
+    expect(valid, `Schema validation errors: ${JSON.stringify(ajv.errors, null, 2)}`).toBe(true);
   });
 
   it('should have required top-level properties', () => {
@@ -93,11 +90,9 @@ describe('config-schema.json', () => {
         const uniqueValues = [...new Set(values)];
         const duplicates = values.filter((item, index) => values.indexOf(item) !== index);
 
-        if (duplicates.length > 0) {
-          console.error(`Duplicates found at ${path}:`, duplicates);
-        }
-
-        expect(values).toHaveLength(uniqueValues.length);
+        expect(values, `Duplicates found at ${path}: ${duplicates.join(', ')}`).toHaveLength(
+          uniqueValues.length,
+        );
       });
     });
 
@@ -249,6 +244,112 @@ describe('config-schema.json', () => {
       expect(properties).toHaveProperty('redteam');
       expect(properties).toHaveProperty('scenarios');
       expect(properties).toHaveProperty('defaultTest');
+    });
+  });
+
+  describe('transform schema', () => {
+    it('should accept string transforms in JSON/YAML config files', () => {
+      const validate = ajv.compile(schema);
+
+      const config = {
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [
+          {
+            options: {
+              transform: 'output.trim()',
+              transformVars: '{ ...vars, name: vars.name.toUpperCase() }',
+            },
+            assert: [
+              {
+                type: 'contains',
+                value: 'HELLO',
+                transform: 'output.toUpperCase()',
+                contextTransform: 'output.context',
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(validate(config)).toBe(true);
+    });
+
+    it('should reject non-string transforms in JSON/YAML config files', () => {
+      const validate = ajv.compile(schema);
+
+      const config = {
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [
+          {
+            options: {
+              transform: { unexpected: 'object' },
+            },
+          },
+        ],
+      };
+
+      expect(validate(config)).toBe(false);
+      expect(validate.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            instancePath: '/tests/0/options/transform',
+            keyword: 'type',
+          }),
+        ]),
+      );
+    });
+
+    it('should reject non-string redteam provider transforms in JSON/YAML config files', () => {
+      const validate = ajv.compile(schema);
+
+      const config = {
+        prompts: ['hello'],
+        redteam: {
+          plugins: ['default'],
+          strategies: ['default'],
+          provider: {
+            id: 'openai:chat:gpt-4o-mini',
+            transform: { unexpected: 'object' },
+          },
+        },
+      };
+
+      expect(validate(config)).toBe(false);
+      expect(validate.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            instancePath: '/redteam/provider/transform',
+            keyword: 'type',
+          }),
+        ]),
+      );
+    });
+
+    it('emits string-only types for every transform field in the JSON schema', () => {
+      // Guard against the StringOrFunctionSchema leaking into the generated
+      // config-schema.json via a `z.custom` → `{}` (any) branch. Every transform
+      // property anywhere in the schema tree must declare `type: string` so
+      // external YAML/JSON validators reject objects, numbers, and functions.
+      const schemaJson = JSON.stringify(schema);
+      const transformOccurrences = schemaJson.match(/"transform":\s*\{[^}]*\}/g) ?? [];
+      const transformVarsOccurrences = schemaJson.match(/"transformVars":\s*\{[^}]*\}/g) ?? [];
+      const contextTransformOccurrences =
+        schemaJson.match(/"contextTransform":\s*\{[^}]*\}/g) ?? [];
+      const postprocessOccurrences = schemaJson.match(/"postprocess":\s*\{[^}]*\}/g) ?? [];
+
+      const allTransformFields = [
+        ...transformOccurrences,
+        ...transformVarsOccurrences,
+        ...contextTransformOccurrences,
+        ...postprocessOccurrences,
+      ];
+
+      expect(allTransformFields.length).toBeGreaterThan(0);
+      for (const field of allTransformFields) {
+        expect(field).toContain('"type":"string"');
+      }
     });
   });
 });

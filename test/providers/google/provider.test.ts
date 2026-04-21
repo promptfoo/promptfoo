@@ -7,6 +7,7 @@ import * as util from '../../../src/providers/google/util';
 import * as fetchUtil from '../../../src/util/fetch/index';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -265,15 +266,15 @@ describe('GoogleProvider', () => {
 
     it('should throw error when API key is missing in AI Studio mode', async () => {
       // Delete all possible API key env vars
-      delete process.env.GEMINI_API_KEY;
-      delete process.env.GOOGLE_API_KEY;
-      delete process.env.PALM_API_KEY;
-      delete process.env.VERTEX_API_KEY;
+      mockProcessEnv({ GEMINI_API_KEY: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ PALM_API_KEY: undefined });
+      mockProcessEnv({ VERTEX_API_KEY: undefined });
       // Also delete project-related env vars that would trigger Vertex mode detection
-      delete process.env.GOOGLE_PROJECT_ID;
-      delete process.env.VERTEX_PROJECT_ID;
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+      mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+      mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: undefined });
 
       // Explicitly set vertexai: false to ensure AI Studio mode regardless of env vars
       const noKeyProvider = new GoogleProvider('gemini-pro', {
@@ -362,7 +363,15 @@ describe('GoogleProvider', () => {
       });
 
       it('should call API using Google client for OAuth mode', async () => {
-        await provider.callApi('test prompt');
+        const getProjectIdSpy = vi
+          .spyOn(provider as any, 'getProjectId')
+          .mockResolvedValue('my-project');
+
+        try {
+          await provider.callApi('test prompt');
+        } finally {
+          getProjectIdSpy.mockRestore();
+        }
 
         expect(vi.mocked(util.getGoogleClient)).toHaveBeenCalled();
       });

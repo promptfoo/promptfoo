@@ -17,6 +17,8 @@ keywords:
     UnsafeBench,
     VLGuard,
     audio strategy,
+    custom providers,
+    base64 media,
   ]
 ---
 
@@ -545,6 +547,37 @@ Run the audio strategy red team:
 # Generate and evaluate in one step
 npx promptfoo@latest redteam run -c promptfooconfig.yaml
 ```
+
+## Using Custom Providers
+
+Custom [Python](/docs/providers/python) and [JavaScript](/docs/providers/custom-api) providers receive media data in the variable named by `redteam.injectVar`. Read `context.vars` (`context['vars']` in Python) directly rather than parsing the rendered prompt, which may contain a long inline base64 string:
+
+```python
+def call_api(prompt, options, context):
+    media_data = context['vars'].get('media', '')
+    question = context['vars'].get('question', 'Describe this media')
+    # Build your API call with media_data and question...
+```
+
+:::warning
+
+Always set `injectVar` explicitly for multimodal prompts. It defaults to the **last** template variable, which may not be the media variable. With `{{image}} {{question}}`, the default is `question`.
+
+:::
+
+Media strategies put raw base64 in `context.vars[redteam.injectVar]`, not a ready-to-send chat message:
+
+| Strategy | Value passed to custom providers                 | Gotchas                                                                                                                                                                                                                                      |
+| -------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image`  | PNG base64 with no `data:` prefix                | Wrap as `data:image/png;base64,...` for APIs that expect data URLs. The original text is also available as `context.vars.image_text`.                                                                                                        |
+| `audio`  | MP3 base64 with no `data:` prefix                | Audio conversion uses remote generation. Forward it as your API's audio input type, usually with MIME type `audio/mpeg` or format `mp3`.                                                                                                     |
+| `video`  | MP4 base64 when local FFmpeg generation succeeds | For a real MP4 payload, install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`. If generation falls back, the value may decode to the original text instead of video bytes. |
+
+Static variables and dataset-driven media may already be `data:` URLs or use a different MIME type, so check the value before prepending a media prefix.
+
+Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+
+See the [Python provider](/docs/providers/python#handling-multimodal-content) and [JavaScript provider](/docs/providers/custom-api#handling-multimodal-content) docs for complete examples.
 
 ## See Also
 

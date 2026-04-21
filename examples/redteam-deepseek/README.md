@@ -13,7 +13,7 @@ cd redteam-deepseek
 
 This example requires the following environment variables:
 
-- `OPENROUTER_API_KEY` - Your OpenRouter API key for accessing DeepSeek models
+- `OPENROUTER_API_KEY` - Your OpenRouter API key for accessing DeepSeek R1 0528
 
 You can set this in a `.env` file or directly in your environment.
 

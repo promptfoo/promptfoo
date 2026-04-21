@@ -34,8 +34,13 @@ export default function EvalResumeBanner({ evalId, stats }: EvalResumeBannerProp
     return null;
   }
 
-  // Only show for incomplete evals: status is not 'complete' and we have an expectedTestCount
-  if (!stats || stats.status === 'complete' || stats.expectedTestCount == null) {
+  // Only show for stopped incomplete evals. Running evals are actively producing results.
+  if (
+    !stats ||
+    stats.status === 'complete' ||
+    stats.status === 'running' ||
+    stats.expectedTestCount == null
+  ) {
     return null;
   }
 
