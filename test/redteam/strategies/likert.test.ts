@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { getUserEmail } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
 import { addLikertTestCases } from '../../../src/redteam/strategies/likert';
 
 import type { TestCase } from '../../../src/types/index';
@@ -41,6 +45,10 @@ describe('likert strategy', () => {
     vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
       return 'http://test.com';
     });
+    vi.mocked(getRemoteGenerationExplicitlyDisabledError).mockImplementation(
+      (strategyName) =>
+        `${strategyName} requires remote generation, which has been explicitly disabled.`,
+    );
     vi.mocked(neverGenerateRemote).mockImplementation(function () {
       return false;
     });
@@ -107,7 +115,7 @@ describe('likert strategy', () => {
     });
 
     await expect(addLikertTestCases(testCases, 'prompt', {})).rejects.toThrow(
-      'Likert jailbreak strategy requires remote generation to be enabled',
+      'Likert jailbreak strategy requires remote generation, which has been explicitly disabled.',
     );
   });
 

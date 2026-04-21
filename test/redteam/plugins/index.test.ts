@@ -15,9 +15,14 @@ import {
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 import type { FetchWithCacheResult } from '../../../src/cache';
-import type { ApiProvider, TestCase } from '../../../src/types/index';
+import type { TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger', () => ({
@@ -73,16 +78,15 @@ function stringifyLoggerCalls(...mocks: ReturnType<typeof vi.fn>[]) {
 }
 
 describe('Plugins', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: vi.fn().mockResolvedValue({
+    mockProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Sample output',
-        error: null,
+        error: null as any,
       }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    });
 
     // Reset all mocks
     vi.clearAllMocks();
@@ -420,7 +424,10 @@ describe('Plugins', () => {
       ]);
     });
 
-    it('should preserve coding-agent collection canary-breaking strategy exclusions in metadata', async () => {
+    it.each([
+      'coding-agent:core',
+      'coding-agent:all',
+    ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
@@ -431,7 +438,7 @@ describe('Plugins', () => {
       const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const plugin = Plugins.find((p) => p.key === 'coding-agent:core');
+      const plugin = Plugins.find((p) => p.key === pluginId);
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',

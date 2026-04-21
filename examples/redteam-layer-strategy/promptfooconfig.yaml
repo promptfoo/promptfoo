@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # Example of using the layer strategy to compose multiple transformations
 # This example shows how to chain strategies.
 
 targets:
-  - openai:gpt-5-nano
+  - openai:chat:gpt-5.4-nano
 
 redteam:
   purpose: An AI assistant that helps with general questions

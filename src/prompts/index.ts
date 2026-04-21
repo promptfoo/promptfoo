@@ -2,6 +2,7 @@ import { stat } from 'fs/promises';
 
 import { globSync } from 'glob';
 import logger from '../logger';
+import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
@@ -26,7 +27,6 @@ import type {
   ProviderOptions,
   ProviderOptionsMap,
   TestSuite,
-  UnifiedConfig,
 } from '../types/index';
 
 export * from './grading';
@@ -39,7 +39,7 @@ export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
  * @returns A map of provider IDs to their respective prompts.
  */
 export function readProviderPromptMap(
-  config: Pick<Partial<UnifiedConfig>, 'providers'>,
+  config: Pick<Partial<EvaluateTestSuite>, 'providers'>,
   parsedPrompts: Prompt[],
 ): TestSuite['providerPromptMap'] {
   const ret: Record<string, string[]> = {};
@@ -48,10 +48,13 @@ export function readProviderPromptMap(
     return ret;
   }
 
-  const allPrompts = [];
-  for (const prompt of parsedPrompts) {
-    allPrompts.push(prompt.label);
-  }
+  const allPrompts = parsedPrompts.map((prompt) => prompt.label);
+  const addProviderPrompts = (id: string, label?: string, prompts = allPrompts) => {
+    ret[id] = prompts;
+    if (label) {
+      ret[label] = prompts;
+    }
+  };
 
   if (typeof config.providers === 'string') {
     return { [config.providers]: allPrompts };
@@ -61,7 +64,17 @@ export function readProviderPromptMap(
     return { 'Custom function': allPrompts };
   }
 
+  if (isApiProvider(config.providers)) {
+    addProviderPrompts(config.providers.id());
+    return ret;
+  }
+
   for (const provider of config.providers) {
+    if (isApiProvider(provider)) {
+      addProviderPrompts(provider.id(), provider.label);
+      continue;
+    }
+
     if (typeof provider === 'object') {
       // It's either a ProviderOptionsMap or a ProviderOptions
       if (provider.id) {
@@ -70,10 +83,7 @@ export function readProviderPromptMap(
           rawProvider.id,
           'You must specify an `id` on the Provider when you override options.prompts',
         );
-        ret[rawProvider.id] = rawProvider.prompts || allPrompts;
-        if (rawProvider.label) {
-          ret[rawProvider.label] = rawProvider.prompts || allPrompts;
-        }
+        addProviderPrompts(rawProvider.id, rawProvider.label, rawProvider.prompts || allPrompts);
       } else {
         const rawProvider = provider as ProviderOptionsMap;
         const originalId = Object.keys(rawProvider)[0];

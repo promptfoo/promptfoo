@@ -41,6 +41,17 @@ strategies:
 
 One plugin can be tested with multiple strategies for comprehensive coverage.
 
+## Generation and Strategy QA
+
+When changing redteam generation, trace the full path before editing: `src/redteam/commands/generate.ts`, `src/redteam/index.ts`, `src/redteam/plugins/index.ts`, plugin `generateTests`, strategies, and iterative providers such as meta, hydra, and crescendo.
+
+Evaluate generated cases for diversity, realism, coverage, and failure modes. For agent redteams, include coding-agent risks, connectors, sandboxing, traces, raw provider events, changed files, canaries, and sidecar evidence where available.
+
+## Public Documentation
+
+Redteam behavior is user-facing. When changing plugins, strategies, generated config,
+grading, or reports, update the matching pages under `site/docs/red-team/`.
+
 ## Logging
 
 See `docs/logging.md` - especially important here since test content may contain harmful/sensitive data.

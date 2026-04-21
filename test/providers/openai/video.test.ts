@@ -9,7 +9,8 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
-import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
@@ -390,8 +391,7 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should throw error if API key is not set', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiVideoProvider('sora-2');
@@ -400,15 +400,15 @@ describe('OpenAiVideoProvider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnv();
       }
     });
 
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      const originalCustomEnv = process.env.CUSTOM_VIDEO_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_VIDEO_API_KEY;
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_VIDEO_API_KEY: undefined,
+      });
 
       try {
         const provider = new OpenAiVideoProvider('sora-2', {
@@ -425,8 +425,7 @@ describe('OpenAiVideoProvider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_VIDEO_API_KEY'),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalEnv);
-        restoreEnvVar('CUSTOM_VIDEO_API_KEY', originalCustomEnv);
+        restoreEnv();
       }
     });
 
