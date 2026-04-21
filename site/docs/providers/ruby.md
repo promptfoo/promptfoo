@@ -159,12 +159,30 @@ Provides information about the current test case:
 ```ruby
 {
   'vars' => {
-    # Variables used in this test case
     'user_input' => 'Hello world',
     'system_prompt' => 'You are a helpful assistant'
-  }
+  },
+  'prompt' => {
+    'raw' => '...',
+    'label' => '...',
+  },
+  'test' => {
+    'vars' => { ... },
+    'metadata' => {
+      'pluginId' => '...',   # Redteam plugin (e.g. "promptfoo:redteam:harmful:hate")
+      'strategyId' => '...',  # Redteam strategy (e.g. "jailbreak", "prompt-injection")
+    },
+  },
 }
 ```
+
+For redteam evals, use `context['test']['metadata']['pluginId']` and `context['test']['metadata']['strategyId']` to identify which plugin and strategy generated the test case.
+
+:::note
+
+Non-serializable fields (`logger`, `getCache`, `filters`, `originalProvider`) are removed before passing context to Ruby. Additional fields like `evaluationId`, `testCaseId`, `testIdx`, `promptIdx`, and `repeatIndex` are also available.
+
+:::
 
 ### Return Format
 
@@ -210,7 +228,9 @@ The types passed into the Ruby script function and the `ProviderResponse` return
 
 # CallApiContextParams
 {
-  'vars' => Hash[String, String]
+  'vars' => Hash[String, String],
+  'prompt' => Hash (optional),       # Prompt template (raw, label, config)
+  'test' => Hash (optional),         # Full test case including metadata
 }
 
 # TokenUsage

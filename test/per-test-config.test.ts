@@ -10,10 +10,6 @@ describe('Per-test configuration merging', () => {
   const buildTestConcurrencyKey = (test: TestCase, repeatIndex = 0) =>
     buildConversationKey(mockProvider, mockPrompt, test as AtomicTestCase, repeatIndex);
 
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
   beforeEach(() => {
     vi.resetAllMocks();
 

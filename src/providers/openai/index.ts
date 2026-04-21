@@ -23,7 +23,7 @@ export class OpenAiGenericProvider implements ApiProvider {
     const { config, id, env } = options;
     this.env = env;
     this.modelName = modelName;
-    this.config = config || {};
+    this.config = config ? { ...config } : {};
     this.id = id ? () => id : this.id;
   }
 
@@ -79,6 +79,10 @@ export class OpenAiGenericProvider implements ApiProvider {
 
   requiresApiKey(): boolean {
     return this.config.apiKeyRequired ?? true;
+  }
+
+  protected getMissingApiKeyErrorMessage(): string {
+    return `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`;
   }
 
   // @ts-ignore: Params are not used in this implementation

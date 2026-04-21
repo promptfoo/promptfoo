@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
@@ -21,6 +22,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
+import { checkExfilTracking } from '../../strategies/indirectWebPwn';
 import {
   extractInputVarsFromPrompt,
   extractPromptFromTags,
@@ -29,10 +31,15 @@ import {
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
+  buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
+  formatRedteamHistoryAsTranscript,
+  getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  isConversationEndedResponse,
   isValidChatMessageArray,
+  type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
@@ -58,13 +65,12 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
-
-type StopReason = 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
 
 /**
  * Represents metadata for the Crescendo conversation process.
@@ -74,7 +80,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
   crescendoConfidence: number | null;
-  stopReason: StopReason;
+  stopReason: RoundBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -163,8 +169,13 @@ export class CrescendoProvider implements ApiProvider {
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
     // Support backwards compatibility: use maxRounds if maxTurns is not provided
-    this.maxTurns = config.maxTurns || config.maxRounds || DEFAULT_MAX_TURNS;
-    this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+    this.maxTurns = config.maxTurns ?? config.maxRounds ?? DEFAULT_MAX_TURNS;
+    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
     this.targetConversationId = crypto.randomUUID();
@@ -287,7 +298,7 @@ export class CrescendoProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let storedGraderResult: any = undefined;
 
-    let exitReason: StopReason = 'Max rounds reached';
+    let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
@@ -302,6 +313,12 @@ export class CrescendoProvider implements ApiProvider {
       inputVars?: Record<string, string>;
     }> = [];
     let lastTransformResult: TransformResult | undefined;
+
+    // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
+    let lastTransformDisplayVars: Record<string, string> | undefined;
+
+    // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
+    let lastFinalAttackPrompt: string | undefined;
 
     const tracingOptions = resolveTracingOptions({
       strategyId: 'crescendo',
@@ -412,6 +429,17 @@ export class CrescendoProvider implements ApiProvider {
         );
         lastResponse = response;
         lastTransformResult = transformResult;
+
+        // Capture display vars from transform (e.g., fetchPrompt, webPageUrl, embeddedInjection)
+        if (transformResult?.displayVars) {
+          lastTransformDisplayVars = transformResult.displayVars;
+        }
+
+        // Track the final prompt sent to target for UI display (e.g., fetchPrompt for indirect-web-pwn)
+        if (transformResult?.prompt) {
+          lastFinalAttackPrompt = transformResult.prompt;
+        }
+
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
@@ -425,6 +453,15 @@ export class CrescendoProvider implements ApiProvider {
             };
           }
           context.vars['sessionId'] = lastResponse.sessionId;
+        }
+
+        if (isConversationEndedResponse(lastResponse)) {
+          logger.info('[Crescendo] Target ended conversation', {
+            round: roundNum,
+            reason: lastResponse.conversationEndReason,
+          });
+          exitReason = 'Target ended conversation';
+          break;
         }
 
         // Check if the target is asking a blocking question that needs an answer to proceed
@@ -460,6 +497,15 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (isConversationEndedResponse(lastResponse)) {
+            logger.info('[Crescendo] Target ended conversation during unblocking', {
+              round: roundNum,
+              reason: lastResponse.conversationEndReason,
+            });
+            exitReason = 'Target ended conversation';
+            break;
+          }
+
           if (lastResponse.sessionId && this.stateful) {
             vars['sessionId'] = lastResponse.sessionId;
             if (context) {
@@ -516,30 +562,84 @@ export class CrescendoProvider implements ApiProvider {
               ? (response.traceSummary ??
                 (response.traceContext ? formatTraceSummary(response.traceContext) : undefined))
               : undefined;
+
+            // Build grading context with tracing and exfil tracking data
+            let gradingContext: RedteamGradingContext | undefined;
+
+            // First try to get exfil data from provider response metadata (Playwright provider)
+            if (lastResponse.metadata?.wasExfiltrated === undefined) {
+              // Try to fetch exfil tracking from server API via webPageUuid
+              const webPageUuid = test.metadata?.webPageUuid as string | undefined;
+              if (webPageUuid) {
+                const evalId =
+                  context?.evaluationId ?? (test.metadata?.evaluationId as string | undefined);
+                logger.debug('[Crescendo] Fetching exfil tracking from server API', {
+                  webPageUuid,
+                  evalId,
+                });
+                const exfilData = await checkExfilTracking(webPageUuid, evalId);
+                if (exfilData) {
+                  gradingContext = {
+                    ...(tracingOptions.includeInGrading
+                      ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
+                      : {}),
+                    wasExfiltrated: exfilData.wasExfiltrated,
+                    exfilCount: exfilData.exfilCount,
+                    exfilRecords: exfilData.exfilRecords,
+                  };
+                }
+              }
+            } else {
+              logger.debug('[Crescendo] Using exfil data from provider response metadata');
+              gradingContext = {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
+                  : {}),
+                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
+                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
+                exfilRecords: [],
+              };
+            }
+
+            // Fallback to just tracing context if no exfil data found
+            if (!gradingContext && tracingOptions.includeInGrading) {
+              gradingContext = {
+                traceContext: response.traceContext,
+                traceSummary: gradingTraceSummary,
+              };
+            }
+
+            // Provide prior turns separately from the latest assistant output
+            // under test. Context-aware graders can use this to reason over
+            // provenance without duplicating the current turn in `llmOutput`.
+            const conversationHistoryForGrading = redteamHistory.map((turn) => ({
+              prompt: turn.prompt,
+              output: turn.output,
+            }));
+            gradingContext = {
+              ...(gradingContext ?? {}),
+              redteamHistory: [...redteamHistory],
+              conversationHistory: conversationHistoryForGrading,
+              conversationTranscript: formatRedteamHistoryAsTranscript(
+                conversationHistoryForGrading,
+              ),
+            };
+
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,
               provider,
-              assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              getGraderAssertionValue(assertToUse),
               additionalRubric,
               undefined,
-              tracingOptions.includeInGrading
-                ? {
-                    traceContext: response.traceContext,
-                    traceSummary: gradingTraceSummary,
-                  }
-                : undefined,
+              gradingContext,
             );
 
             graderPassed = grade.pass;
             storedGraderResult = {
               ...grade,
-              assertion: grade.assertion
-                ? { ...grade.assertion, value: rubric }
-                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                  ? { ...assertToUse, value: rubric }
-                  : undefined,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             };
           }
         }
@@ -636,7 +736,8 @@ export class CrescendoProvider implements ApiProvider {
       prompt: finalPrompt,
       metadata: {
         sessionId: getSessionId(lastResponse, context),
-        redteamFinalPrompt: finalPrompt,
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
         messages: messages as Record<string, any>[],
         crescendoRoundsCompleted: roundNum,
         crescendoBacktrackCount: backtrackCount,
@@ -651,6 +752,7 @@ export class CrescendoProvider implements ApiProvider {
           traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse?.guardrails,
@@ -908,6 +1010,12 @@ export class CrescendoProvider implements ApiProvider {
         this.config.injectVar,
         this.perTurnLayers,
         Strategies,
+        {
+          evaluationId: context?.evaluationId,
+          testCaseId: context?.test?.metadata?.testCaseId as string | undefined,
+          purpose: context?.test?.metadata?.purpose as string | undefined,
+          goal: context?.test?.metadata?.goal as string | undefined,
+        },
       );
 
       // Skip turn if transform failed
