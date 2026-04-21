@@ -405,11 +405,12 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
-  // Default response for table view
-  const leanTable = trimEvalTableForApi(returnTable);
+  // Version 3 evals persist the client table for legacy manual-rating updates.
+  // Keep those tables full so a rating PATCH does not write trimmed detail back to storage.
+  const tableForResponse = eval_.version() < 4 ? returnTable : trimEvalTableForApi(returnTable);
   const leanConfig = trimEvalConfigForTableApi(eval_.config);
   const responsePayload = EvalSchemas.Table.Response.parse({
-    table: leanTable,
+    table: tableForResponse,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
     filteredMetrics,

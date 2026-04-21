@@ -1373,11 +1373,20 @@ function EvalOutputCell({
       return;
     }
 
-    void Promise.resolve(prefetchEvalResultDetail(detailEvalId, output.id)).then((detail) => {
-      if (detail && isMountedRef.current) {
-        setCellDetail((currentDetail) => currentDetail ?? detail);
-      }
-    });
+    const requestedEvalId = detailEvalId;
+    const requestedResultId = output.id;
+    void Promise.resolve(prefetchEvalResultDetail(requestedEvalId, requestedResultId)).then(
+      (detail) => {
+        if (
+          detail &&
+          isMountedRef.current &&
+          detail.evalId === requestedEvalId &&
+          detail.resultId === requestedResultId
+        ) {
+          setCellDetail((currentDetail) => currentDetail ?? detail);
+        }
+      },
+    );
   }, [cellDetail, detailAvailable, detailError, detailEvalId, detailLoading, output.id]);
 
   const handlePromptOpen = () => {

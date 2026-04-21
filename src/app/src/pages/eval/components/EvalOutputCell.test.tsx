@@ -432,6 +432,83 @@ describe('EvalOutputCell', () => {
     );
   });
 
+  it('ignores stale prefetched detail after the rendered output changes', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.showPrompts = false;
+
+    let resolvePrefetch:
+      | ((detail: Awaited<ReturnType<typeof prefetchEvalResultDetail>>) => void)
+      | undefined;
+    vi.mocked(prefetchEvalResultDetail).mockReturnValue(
+      new Promise((resolve) => {
+        resolvePrefetch = resolve;
+      }),
+    );
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'new-id',
+      prompt: 'Fresh prompt from detail',
+      text: 'Fresh output from detail',
+    });
+
+    const { rerender } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          id: 'old-id',
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    await user.hover(screen.getByRole('button', { name: /view output and test details/i }));
+
+    rerender(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          id: 'new-id',
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    await act(async () => {
+      resolvePrefetch?.({
+        evalId: 'eval-1',
+        resultId: 'old-id',
+        prompt: 'Stale prefetched prompt',
+        text: 'Stale prefetched output',
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'new-id',
+        expect.any(AbortSignal),
+      );
+    });
+    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
+      'data-prompt',
+      'Fresh prompt from detail',
+    );
+  });
+
   it('uses lazy-loaded detail in the prompt dialog', async () => {
     const user = userEvent.setup();
     vi.mocked(fetchEvalResultDetail).mockResolvedValue({

@@ -182,6 +182,26 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     });
   });
 
+  it('keeps legacy eval table payloads full so manual rating updates do not persist trimmed detail', async () => {
+    const eval_ = (await Eval.findById('large-eval')) as unknown as Eval;
+    vi.mocked(Eval.findById).mockResolvedValueOnce({
+      ...eval_,
+      version: () => 3,
+    } as unknown as Eval);
+
+    const response = await request(app).get('/api/eval/large-eval/table');
+
+    expect(response.status).toBe(200);
+    const legacyCell = response.body.table.body[0].outputs[0];
+    expect(legacyCell.prompt).toBe(oversized);
+    expect(legacyCell.response.output).toBe(oversized);
+    expect(legacyCell.response.prompt).toBe(oversized);
+    expect(legacyCell.response.images[0].data).toBe(oversized);
+    expect(legacyCell.metadata.inputVars.image).toBe(oversized);
+    expect(legacyCell.detail).toBeUndefined();
+    expect(response.body.table.body[0].test.vars.image).toBe(oversized);
+  });
+
   it('strips oversized table strings and preserves table shape when JSON serialization overflows', async () => {
     mockNextPayloadStringifyRangeError(
       (value) => value !== null && typeof value === 'object' && 'table' in value,
