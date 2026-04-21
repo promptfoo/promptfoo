@@ -15,10 +15,13 @@ import type { DataTableToolbarProps } from './types';
 export function DataTableToolbar<TData>({
   table,
   columnFilters,
+  columnVisibility,
+  setColumnVisibility,
   globalFilter,
   setGlobalFilter,
   showColumnToggle = true,
   showFilter = true,
+  showGlobalFilter = true,
   showExport = true,
   onExportCSV,
   onExportJSON,
@@ -27,7 +30,13 @@ export function DataTableToolbar<TData>({
   return (
     <div className="flex items-center justify-between gap-2 p-2 border-b border-border">
       <div className="flex items-center gap-2">
-        {showColumnToggle && <DataTableColumnToggle table={table} />}
+        {showColumnToggle && (
+          <DataTableColumnToggle
+            table={table}
+            columnVisibility={columnVisibility}
+            setColumnVisibility={setColumnVisibility}
+          />
+        )}
 
         {showFilter && <DataTableFilter table={table} columnFilters={columnFilters} />}
 
@@ -51,15 +60,17 @@ export function DataTableToolbar<TData>({
         {toolbarActions}
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
-        <Input
-          placeholder="Search..."
-          value={globalFilter ?? ''}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-          className="pl-8 rounded-lg bg-white dark:bg-gray-900"
-        />
-      </div>
+      {showGlobalFilter && (
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-500 dark:text-gray-400" />
+          <Input
+            placeholder="Search..."
+            value={globalFilter ?? ''}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="pl-8 rounded-lg bg-white dark:bg-gray-900"
+          />
+        </div>
+      )}
     </div>
   );
 }
