@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider setup local JavaScript wrapper smoke
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: file://provider.mjs
+    label: provider-setup-local-wrapper
+    config:
+      defaultUserId: qa-config
+      defaultInvoiceId: inv-config
+
+tests:
+  - description: local wrapper reaches static app code
+    vars:
+      user_id: qa-static
+      invoice_id: inv-123
+      message: Say exactly PONG.
+    assert:
+      - type: contains
+        value: PONG
+      - type: contains
+        value: inv-123
+  - description: local wrapper uses provider config defaults
+    vars:
+      message: Say exactly PONG.
+    assert:
+      - type: contains
+        value: PONG local wrapper for qa-config/inv-config

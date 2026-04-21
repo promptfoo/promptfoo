@@ -10,8 +10,8 @@ vi.mock('../../src/providers/defaults', () => ({
   getDefaultProviders: vi.fn(),
 }));
 
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual('../../src/matchers');
+vi.mock('../../src/matchers/providers', async () => {
+  const actual = await vi.importActual('../../src/matchers/providers');
   return {
     ...actual,
     getAndCheckProvider: vi.fn().mockImplementation(async (_type, provider, defaultProvider) => {

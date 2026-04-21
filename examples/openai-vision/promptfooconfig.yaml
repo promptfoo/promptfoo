@@ -4,7 +4,7 @@ description: OpenAI vision model image analysis and evaluation
 prompts:
   - file://prompt.json
 providers:
-  - openai:chat:gpt-5
+  - openai:chat:gpt-5.4
 
 tests:
   - vars:

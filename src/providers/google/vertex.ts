@@ -14,6 +14,7 @@ import { isValidJson } from '../../util/json';
 import {
   calculateAnthropicCost,
   getTokenUsage,
+  isClaudeOpus47Model,
   outputFromMessage,
   parseMessages,
 } from '../anthropic/util';
@@ -28,6 +29,7 @@ import {
   loadCredentials,
   mergeParts,
   normalizeSafetySettings,
+  parseConfigSystemInstruction,
   resolveProjectId,
 } from './util';
 
@@ -167,16 +169,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Determine the system based on model name
-    let system = 'vertex';
-    if (this.modelName.includes('claude')) {
-      system = 'vertex:anthropic';
-    } else if (this.modelName.includes('gemini')) {
-      system = 'vertex:gemini';
-    } else if (this.modelName.includes('llama')) {
-      system = 'vertex:llama';
-    } else {
-      system = 'vertex:palm2';
-    }
+    const system = this.modelName.includes('claude')
+      ? 'vertex:anthropic'
+      : this.modelName.includes('gemini')
+        ? 'vertex:gemini'
+        : this.modelName.includes('llama')
+          ? 'vertex:llama'
+          : 'vertex:palm2';
 
     // Set up tracing context
     const spanContext: GenAISpanContext = {
@@ -223,7 +222,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return this.callPalm2Api(prompt);
   }
 
-  async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Support YAML chat prompts (legacy format used by parseChatPrompt)
     let normalizedPrompt = prompt;
     if (prompt.trim().startsWith('- role:')) {
@@ -237,6 +236,24 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     const { system, extractedMessages, thinking } = parseMessages(normalizedPrompt);
+
+    // Merge config.systemInstruction (if set) with the system instruction extracted from the prompt.
+    let mergedSystem = system;
+    const parsedConfigInstruction = parseConfigSystemInstruction(
+      this.config.systemInstruction,
+      context?.vars,
+    );
+    if (parsedConfigInstruction) {
+      const configSystemBlocks: Array<{ type: 'text'; text: string }> = [];
+      for (const part of parsedConfigInstruction.parts) {
+        if (part.text) {
+          configSystemBlocks.push({ type: 'text', text: part.text });
+        }
+      }
+      if (configSystemBlocks.length > 0) {
+        mergedSystem = [...configSystemBlocks, ...(mergedSystem || [])];
+      }
+    }
 
     const thinkingConfig: ClaudeThinkingConfig | undefined =
       this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
@@ -255,15 +272,23 @@ export class VertexChatProvider extends GoogleGenericProvider {
       maxTokens = thinkingConfig.budget_tokens + 1024;
     }
 
+    // Claude Opus 4.7 deprecates `temperature` at the model level — the
+    // underlying Anthropic API returns 400 for any request that includes it.
+    // Vertex forwards the request body verbatim to rawPredict, so suppress
+    // the field here too.
+    const resolvedTemperature = isClaudeOpus47Model(this.modelName)
+      ? undefined
+      : this.config.temperature;
+
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
       max_tokens: maxTokens,
-      temperature: this.config.temperature,
+      temperature: resolvedTemperature,
       top_p: this.config.top_p || this.config.topP,
       top_k: this.config.top_k || this.config.topK,
-      ...(system ? { system } : {}),
+      ...(mergedSystem ? { system: mergedSystem } : {}),
       ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
       messages: extractedMessages as ClaudeRequest['messages'],
     };
@@ -685,9 +710,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         };
         // Include thinking tokens in output cost - Google bills them as output tokens
         const completionForCost =
-          completionTokenCount != null
-            ? completionTokenCount + (thoughtsTokenCount ?? 0)
-            : undefined;
+          completionTokenCount == null
+            ? undefined
+            : completionTokenCount + (thoughtsTokenCount ?? 0);
         const cost = calculateGoogleCost(
           this.modelName,
           config,

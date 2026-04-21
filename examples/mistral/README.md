@@ -92,6 +92,7 @@ This example includes multiple configuration files for different use cases:
 ### Advanced Features
 
 - **`promptfooconfig.tool-use.yaml`** - Function calling and tool integration
+- **`promptfooconfig.tool-routing.yaml`** - End-to-end QA for tool-only, mixed content+tool_calls, file-based tools, and plain chat output
 - **`promptfooconfig.json-mode.yaml`** - Structured JSON output generation
 - **`promptfooconfig.yaml`** - Main example with evaluation using Mistral models
 

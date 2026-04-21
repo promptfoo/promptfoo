@@ -107,7 +107,7 @@ export default new Agent({
   - Use check_inventory to see what items, equipment, and gold players have
   - Use check_character_stats to view player abilities, HP, AC, and level
   - Use describe_scene to paint vivid, atmospheric pictures of locations`,
-  model: 'gpt-4o-mini',
+  model: 'gpt-5-mini',
   tools: gameTools,
 });
 ```
