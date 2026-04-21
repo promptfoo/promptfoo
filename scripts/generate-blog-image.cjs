@@ -36,12 +36,12 @@ Usage: node generate-blog-image.js [options]
 Options:
   -f, --filename <name>    Output filename (default: blog-image.png)
   -p, --prompt <text>      Image generation prompt
-  -s, --size <size>        Image size: 1024x1024, 1792x1024, 1024x1792 (default: 1024x1024)
+  -s, --size <size>        Image size: 1024x1024, 1536x1024, 1024x1536, auto (default: 1024x1024)
   -o, --output-dir <dir>   Output subdirectory under site/static/img/ (default: blog)
   -h, --help              Show this help message
 Examples:
   node generate-blog-image.js -f system-cards-hero.png -p "A red panda reading documentation"
-  node generate-blog-image.js --filename hero.jpg --prompt "Conference banner" --size 1792x1024 --output-dir events
+  node generate-blog-image.js --filename hero.jpg --prompt "Conference banner" --size 1536x1024 --output-dir events
 `);
     process.exit(0);
   }

@@ -55,6 +55,20 @@ function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unkno
   return typeof test === 'object' && test !== null && 'vars' in test;
 }
 
+function firstTargetHasInputs(providers: UnifiedConfig['providers'] | undefined): boolean {
+  if (!Array.isArray(providers)) {
+    return false;
+  }
+
+  const firstProvider = providers[0];
+  if (typeof firstProvider !== 'object' || firstProvider === null || !('inputs' in firstProvider)) {
+    return false;
+  }
+
+  const inputs = firstProvider.inputs;
+  return typeof inputs === 'object' && inputs !== null && Object.keys(inputs).length > 0;
+}
+
 /**
  * When --providers is used alongside a config file that has providers defined,
  * maps each CLI provider token to a matching config provider (preserving its config
@@ -339,8 +353,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
         ret.tests.some(
           (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
+    const usesMultiInputTargets = firstTargetHasInputs(ret.providers);
 
-    if (!hasAnyPrompt) {
+    if (!hasAnyPrompt && !usesMultiInputTargets) {
       logger.warn(
         `Warning: Expected top-level "prompts" property in config or a test variable named "prompt"`,
       );
@@ -438,6 +453,16 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       'Warning: Multiple configurations and extensions detected. Currently, all extensions are run across all configs and do not respect their original promptfooconfig. Please file an issue on our GitHub repository if you need support for this use case.',
     );
   }
+
+  const resultsTable = configs.reduce<UnifiedConfig['resultsTable']>((prev, curr) => {
+    if (!curr.resultsTable) {
+      return prev;
+    }
+    return {
+      ...(prev ?? {}),
+      ...curr.resultsTable,
+    };
+  }, undefined);
 
   let redteam: UnifiedConfig['redteam'] | undefined;
   for (const config of configs) {
@@ -571,6 +596,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
       return prev;
     }, undefined),
+    ...(resultsTable ? { resultsTable } : {}),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
     env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
@@ -694,6 +720,9 @@ export async function resolveConfigs(
       ? await readTest(processedDefaultTest, basePath, true)
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
+    ...(fileConfig.resultsTable || defaultConfig.resultsTable
+      ? { resultsTable: fileConfig.resultsTable || defaultConfig.resultsTable }
+      : {}),
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: [
       ...(cmdObj.extension || []),
@@ -876,10 +905,12 @@ export async function resolveConfigs(
     scenarios: config.scenarios as Scenario[],
     defaultTest,
     derivedMetrics: config.derivedMetrics,
+    ...(config.resultsTable ? { resultsTable: config.resultsTable } : {}),
     nunjucksFilters: await readFilters(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
       basePath,
     ),
+    redteam: config.redteam,
     extensions: config.extensions,
     tracing: config.tracing,
   };

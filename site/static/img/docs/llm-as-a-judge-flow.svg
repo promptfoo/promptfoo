@@ -1,0 +1,174 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1120 560"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">LLM as a judge evaluation flow</title>
+  <desc id="desc">
+    A promptfoo test case sends a prompt to the system under test. The candidate output and trusted
+    rubric are passed to a separate judge model, which returns pass, score, and reason.
+  </desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-18%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0f172a" flood-opacity="0.12" />
+    </filter>
+    <marker id="arrow-neutral" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2 L10 6 L2 10 Z" fill="#64748b" />
+    </marker>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2 L10 6 L2 10 Z" fill="#2563eb" />
+    </marker>
+    <style>
+      text {
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      .title {
+        font-size: 18px;
+        font-weight: 800;
+        fill: #0f172a;
+      }
+      .cardTitle {
+        font-size: 16px;
+        font-weight: 800;
+      }
+      .small {
+        font-size: 13px;
+        fill: #475569;
+      }
+      .micro {
+        font-size: 12px;
+        fill: #64748b;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+    </style>
+  </defs>
+
+  <rect width="1120" height="560" rx="24" fill="#f8fafc" />
+  <text x="56" y="62" class="title">LLM-as-a-judge flow</text>
+  <text x="56" y="88" class="small">
+    Keep the candidate output separate from the trusted rubric, then grade with an independent
+    model.
+  </text>
+
+  <rect x="42" y="130" width="272" height="322" rx="18" fill="#eff6ff" stroke="#bfdbfe" />
+  <text x="70" y="166" class="small" font-weight="700" fill="#1d4ed8">Application under test</text>
+
+  <g filter="url(#shadow)">
+    <rect x="78" y="196" width="200" height="80" rx="14" fill="#ffffff" stroke="#cbd5e1" />
+  </g>
+  <text x="178" y="228" text-anchor="middle" class="cardTitle">Test case</text>
+  <text x="178" y="252" text-anchor="middle" class="micro">prompt + vars</text>
+
+  <path
+    d="M178 276 L178 316"
+    stroke="#64748b"
+    stroke-width="2.5"
+    marker-end="url(#arrow-neutral)"
+  />
+
+  <g filter="url(#shadow)">
+    <rect x="78" y="326" width="200" height="82" rx="14" fill="#ffffff" stroke="#cbd5e1" />
+  </g>
+  <text x="178" y="358" text-anchor="middle" class="cardTitle">System under test</text>
+  <text x="178" y="382" text-anchor="middle" class="micro">prompt, agent, or RAG app</text>
+
+  <path
+    d="M314 367 C360 367 374 250 422 250"
+    stroke="#64748b"
+    stroke-width="2.5"
+    fill="none"
+    marker-end="url(#arrow-neutral)"
+  />
+
+  <rect x="410" y="130" width="288" height="322" rx="18" fill="#fefce8" stroke="#fde68a" />
+  <text x="438" y="166" class="small" font-weight="700" fill="#a16207">Evaluation inputs</text>
+
+  <g filter="url(#shadow)">
+    <rect
+      x="448"
+      y="198"
+      width="214"
+      height="92"
+      rx="14"
+      fill="#fffbeb"
+      stroke="#f59e0b"
+      stroke-width="2"
+    />
+  </g>
+  <text x="555" y="230" text-anchor="middle" class="cardTitle" fill="#7c2d12">
+    Candidate output
+  </text>
+  <text x="555" y="254" text-anchor="middle" class="micro" fill="#92400e">model response</text>
+  <text x="555" y="274" text-anchor="middle" class="micro" fill="#b45309">
+    treat as untrusted data
+  </text>
+
+  <g filter="url(#shadow)">
+    <rect
+      x="448"
+      y="330"
+      width="214"
+      height="78"
+      rx="14"
+      fill="#ecfdf5"
+      stroke="#10b981"
+      stroke-width="2"
+    />
+  </g>
+  <text x="555" y="360" text-anchor="middle" class="cardTitle" fill="#065f46">Rubric</text>
+  <text x="555" y="384" text-anchor="middle" class="micro" fill="#047857">
+    trusted grading criteria
+  </text>
+
+  <path
+    d="M662 244 C730 244 732 224 780 224"
+    stroke="#64748b"
+    stroke-width="2.5"
+    fill="none"
+    marker-end="url(#arrow-neutral)"
+  />
+  <path
+    d="M662 370 C730 370 732 292 780 292"
+    stroke="#64748b"
+    stroke-width="2.5"
+    fill="none"
+    marker-end="url(#arrow-neutral)"
+  />
+
+  <rect x="778" y="130" width="300" height="322" rx="18" fill="#f0fdfa" stroke="#99f6e4" />
+  <text x="806" y="166" class="small" font-weight="700" fill="#0f766e">Judge layer</text>
+
+  <g filter="url(#shadow)">
+    <rect x="812" y="198" width="230" height="116" rx="16" fill="#1d4ed8" />
+  </g>
+  <text x="927" y="238" text-anchor="middle" font-size="20" font-weight="800" fill="#ffffff">
+    Judge model
+  </text>
+  <text x="927" y="264" text-anchor="middle" font-size="13" fill="#dbeafe">
+    grades output against rubric
+  </text>
+  <text x="927" y="286" text-anchor="middle" font-size="13" fill="#bfdbfe">
+    separate from the SUT
+  </text>
+
+  <path d="M927 314 L927 348" stroke="#2563eb" stroke-width="3" marker-end="url(#arrow-blue)" />
+
+  <g filter="url(#shadow)">
+    <rect x="812" y="356" width="230" height="66" rx="14" fill="#ffffff" stroke="#cbd5e1" />
+  </g>
+  <text x="838" y="384" class="mono" font-size="14" fill="#0f172a">{ pass, score, reason }</text>
+  <text x="838" y="406" class="micro">stored as assertion results</text>
+
+  <path d="M458 300 L458 318" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 5" />
+  <text x="470" y="314" class="micro" fill="#92400e">output cannot rewrite rubric</text>
+</svg>

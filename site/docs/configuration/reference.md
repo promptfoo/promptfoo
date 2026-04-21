@@ -40,6 +40,7 @@ Here is the main structure of the promptfoo configuration file:
 | evaluateOptions.maxEvalTimeMs   | number                                                                                           | No       | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                                               |
 | extensions                      | string[]                                                                                         | No       | List of [extension files](#extension-hooks) to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
 | env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                                       |
+| resultsTable                    | object                                                                                           | No       | Default variable-column visibility for the web viewer. Use `defaultVisibleVars` as an allowlist or `defaultHiddenVars` as a denylist.                                                                                           |
 | commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                        | No       | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
 
 ### Test Case
@@ -62,6 +63,7 @@ A test case represents a single example input that is fed into all prompts and p
 | options.prefix                | string                                                          | No       | Text to prepend to the prompt                                                                                                                                                                                                          |
 | options.suffix                | string                                                          | No       | Text to append to the prompt                                                                                                                                                                                                           |
 | options.provider              | string                                                          | No       | The API provider to use for [model-graded](/docs/configuration/expected-outputs/model-graded) assertion grading                                                                                                                        |
+| options.disableDefaultAsserts | boolean                                                         | No       | If true, this test case does not inherit assertions from `defaultTest.assert`; other `defaultTest` properties still apply                                                                                                              |
 | options.runSerially           | boolean                                                         | No       | If true, run this test case without concurrency regardless of global settings                                                                                                                                                          |
 | options.storeOutputAs         | string                                                          | No       | The output of this test will be stored as a variable, which can be used in subsequent tests. See [multi-turn conversations](/docs/configuration/chat#using-storeoutputas).                                                             |
 | options.rubricPrompt          | string \| string[]                                              | No       | Custom prompt for [model-graded](/docs/configuration/expected-outputs/model-graded) assertions                                                                                                                                         |
@@ -296,7 +298,7 @@ export async function extensionHook(hookName, context) {
 }
 ```
 
-See the working [stateful-session-management example](https://github.com/promptfoo/promptfoo/tree/main/examples/stateful-session-management) for a complete implementation.
+See the working [stateful-session-management example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-stateful-session-management) for a complete implementation.
 
 #### Test-Time Session Definition
 
@@ -487,7 +489,9 @@ module.exports = extensionHook;
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
-The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
+The `beforeAll`, `beforeEach`, and `afterEach` hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
+
+All merges are **shallow**: returned properties replace existing values at the top level. Nested objects (e.g., `metadata: { nested: { a: 1 } }`) are replaced entirely, not deep-merged.
 
 #### beforeAll
 
@@ -507,6 +511,20 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 | Property       | Type                     | Description                    |
 | -------------- | ------------------------ | ------------------------------ |
 | `context.test` | [`TestCase`](#test-case) | The test case to be evaluated. |
+
+#### afterEach
+
+| Property                           | Type                     | Description                                             |
+| ---------------------------------- | ------------------------ | ------------------------------------------------------- |
+| `context.result.namedScores`       | `Record<string, number>` | Custom numeric metrics (e.g., `num_turns`, `cost_usd`). |
+| `context.result.metadata`          | `Record<string, any>`    | Structured data (e.g., tool call details, URLs).        |
+| `context.result.response.metadata` | `Record<string, any>`    | Response-level metadata (e.g., session viewer URLs).    |
+
+Fields like `success`, `score`, and `response.output` are **not** overridable from `afterEach`.
+
+#### afterAll
+
+The `afterAll` hook is intended for side effects (sending to monitoring, cleanup, etc.) and its return value is not persisted. Use it for read-only operations on the completed evaluation.
 
 ## Provider-related types
 
@@ -618,6 +636,11 @@ type ProviderFunction = (
 
 ProviderOptions is an object that includes the `id` of the provider and an optional `config` object that can be used to pass provider-specific configurations.
 
+For providers with built-in cost estimation, `config` can also include pricing overrides such
+as `cost`, `inputCost`, and `outputCost`. When supported, `inputCost` and `outputCost` take
+precedence over the legacy shared `cost` value. OpenAI audio-capable models also support
+`audioCost`, `audioInputCost`, and `audioOutputCost`.
+
 ```typescript
 interface ProviderOptions {
   id?: ProviderId;
@@ -717,6 +740,13 @@ interface TestSuiteConfig {
 
   // Whether to write latest results to promptfoo storage. This enables you to use the web viewer.
   writeLatestResults?: boolean;
+
+  // Default variable-column visibility in the web viewer.
+  // If both fields are set, defaultVisibleVars takes precedence.
+  resultsTable?: {
+    defaultVisibleVars?: string[];
+    defaultHiddenVars?: string[];
+  };
 }
 ```
 
@@ -889,7 +919,10 @@ interface GradingResult {
   pass: boolean;                        # did test pass?
   score: number;                        # score between 0 and 1
   reason: string;                       # plaintext reason for outcome
+  namedScores?: Record<string, number>; # labeled metrics attached to this result
+  namedScoreWeights?: Record<string, number>; # weighted denominator for namedScores
   tokensUsed?: TokenUsage;              # tokens consumed by the test
+  metadata?: Record<string, any>;       # additional matcher/provider metadata
   componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
   assertion: Assertion | null;          # source of assertion
   latencyMs?: number;                   # latency of LLM call
@@ -920,6 +953,7 @@ interface CompletedPrompt {
     tokenUsage: TokenUsage;
     namedScores: Record<string, number>;
     namedScoresCount: Record<string, number>;
+    namedScoreWeights?: Record<string, number>;
     redteam?: {
       pluginPassCount: Record<string, number>;
       pluginFailCount: Record<string, number>;

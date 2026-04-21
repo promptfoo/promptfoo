@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
@@ -100,8 +102,34 @@ export function handleApiError(err: any, data?: any): ProviderModerationResponse
   return { error: err.message || 'Unknown error', flags: [] };
 }
 
-export function getModerationCacheKey(modelName: string, _config: any, content: string): string {
-  return `azure-moderation:${modelName}:${JSON.stringify(content)}`;
+export function getModerationCacheKey(
+  modelName: string,
+  config: AzureModerationConfig,
+  content: string,
+): string {
+  const cacheConfig = {
+    endpoint: config.endpoint,
+    apiVersion: config.apiVersion,
+    headersHash:
+      config.headers && Object.keys(config.headers).length > 0
+        ? crypto
+            .createHash('sha256')
+            .update(
+              JSON.stringify(
+                Object.keys(config.headers)
+                  .sort()
+                  .map((k) => [k, config.headers![k]]),
+              ),
+            )
+            .digest('hex')
+            .slice(0, 16)
+        : undefined,
+    blocklistNames: config.blocklistNames || [],
+    haltOnBlocklistHit: config.haltOnBlocklistHit ?? false,
+    passthrough: config.passthrough || {},
+  };
+
+  return `azure-moderation:${modelName}:${JSON.stringify(cacheConfig)}:${JSON.stringify(content)}`;
 }
 
 export class AzureModerationProvider extends AzureGenericProvider implements ApiModerationProvider {
@@ -136,6 +164,12 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
 
     if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown Azure moderation model: ${modelName}`);
+    }
+
+    if (config?.blocklistNames != null && !Array.isArray(config.blocklistNames)) {
+      logger.warn(
+        `Azure moderation config blocklistNames should be an array, got ${typeof config.blocklistNames}`,
+      );
     }
   }
 
@@ -190,7 +224,11 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     let cacheKey = '';
 
     if (useCache) {
-      cacheKey = getModerationCacheKey(this.modelName, this.configWithHeaders, assistantResponse);
+      cacheKey = getModerationCacheKey(
+        this.modelName,
+        { ...this.configWithHeaders, endpoint: this.endpoint, apiVersion: this.apiVersion },
+        assistantResponse,
+      );
       const cache = await getCache();
       const cachedResponse = await cache.get(cacheKey);
 

@@ -1,5 +1,10 @@
 import { OpenAiResponsesProvider } from '../openai/responses';
-import { buildOpenClawProviderOptions, DEFAULT_GATEWAY_HOST, DEFAULT_GATEWAY_PORT } from './shared';
+import {
+  buildOpenClawModelName,
+  buildOpenClawProviderOptions,
+  DEFAULT_GATEWAY_HOST,
+  DEFAULT_GATEWAY_PORT,
+} from './shared';
 
 import type {
   CallApiContextParams,
@@ -24,7 +29,7 @@ export class OpenClawResponsesProvider extends OpenAiResponsesProvider {
   private agentId: string;
 
   constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    super(`openclaw:${agentId}`, buildOpenClawProviderOptions(agentId, providerOptions));
+    super(buildOpenClawModelName(agentId), buildOpenClawProviderOptions(agentId, providerOptions));
     this.agentId = agentId;
   }
 

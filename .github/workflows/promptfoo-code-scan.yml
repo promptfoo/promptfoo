@@ -9,10 +9,15 @@ on:
         description: 'PR number to scan'
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   security-scan:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       contents: read
       pull-requests: write
@@ -20,12 +25,25 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
 
+      - name: Use Node
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version-file: '.nvmrc'
+
       - name: Run Promptfoo Code Scan
-        uses: promptfoo/code-scan-action@v0
+        uses: promptfoo/code-scan-action@c4839dcb8623ca031ee6d271c7850dc71d994dd3 # v0
+        env:
+          # Keep the global CLI install on the first promptfoo release that retries
+          # transient repository MCP timeouts, while avoiding future dependency drift.
+          NPM_CONFIG_BEFORE: '2026-04-11T00:40:00.000Z'
+          # Avoid combining the workflow's before pin with this repo's project .npmrc
+          # min-release-age setting without changing nested npx package layout.
+          NPM_CONFIG_USERCONFIG: '/dev/null'
         with:
           min-severity: medium
+          config-path: .github/promptfoo-code-scan.yaml
           enable-fork-prs: true
