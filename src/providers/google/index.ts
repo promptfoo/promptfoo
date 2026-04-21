@@ -5,7 +5,7 @@
  */
 
 // Legacy providers (maintained for backwards compatibility)
-export { AIStudioChatProvider } from './ai.studio';
+export { AIStudioChatProvider, AIStudioEmbeddingProvider } from './ai.studio';
 export { GoogleAuthManager } from './auth';
 // Base classes and utilities
 export { GoogleGenericProvider } from './base';
