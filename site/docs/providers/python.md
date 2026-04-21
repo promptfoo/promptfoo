@@ -737,6 +737,118 @@ def call_api(prompt, options, context):
             time.sleep(2 ** attempt)  # Exponential backoff
 ```
 
+### Handling Multimodal Content
+
+Custom providers handle multimodal content the same way whether the media comes from a standard eval or a red team strategy: read the media variable from `context['vars']` and translate it into the target API's expected payload shape.
+
+For standard evals, provide the media value through `tests[].vars`, `defaultTest.vars`, a dataset column, or a dynamic variable:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: file://multimodal_provider.py
+
+prompts:
+  - '{{image}} {{question}}'
+
+tests:
+  - vars:
+      image: 'data:image/png;base64,iVBORw0KGgo...'
+      question: Describe this image.
+```
+
+In this case, `context['vars']['image']` contains the configured value. It may be raw base64, a `data:` URL, an external URL, or another representation your provider knows how to forward.
+
+For red team runs, [image](/docs/red-team/strategies/image), [audio](/docs/red-team/strategies/audio), and [video](/docs/red-team/strategies/video) strategies generate media and store it in the template variable named by `redteam.injectVar`. The rendered `prompt` also contains the media value, but `context['vars']` is safer because it preserves variable boundaries and avoids parsing a very long prompt.
+
+| Red team strategy | `context['vars'][inject_var]`                            | Extra context                                                                  | Forwarding notes                                                                                                                                                                                                                   |
+| ----------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image`           | Raw PNG base64, no `data:` prefix                        | `context['vars']['image_text']`, `context['test']['metadata']['originalText']` | Wrap as `data:image/png;base64,...` for APIs that expect data URLs.                                                                                                                                                                |
+| `audio`           | Raw MP3 base64 from remote generation, no `data:` prefix | `context['test']['metadata']['originalText']`                                  | Requires remote generation. Forward with MIME type `audio/mpeg` or your provider's equivalent audio format.                                                                                                                        |
+| `video`           | Raw MP4 base64 when local FFmpeg generation succeeds     | `context['vars']['video_text']`, `context['test']['metadata']['originalText']` | Install FFmpeg and set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` or `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true` for real MP4 bytes. If generation falls back, the value may decode to the original text instead of an MP4. |
+
+Audio and video have opposite generation requirements today: audio requires remote generation, while real MP4 video requires the local FFmpeg path. Run separate scans if you need to verify both remote audio and local MP4 handling.
+
+```python title="multimodal_provider.py"
+import os
+import requests
+
+def call_api(prompt, options, context):
+    api_key = os.environ.get('OPENAI_API_KEY')
+    if not api_key:
+        return {'error': 'OPENAI_API_KEY is required'}
+
+    image_base64 = context['vars'].get('image', '')
+    question = context['vars'].get('question', 'Describe this image')
+
+    # Red team image runs provide raw PNG base64. Eval vars may already provide a URL.
+    image_url = (
+        image_base64
+        if image_base64.startswith(('data:', 'http://', 'https://'))
+        else f'data:image/png;base64,{image_base64}'
+    )
+
+    response = requests.post(
+        'https://api.openai.com/v1/chat/completions',
+        headers={'Authorization': f'Bearer {api_key}'},
+        json={
+            'model': 'gpt-5',
+            'messages': [{
+                'role': 'user',
+                'content': [
+                    {'type': 'image_url', 'image_url': {'url': image_url}},
+                    {'type': 'text', 'text': question},
+                ],
+            }],
+        },
+    )
+
+    if not response.ok:
+        return {'error': f'OpenAI API error {response.status_code}: {response.text}'}
+
+    result = response.json()
+    output = result.get('choices', [{}])[0].get('message', {}).get('content')
+    if output:
+        return {'output': output}
+    return {'error': f'OpenAI API returned no output: {result}'}
+```
+
+For red team runs, set `redteam.injectVar` to the same template variable:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+providers:
+  - id: file://multimodal_provider.py
+
+prompts:
+  - '{{image}} {{question}}'
+
+defaultTest:
+  vars:
+    question: Describe this image.
+
+redteam:
+  purpose: A vision assistant that answers questions about images.
+  injectVar: image
+  plugins:
+    - harmful:hate
+  strategies:
+    - image
+    - id: basic
+      config:
+        enabled: false
+```
+
+:::note
+
+`injectVar` defaults to the **last** template variable in your prompt. With `{{image}} {{question}}`, it defaults to `question` — not `image`. Always set `injectVar` explicitly when using media strategies.
+
+:::
+
+Static variables and dataset-driven media may already provide a `data:` URL or a different MIME type, so check the value before prepending `data:image/png;base64,`. Avoid logging full media strings; screenshots, audio, and video can be large or sensitive. For debugging, log length, detected MIME type, a hash, or the first few bytes after decoding instead of the full base64 payload.
+
+See the [multimodal red team guide](/docs/guides/multimodal-red-team) and [JavaScript provider multimodal docs](/docs/providers/custom-api#handling-multimodal-content) for more examples.
+
 ## Troubleshooting
 
 ### Common Issues and Solutions

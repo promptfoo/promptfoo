@@ -1,5 +1,5 @@
+import { mockIndexedDB } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getThumbnail } from './useThumbnailCache';
 
 // Mock IndexedDB
 const mockObjectStore = {
@@ -23,24 +23,54 @@ const mockDB = {
   createObjectStore: vi.fn(() => mockObjectStore),
 };
 
-const mockOpenDBRequest = {
-  result: mockDB,
-  error: null,
-  onsuccess: null as ((event: Event) => void) | null,
-  onerror: null as ((event: Event) => void) | null,
-  onupgradeneeded: null as ((event: IDBVersionChangeEvent) => void) | null,
+type MockIDBRequest<T> = {
+  error: DOMException | null;
+  onerror: ((event: Event) => void) | null;
+  onsuccess: ((event: Event) => void) | null;
+  result: T;
 };
+
+type MockIDBOpenRequest = MockIDBRequest<typeof mockDB> & {
+  onupgradeneeded: ((event: IDBVersionChangeEvent) => void) | null;
+};
+
+let mockOpenDBRequest: MockIDBOpenRequest;
+
+function createOpenDBRequest(): MockIDBOpenRequest {
+  return {
+    result: mockDB,
+    error: null,
+    onsuccess: null,
+    onerror: null,
+    onupgradeneeded: null,
+  };
+}
+
+function createRequest<T>(result: T): MockIDBRequest<T> {
+  return {
+    result,
+    error: null,
+    onsuccess: null,
+    onerror: null,
+  };
+}
+
+async function loadThumbnailCache() {
+  vi.resetModules();
+  return import('./useThumbnailCache');
+}
 
 describe('getThumbnail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock indexedDB.open
-    global.indexedDB = {
+    mockOpenDBRequest = createOpenDBRequest();
+    mockIndexedDB({
       open: vi.fn(() => mockOpenDBRequest as unknown as IDBOpenDBRequest),
-    } as unknown as IDBFactory;
+    } as unknown as IDBFactory);
   });
 
   it('should return cached thumbnail if not expired', async () => {
+    const { getThumbnail } = await loadThumbnailCache();
     const mockThumbnail = 'data:image/jpeg;base64,xyz';
     const mockEntry = {
       hash: 'test-hash',
@@ -49,11 +79,7 @@ describe('getThumbnail', () => {
     };
 
     // Setup mock request
-    const mockRequest = {
-      result: mockEntry,
-      onsuccess: null as ((event: Event) => void) | null,
-      onerror: null as ((event: Event) => void) | null,
-    };
+    const mockRequest = createRequest(mockEntry);
     mockObjectStore.get.mockReturnValue(mockRequest);
 
     // Trigger DB open success
@@ -79,6 +105,7 @@ describe('getThumbnail', () => {
   });
 
   it('should return null if thumbnail is expired', async () => {
+    const { getThumbnail } = await loadThumbnailCache();
     const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
     const mockEntry = {
       hash: 'expired-hash',
@@ -86,11 +113,7 @@ describe('getThumbnail', () => {
       createdAt: Date.now() - MAX_AGE_MS - 1000, // Expired by 1 second
     };
 
-    const mockRequest = {
-      result: mockEntry,
-      onsuccess: null as ((event: Event) => void) | null,
-      onerror: null as ((event: Event) => void) | null,
-    };
+    const mockRequest = createRequest(mockEntry);
     mockObjectStore.get.mockReturnValue(mockRequest);
 
     setTimeout(() => {
@@ -113,11 +136,8 @@ describe('getThumbnail', () => {
   });
 
   it('should return null if thumbnail not found', async () => {
-    const mockRequest = {
-      result: undefined,
-      onsuccess: null as ((event: Event) => void) | null,
-      onerror: null as ((event: Event) => void) | null,
-    };
+    const { getThumbnail } = await loadThumbnailCache();
+    const mockRequest = createRequest(undefined);
     mockObjectStore.get.mockReturnValue(mockRequest);
 
     setTimeout(() => {
@@ -140,11 +160,8 @@ describe('getThumbnail', () => {
   });
 
   it('should return null on database error', async () => {
-    const mockRequest = {
-      result: undefined,
-      onsuccess: null as ((event: Event) => void) | null,
-      onerror: null as ((event: Event) => void) | null,
-    };
+    const { getThumbnail } = await loadThumbnailCache();
+    const mockRequest = createRequest(undefined);
     mockObjectStore.get.mockReturnValue(mockRequest);
 
     setTimeout(() => {

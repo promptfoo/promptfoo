@@ -379,7 +379,7 @@ function GradingPromptSection({ gradingResults }: { gradingResults?: GradingResu
       <h4 className="mb-2 text-sm font-medium">Grading Prompts</h4>
       <div className="space-y-2">
         {promptsWithData.map((result, i) => (
-          <Collapsible key={i} open={openItems[i]} onOpenChange={() => toggleItem(i)}>
+          <Collapsible key={i} open={Boolean(openItems[i])} onOpenChange={() => toggleItem(i)}>
             <div className="rounded-lg border border-border">
               <CollapsibleTrigger asChild>
                 <button className="flex w-full items-center justify-between px-4 py-3 text-sm hover:bg-muted/50 transition-colors">

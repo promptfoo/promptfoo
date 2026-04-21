@@ -1,17 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { handleWordCount } from '../../src/assertions/wordCount';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type {
-  ApiProvider,
-  AssertionParams,
-  AssertionValue,
-  AtomicTestCase,
-} from '../../src/types/index';
+import type { AssertionParams, AssertionValue, AtomicTestCase } from '../../src/types/index';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const defaultParams = {
   baseType: 'word-count' as const,

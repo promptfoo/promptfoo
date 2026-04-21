@@ -9,7 +9,7 @@ import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { checkProviderApiKeys } from '../../src/util/provider';
-import { createDeferred } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -71,9 +71,9 @@ const createMockResponse = (
 
 function restoreEnvVar(name: 'OPENAI_API_KEY' | 'CODEX_API_KEY', value: string | undefined) {
   if (value === undefined) {
-    delete process.env[name];
+    mockProcessEnv({ [name]: undefined });
   } else {
-    process.env[name] = value;
+    mockProcessEnv({ [name]: value });
   }
 }
 
@@ -251,11 +251,74 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         expect(mockStartThread).toHaveBeenCalledWith({
-          workingDirectory: undefined,
+          workingDirectory: process.cwd(),
           skipGitRepoCheck: false,
         });
 
         expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
+      it('should pass structured text and local image prompt inputs to the SDK', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Image-aware response'));
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const prompt = JSON.stringify([
+          { type: 'text', text: 'Describe this screenshot' },
+          { type: 'local_image', path: '/tmp/screenshot.png' },
+        ]);
+
+        const result = await provider.callApi(prompt);
+
+        expect(result.output).toBe('Image-aware response');
+        expect(mockRun).toHaveBeenCalledWith(
+          [
+            { type: 'text', text: 'Describe this screenshot' },
+            { type: 'local_image', path: '/tmp/screenshot.png' },
+          ],
+          {},
+        );
+      });
+
+      it('should preserve ordinary JSON prompts that do not match the Codex input schema', async () => {
+        mockRun.mockResolvedValue(createMockResponse('JSON response'));
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const prompt = JSON.stringify([{ role: 'user', content: 'Keep this as text JSON' }]);
+
+        const result = await provider.callApi(prompt);
+
+        expect(result.output).toBe('JSON response');
+        expect(mockRun).toHaveBeenCalledWith(prompt, {});
+      });
+
+      it('should preserve JSON text arrays with extra object fields as plain text prompts', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Text JSON response'));
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const prompt = JSON.stringify([{ type: 'text', text: 'hello', id: 123 }]);
+
+        const result = await provider.callApi(prompt);
+
+        expect(result.output).toBe('Text JSON response');
+        expect(mockRun).toHaveBeenCalledWith(prompt, {});
+      });
+
+      it('should preserve JSON local_image arrays with extra object fields as plain text prompts', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Image JSON response'));
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const prompt = JSON.stringify([
+          { type: 'local_image', path: '/tmp/screenshot.png', mimeType: 'image/png' },
+        ]);
+
+        const result = await provider.callApi(prompt);
+
+        expect(result.output).toBe('Image JSON response');
+        expect(mockRun).toHaveBeenCalledWith(prompt, {});
       });
 
       it('should handle SDK exceptions', async () => {
@@ -299,8 +362,8 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should allow SDK-managed auth when API key is missing', async () => {
-        delete process.env.OPENAI_API_KEY;
-        delete process.env.CODEX_API_KEY;
+        mockProcessEnv({ OPENAI_API_KEY: undefined });
+        mockProcessEnv({ CODEX_API_KEY: undefined });
         mockRun.mockResolvedValue(createMockResponse('Login-backed response'));
 
         const provider = new OpenAICodexSDKProvider();
@@ -316,8 +379,8 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it('should skip missing API key preflight for SDK-managed auth', () => {
-        delete process.env.OPENAI_API_KEY;
-        delete process.env.CODEX_API_KEY;
+        mockProcessEnv({ OPENAI_API_KEY: undefined });
+        mockProcessEnv({ CODEX_API_KEY: undefined });
 
         const provider = new OpenAICodexSDKProvider();
         const result = checkProviderApiKeys([provider]);
@@ -627,8 +690,8 @@ describe('OpenAICodexSDKProvider', () => {
       it('should infer skillCalls from USERPROFILE .codex skill directories on Windows', async () => {
         const originalHome = process.env.HOME;
         const originalUserProfile = process.env.USERPROFILE;
-        delete process.env.HOME;
-        process.env.USERPROFILE = 'C:\\Users\\promptfoo';
+        mockProcessEnv({ HOME: undefined });
+        mockProcessEnv({ USERPROFILE: 'C:\\Users\\promptfoo' });
 
         mockRun.mockResolvedValue(
           createMockResponse('USERPROFILE-SKILL', undefined, [
@@ -660,15 +723,15 @@ describe('OpenAICodexSDKProvider', () => {
           });
         } finally {
           if (originalHome === undefined) {
-            delete process.env.HOME;
+            mockProcessEnv({ HOME: undefined });
           } else {
-            process.env.HOME = originalHome;
+            mockProcessEnv({ HOME: originalHome });
           }
 
           if (originalUserProfile === undefined) {
-            delete process.env.USERPROFILE;
+            mockProcessEnv({ USERPROFILE: undefined });
           } else {
-            process.env.USERPROFILE = originalUserProfile;
+            mockProcessEnv({ USERPROFILE: originalUserProfile });
           }
         }
       });
@@ -815,6 +878,24 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toMatch(/is not inside a Git repository/);
+      });
+
+      it('should validate process.cwd() when working_dir is omitted', async () => {
+        existsSyncSpy.mockReturnValue(false);
+        const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue('/path/to/non-git-cwd');
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toMatch(
+          /Working directory \/path\/to\/non-git-cwd is not inside a Git repository/,
+        );
+        expect(mockStartThread).not.toHaveBeenCalled();
+
+        cwdSpy.mockRestore();
       });
 
       it('should accept a repository subdirectory when a parent directory contains .git', async () => {
@@ -1171,7 +1252,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         expect(mockResumeThread).toHaveBeenCalledWith('existing-thread-123', {
           skipGitRepoCheck: false,
-          workingDirectory: undefined,
+          workingDirectory: process.cwd(),
         });
         expect(mockStartThread).not.toHaveBeenCalled();
       });
@@ -1573,6 +1654,46 @@ describe('OpenAICodexSDKProvider', () => {
         });
       });
 
+      it('should render runtime vars in provider config for per-row workspaces and env canaries', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            cli_env: {
+              PFQA_SECRET_ENV_READ: '{{secretEnvValue}}',
+            },
+            working_dir: '/tmp/{{workspaceName}}',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const context: CallApiContextParams = {
+          prompt: {
+            raw: 'Test prompt',
+            label: 'test',
+            config: {},
+          },
+          vars: {
+            secretEnvValue: 'PFQA_SECRET_UNIT_RENDERED',
+            workspaceName: 'codex-row-1',
+          },
+        };
+
+        await provider.callApi('Test prompt', context);
+
+        expect(mockStartThread).toHaveBeenCalledWith({
+          workingDirectory: '/tmp/codex-row-1',
+          skipGitRepoCheck: false,
+        });
+        expect(MockCodex).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              PFQA_SECRET_ENV_READ: 'PFQA_SECRET_UNIT_RENDERED',
+            }),
+          }),
+        );
+      });
+
       it('should return a provider error for malformed prompt-level config instead of throwing', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
         const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -1678,7 +1799,7 @@ describe('OpenAICodexSDKProvider', () => {
     describe('environment variables', () => {
       it('should use a minimal shell env by default instead of inheriting all process variables', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
-        process.env.PROMPTFOO_TEST_EXISTING = 'present';
+        mockProcessEnv({ PROMPTFOO_TEST_EXISTING: 'present' });
 
         try {
           const provider = new OpenAICodexSDKProvider({
@@ -1705,7 +1826,7 @@ describe('OpenAICodexSDKProvider', () => {
             }),
           );
         } finally {
-          delete process.env.PROMPTFOO_TEST_EXISTING;
+          mockProcessEnv({ PROMPTFOO_TEST_EXISTING: undefined });
         }
       });
 
@@ -1769,7 +1890,7 @@ describe('OpenAICodexSDKProvider', () => {
 
       it('should use custom cli_env', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
-        process.env.PROMPTFOO_TEST_EXISTING = 'present';
+        mockProcessEnv({ PROMPTFOO_TEST_EXISTING: 'present' });
 
         try {
           const provider = new OpenAICodexSDKProvider({
@@ -1804,7 +1925,7 @@ describe('OpenAICodexSDKProvider', () => {
             }),
           );
         } finally {
-          delete process.env.PROMPTFOO_TEST_EXISTING;
+          mockProcessEnv({ PROMPTFOO_TEST_EXISTING: undefined });
         }
       });
 
@@ -1843,7 +1964,7 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         expect(mockStartThread).toHaveBeenCalledWith({
-          workingDirectory: undefined,
+          workingDirectory: process.cwd(),
           skipGitRepoCheck: false,
           model: 'gpt-5.2',
         });
@@ -1859,7 +1980,7 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         expect(mockStartThread).toHaveBeenCalledWith({
-          workingDirectory: undefined,
+          workingDirectory: process.cwd(),
           skipGitRepoCheck: false,
         });
       });
@@ -1867,14 +1988,14 @@ describe('OpenAICodexSDKProvider', () => {
 
     describe('API key priority', () => {
       beforeEach(() => {
-        delete process.env.OPENAI_API_KEY;
-        delete process.env.CODEX_API_KEY;
+        mockProcessEnv({ OPENAI_API_KEY: undefined });
+        mockProcessEnv({ CODEX_API_KEY: undefined });
       });
 
       it('should prioritize config apiKey over env vars', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        process.env.OPENAI_API_KEY = 'env-key';
+        mockProcessEnv({ OPENAI_API_KEY: 'env-key' });
         const provider = new OpenAICodexSDKProvider({
           config: { apiKey: 'config-key' },
         });
@@ -1895,7 +2016,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should use prompt config apiKey over provider and process env vars', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        process.env.OPENAI_API_KEY = 'process-env-key';
+        mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
         const provider = new OpenAICodexSDKProvider({
           env: { OPENAI_API_KEY: 'provider-env-key' },
         });
@@ -1984,7 +2105,7 @@ describe('OpenAICodexSDKProvider', () => {
       it('should merge cli_env with inherited process env when inherit_process_env is enabled', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
-        process.env.PROMPTFOO_TEST_EXISTING = 'present';
+        mockProcessEnv({ PROMPTFOO_TEST_EXISTING: 'present' });
         try {
           const provider = new OpenAICodexSDKProvider({
             config: {
@@ -2006,7 +2127,104 @@ describe('OpenAICodexSDKProvider', () => {
             }),
           );
         } finally {
-          delete process.env.PROMPTFOO_TEST_EXISTING;
+          mockProcessEnv({ PROMPTFOO_TEST_EXISTING: undefined });
+        }
+      });
+
+      it('should warn when CODEX_HOME from process.env is omitted from the default minimal CLI env', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const originalCodexHome = process.env.CODEX_HOME;
+        mockProcessEnv({ CODEX_HOME: '/tmp/process-codex-home' });
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await provider.callApi('Test prompt');
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            '[CodexSDK] Optional Codex CLI process env vars are not inherited by default. ' +
+              'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
+            {
+              envKeys: expect.arrayContaining(['CODEX_HOME']),
+            },
+          );
+        } finally {
+          if (originalCodexHome === undefined) {
+            mockProcessEnv({ CODEX_HOME: undefined });
+          } else {
+            mockProcessEnv({ CODEX_HOME: originalCodexHome });
+          }
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should not warn about omitted SSH agent vars when network and web search are disabled', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const originalSshAuthSock = process.env.SSH_AUTH_SOCK;
+        mockProcessEnv({ SSH_AUTH_SOCK: '/tmp/ssh-agent.sock' });
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              network_access_enabled: false,
+              web_search_mode: 'disabled',
+            },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await provider.callApi('Test prompt');
+
+          expect(warnSpy).not.toHaveBeenCalledWith(
+            '[CodexSDK] Optional Codex CLI process env vars are not inherited by default. ' +
+              'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
+            expect.objectContaining({
+              envKeys: expect.arrayContaining(['SSH_AUTH_SOCK']),
+            }),
+          );
+        } finally {
+          if (originalSshAuthSock === undefined) {
+            mockProcessEnv({ SSH_AUTH_SOCK: undefined });
+          } else {
+            mockProcessEnv({ SSH_AUTH_SOCK: originalSshAuthSock });
+          }
+          warnSpy.mockRestore();
+        }
+      });
+
+      it('should warn about omitted SSH agent vars when network access is enabled', async () => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+        const originalSshAuthSock = process.env.SSH_AUTH_SOCK;
+        mockProcessEnv({ SSH_AUTH_SOCK: '/tmp/ssh-agent.sock' });
+
+        try {
+          const provider = new OpenAICodexSDKProvider({
+            config: {
+              network_access_enabled: true,
+            },
+            env: { OPENAI_API_KEY: 'test-api-key' },
+          });
+
+          await provider.callApi('Test prompt');
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            '[CodexSDK] Optional Codex CLI process env vars are not inherited by default. ' +
+              'Move these keys into config.cli_env or set inherit_process_env: true if Codex CLI commands need them.',
+            {
+              envKeys: expect.arrayContaining(['SSH_AUTH_SOCK']),
+            },
+          );
+        } finally {
+          if (originalSshAuthSock === undefined) {
+            mockProcessEnv({ SSH_AUTH_SOCK: undefined });
+          } else {
+            mockProcessEnv({ SSH_AUTH_SOCK: originalSshAuthSock });
+          }
+          warnSpy.mockRestore();
         }
       });
     });
@@ -2314,6 +2532,26 @@ describe('OpenAICodexSDKProvider', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Codex turn failed: Model overloaded');
+      });
+
+      it('should handle fatal stream error events', async () => {
+        const mockEvents = async function* () {
+          yield {
+            type: 'error',
+            message: 'Stream transport failed',
+          };
+        };
+
+        mockRunStreamed.mockResolvedValue({ events: mockEvents() });
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { enable_streaming: true },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.error).toContain('Codex stream error: Stream transport failed');
       });
     });
   });

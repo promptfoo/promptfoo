@@ -4,6 +4,7 @@ import {
   cleanAssistantResponse,
   OpenAiChatKitProvider,
 } from '../../../src/providers/openai/chatkit';
+import { mockProcessEnv } from '../../util/utils';
 
 // Mock Playwright - we don't want to actually launch browsers in unit tests
 vi.mock('playwright', () => ({
@@ -238,10 +239,7 @@ describe('OpenAiChatKitProvider', () => {
 
   describe('callApi', () => {
     it('should return error when API key is missing', async () => {
-      // Clear environment
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
       try {
         const provider = new OpenAiChatKitProvider('wf_test', {});
 
@@ -249,10 +247,7 @@ describe('OpenAiChatKitProvider', () => {
 
         expect(result.error).toContain('API key');
       } finally {
-        // Restore environment
-        if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
-        }
+        restoreEnv();
       }
     });
   });

@@ -18,6 +18,69 @@ import type { ModelAuditScanResults } from '../../types/modelAudit';
 
 export const modelAuditRouter = Router();
 
+const LIST_SCANNERS_ARGS = parseModelAuditArgs([], {
+  listScanners: true,
+  format: 'json',
+}).args;
+
+function getModelAuditDelegationEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    PROMPTFOO_DELEGATED: 'true',
+  };
+}
+
+interface SpawnCaptureOptions {
+  /** Abort signal to terminate the child process (e.g. on client disconnect). */
+  signal?: AbortSignal;
+}
+
+function spawnModelAuditCapture(
+  args: string[],
+  options: SpawnCaptureOptions = {},
+): Promise<{
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('modelaudit', args, {
+      env: getModelAuditDelegationEnv(),
+    });
+    let stdout = '';
+    let stderr = '';
+
+    const onAbort = () => {
+      if (!child.killed) {
+        child.kill('SIGTERM');
+      }
+    };
+    if (options.signal?.aborted) {
+      onAbort();
+    } else {
+      options.signal?.addEventListener('abort', onAbort, { once: true });
+    }
+    const cleanupAbort = () => options.signal?.removeEventListener('abort', onAbort);
+
+    child.stdout?.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    child.stderr?.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    child.on('error', (error) => {
+      cleanupAbort();
+      reject(error);
+    });
+    child.on('close', (code) => {
+      cleanupAbort();
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
 // Check if modelaudit is installed
 modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): Promise<void> => {
   try {
@@ -33,6 +96,45 @@ modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): P
         cwd: process.cwd(),
       }),
     );
+  }
+});
+
+modelAuditRouter.get('/scanners', async (req: Request, res: Response): Promise<void> => {
+  const abortController = new AbortController();
+  const onClientClose = () => abortController.abort();
+  req.on('close', onClientClose);
+
+  try {
+    const { installed } = await checkModelAuditInstalled();
+    if (!installed) {
+      res.status(400).json({
+        error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
+      });
+      return;
+    }
+
+    const { code, stdout, stderr } = await spawnModelAuditCapture(LIST_SCANNERS_ARGS, {
+      signal: abortController.signal,
+    });
+
+    if (abortController.signal.aborted) {
+      return;
+    }
+
+    if (code !== null && code !== 0) {
+      sendError(res, 500, 'Failed to list ModelAudit scanners', { code, stderr });
+      return;
+    }
+
+    const parsedOutput = JSON.parse(stdout);
+    res.json(ModelAuditSchemas.ListScanners.Response.parse(parsedOutput));
+  } catch (error) {
+    if (abortController.signal.aborted) {
+      return;
+    }
+    sendError(res, 500, 'Failed to list ModelAudit scanners', error);
+  } finally {
+    req.removeListener('close', onClientClose);
   }
 });
 
@@ -156,13 +258,14 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       event: 'model_scan',
       pathCount: paths.length,
       hasBlacklist: (options.blacklist?.length ?? 0) > 0,
+      hasScannerSelection: Boolean(options.scanners?.length || options.excludeScanner?.length),
       timeout: options.timeout ?? 0,
       verbose: options.verbose ?? false,
       persist,
     });
 
     // Run the scan
-    const modelAudit = spawn('modelaudit', args);
+    const modelAudit = spawn('modelaudit', args, { env: getModelAuditDelegationEnv() });
     let stdout = '';
     let stderr = '';
     let responded = false; // Prevent double-response
@@ -392,9 +495,20 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 options: {
                   blacklist: options.blacklist,
                   timeout: options.timeout,
+                  maxSize: options.maxSize,
                   maxFileSize: options.maxFileSize,
                   maxTotalSize: options.maxTotalSize,
                   verbose: options.verbose,
+                  format: options.format,
+                  strict: options.strict,
+                  dryRun: options.dryRun,
+                  cache: options.cache,
+                  quiet: options.quiet,
+                  progress: options.progress,
+                  sbom: options.sbom,
+                  output: options.output,
+                  scanners: options.scanners,
+                  excludeScanner: options.excludeScanner,
                 },
               },
             });

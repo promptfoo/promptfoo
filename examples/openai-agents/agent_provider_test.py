@@ -14,12 +14,18 @@ MODULE_PATH = EXAMPLE_DIR / "agent_provider.py"
 def load_agent_provider():
     agents_module = types.ModuleType("agents")
     items_module = types.ModuleType("agents.items")
+    run_module = types.ModuleType("agents.run")
+    sandbox_module = types.ModuleType("agents.sandbox")
+    sandbox_entries_module = types.ModuleType("agents.sandbox.entries")
+    sandbox_sandboxes_module = types.ModuleType("agents.sandbox.sandboxes")
+    sandbox_unix_local_module = types.ModuleType("agents.sandbox.sandboxes.unix_local")
     tracing_module = types.ModuleType("promptfoo_tracing")
 
     class Agent:
-        def __init__(self, *_, name=None, handoffs=None, **__):
+        def __init__(self, *_, name=None, handoffs=None, **kwargs):
             self.name = name or "Agent"
             self.handoffs = list(handoffs or [])
+            self.kwargs = kwargs
 
     class ItemHelpers:
         @staticmethod
@@ -43,6 +49,32 @@ def load_agent_provider():
         def __init__(self, *args, **kwargs):
             self.args = args
             self.kwargs = kwargs
+
+    class RunConfig:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class SandboxRunConfig:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+    class Manifest:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.entries = kwargs.get("entries", {})
+
+    class SandboxAgent(Agent):
+        def __init__(self, *args, default_manifest=None, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.default_manifest = default_manifest
+
+    class File:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            self.content = kwargs.get("content")
+
+    class UnixLocalSandboxClient:
+        pass
 
     def function_tool(*decorator_args, **decorator_kwargs):
         if (
@@ -84,6 +116,15 @@ def load_agent_provider():
     agents_module.handoff = handoff
     agents_module.trace = trace
 
+    run_module.RunConfig = RunConfig
+
+    sandbox_module.Manifest = Manifest
+    sandbox_module.SandboxAgent = SandboxAgent
+    sandbox_module.SandboxRunConfig = SandboxRunConfig
+
+    sandbox_entries_module.File = File
+    sandbox_unix_local_module.UnixLocalSandboxClient = UnixLocalSandboxClient
+
     items_module.HandoffOutputItem = HandoffOutputItem
     items_module.MessageOutputItem = MessageOutputItem
     items_module.ToolCallOutputItem = ToolCallOutputItem
@@ -92,6 +133,11 @@ def load_agent_provider():
 
     sys.modules["agents"] = agents_module
     sys.modules["agents.items"] = items_module
+    sys.modules["agents.run"] = run_module
+    sys.modules["agents.sandbox"] = sandbox_module
+    sys.modules["agents.sandbox.entries"] = sandbox_entries_module
+    sys.modules["agents.sandbox.sandboxes"] = sandbox_sandboxes_module
+    sys.modules["agents.sandbox.sandboxes.unix_local"] = sandbox_unix_local_module
     sys.modules["promptfoo_tracing"] = tracing_module
 
     spec = importlib.util.spec_from_file_location(
@@ -122,13 +168,276 @@ class AgentProviderTests(unittest.TestCase):
         context = AGENT_PROVIDER.AirlineContext()
         wrapper = AGENT_PROVIDER.RunContextWrapper(context)
 
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My name is Ada Lovelace and my confirmation number is ABC123.",
+            context,
+        )
         lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "abc123")
         update = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
 
+        self.assertEqual(context.user_passenger_name, "Ada Lovelace")
         self.assertEqual(lookup["seat_number"], "12A")
         self.assertIn("Seat updated to 16F", update)
         self.assertEqual(context.seat_number, "16F")
         self.assertEqual(context.verified_confirmation_number, "ABC123")
+
+    def test_update_seat_refuses_explicit_third_party_booking_change(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My friend gave me confirmation number ABC123 and asked me to move their seat to 16F.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+        self.assertEqual(
+            lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIn("third-party booking", result)
+        self.assertIsNone(context.seat_number)
+        self.assertEqual(context.third_party_confirmation_number, "ABC123")
+        self.assertIsNone(context.verified_confirmation_number)
+
+    def test_update_seat_refuses_third_party_intent_before_confirmation(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Can you move my friend's seat to 16F?",
+            context,
+        )
+        self.assertTrue(context.pending_third_party_booking_change)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Their confirmation number is ABC123.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+        self.assertEqual(
+            lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIn("third-party booking", result)
+        self.assertFalse(context.pending_third_party_booking_change)
+        self.assertEqual(context.third_party_confirmation_number, "ABC123")
+        self.assertIsNone(context.seat_number)
+        self.assertIsNone(context.verified_confirmation_number)
+
+    def test_update_seat_refuses_family_third_party_terms(self):
+        for user_step in [
+            "Can you move my daughter's seat to 16F?",
+            "Can you move my son's seat to 16F?",
+            "Can you move my child's seat to 16F?",
+        ]:
+            with self.subTest(user_step=user_step):
+                context = AGENT_PROVIDER.AirlineContext()
+                wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+                AGENT_PROVIDER._hydrate_context_from_step(user_step, context)
+                result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+                self.assertTrue(context.pending_third_party_booking_change)
+                self.assertIn("third-party booking", result)
+                self.assertIsNone(context.confirmation_number)
+                self.assertIsNone(context.seat_number)
+                self.assertIsNone(context.verified_confirmation_number)
+
+    def test_lookup_refuses_pending_third_party_intent_without_binding_tool_confirmation(
+        self,
+    ):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Can you move my friend's seat to 16F?",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ZZZ999")
+        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+        self.assertEqual(
+            lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIn("third-party booking", result)
+        self.assertTrue(context.pending_third_party_booking_change)
+        self.assertIsNone(context.confirmation_number)
+        self.assertIsNone(context.third_party_confirmation_number)
+        self.assertIsNone(context.seat_number)
+        self.assertIsNone(context.verified_confirmation_number)
+
+    def test_third_party_pending_rearms_after_prior_blocked_confirmation(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My friend gave me confirmation number ABC123 and asked me to move "
+            "their seat to 16F.",
+            context,
+        )
+        self.assertFalse(context.pending_third_party_booking_change)
+        self.assertEqual(context.third_party_confirmation_number, "ABC123")
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Can you move my coworker's seat to 18A?",
+            context,
+        )
+        self.assertTrue(context.pending_third_party_booking_change)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Their confirmation number is XYZ789.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "XYZ789")
+        result = AGENT_PROVIDER.update_seat(wrapper, "XYZ789", "18A")
+
+        self.assertEqual(
+            lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIn("third-party booking", result)
+        self.assertFalse(context.pending_third_party_booking_change)
+        self.assertEqual(context.third_party_confirmation_number, "XYZ789")
+        self.assertIsNone(context.seat_number)
+        self.assertIsNone(context.verified_confirmation_number)
+
+    def test_third_party_confirmation_correction_remains_blocked(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My friend gave me confirmation number ABC123 and asked me to move "
+            "their seat to 16F.",
+            context,
+        )
+        self.assertEqual(context.third_party_confirmation_number, "ABC123")
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Sorry, their confirmation number is XYZ789.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "XYZ789")
+        result = AGENT_PROVIDER.update_seat(wrapper, "XYZ789", "18A")
+
+        self.assertEqual(
+            lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIn("third-party booking", result)
+        self.assertEqual(context.third_party_confirmation_number, "XYZ789")
+        self.assertIsNone(context.passenger_name)
+        self.assertIsNone(context.seat_number)
+        self.assertIsNone(context.verified_confirmation_number)
+
+    def test_first_party_claim_after_third_party_refusal_resets_block(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Can you move my friend's seat to 18A?",
+            context,
+        )
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Their confirmation number is XYZ789.",
+            context,
+        )
+        blocked_lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "XYZ789")
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Actually this is my reservation. My name is Ada Lovelace and my "
+            "confirmation number is ABC123.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+        self.assertEqual(
+            blocked_lookup,
+            {
+                "error": (
+                    "Unable to look up a third-party booking. The passenger must "
+                    "contact support directly."
+                )
+            },
+        )
+        self.assertIsNone(context.third_party_confirmation_number)
+        self.assertFalse(context.pending_third_party_booking_change)
+        self.assertEqual(context.user_passenger_name, "Ada Lovelace")
+        self.assertEqual(lookup["passenger_name"], "Ada Lovelace")
+        self.assertIn("Seat updated to 16F", result)
+        self.assertEqual(context.confirmation_number, "ABC123")
+        self.assertEqual(context.seat_number, "16F")
+        self.assertEqual(context.verified_confirmation_number, "ABC123")
+
+    def test_first_party_claim_resets_pending_third_party_intent(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Can you move my friend's seat to 18A?",
+            context,
+        )
+        self.assertTrue(context.pending_third_party_booking_change)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "Actually this is my reservation. My name is Ada Lovelace and my "
+            "confirmation number is ABC123.",
+            context,
+        )
+        lookup = AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+        self.assertIsNone(context.third_party_confirmation_number)
+        self.assertFalse(context.pending_third_party_booking_change)
+        self.assertEqual(lookup["passenger_name"], "Ada Lovelace")
+        self.assertIn("Seat updated to 16F", result)
+        self.assertEqual(context.seat_number, "16F")
+        self.assertEqual(context.verified_confirmation_number, "ABC123")
+
+    def test_update_seat_refuses_mismatched_claimed_passenger(self):
+        context = AGENT_PROVIDER.AirlineContext()
+        wrapper = AGENT_PROVIDER.RunContextWrapper(context)
+
+        AGENT_PROVIDER._hydrate_context_from_step(
+            "My name is Mallory Vale and my confirmation number is ABC123.",
+            context,
+        )
+        AGENT_PROVIDER.lookup_reservation(wrapper, "ABC123")
+        result = AGENT_PROVIDER.update_seat(wrapper, "ABC123", "16F")
+
+        self.assertIn("different passenger", result)
+        self.assertEqual(context.user_passenger_name, "Mallory Vale")
+        self.assertEqual(context.seat_number, "12A")
 
     def test_repeating_same_confirmation_preserves_updated_seat(self):
         context = AGENT_PROVIDER.AirlineContext()
@@ -231,6 +540,43 @@ class AgentProviderTests(unittest.TestCase):
         )
 
         self.assertEqual(session_id, "promptfoo-openai-agents-eval-1-case-1-repeat-2")
+
+    def test_sandbox_manifest_stages_ticket_fixture(self):
+        manifest = AGENT_PROVIDER._build_sandbox_manifest()
+
+        self.assertIn("AGENTS.md", manifest.entries)
+        self.assertIn("bin/python", manifest.entries)
+        self.assertIn("repo/task.md", manifest.entries)
+        self.assertIn("repo/__init__.py", manifest.entries)
+        self.assertIn("repo/tickets/TICKET-014.md", manifest.entries)
+        self.assertIn("repo/tests/__init__.py", manifest.entries)
+        self.assertIn("repo/tests/test_discount_policy.py", manifest.entries)
+        self.assertIn(
+            b"platform-integrations",
+            manifest.entries["repo/tickets/TICKET-014.md"].content,
+        )
+        self.assertIn(
+            b"./bin/python -m unittest discover -s repo/tests",
+            manifest.entries["AGENTS.md"].content,
+        )
+        self.assertEqual(
+            manifest.kwargs["environment"]["value"]["PATH"],
+            "bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin",
+        )
+        self.assertIn(
+            b"return discount_percent >= 20",
+            manifest.entries["repo/task.md"].content,
+        )
+
+    def test_sandbox_agent_uses_staged_manifest(self):
+        agent = AGENT_PROVIDER._build_sandbox_agent("gpt-5.4-mini")
+
+        self.assertEqual(agent.name, "Sandbox Workspace Analyst")
+        self.assertIn("repo/task.md", agent.default_manifest.entries)
+        self.assertIn("repo/src/discount_policy.py", agent.default_manifest.entries)
+        self.assertEqual(
+            agent.kwargs["model_settings"].kwargs["tool_choice"], "required"
+        )
 
 
 if __name__ == "__main__":

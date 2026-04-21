@@ -76,10 +76,11 @@ describe('processExecutableFile', () => {
 
   // Unix-specific tests
   describeUnix('Unix shell script tests', () => {
+    let sharedPrompts: Awaited<ReturnType<typeof processExecutableFile>>;
     let tempDir: string;
     let scriptPath: string;
 
-    beforeAll(() => {
+    beforeAll(async () => {
       tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-executable-test-'));
       scriptPath = path.join(tempDir, 'shared-test-script.sh');
       fs.writeFileSync(
@@ -111,6 +112,7 @@ esac
 `,
       );
       fs.chmodSync(scriptPath, 0o755);
+      sharedPrompts = await processExecutableFile(scriptPath, {});
     });
 
     afterAll(() => {
@@ -118,14 +120,12 @@ esac
     });
 
     it('should process a simple shell script', async () => {
-      const prompts = await processExecutableFile(scriptPath, {});
+      expect(sharedPrompts).toHaveLength(1);
+      expect(sharedPrompts[0].label).toBe(scriptPath);
+      expect(sharedPrompts[0].raw).toContain('#!/bin/sh');
+      expect(typeof sharedPrompts[0].function).toBe('function');
 
-      expect(prompts).toHaveLength(1);
-      expect(prompts[0].label).toBe(scriptPath);
-      expect(prompts[0].raw).toContain('#!/bin/sh');
-      expect(typeof prompts[0].function).toBe('function');
-
-      const result = await prompts[0].function!({
+      const result = await sharedPrompts[0].function!({
         vars: { test: 'value' },
         provider: mockProvider,
       });
@@ -134,8 +134,7 @@ esac
     });
 
     it('should handle scripts with arguments', async () => {
-      const prompts = await processExecutableFile(scriptPath, {});
-      const result = await prompts[0].function!({
+      const result = await sharedPrompts[0].function!({
         vars: { mode: 'args', name: 'test' },
         provider: mockProvider,
       });
@@ -161,8 +160,7 @@ esac
     });
 
     it('should handle scripts that output to stderr', async () => {
-      const prompts = await processExecutableFile(scriptPath, {});
-      const result = await prompts[0].function!({
+      const result = await sharedPrompts[0].function!({
         vars: { mode: 'stderr' },
         provider: mockProvider,
       });
@@ -172,10 +170,8 @@ esac
     });
 
     it('should reject when script fails with no stdout', async () => {
-      const prompts = await processExecutableFile(scriptPath, {});
-
       await expect(
-        prompts[0].function!({
+        sharedPrompts[0].function!({
           vars: { mode: 'error' },
           provider: mockProvider,
         }),

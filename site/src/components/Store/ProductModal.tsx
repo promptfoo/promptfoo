@@ -207,18 +207,20 @@ export function ProductModal() {
       open={isOpen}
       onClose={closeProductModal}
       maxWidth={false}
-      PaperProps={{
-        sx: {
-          width: { xs: '100vw', sm: '90vw' },
-          maxWidth: { xs: '100vw', sm: '1000px' },
-          height: { xs: '100vh', sm: '85vh' },
-          maxHeight: { xs: '100vh', sm: '800px' },
-          m: 0,
-          borderRadius: { xs: 0, sm: '8px' },
-          overflow: 'hidden',
-          display: 'flex',
-          flexDirection: 'column',
-          color: 'var(--ifm-font-color-base, #1c1e21)',
+      slotProps={{
+        paper: {
+          sx: {
+            width: { xs: '100vw', sm: '90vw' },
+            maxWidth: { xs: '100vw', sm: '1000px' },
+            height: { xs: '100vh', sm: '85vh' },
+            maxHeight: { xs: '100vh', sm: '800px' },
+            m: 0,
+            borderRadius: { xs: 0, sm: '8px' },
+            overflow: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+            color: 'var(--ifm-font-color-base, #1c1e21)',
+          },
         },
       }}
     >

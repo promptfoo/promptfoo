@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.9/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -14,6 +14,7 @@
       "**/*.tsx",
       "**/*.json",
       "**/*.jsonc",
+      "**/*.grit",
       "**/*.mjs",
       "**/*.cjs",
       "!!drizzle",
@@ -166,6 +167,8 @@
         "noDuplicateObjectKeys": "error",
         "noDuplicateParameters": "error",
         "noDuplicateTestHooks": "error",
+        "noFocusedTests": "error",
+        "noSkippedTests": "error",
         "noRedundantUseStrict": "error",
         "noThenProperty": "error",
         "useErrorMessage": "warn",
@@ -183,7 +186,10 @@
       },
       "nursery": {
         "noFloatingPromises": "error",
-        "noMisusedPromises": "error"
+        "noMisusedPromises": "error",
+        "noUselessTypeConversion": "error",
+        "noIdenticalTestTitle": "error",
+        "useReduceTypeParameter": "warn"
       }
     }
   },
@@ -281,6 +287,23 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "*.js",
+        "*.jsx",
+        "*.ts",
+        "*.tsx",
+        "*.mjs",
+        "*.cjs",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mjs",
+        "**/*.cjs"
+      ],
+      "plugins": ["./tools/biome/no-direct-process-env-mutation.grit"]
     },
     {
       "includes": ["src/app/**/*"],

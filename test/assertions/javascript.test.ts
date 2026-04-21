@@ -79,8 +79,9 @@ vi.mock('../../src/cliState', () => ({
   },
   basePath: '/base/path',
 }));
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
+vi.mock('../../src/matchers/rag', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');
   return {
     ...actual,
     matchesContextRelevance: vi
@@ -323,6 +324,51 @@ describe('JavaScript file references', () => {
       prompt: 'Some prompt',
       vars: {},
       test: {},
+      provider,
+      providerResponse,
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass assertion config to JavaScript file references', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'file:///path/to/assert.js',
+      config: {
+        minLength: 5,
+      },
+    };
+
+    const mockFn = vi.fn((output: string, context: { config?: { minLength?: number } }) => {
+      return output.length >= (context.config?.minLength ?? 0);
+    });
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const output = 'Expected output';
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(mockFn).toHaveBeenCalledWith(output, {
+      prompt: 'Some prompt',
+      vars: {},
+      test: {},
+      config: {
+        minLength: 5,
+      },
       provider,
       providerResponse,
     });
