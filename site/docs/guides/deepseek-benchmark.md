@@ -1,20 +1,20 @@
 ---
 sidebar_label: DeepSeek Benchmark
-description: Compare Deepseek MoE (671B params) vs GPT-5 vs Llama 4 performance with custom benchmarks to evaluate code tasks and choose the optimal model for your needs
+description: Compare DeepSeek V3.2 vs GPT-5 vs Llama 4 Maverick performance with custom benchmarks to evaluate code tasks and choose the optimal model for your needs
 ---
 
-# Deepseek vs GPT vs O3 vs Llama: Run a Custom Benchmark
+# DeepSeek vs GPT vs O3 vs Llama: Run a Custom Benchmark
 
-Deepseek is a Mixture-of-Experts (MoE) model known for its impressive performance, especially in code tasks. Its MoE architecture has 671B total parameters, though only 37B are activated for each token. This allows for efficient inference while maintaining powerful capabilities.
+DeepSeek is a model family known for strong reasoning and coding performance.
 
-When evaluating LLMs for your application, generic benchmarks often fall short of capturing the specific requirements of your use case. This guide will walk you through creating a tailored benchmark to compare Deepseek-V3, OpenAI's gpt-5 and o3-mini, and Llama 4 Scout for your specific needs.
+When evaluating LLMs for your application, generic benchmarks often fall short of capturing the specific requirements of your use case. This guide will walk you through creating a tailored benchmark to compare DeepSeek V3.2, OpenAI's GPT-5 and o3-mini, and Llama 4 Maverick for your specific needs.
 
 In this guide, we'll create a practical comparison that results in a detailed side-by-side analysis view.
 
 ## Requirements
 
 - Node.js 20+
-- OpenRouter API access for Deepseek and Llama (set `OPENROUTER_API_KEY`)
+- OpenRouter API access for DeepSeek and Llama (set `OPENROUTER_API_KEY`)
 - OpenAI API access for GPT-5 and o3-mini (set `OPENAI_API_KEY`)
 
 ## Step 1: Project Setup
@@ -28,14 +28,14 @@ cd deepseek-benchmark
 
 ## Step 2: Model Configuration
 
-Edit your `promptfooconfig.yaml` to include the three models:
+Edit your `promptfooconfig.yaml` to include the four models:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - 'openai:gpt-5'
   - 'openai:o3-mini'
-  - 'openrouter:meta-llama/llama-4-scout-17b-16e-instruct'
-  - 'openrouter:deepseek/deepseek-chat'
+  - 'openrouter:meta-llama/llama-4-maverick'
+  - 'openrouter:deepseek/deepseek-v3.2'
 
 # Optional: Configure model parameters
 providers:
@@ -46,11 +46,11 @@ providers:
   - id: openai:o3-mini
     config:
       max_tokens: 1000
-  - id: openrouter:meta-llama/llama-4-scout-17b-16e-instruct
+  - id: openrouter:meta-llama/llama-4-maverick
     config:
       temperature: 0.7
       max_tokens: 1000
-  - id: openrouter:deepseek/deepseek-chat
+  - id: openrouter:deepseek/deepseek-v3.2
     config:
       max_tokens: 1000
 ```
@@ -134,12 +134,12 @@ npx promptfoo@latest view
 
 Here's how these models compare based on public benchmarks:
 
-| Model         | Architecture | Parameters        | Key Strengths                             |
-| ------------- | ------------ | ----------------- | ----------------------------------------- |
-| Deepseek-V3   | MoE          | 671B (37B active) | Strong performance in math and code tasks |
-| GPT-5         | Unknown      | Unknown           | Consistent performance across tasks       |
-| o3-mini       | Unknown      | Unknown           | Reasoning and code tasks                  |
-| Llama 4 Scout | MoE          | 109B (17B active) | Good balance of efficiency and capability |
+| Model            | Architecture | Parameters | Key Strengths                              |
+| ---------------- | ------------ | ---------- | ------------------------------------------ |
+| DeepSeek-V3.2    | Sparse/MoE   | Unknown    | Strong reasoning, tool use, and code tasks |
+| GPT-5            | Unknown      | Unknown    | Consistent performance across tasks        |
+| o3-mini          | Unknown      | Unknown    | Reasoning and code tasks                   |
+| Llama 4 Maverick | MoE          | Unknown    | Strong open-weight general model           |
 
 However, your custom benchmark results may differ significantly based on your specific use case.
 
@@ -147,13 +147,13 @@ However, your custom benchmark results may differ significantly based on your sp
 
 When choosing between these models, consider:
 
-1. **Task Specificity**: Deepseek excels in mathematical and coding tasks
-2. **Resource Requirements**: Deepseek is more resource-intensive than Llama 4 Scout, for example.
+1. **Task Specificity**: DeepSeek excels in mathematical and coding tasks
+2. **Resource Requirements**: DeepSeek V3.2 is more resource-intensive than smaller open models, for example.
 3. **API Availability**: Factor in API reliability and geographic availability, given that GPT is a proprietary model that requires internet access.
 4. **Cost Structure**: Model pricing will vary by providers, and providers are constantly driving down costs.
 
 ## Conclusion
 
-While public benchmarks show Deepseek performing exceptionally well in certain logical tasks, GPT-5 maintaining strong general performance, o3 with strong reasoning performance, and Llama 4 Scout offering a balanced open-source approach, your specific use case may yield different results.
+While public benchmarks show DeepSeek V3.2 performing strongly in reasoning-heavy tasks, GPT-5 maintaining strong general performance, o3 with strong reasoning performance, and Llama 4 Maverick offering a balanced open-weight option, your specific use case may yield different results.
 
 Remember that the best model for your application depends on your specific requirements, constraints, and use cases. Use this guide as a starting point to create a benchmark that truly matters for your application.

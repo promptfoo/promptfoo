@@ -24,6 +24,7 @@ import {
   SeveritySchema,
   TEEN_SAFETY_PLUGINS,
 } from '../redteam/constants';
+import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
@@ -438,6 +439,10 @@ export const RedteamConfigSchema = z
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {
         expandCollection([...GUARDRAILS_EVALUATION_PLUGINS], config, numTests, severity);
+      } else if (id === 'coding-agent:core') {
+        expandCollection([...CODING_AGENT_CORE_PLUGINS], config, numTests, severity);
+      } else if (id === 'coding-agent:all') {
+        expandCollection([...CODING_AGENT_PLUGINS], config, numTests, severity);
       }
     };
 

@@ -9,7 +9,7 @@ When evaluating the performance of LLMs, generic benchmarks will only get you so
 
 So, the sensible thing to do is run an eval on your own data.
 
-This guide will walk you through setting up a comparison between OpenAI's GPT-5.2, Anthropic's Claude Sonnet 4.6, and Google's Gemini using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
+This guide will walk you through setting up a comparison between OpenAI's GPT-5.4, Anthropic's Claude Sonnet 4.6, and Google's Gemini 3.1 Pro Preview using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
 
 <div style={{textAlign: 'center'}}><img src="/img/docs/gpt-vs-claude-vs-gemini-overview.jpg" alt="LLM model comparison" style={{maxWidth: '80%'}} /></div>
 
@@ -40,8 +40,8 @@ Specify the models you want to compare under `providers`:
 
 ```yaml
 providers:
-  - openai:gpt-5.2
-  - anthropic:claude-sonnet-4-6
+  - openai:chat:gpt-5.4
+  - anthropic:messages:claude-sonnet-4-6
   - google:gemini-3.1-pro-preview
 ```
 
@@ -49,10 +49,10 @@ You can optionally set parameters like temperature and max tokens for each model
 
 ```yaml
 providers:
-  - id: openai:gpt-5.2
+  - id: openai:chat:gpt-5.4
     config:
       max_tokens: 1024
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-4-6
     config:
       temperature: 0.3
       max_tokens: 1024
@@ -103,10 +103,10 @@ prompts:
 providers:
   - id: google:gemini-3.1-pro-preview
     prompts: gemini_prompt
-  - id: openai:gpt-5.2
+  - id: openai:chat:gpt-5.4
     prompts:
       - gpt_prompt
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-4-6
     prompts:
       - gpt_prompt
 ```
@@ -273,8 +273,8 @@ If you're working on an application that involves classifying images, you can se
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-5.2
-  - anthropic:claude-sonnet-4-6
+  - openai:chat:gpt-5.4
+  - anthropic:messages:claude-sonnet-4-6
   - google:gemini-3.1-pro-preview
 
 prompts:

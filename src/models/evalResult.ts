@@ -19,7 +19,15 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
+
+function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
+  return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
+    context: 'provider config',
+    maxDepth: Number.POSITIVE_INFINITY,
+  }) as ProviderConfig;
+}
 
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
@@ -31,7 +39,7 @@ export function sanitizeProvider(
         id: provider.id(),
         label: provider.label,
         ...(provider.config && {
-          config: JSON.parse(safeJsonStringify(provider.config) as string),
+          config: sanitizeProviderConfig(provider.config),
         }),
       };
     }
@@ -40,7 +48,7 @@ export function sanitizeProvider(
         id: provider.id,
         label: provider.label,
         ...(provider.config && {
-          config: JSON.parse(safeJsonStringify(provider.config) as string),
+          config: sanitizeProviderConfig(provider.config),
         }),
       };
     }
@@ -54,7 +62,7 @@ export function sanitizeProvider(
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
         ...(providerObj.config && {
-          config: JSON.parse(safeJsonStringify(providerObj.config) as string),
+          config: sanitizeProviderConfig(providerObj.config),
         }),
       };
     }
@@ -95,6 +103,29 @@ function sanitizeForDb<T>(obj: T): T {
   }
 }
 
+/**
+ * Sanitize a per-test-case field for persistence: strips circular refs,
+ * collapses class instances (e.g. live SDK clients that leaked in via
+ * `defaultTest.options.provider`), and redacts credential fields (`apiKey`,
+ * `token`, etc.) at any depth. Use this for any slot that can carry a provider
+ * config — notably `testCase.options.provider` and `prompt.config.provider`,
+ * where the resolved runtime provider (with its Anthropic / Bedrock SDK
+ * client) flows in from the evaluator. Without this, credentials configured on
+ * the judge provider end up in the Eval results both in the DB and in the
+ * polling response served by `/api/eval/job/:id`.
+ */
+function sanitizeForDbWithSecrets<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  return sanitizeObject(obj, {
+    context: 'evalResult field',
+    // Nested provider configs can be deeper than the default maxDepth (4);
+    // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
+    maxDepth: Number.POSITIVE_INFINITY,
+  }) as T;
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -117,7 +148,7 @@ export default class EvalResult {
       testCase,
     } = result;
 
-    // Normalize provider for storage and extract blobs from responses
+    // Normalize provider for storage and extract blobs from responses.
     const preSanitizeTestCase = {
       ...testCase,
       ...(testCase.provider && {
@@ -131,16 +162,20 @@ export default class EvalResult {
       promptIdx: result.promptIdx,
     });
 
-    // Sanitize all JSON fields to remove circular references and non-serializable values
-    // This prevents "Converting circular structure to JSON" errors from Timeout objects
-    // or other non-serializable data that may leak into results (e.g., from Python providers)
+    // Sanitize all JSON fields to remove circular references and non-serializable values.
+    // `testCase` and `prompt` can contain a resolved runtime provider under
+    // `options.provider` or `config.provider` (used for llm-rubric judging); that
+    // provider may hold a live SDK client with credentials (Anthropic apiKey, etc.)
+    // and circular references — see `sanitizeForDbWithSecrets`. Other fields go
+    // through the lighter `sanitizeForDb` which only strips circular refs /
+    // non-serializable values.
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeForDb(preSanitizeTestCase),
+      testCase: sanitizeForDbWithSecrets(preSanitizeTestCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
-      prompt: sanitizeForDb(prompt),
+      prompt: sanitizeForDbWithSecrets(prompt),
       promptId: hashPrompt(prompt),
       error: error?.toString(),
       success,
@@ -180,11 +215,13 @@ export default class EvalResult {
 
     db.transaction(() => {
       for (const result of processedResults) {
-        // Sanitize JSON fields to prevent circular reference errors
+        // See `createFromEvaluateResult` for why `testCase` and `prompt` go
+        // through the credential-redacting sanitizer while the other fields
+        // stay on the lighter `sanitizeForDb`.
         const sanitizedResult = {
           ...result,
-          testCase: sanitizeForDb(result.testCase),
-          prompt: sanitizeForDb(result.prompt),
+          testCase: sanitizeForDbWithSecrets(result.testCase),
+          prompt: sanitizeForDbWithSecrets(result.prompt),
           response: sanitizeForDb(result.response),
           gradingResult: sanitizeForDb(result.gradingResult),
           namedScores: sanitizeForDb(result.namedScores),

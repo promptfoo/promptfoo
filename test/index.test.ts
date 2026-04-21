@@ -3,11 +3,13 @@ import * as cache from '../src/cache';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
 import { evaluate } from '../src/index';
+import logger from '../src/logger';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
 import * as fileUtils from '../src/util/file';
 import { writeMultipleOutputs, writeOutput } from '../src/util/index';
+import { createMockProvider } from './factories/provider';
 
 vi.mock('../src/cache');
 vi.mock('../src/database', () => ({
@@ -48,6 +50,17 @@ vi.mock('../src/evaluator', async () => {
     }),
   };
 });
+vi.mock('../src/globalConfig/accounts', async () => {
+  const originalModule = await vi.importActual<typeof import('../src/globalConfig/accounts')>(
+    '../src/globalConfig/accounts',
+  );
+  return {
+    ...originalModule,
+    // Pass the override through so tests can verify the full propagation chain.
+    // Individual tests can override this with mockImplementationOnce.
+    getAuthor: vi.fn((override?: string | null) => override ?? null),
+  };
+});
 vi.mock('../src/migrate');
 vi.mock('../src/prompts', async () => {
   const originalModule = await vi.importActual<typeof import('../src/prompts')>('../src/prompts');
@@ -80,6 +93,7 @@ describe('index.ts exports', () => {
     'isGradingResult',
     'isProviderOptions',
     'isResultFailureReason',
+    'isTransformFunction',
     'loadApiProvider',
     'redteam',
   ];
@@ -191,10 +205,9 @@ describe('evaluate function', () => {
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
-    loadApiProviderSpy = vi.spyOn(providers, 'loadApiProvider').mockResolvedValue({
-      id: () => 'mock-provider',
-      callApi: vi.fn() as any,
-    });
+    loadApiProviderSpy = vi
+      .spyOn(providers, 'loadApiProvider')
+      .mockResolvedValue(createMockProvider({ id: 'mock-provider' }));
   });
 
   afterEach(() => {
@@ -406,7 +419,75 @@ describe('evaluate function', () => {
 
     await evaluate(testSuite);
 
-    expect(createEvalSpy).toHaveBeenCalledWith(expect.anything(), expect.anything());
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ author: null }),
+    );
+
+    createEvalSpy.mockRestore();
+  });
+
+  it('should not persist evaluate-only author in config', async () => {
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      author: 'author@example.com',
+    };
+
+    await evaluate(testSuite);
+
+    expect(createEvalSpy.mock.calls[0][0]).not.toHaveProperty('author');
+
+    createEvalSpy.mockRestore();
+  });
+
+  it('should propagate the testSuite author through getAuthor to Eval.create', async () => {
+    const { getAuthor } = await import('../src/globalConfig/accounts');
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      author: 'programmatic@example.com',
+    };
+
+    await evaluate(testSuite);
+
+    expect(vi.mocked(getAuthor)).toHaveBeenCalledWith('programmatic@example.com');
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ author: 'programmatic@example.com' }),
+    );
+
+    createEvalSpy.mockRestore();
+  });
+
+  it('should let cloud identity win over the testSuite author when cloud auth is active', async () => {
+    const { getAuthor } = await import('../src/globalConfig/accounts');
+    vi.mocked(getAuthor).mockReturnValueOnce('cloud@example.com');
+    const createEvalSpy = vi.spyOn(Eval, 'create');
+
+    const testSuite = {
+      prompts: ['test'],
+      providers: [],
+      writeLatestResults: true,
+      author: 'override@example.com',
+    };
+
+    await evaluate(testSuite);
+
+    expect(vi.mocked(getAuthor)).toHaveBeenCalledWith('override@example.com');
+    expect(createEvalSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ author: 'cloud@example.com' }),
+    );
 
     createEvalSpy.mockRestore();
   });
@@ -437,15 +518,11 @@ describe('evaluate function', () => {
 
   describe('providerMap functionality', () => {
     it('should resolve assertion provider by ID from providerMap', async () => {
-      const mockProvider1 = {
-        id: () => 'provider-1',
+      const mockProvider1 = createMockProvider({
+        id: 'provider-1',
         label: 'Provider One',
-        callApi: vi.fn(),
-      };
-      const mockProvider2 = {
-        id: () => 'provider-2',
-        callApi: vi.fn(),
-      };
+      });
+      const mockProvider2 = createMockProvider({ id: 'provider-2' });
 
       // Mock loadApiProviders to return our test providers
       loadApiProvidersSpy.mockResolvedValueOnce([mockProvider1, mockProvider2]);
@@ -487,11 +564,10 @@ describe('evaluate function', () => {
     });
 
     it('should resolve assertion provider by label from providerMap', async () => {
-      const mockProvider = {
-        id: () => 'azure:chat:gpt-4',
+      const mockProvider = createMockProvider({
+        id: 'azure:chat:gpt-4',
         label: 'GPT-4',
-        callApi: vi.fn(),
-      };
+      });
 
       // Mock loadApiProviders to return our test provider
       loadApiProvidersSpy.mockResolvedValueOnce([mockProvider]);
@@ -533,10 +609,7 @@ describe('evaluate function', () => {
     });
 
     it('should fall back to loadApiProvider when provider not found in providerMap', async () => {
-      const mockExistingProvider = {
-        id: () => 'existing-provider',
-        callApi: vi.fn(),
-      };
+      const mockExistingProvider = createMockProvider({ id: 'existing-provider' });
 
       // Mock loadApiProviders to return existing provider
       loadApiProvidersSpy.mockResolvedValueOnce([mockExistingProvider]);
@@ -578,11 +651,7 @@ describe('evaluate function', () => {
     });
 
     it('should handle providers without labels in providerMap', async () => {
-      const mockProvider = {
-        id: () => 'provider-without-label',
-        callApi: vi.fn(),
-        // No label property
-      };
+      const mockProvider = createMockProvider({ id: 'provider-without-label' });
 
       loadApiProvidersSpy.mockResolvedValueOnce([mockProvider]);
 
@@ -621,19 +690,20 @@ describe('evaluate function', () => {
       );
     });
 
-    // Test cases for GitHub issue #4111: Model-graded assertions with provider resolution
+    // Regression for GitHub issue #4111: model-graded assertions that specified
+    // `provider` as a string ID were not resolved from the main providers
+    // array/providerMap, causing those assertions to fail.
     describe('Model-graded assertions with provider resolution', () => {
       it('should resolve model-graded assertions using providers from main array', async () => {
-        const mockLiteLLMProvider = {
-          id: () => 'litellm:gemini-pro',
-          callApi: vi.fn(),
+        const mockLiteLLMProvider = createMockProvider({
+          id: 'litellm:gemini-pro',
           config: {
             apiBaseUrl: 'http://localhost:4000',
             apiKey: 'test-key',
             temperature: 0.1,
             max_tokens: 8096,
           },
-        };
+        });
 
         // Mock loadApiProviders to return the LiteLLM provider
         loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
@@ -687,15 +757,8 @@ describe('evaluate function', () => {
       });
 
       it('should resolve different providers for response and model-graded assertions', async () => {
-        const mockResponseProvider = {
-          id: () => 'litellm:gpt-4',
-          callApi: vi.fn(),
-        };
-
-        const mockGevalProvider = {
-          id: () => 'litellm:gemini-pro',
-          callApi: vi.fn(),
-        };
+        const mockResponseProvider = createMockProvider({ id: 'litellm:gpt-4' });
+        const mockGevalProvider = createMockProvider({ id: 'litellm:gemini-pro' });
 
         // Mock loadApiProviders to return both providers
         loadApiProvidersSpy.mockResolvedValueOnce([mockResponseProvider, mockGevalProvider]);
@@ -738,10 +801,7 @@ describe('evaluate function', () => {
       });
 
       it('should handle multiple model-graded assertions with same provider', async () => {
-        const mockLiteLLMProvider = {
-          id: () => 'litellm:claude-3',
-          callApi: vi.fn(),
-        };
+        const mockLiteLLMProvider = createMockProvider({ id: 'litellm:claude-3' });
 
         loadApiProvidersSpy.mockResolvedValueOnce([mockLiteLLMProvider]);
 
@@ -792,10 +852,7 @@ describe('evaluate function', () => {
       });
 
       it('should fall back to loadApiProvider for model-graded assertions when provider not in main array', async () => {
-        const mockMainProvider = {
-          id: () => 'litellm:gpt-4',
-          callApi: vi.fn(),
-        };
+        const mockMainProvider = createMockProvider({ id: 'litellm:gpt-4' });
 
         // Mock main providers array (only has gpt-4)
         loadApiProvidersSpy.mockResolvedValueOnce([mockMainProvider]);
@@ -850,10 +907,9 @@ describe('evaluate with external defaultTest', () => {
 
     // Set up spies for provider functions
     loadApiProvidersSpy = vi.spyOn(providers, 'loadApiProviders').mockResolvedValue([]);
-    loadApiProviderSpy = vi.spyOn(providers, 'loadApiProvider').mockResolvedValue({
-      id: () => 'mock-provider',
-      callApi: vi.fn() as any,
-    });
+    loadApiProviderSpy = vi
+      .spyOn(providers, 'loadApiProvider')
+      .mockResolvedValue(createMockProvider({ id: 'mock-provider' }));
 
     maybeLoadFromExternalFileSpy = vi.mocked(fileUtils.maybeLoadFromExternalFile);
   });
@@ -870,10 +926,10 @@ describe('evaluate with external defaultTest', () => {
       options: { provider: 'openai:gpt-4' },
     };
 
-    const mockApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-    };
+    const mockApiProvider = createMockProvider({
+      id: 'mock-provider',
+      response: { output: 'test output' },
+    });
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
     maybeLoadFromExternalFileSpy.mockResolvedValueOnce(externalDefaultTest);
@@ -900,10 +956,10 @@ describe('evaluate with external defaultTest', () => {
       vars: { inline: true },
     };
 
-    const mockApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-    };
+    const mockApiProvider = createMockProvider({
+      id: 'mock-provider',
+      response: { output: 'test output' },
+    });
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
 
@@ -922,10 +978,10 @@ describe('evaluate with external defaultTest', () => {
   });
 
   it('should handle missing external defaultTest file gracefully', async () => {
-    const mockApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-    };
+    const mockApiProvider = createMockProvider({
+      id: 'mock-provider',
+      response: { output: 'test output' },
+    });
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
 
@@ -944,10 +1000,10 @@ describe('evaluate with external defaultTest', () => {
   });
 
   it('should not load external file when defaultTest is not a file:// string', async () => {
-    const mockApiProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-    };
+    const mockApiProvider = createMockProvider({
+      id: 'mock-provider',
+      response: { output: 'test output' },
+    });
 
     loadApiProvidersSpy.mockResolvedValueOnce([mockApiProvider]);
 
@@ -970,26 +1026,26 @@ describe('evaluate with external defaultTest', () => {
     let resolveProviderSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-      mockApiProvider = {
-        id: () => 'mock-api-provider',
-        callApi: vi.fn().mockResolvedValue({ output: 'mock response' }),
-      };
+      mockApiProvider = createMockProvider({
+        id: 'mock-api-provider',
+        response: { output: 'mock response' },
+      });
 
-      mockCustomProvider = {
-        id: () => 'custom-validator',
-        callApi: vi.fn().mockResolvedValue({ output: 'custom validation response' }),
-      };
+      mockCustomProvider = createMockProvider({
+        id: 'custom-validator',
+        response: { output: 'custom validation response' },
+      });
 
       // Mock resolveProvider to track calls and return mock providers
       resolveProviderSpy = vi
         .spyOn(providers, 'resolveProvider')
         .mockImplementation(async (provider) => {
           if (typeof provider === 'string') {
-            return { id: () => provider, callApi: vi.fn() };
+            return createMockProvider({ id: provider });
           }
           if (typeof provider === 'object' && 'id' in provider && typeof provider.id === 'string') {
             // This is a ProviderOptions object
-            return { id: () => provider.id as string, callApi: vi.fn() };
+            return createMockProvider({ id: provider.id as string });
           }
           // This shouldn't be called for ApiProvider instances due to our fix
           return provider;
@@ -1220,6 +1276,493 @@ describe('evaluate with external defaultTest', () => {
         expect.anything(),
         expect.anything(),
       );
+    });
+  });
+
+  // Regression test for #8687: resolved providers must not mutate the input
+  // testSuite, because SDK clients can attach circular references at runtime
+  // and break JSON serialization when those mutated objects are reused.
+  describe('input testSuite mutation safety', () => {
+    let resolveProviderSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      vi.mocked(doEvaluate).mockClear();
+      resolveProviderSpy = vi
+        .spyOn(providers, 'resolveProvider')
+        .mockImplementation(async (provider) => {
+          const id =
+            typeof provider === 'string'
+              ? provider
+              : typeof provider === 'object' && provider && 'id' in provider
+                ? (provider as { id: string }).id
+                : 'resolved-provider';
+          return { id: () => id, callApi: vi.fn() as any };
+        });
+    });
+
+    afterEach(() => {
+      resolveProviderSpy.mockRestore();
+    });
+
+    it('does not mutate testSuite.defaultTest.options.provider when resolving for the runtime suite', async () => {
+      const rawProviderConfig = {
+        id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+        config: { region: 'us-east-1' },
+      };
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        defaultTest: {
+          options: {
+            provider: rawProviderConfig,
+          },
+        },
+        tests: [{ vars: { x: 'y' } }],
+      };
+      const originalDefaultTest = testSuite.defaultTest;
+      const originalOptions = testSuite.defaultTest.options;
+
+      await evaluate(testSuite);
+
+      expect(testSuite.defaultTest).toBe(originalDefaultTest);
+      expect(testSuite.defaultTest.options).toBe(originalOptions);
+      expect(testSuite.defaultTest.options.provider).toBe(rawProviderConfig);
+      expect(testSuite.defaultTest.options.provider).toEqual({
+        id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+        config: { region: 'us-east-1' },
+      });
+    });
+
+    it('does not mutate testSuite.defaultTest.provider when resolving it', async () => {
+      const rawProviderConfig = {
+        id: 'anthropic:messages:claude-3-haiku',
+        config: { apiKey: 'sk-test' },
+      };
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        defaultTest: {
+          provider: rawProviderConfig,
+        },
+        tests: [{ vars: { x: 'y' } }],
+      };
+
+      await evaluate(testSuite);
+
+      expect(testSuite.defaultTest.provider).toBe(rawProviderConfig);
+      expect(testSuite.defaultTest.provider).toEqual({
+        id: 'anthropic:messages:claude-3-haiku',
+        config: { apiKey: 'sk-test' },
+      });
+    });
+
+    it('does not mutate inline test.options.provider or assertion.provider', async () => {
+      const rawTestProviderConfig = { id: 'bedrock:test-model', config: { region: 'eu-west-1' } };
+      const rawAssertProviderConfig = {
+        id: 'anthropic:messages:claude-3-haiku',
+        config: { apiKey: 'sk-test' },
+      };
+      const inlineTest = {
+        vars: { x: 'y' },
+        options: { provider: rawTestProviderConfig },
+        assert: [
+          {
+            type: 'llm-rubric' as const,
+            value: 'checks the thing',
+            provider: rawAssertProviderConfig,
+          },
+        ],
+      };
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [inlineTest],
+      };
+
+      await evaluate(testSuite);
+
+      expect(inlineTest.options.provider).toBe(rawTestProviderConfig);
+      expect(inlineTest.assert[0].provider).toBe(rawAssertProviderConfig);
+    });
+
+    it('only clones siblings of test cases that need provider resolution; unaffected siblings keep raw config', async () => {
+      const rawProviderConfig = { id: 'bedrock:test-model', config: { region: 'eu-west-1' } };
+      const testWithProvider = {
+        vars: { x: '1' },
+        options: { provider: rawProviderConfig },
+      };
+      const testWithoutProvider = { vars: { x: '2' } };
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [testWithProvider, testWithoutProvider],
+      };
+
+      await evaluate(testSuite);
+
+      expect(testWithProvider.options.provider).toBe(rawProviderConfig);
+      expect(testSuite.tests[1]).toBe(testWithoutProvider);
+    });
+
+    it('passes the resolved provider to doEvaluate on a cloned defaultTest', async () => {
+      const rawProviderConfig = {
+        id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+        config: { region: 'us-east-1' },
+      };
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        defaultTest: {
+          options: {
+            provider: rawProviderConfig,
+          },
+        },
+        tests: [{ vars: { x: 'y' } }],
+      };
+
+      await evaluate(testSuite);
+
+      // The runtime defaultTest must be a different object than the input so the
+      // lazy SDK-client mutation downstream cannot leak back into the input that the
+      // unified config aliases.
+      const passedTestSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+      expect(passedTestSuite).toBeDefined();
+      expect(passedTestSuite!.defaultTest).not.toBe(testSuite.defaultTest);
+      expect((passedTestSuite!.defaultTest as { options: unknown }).options).not.toBe(
+        testSuite.defaultTest.options,
+      );
+      expect(
+        (
+          passedTestSuite!.defaultTest as { options: { provider: { id: () => string } } }
+        ).options.provider.id(),
+      ).toBe('bedrock:anthropic.claude-3-haiku-20240307-v1:0');
+    });
+
+    it('produces an Eval config that is JSON-serializable even when the resolved provider gains circular references', async () => {
+      // Mimic the AWS / Anthropic SDK pattern: ApiProvider instance whose first
+      // `callApi` lazily attaches a client that holds a circular reference. Without
+      // the fix, the resolved instance was stored on the input, and once the cycle
+      // appeared the unified config persisted via drizzle's text-json column threw
+      // "Converting circular structure to JSON ... AwsRestJsonProtocol.serdeContext".
+      type ResolvedProvider = {
+        id: () => string;
+        callApi: ReturnType<typeof vi.fn>;
+        sdkClient?: { self?: unknown };
+      };
+      const resolvedProvider: ResolvedProvider = {
+        id: () => 'bedrock:resolved',
+        callApi: vi.fn().mockImplementation(async function (this: ResolvedProvider) {
+          const cyclic: { self?: unknown } = {};
+          cyclic.self = cyclic;
+          this.sdkClient = cyclic;
+          return { output: 'ok' };
+        }),
+      };
+      resolveProviderSpy.mockResolvedValue(resolvedProvider);
+
+      const createEvalSpy = vi.spyOn(Eval, 'create');
+
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        defaultTest: {
+          options: {
+            provider: {
+              id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+              config: { region: 'us-east-1' },
+            },
+          },
+        },
+        tests: [{ vars: { x: 'y' } }],
+        writeLatestResults: true,
+      };
+
+      await evaluate(testSuite);
+
+      await (resolvedProvider.callApi as unknown as (...args: unknown[]) => Promise<unknown>)(
+        'anything',
+        {},
+        {},
+      );
+      expect(resolvedProvider.sdkClient).toBeDefined();
+
+      // Direct check on the actual production failure mode: the config object handed
+      // to Eval.create is what drizzle JSON-serializes via the text-json column.
+      const persistedConfig = createEvalSpy.mock.calls.at(-1)?.[0];
+      expect(persistedConfig).toBeDefined();
+      expect(() => JSON.stringify(persistedConfig)).not.toThrow();
+      // The input itself must also be safe — library callers may persist or log it.
+      expect(() => JSON.stringify(testSuite)).not.toThrow();
+
+      const passedTestSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+      expect(passedTestSuite).toBeDefined();
+      expect(
+        (passedTestSuite!.defaultTest as { options: { provider: { id: () => string } } }).options
+          .provider,
+      ).toBe(resolvedProvider);
+      expect(
+        (
+          passedTestSuite!.defaultTest as { options: { provider: { id: () => string } } }
+        ).options.provider.id(),
+      ).toBe('bedrock:resolved');
+
+      createEvalSpy.mockRestore();
+    });
+
+    it('serializes live ApiProvider references before persisting the Eval config', async () => {
+      const cyclicClient: Record<string, unknown> = {};
+      cyclicClient.self = cyclicClient;
+      const liveProvider = createMockProvider({
+        id: 'live-provider',
+        label: 'Live Provider',
+        config: { region: 'us-east-1' },
+      }) as ReturnType<typeof createMockProvider> & { sdkClient?: unknown };
+      liveProvider.sdkClient = cyclicClient;
+
+      loadApiProvidersSpy.mockResolvedValueOnce([liveProvider]);
+
+      const createEvalSpy = vi.spyOn(Eval, 'create');
+
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [liveProvider],
+        defaultTest: {
+          provider: liveProvider,
+          options: {
+            provider: liveProvider,
+          },
+        },
+        tests: [
+          {
+            options: {
+              provider: liveProvider,
+            },
+            assert: [
+              {
+                type: 'llm-rubric' as const,
+                value: 'looks good',
+                provider: liveProvider,
+              },
+            ],
+          },
+        ],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [
+              {
+                options: {
+                  provider: liveProvider,
+                },
+              },
+            ],
+          },
+        ],
+        writeLatestResults: true,
+      };
+
+      await evaluate(testSuite);
+
+      const persistedConfig = createEvalSpy.mock.calls.at(-1)?.[0] as {
+        providers?: unknown;
+        defaultTest?: {
+          provider?: unknown;
+          options?: { provider?: unknown };
+        };
+        tests?: Array<{
+          options?: { provider?: unknown };
+          assert?: Array<{ provider?: unknown }>;
+        }>;
+        scenarios?: Array<{ tests?: Array<{ options?: { provider?: unknown } }> }>;
+      };
+      const serializableProvider = {
+        id: 'live-provider',
+        label: 'Live Provider',
+        config: { region: 'us-east-1' },
+      };
+
+      expect(() => JSON.stringify(persistedConfig)).not.toThrow();
+      expect(persistedConfig.providers).toEqual([serializableProvider]);
+      expect(persistedConfig.defaultTest?.provider).toEqual(serializableProvider);
+      expect(persistedConfig.defaultTest?.options?.provider).toEqual(serializableProvider);
+      expect(persistedConfig.tests?.[0].options?.provider).toEqual(serializableProvider);
+      expect(persistedConfig.tests?.[0].assert?.[0].provider).toEqual(serializableProvider);
+      expect(persistedConfig.scenarios?.[0].tests?.[0].options?.provider).toEqual(
+        serializableProvider,
+      );
+      expect(JSON.stringify(persistedConfig)).not.toContain('sdkClient');
+
+      createEvalSpy.mockRestore();
+    });
+
+    it('replaces function-valued transforms with "[inline function]" markers in the persisted config and warns', async () => {
+      // Function transforms are first-class at runtime but not JSON-serializable.
+      // When writeLatestResults is true they must not silently vanish from the
+      // persisted config — replace with a named marker and surface a warning.
+      const providerFn = () => Promise.resolve({ output: 'raw' });
+      loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'mock-provider' })]);
+
+      function namedTransform(output: unknown) {
+        return String(output).toUpperCase();
+      }
+      const anonymousTransform = (output: unknown) => output;
+      const transformVarsFn = (vars: unknown) => vars as Record<string, unknown>;
+      const contextTransformFn = () => 'context';
+
+      const createEvalSpy = vi.spyOn(Eval, 'create');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+      const testSuite = {
+        prompts: ['p'],
+        providers: [providerFn],
+        defaultTest: {
+          options: { transform: namedTransform },
+        },
+        tests: [
+          {
+            vars: { q: 'x' },
+            options: {
+              transform: namedTransform,
+              transformVars: transformVarsFn,
+            },
+            assert: [
+              {
+                type: 'contains' as const,
+                value: 'x',
+                transform: anonymousTransform,
+                contextTransform: contextTransformFn,
+              },
+            ],
+          },
+        ],
+        scenarios: [
+          {
+            config: [{}],
+            tests: [{ options: { transform: namedTransform } }],
+          },
+        ],
+        writeLatestResults: true,
+      };
+
+      await evaluate(testSuite);
+
+      const persistedConfig = createEvalSpy.mock.calls.at(-1)?.[0] as {
+        defaultTest?: { options?: { transform?: unknown } };
+        tests?: Array<{
+          options?: { transform?: unknown; transformVars?: unknown };
+          assert?: Array<{ transform?: unknown; contextTransform?: unknown }>;
+        }>;
+        scenarios?: Array<{ tests?: Array<{ options?: { transform?: unknown } }> }>;
+      };
+
+      // Named functions get their name in the marker; anonymous ones get the
+      // container-property name via JS function-name inference (here: "transform"
+      // and "contextTransform" via property-assignment naming).
+      expect(persistedConfig.defaultTest?.options?.transform).toBe(
+        '[inline function]: namedTransform',
+      );
+      expect(persistedConfig.tests?.[0].options?.transform).toBe(
+        '[inline function]: namedTransform',
+      );
+      expect(persistedConfig.tests?.[0].options?.transformVars).toBe(
+        '[inline function]: transformVarsFn',
+      );
+      expect(typeof persistedConfig.tests?.[0].assert?.[0].transform).toBe('string');
+      expect(persistedConfig.tests?.[0].assert?.[0].transform).toMatch(/^\[inline function\]/);
+      expect(typeof persistedConfig.tests?.[0].assert?.[0].contextTransform).toBe('string');
+      expect(persistedConfig.tests?.[0].assert?.[0].contextTransform).toMatch(
+        /^\[inline function\]/,
+      );
+      expect(persistedConfig.scenarios?.[0].tests?.[0].options?.transform).toBe(
+        '[inline function]: namedTransform',
+      );
+
+      // Every transform field must survive JSON round-trip (the regression we guard).
+      const roundTripped = JSON.parse(JSON.stringify(persistedConfig)) as typeof persistedConfig;
+      expect(roundTripped.tests?.[0].options?.transform).toBe('[inline function]: namedTransform');
+      expect(roundTripped.tests?.[0].assert?.[0].transform).toMatch(/^\[inline function\]/);
+
+      // Warning surfaces the serialization substitution. Assert on content, not
+      // call count — a future refactor that splits this into multiple lines
+      // should still satisfy the guarantee.
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[inline function]'));
+
+      createEvalSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('does not warn or rewrite persisted config when no function transforms are present', async () => {
+      loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'mock-provider' })]);
+
+      const createEvalSpy = vi.spyOn(Eval, 'create');
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+      const testSuite = {
+        prompts: ['p'],
+        providers: ['mock-provider'],
+        tests: [
+          {
+            vars: { q: 'x' },
+            options: { transform: 'output.toUpperCase()' },
+          },
+        ],
+        writeLatestResults: true,
+      };
+
+      await evaluate(testSuite);
+
+      const persistedConfig = createEvalSpy.mock.calls.at(-1)?.[0] as {
+        tests?: Array<{ options?: { transform?: unknown } }>;
+      };
+      expect(persistedConfig.tests?.[0].options?.transform).toBe('output.toUpperCase()');
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('[inline function]'));
+
+      createEvalSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+
+    it('does not emit the serialization warning when writeLatestResults is false', async () => {
+      loadApiProvidersSpy.mockResolvedValueOnce([createMockProvider({ id: 'mock-provider' })]);
+
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+      function fn(output: unknown) {
+        return output;
+      }
+
+      await evaluate({
+        prompts: ['p'],
+        providers: ['mock-provider'],
+        tests: [{ vars: { q: 'x' }, options: { transform: fn } }],
+        // writeLatestResults omitted → no warning even though the function is present
+      });
+
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('[inline function]'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('passes scenario-nested test cases through unchanged (provider resolution there is the evaluator runtime path, not evaluate())', async () => {
+      // Pin current behavior: src/index.ts only resolves providers on
+      // `constructedTestSuite.tests`, NOT on `scenarios[i].tests`. If a future change
+      // adds scenario provider resolution at this layer, it must extend
+      // `cloneTestForResolve` coverage to scenarios — otherwise #8687 recurs.
+      const rawProviderConfig = {
+        id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
+        config: { region: 'us-east-1' },
+      };
+      const scenarioTest = { vars: { x: 'y' }, options: { provider: rawProviderConfig } };
+      const testSuite = {
+        prompts: ['test prompt'],
+        providers: [],
+        scenarios: [{ config: [{}], tests: [scenarioTest] }],
+        tests: [{ vars: { z: 'w' } }],
+      };
+
+      await evaluate(testSuite);
+
+      expect(scenarioTest.options.provider).toBe(rawProviderConfig);
+      expect(() => JSON.stringify(testSuite)).not.toThrow();
     });
   });
 });
