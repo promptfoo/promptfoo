@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 import {
   AnthropicLlmRubricProvider,
@@ -16,7 +17,7 @@ import {
 
 describe('Anthropic modules', () => {
   it('should export core values', () => {
-    expect(DEFAULT_ANTHROPIC_MODEL).toBeDefined();
+    expect(DEFAULT_ANTHROPIC_MODEL).toBe('claude-sonnet-4-6');
     // Types are exported but we don't need to check them as values
     // AnthropicMessageOptions and AnthropicCompletionOptions are types, not values
   });

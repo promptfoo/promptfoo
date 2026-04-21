@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
-import { ADDITIONAL_STRATEGIES, DEFAULT_STRATEGIES } from '../../../src/redteam/constants';
+import { describe, expect, it } from 'vitest';
+import {
+  ADDITIONAL_STRATEGIES,
+  AGENTIC_STRATEGIES,
+  DEFAULT_STRATEGIES,
+} from '../../../src/redteam/constants';
 
 describe('Strategy IDs', () => {
   const findStrategyIdAssignments = (fileContent: string): string[] => {
@@ -36,7 +41,11 @@ describe('Strategy IDs', () => {
     });
 
     // Make sure each used strategy ID is defined in constants
-    const allDefinedStrategies = [...ADDITIONAL_STRATEGIES, ...DEFAULT_STRATEGIES];
+    const allDefinedStrategies = [
+      ...ADDITIONAL_STRATEGIES,
+      ...DEFAULT_STRATEGIES,
+      ...AGENTIC_STRATEGIES,
+    ];
 
     usedStrategyIds.forEach((id) => {
       expect(allDefinedStrategies).toContain(id);
@@ -124,11 +133,10 @@ describe('Strategy IDs', () => {
       const directPath = path.join(strategyDir, `${strategy}.ts`);
 
       const fileExists = fs.existsSync(expectedPath) || fs.existsSync(directPath);
-      if (!fileExists) {
-        console.error(`Strategy implementation not found for: ${strategy}`);
-        console.error(`Checked paths: ${expectedPath} and ${directPath}`);
-      }
-      expect(fileExists).toBe(true);
+      expect(
+        fileExists,
+        `Strategy implementation not found for ${strategy}. Checked paths: ${expectedPath} and ${directPath}`,
+      ).toBe(true);
     });
   });
 });

@@ -6,12 +6,15 @@
 import safeStringify from 'fast-safe-stringify';
 
 const MAX_DEPTH = 4;
+const DUMMY_BASE = 'http://placeholder';
+
+export const REDACTED = '[REDACTED]';
 
 /**
  * Set of field names that should be redacted (case-insensitive, with hyphens/underscores normalized)
  * Note: Keys are stored in their normalized form (lowercase, no hyphens/underscores)
  */
-const SECRET_FIELD_NAMES = new Set([
+export const SECRET_FIELD_NAMES = new Set([
   // Password variants
   'password',
   'passwd',
@@ -21,9 +24,11 @@ const SECRET_FIELD_NAMES = new Set([
   'secret',
   'secrets',
   'secretkey',
+  'credentials',
 
   // API keys and tokens
   'apikey',
+  'apisecret',
   'token',
   'accesstoken',
   'refreshtoken',
@@ -32,9 +37,12 @@ const SECRET_FIELD_NAMES = new Set([
   'authtoken',
   'clientsecret',
   'webhooksecret',
+  'anthropicapikey',
+  'awsbearertokenbedrock',
   'authorization',
   'auth',
   'bearer',
+  'apikeyenvar', // environment variable name for API key
 
   // Header-specific patterns (normalized: hyphens removed)
   'xapikey', // x-api-key
@@ -72,15 +80,73 @@ const SECRET_FIELD_NAMES = new Set([
 /**
  * Normalize field names for comparison (lowercase, no hyphens/underscores)
  */
-function normalizeFieldName(fieldName: string): string {
+export function normalizeFieldName(fieldName: string): string {
   return fieldName.toLowerCase().replace(/[-_]/g, '');
 }
 
 /**
  * Check if a field name should be redacted
  */
-function isSecretField(fieldName: string): boolean {
+export function isSecretField(fieldName: string): boolean {
   return SECRET_FIELD_NAMES.has(normalizeFieldName(fieldName));
+}
+
+/**
+ * Check if a value looks like a secret based on common patterns.
+ * Detects API keys, tokens, and other credential patterns.
+ */
+export function looksLikeSecret(value: string): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  // OpenAI API keys (sk-...)
+  if (/^sk-[a-zA-Z0-9-_]{20,}/.test(value)) {
+    return true;
+  }
+
+  // OpenAI project keys (sk-proj-...)
+  if (/^sk-proj-[a-zA-Z0-9-_]{20,}/.test(value)) {
+    return true;
+  }
+
+  // Anthropic keys (sk-ant-...)
+  if (/^sk-ant-[a-zA-Z0-9-_]{20,}/.test(value)) {
+    return true;
+  }
+
+  // Generic API key patterns (key-...)
+  if (/^key-[a-zA-Z0-9]{20,}/.test(value)) {
+    return true;
+  }
+
+  // Bearer tokens
+  if (/^Bearer\s+.{20,}/i.test(value)) {
+    return true;
+  }
+
+  // Basic auth
+  if (/^Basic\s+.{20,}/i.test(value)) {
+    return true;
+  }
+
+  // Long base64-like strings (likely tokens/keys) - 64+ chars of alphanumeric
+  // Using 64 chars to reduce false positives on concatenated IDs, base64 content, or long model names
+  if (/^[a-zA-Z0-9+/=_-]{64,}$/.test(value)) {
+    return true;
+  }
+
+  // AWS-style access keys (AKIA...)
+  if (/^AKIA[A-Z0-9]{16}/.test(value)) {
+    return true;
+  }
+
+  // Google API keys (AIza...)
+  if (/^AIza[a-zA-Z0-9_-]{35}/.test(value)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -99,17 +165,20 @@ function isClassInstance(obj: any): boolean {
 }
 
 /**
- * Parse and sanitize JSON strings
+ * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
-function sanitizeJsonString(str: string, depth: number): string {
+function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth);
+      const sanitized = recursiveSanitize(parsed, depth, maxDepth);
       return JSON.stringify(sanitized);
     }
   } catch {
-    // Not JSON, return as-is
+    // Not JSON - check if it looks like a secret
+    if (looksLikeSecret(str)) {
+      return REDACTED;
+    }
   }
   return str;
 }
@@ -117,13 +186,18 @@ function sanitizeJsonString(str: string, depth: number): string {
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number): any {
+function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
   const sanitized: any = {};
   for (const [key, value] of Object.entries(obj)) {
     if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
+    } else if (isSecretField(key)) {
+      sanitized[key] = REDACTED;
+    } else if (typeof value === 'string' && looksLikeSecret(value)) {
+      // Redact values that look like secrets (API keys, tokens, etc.)
+      sanitized[key] = REDACTED;
     } else {
-      sanitized[key] = isSecretField(key) ? '[REDACTED]' : recursiveSanitize(value, depth + 1);
+      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth);
     }
   }
   return sanitized;
@@ -132,14 +206,14 @@ function sanitizePlainObject(obj: any, depth: number): any {
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0): any {
+function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return sanitizeJsonString(obj, depth);
+    return sanitizeJsonString(obj, depth, maxDepth);
   }
 
   // Handle primitives and null/undefined
@@ -148,13 +222,13 @@ function recursiveSanitize(obj: any, depth = 0): any {
   }
 
   // Enforce depth limit for objects and arrays
-  if (depth > MAX_DEPTH) {
+  if (depth > maxDepth) {
     return '[...]';
   }
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1));
+    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth));
   }
 
   // Handle class instances
@@ -164,7 +238,7 @@ function recursiveSanitize(obj: any, depth = 0): any {
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth);
+  return sanitizePlainObject(obj, depth, maxDepth);
 }
 
 /**
@@ -178,9 +252,10 @@ export function sanitizeObject(
   options: {
     context?: string;
     throwOnError?: boolean;
+    maxDepth?: number;
   } = {},
 ): any {
-  const { context = 'object', throwOnError = false } = options;
+  const { context = 'object', throwOnError = false, maxDepth = MAX_DEPTH } = options;
 
   try {
     // Handle null/undefined
@@ -190,7 +265,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return sanitizeJsonString(obj, 0);
+      return sanitizeJsonString(obj, 0, maxDepth);
     }
 
     // Handle other primitives
@@ -199,15 +274,30 @@ export function sanitizeObject(
     }
 
     // Use safeStringify only to handle circular references
+    // Custom replacer to handle Error objects which don't serialize properly
+    // (Error objects have no enumerable properties, so JSON.stringify returns "{}")
     const safeObj = JSON.parse(
-      safeStringify(obj, undefined, undefined, {
-        depthLimit: Number.MAX_SAFE_INTEGER,
-        edgesLimit: Number.MAX_SAFE_INTEGER,
-      }),
+      safeStringify(
+        obj,
+        (_key, val) => {
+          if (val instanceof Error) {
+            return {
+              name: val.name,
+              message: val.message,
+            };
+          }
+          return val;
+        },
+        undefined,
+        {
+          depthLimit: Number.MAX_SAFE_INTEGER,
+          edgesLimit: Number.MAX_SAFE_INTEGER,
+        },
+      ),
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj);
+    return recursiveSanitize(safeObj, 0, maxDepth);
   } catch (error) {
     if (throwOnError) {
       throw error;
@@ -232,7 +322,27 @@ export function sanitizeUrl(url: string): string {
       return url;
     }
 
-    const parsedUrl = new URL(url);
+    // Check if URL contains template variables (e.g., {{ variable }})
+    // These are configuration templates, not runtime secrets, so skip sanitization entirely.
+    //
+    // Important trade-off: URLs with both templates AND real sensitive params
+    // (e.g., "https://example.com/{{ path }}?api_key=secret") will NOT be sanitized.
+    // This is acceptable because:
+    // 1. Template URLs come from config files (version-controlled, not runtime)
+    // 2. Secrets should be in environment variables, not hardcoded in config
+    // 3. Attempting to parse/sanitize would URL-encode template syntax ({{ → %7B%7B),
+    //    breaking Nunjucks rendering
+    // 4. When templates render to real URLs at runtime, those URLs get sanitized normally
+    //
+    // Use simple string check instead of regex to avoid ReDoS vulnerability
+    if (url.includes('{{') && url.includes('}}')) {
+      return url;
+    }
+
+    // Handle path-only URLs (e.g., /api/openai/completion from raw HTTP request mode).
+    // new URL() requires a fully qualified URL, so prepend a dummy base for parsing.
+    const isPathOnly = url.startsWith('/') && !url.startsWith('//');
+    const parsedUrl = isPathOnly ? new URL(url, DUMMY_BASE) : new URL(url);
 
     // Create a copy for sanitization to avoid modifying the original URL
     // Use href instead of toString() for better cross-platform compatibility
@@ -257,6 +367,11 @@ export function sanitizeUrl(url: string): string {
       // If search params handling fails, continue without sanitizing them
       // using console since logger would create a circular dependency
       console.warn(`Failed to sanitize URL parameters ${url}: ${paramError}`);
+    }
+
+    // For path-only URLs, return just the path (+ search + hash), not the dummy base
+    if (isPathOnly) {
+      return sanitizedUrl.pathname + sanitizedUrl.search + sanitizedUrl.hash;
     }
 
     return sanitizedUrl.toString();

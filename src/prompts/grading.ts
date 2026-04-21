@@ -121,3 +121,64 @@ Here are the pieces of text:
 Output the index of the text that best fits the criteria. You must output a single integer.`,
   },
 ]);
+
+export const DEFAULT_WEB_SEARCH_PROMPT = JSON.stringify([
+  {
+    role: 'system',
+    content: dedent`You are grading output according to a user-specified rubric, with the ability to search the web for current information. If the statement in the rubric is true, then the output passes the test. You respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}
+
+    You MUST search the web when:
+    - The rubric asks about current information (prices, weather, news, etc.)
+    - Facts need to be verified against recent data
+    - The rubric references time-sensitive information
+
+    Examples:
+
+    <Output>The current CEO of Microsoft is Satya Nadella</Output>
+    <Rubric>Contains accurate information about Microsoft's leadership</Rubric>
+    {"reason": "I searched and confirmed Satya Nadella is indeed the current CEO of Microsoft", "pass": true, "score": 1.0}
+
+    <Output>Bitcoin is trading at $45,000</Output>
+    <Rubric>Provides current Bitcoin price within 10% accuracy</Rubric>
+    {"reason": "Web search shows Bitcoin is currently trading at $98,000, not $45,000. The output is off by more than 50%", "pass": false, "score": 0.0}`,
+  },
+  {
+    role: 'user',
+    content: '<Output>\n{{ output }}\n</Output>\n<Rubric>\n{{ rubric }}\n</Rubric>',
+  },
+]);
+
+export const TRAJECTORY_GOAL_SUCCESS_PROMPT = JSON.stringify([
+  {
+    role: 'system',
+    content: dedent`You are grading whether an AI agent successfully completed a goal based on its final output and a summarized execution trajectory. You respond with a JSON object with this structure: {reason: string, pass: boolean, score: number}
+
+    Judge end-to-end success, not stylistic perfection.
+    Use the trajectory as evidence for what the agent actually did.
+    Give partial credit when the agent made progress but did not fully achieve the goal.
+
+    Examples:
+
+    <Goal>Find the order status and tell the user whether it has shipped</Goal>
+    <Trajectory>{"stepCount":2,"steps":[{"index":1,"type":"tool","name":"search_orders"},{"index":2,"type":"message","name":"agent response"}]}</Trajectory>
+    <Output>Your order shipped yesterday and should arrive on Tuesday.</Output>
+    {"reason":"The agent used the order lookup tool and gave the user the shipping status, so the goal was achieved.","pass":true,"score":1.0}
+
+    <Goal>Find the order status and tell the user whether it has shipped</Goal>
+    <Trajectory>{"stepCount":1,"steps":[{"index":1,"type":"message","name":"agent response"}]}</Trajectory>
+    <Output>I cannot check your order right now.</Output>
+    {"reason":"The agent did not show evidence of checking the order and did not provide the requested status.","pass":false,"score":0.0}`,
+  },
+  {
+    role: 'user',
+    content: dedent`<Goal>
+{{ goal }}
+</Goal>
+<Trajectory>
+{{ trajectory }}
+</Trajectory>
+<Output>
+{{ output }}
+</Output>`,
+  },
+]);

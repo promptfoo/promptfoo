@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import LoadExampleButton from '../LoadExampleButton';
 import PageWrapper from '../PageWrapper';
@@ -16,14 +12,13 @@ import type { ProviderOptions } from '../../types';
 interface TargetsProps {
   onNext?: () => void;
   onBack?: () => void;
-  setupModalOpen?: boolean;
 }
 
 const requiresPrompt = (target: ProviderOptions) => {
   return target.id !== 'http' && target.id !== 'websocket' && target.id !== 'browser';
 };
 
-export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps) {
+export default function Targets({ onNext, onBack }: TargetsProps) {
   const { config, updateConfig } = useRedTeamConfig();
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(
     config.target || DEFAULT_HTTP_TARGET,
@@ -38,6 +33,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
   const { recordEvent } = useTelemetry();
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_targets' });
   }, []);
@@ -58,12 +54,12 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
   const handleProviderChange = (provider: ProviderOptions) => {
     setSelectedTarget((prev) => {
       if (prev.id !== provider.id) {
-        // Reset test states when provider changes
+        // Reset test states when provider type changes
         setIsTargetTested(false);
         setIsSessionTested(false);
-        return provider;
       }
-      return prev;
+      // Always update to the new provider (including config changes)
+      return provider;
     });
     recordEvent('feature_used', { feature: 'redteam_config_target_changed', target: provider.id });
   };
@@ -86,9 +82,9 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
     if (selectedTarget.id === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
       const hasConfig =
-        selectedTarget.config.request !== undefined
-          ? selectedTarget.config.request?.trim() !== ''
-          : !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+        selectedTarget.config.request === undefined
+          ? !!selectedTarget.config.url && selectedTarget.config.url.trim() !== ''
+          : selectedTarget.config.request?.trim() !== '';
 
       // For HTTP providers, require both tests to be completed
       return hasConfig && isTargetTested && isSessionTested;
@@ -109,13 +105,13 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
 
     // Additional validation messages for HTTP and WebSocket providers
     if (selectedTarget.id === 'http') {
-      if (selectedTarget.config.request !== undefined) {
-        if (!selectedTarget.config.request?.trim()) {
-          return 'HTTP request content is required';
-        }
-      } else {
+      if (selectedTarget.config.request === undefined) {
         if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
           return 'Valid URL is required';
+        }
+      } else {
+        if (!selectedTarget.config.request?.trim()) {
+          return 'HTTP request content is required';
         }
       }
 
@@ -143,18 +139,23 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       title="Target Configuration"
       description={
         <>
-          <Typography variant="body1" sx={{ mb: 2 }}>
+          <p className="mb-4">
             A target is the specific LLM or endpoint you want to evaluate in your red teaming
             process. In Promptfoo targets are also known as providers. You can configure additional
             targets later.
-          </Typography>
-          <Typography variant="body1">
+          </p>
+          <p>
             For more information on available providers and how to configure them, please visit our{' '}
-            <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
+            <a
+              href="https://www.promptfoo.dev/docs/providers/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
               provider documentation
-            </Link>
+            </a>
             .
-          </Typography>
+          </p>
         </>
       }
       onNext={onNext}
@@ -162,14 +163,11 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
       nextDisabled={!isProviderValid()}
       warningMessage={getNextButtonTooltip()}
     >
-      <Stack direction="column" spacing={3}>
-        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-            Select Red Team Target
-          </Typography>
-
+      <div className="flex flex-col gap-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Select Red Team Target</h2>
           <LoadExampleButton />
-        </Box>
+        </div>
 
         <ProviderEditor
           provider={selectedTarget}
@@ -188,7 +186,7 @@ export default function Targets({ onNext, onBack, setupModalOpen }: TargetsProps
         />
 
         {promptRequired && <Prompts />}
-      </Stack>
+      </div>
     </PageWrapper>
   );
 }

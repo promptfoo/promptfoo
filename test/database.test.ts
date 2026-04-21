@@ -3,6 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 import Database from 'better-sqlite3';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from './util/utils';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -10,16 +12,16 @@ describe('database WAL mode', () => {
   let tempDir: string;
 
   beforeEach(() => {
-    jest.resetModules();
-    process.env = { ...ORIGINAL_ENV };
+    vi.resetModules();
+    mockProcessEnv({ ...ORIGINAL_ENV }, { clear: true });
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-dbtest-'));
-    process.env.PROMPTFOO_CONFIG_DIR = tempDir;
-    delete process.env.IS_TESTING;
-    delete process.env.PROMPTFOO_DISABLE_WAL_MODE;
+    mockProcessEnv({ PROMPTFOO_CONFIG_DIR: tempDir });
+    mockProcessEnv({ IS_TESTING: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_WAL_MODE: undefined });
   });
 
   afterEach(async () => {
-    process.env = ORIGINAL_ENV;
+    mockProcessEnv(ORIGINAL_ENV, { clear: true });
     // Close the database connection if it exists
     try {
       const database = await import('../src/database');
@@ -72,7 +74,7 @@ describe('database WAL mode', () => {
   });
 
   it('skips WAL mode when PROMPTFOO_DISABLE_WAL_MODE is set', async () => {
-    process.env.PROMPTFOO_DISABLE_WAL_MODE = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_WAL_MODE: 'true' });
 
     const database = await import('../src/database');
     database.getDb();
@@ -91,7 +93,7 @@ describe('database WAL mode', () => {
   });
 
   it('does not enable WAL mode for in-memory databases', async () => {
-    process.env.IS_TESTING = 'true';
+    mockProcessEnv({ IS_TESTING: 'true' });
 
     const database = await import('../src/database');
     const db = database.getDb();
@@ -99,6 +101,49 @@ describe('database WAL mode', () => {
     // For in-memory databases, we can't verify the journal mode
     // but we can ensure it doesn't throw
     expect(db).toBeDefined();
+  });
+
+  describe('closeDbIfOpen', () => {
+    it('should close database when it is open', async () => {
+      const database = await import('../src/database');
+
+      // Open the database
+      database.getDb();
+      expect(database.isDbOpen()).toBe(true);
+
+      // Close it using closeDbIfOpen
+      database.closeDbIfOpen();
+      expect(database.isDbOpen()).toBe(false);
+    });
+
+    it('should do nothing when database is not open', async () => {
+      const database = await import('../src/database');
+
+      // Ensure database is not open
+      expect(database.isDbOpen()).toBe(false);
+
+      // closeDbIfOpen should not throw
+      expect(() => database.closeDbIfOpen()).not.toThrow();
+      expect(database.isDbOpen()).toBe(false);
+    });
+
+    it('should be safe to call multiple times', async () => {
+      const database = await import('../src/database');
+
+      // Open the database
+      database.getDb();
+      expect(database.isDbOpen()).toBe(true);
+
+      // Close multiple times - should not throw
+      database.closeDbIfOpen();
+      expect(database.isDbOpen()).toBe(false);
+
+      database.closeDbIfOpen();
+      expect(database.isDbOpen()).toBe(false);
+
+      database.closeDbIfOpen();
+      expect(database.isDbOpen()).toBe(false);
+    });
   });
 
   it('verifies WAL checkpoint settings', async () => {

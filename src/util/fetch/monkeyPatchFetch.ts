@@ -22,6 +22,15 @@ function isConnectionError(error: Error) {
  * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
  */
 
+export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
+  try {
+    const targetUrl = url instanceof Request ? url.url : url.toString();
+    return new URL(targetUrl).origin === CLOUD_API_HOST;
+  } catch {
+    return false;
+  }
+}
+
 export async function monkeyPatchFetch(
   url: string | URL | Request,
   options?: FetchOptions,
@@ -51,10 +60,7 @@ export async function monkeyPatchFetch(
     }
   }
 
-  if (
-    (typeof url === 'string' && url.startsWith(CLOUD_API_HOST)) ||
-    (url instanceof URL && url.host === CLOUD_API_HOST.replace(/^https?:\/\//, ''))
-  ) {
+  if (isPromptfooCloudApiHost(url)) {
     const token = cloudConfig.getApiKey();
     opts.headers = {
       ...(opts.headers || {}),
@@ -66,7 +72,7 @@ export async function monkeyPatchFetch(
     const response = await fetch(url, opts);
 
     if (logEnabled) {
-      logRequestResponse({
+      void logRequestResponse({
         url: url.toString(),
         requestBody: originalBody,
         requestMethod: opts.method || 'GET',
@@ -77,20 +83,19 @@ export async function monkeyPatchFetch(
     return response;
   } catch (e) {
     if (logEnabled) {
-      logRequestResponse({
+      void logRequestResponse({
         url: url.toString(),
         requestBody: opts.body,
         requestMethod: opts.method || 'GET',
         response: null,
-        error: true,
       });
       if (isConnectionError(e as Error)) {
-        logger.error(
+        logger.debug(
           `Connection error, please check your network connectivity to the host: ${url} ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY ? `or Proxy: ${process.env.HTTP_PROXY || process.env.HTTPS_PROXY}` : ''}`,
         );
         throw e;
       }
-      logger.error(
+      logger.debug(
         `Error in fetch: ${JSON.stringify(e, Object.getOwnPropertyNames(e), 2)} ${e instanceof Error ? e.stack : ''}`,
       );
     }

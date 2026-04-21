@@ -1,20 +1,29 @@
-import { disableCache, enableCache, fetchWithCache } from '../../src/cache';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  disableCache,
+  enableCache,
+  fetchWithCache,
+  getCache,
+  isCacheEnabled,
+} from '../../src/cache';
 import {
   DefaultModerationProvider,
   ReplicateImageProvider,
   ReplicateModerationProvider,
   ReplicateProvider,
 } from '../../src/providers/replicate';
+import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { mockProcessEnv } from '../util/utils';
 
-jest.mock('../../src/cache');
+vi.mock('../../src/cache');
 
-const mockedFetchWithCache = jest.mocked(fetchWithCache);
+const mockedFetchWithCache = vi.mocked(fetchWithCache);
 
 describe('ReplicateProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -53,6 +62,54 @@ describe('ReplicateProvider', () => {
       expect.any(Number),
       'json',
     );
+  });
+
+  it('should preserve explicit zero-valued config instead of replacing it with env defaults', async () => {
+    const originalTemperature = process.env.REPLICATE_TEMPERATURE;
+    const originalSeed = process.env.REPLICATE_SEED;
+    mockProcessEnv({ REPLICATE_TEMPERATURE: '0.9' });
+    mockProcessEnv({ REPLICATE_SEED: '123' });
+
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'succeeded',
+        output: 'test response',
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    try {
+      const provider = new ReplicateProvider('test-model', {
+        config: {
+          apiKey: mockApiKey,
+          temperature: 0,
+          seed: 0,
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      const request = mockedFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(request[1].body);
+
+      expect(body.input.temperature).toBe(0);
+      expect(body.input.seed).toBe(0);
+    } finally {
+      if (originalTemperature === undefined) {
+        mockProcessEnv({ REPLICATE_TEMPERATURE: undefined });
+      } else {
+        mockProcessEnv({ REPLICATE_TEMPERATURE: originalTemperature });
+      }
+
+      if (originalSeed === undefined) {
+        mockProcessEnv({ REPLICATE_SEED: undefined });
+      } else {
+        mockProcessEnv({ REPLICATE_SEED: originalSeed });
+      }
+    }
   });
 
   it('should handle API errors', async () => {
@@ -200,13 +257,78 @@ describe('ReplicateProvider', () => {
       'json',
     );
   });
+
+  it('should set cached flag when returning cached response', async () => {
+    const mockCachedResponse = {
+      output: 'cached test response',
+      tokenUsage: { total: 100 },
+    };
+
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponse)),
+      set: vi.fn(),
+    } as any;
+
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockResolvedValue(mockCache);
+
+    const provider = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.output).toBe('cached test response');
+    expect(mockCache.get).toHaveBeenCalled();
+    // Verify fetchWithCache was not called because cache was used
+    expect(mockedFetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should cache successful string responses', async () => {
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'succeeded',
+        output: 'test response',
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    } as any;
+
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockResolvedValue(mockCache);
+
+    const provider = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.output).toBe('test response');
+    expect(mockCache.set).toHaveBeenCalledTimes(1);
+    expect(mockCache.set).toHaveBeenCalledWith(
+      'replicate:test-model:{"apiKey":"test-api-key"}:test prompt',
+      expect.any(String),
+    );
+    expect(JSON.parse(mockCache.set.mock.calls[0][1])).toEqual({
+      output: 'test response',
+      tokenUsage: createEmptyTokenUsage(),
+    });
+  });
 });
 
 describe('ReplicateModerationProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -381,7 +503,7 @@ describe('ReplicateImageProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 

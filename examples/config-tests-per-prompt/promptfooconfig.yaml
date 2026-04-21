@@ -1,0 +1,100 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Filter specific tests to specific prompts
+
+prompts:
+  # Factual prompt - for questions requiring accurate answers
+  - id: factual
+    label: Factual Assistant
+    raw: |
+      You are a factual assistant. Answer the following question accurately and concisely.
+
+      Question: {{question}}
+
+  # Creative prompt - for questions requiring imaginative responses
+  - id: creative
+    label: Creative Writer
+    raw: |
+      You are a creative writer. Answer the following in an imaginative and engaging way.
+
+      Question: {{question}}
+
+  # Technical prompt - for questions requiring detailed explanations
+  - id: technical
+    label: Technical Expert
+    raw: |
+      You are a technical expert. Provide a detailed, technical answer.
+
+      Question: {{question}}
+
+providers:
+  # Using echo provider for demonstration - replace with your preferred LLM
+  - echo
+
+tests:
+  # === Factual tests - only run with Factual Assistant ===
+  - description: Math question - factual only
+    vars:
+      question: What is 15 multiplied by 7?
+    prompts:
+      - Factual Assistant
+    assert:
+      - type: contains
+        value: factual assistant
+
+  - description: Geography question - factual only
+    vars:
+      question: What is the capital of France?
+    prompts:
+      - factual # Can also reference by ID
+    assert:
+      - type: contains
+        value: France
+
+  # === Creative tests - only run with Creative Writer ===
+  - description: Story prompt - creative only
+    vars:
+      question: Tell me about a magical forest
+    prompts:
+      - Creative Writer
+    assert:
+      - type: contains
+        value: magical forest
+
+  - description: Poetry prompt - creative only
+    vars:
+      question: Write a haiku about the moon
+    prompts:
+      - creative
+    assert:
+      - type: contains
+        value: moon
+
+  # === Technical tests - only run with Technical Expert ===
+  - description: Programming question - technical only
+    vars:
+      question: Explain what a binary search tree is
+    prompts:
+      - Technical Expert
+    assert:
+      - type: contains
+        value: binary search tree
+
+  # === Tests that run with multiple prompts ===
+  - description: General question - factual and technical
+    vars:
+      question: What is machine learning?
+    prompts:
+      - Factual Assistant
+      - Technical Expert
+    assert:
+      - type: contains
+        value: machine learning
+
+  # === Test with no prompts filter - runs with ALL prompts ===
+  - description: Universal test - all prompts
+    vars:
+      question: Hello, how are you?
+    # No prompts field = runs with all 3 prompts
+    assert:
+      - type: contains
+        value: Hello

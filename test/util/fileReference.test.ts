@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as esmModule from '../../src/esm';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -9,58 +10,72 @@ import { isJavascriptFile } from '../../src/util/fileExtensions';
 import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
 import type { Logger } from 'winston';
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  promises: {
-    readFile: jest.fn(),
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      promises: {
+        readFile: vi.fn(),
+      },
+    },
+    promises: {
+      readFile: vi.fn(),
+    },
+  };
+});
+vi.mock('path');
+vi.mock('js-yaml');
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(),
+}));
+vi.mock('../../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
+}));
+vi.mock('../../src/util/fileExtensions');
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
-jest.mock('path');
-jest.mock('js-yaml');
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
-}));
-jest.mock('../../src/python/pythonUtils', () => ({
-  runPython: jest.fn(),
-}));
-jest.mock('../../src/util/fileExtensions');
-jest.mock('../../src/logger');
 
-const importModule = jest.mocked(esmModule.importModule);
-const runPython = jest.mocked(pythonUtils.runPython);
-const readFileMock = jest.mocked(fs.promises.readFile);
+const importModule = vi.mocked(esmModule.importModule);
+const runPython = vi.mocked(pythonUtils.runPython);
+const readFileMock = vi.mocked(fs.promises.readFile);
 
 describe('fileReference utility functions', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
 
-    jest.mocked(logger.debug).mockImplementation((message: string) => {
+    vi.mocked(logger.debug).mockImplementation((_message: string) => {
       return {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
       } as unknown as Logger;
     });
 
-    jest.mocked(logger.error).mockImplementation((message: string) => {
+    vi.mocked(logger.error).mockImplementation((_message: string) => {
       return {
-        debug: jest.fn(),
-        info: jest.fn(),
-        warn: jest.fn(),
-        error: jest.fn(),
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
       } as unknown as Logger;
     });
 
-    jest
-      .mocked(path.resolve)
-      .mockImplementation((basePath, filePath) =>
-        filePath?.startsWith('/') ? filePath : path.join(basePath || '', filePath || ''),
-      );
+    vi.mocked(path.resolve).mockImplementation((basePath, filePath) =>
+      filePath?.startsWith('/') ? filePath : path.join(basePath || '', filePath || ''),
+    );
 
-    jest.mocked(path.join).mockImplementation((...parts) => parts.filter(Boolean).join('/'));
+    vi.mocked(path.join).mockImplementation((...parts) => parts.filter(Boolean).join('/'));
 
-    jest.mocked(path.extname).mockImplementation((filePath) => {
+    vi.mocked(path.extname).mockImplementation((filePath) => {
       if (!filePath) {
         return '';
       }
@@ -68,7 +83,7 @@ describe('fileReference utility functions', () => {
       return parts.length > 1 ? `.${parts[parts.length - 1]}` : '';
     });
 
-    jest.mocked(isJavascriptFile).mockImplementation((filePath) => {
+    vi.mocked(isJavascriptFile).mockImplementation((filePath) => {
       if (!filePath) {
         return false;
       }
@@ -86,7 +101,7 @@ describe('fileReference utility functions', () => {
       const parsedContent = { name: 'test', value: 42 };
 
       readFileMock.mockResolvedValue(fileContent);
-      jest.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
+      vi.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
 
       const result = await loadFileReference(fileRef);
 
@@ -100,7 +115,7 @@ describe('fileReference utility functions', () => {
       const parsedContent = { name: 'test', value: 42 };
 
       readFileMock.mockResolvedValue(fileContent);
-      jest.mocked(yaml.load).mockReturnValue(parsedContent);
+      vi.mocked(yaml.load).mockReturnValue(parsedContent);
 
       const result = await loadFileReference(fileRef);
 
@@ -113,7 +128,7 @@ describe('fileReference utility functions', () => {
       const fileRef = 'file:///path/to/config.js';
       const moduleOutput = { settings: { temperature: 0.7 } };
 
-      jest.mocked(isJavascriptFile).mockReturnValue(true);
+      vi.mocked(isJavascriptFile).mockReturnValue(true);
       importModule.mockResolvedValue(moduleOutput);
 
       const result = await loadFileReference(fileRef);
@@ -126,7 +141,7 @@ describe('fileReference utility functions', () => {
       const fileRef = 'file:///path/to/config.js:getConfig';
       const moduleOutput = { getConfig: 'success' };
 
-      jest.mocked(isJavascriptFile).mockReturnValue(true);
+      vi.mocked(isJavascriptFile).mockReturnValue(true);
       importModule.mockResolvedValue(moduleOutput);
 
       const result = await loadFileReference(fileRef);
@@ -177,9 +192,9 @@ describe('fileReference utility functions', () => {
       const fileContent = '{"name": "test"}';
       const parsedContent = { name: 'test' };
 
-      jest.mocked(path.resolve).mockReturnValue('/base/path/config.json');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/config.json');
       readFileMock.mockResolvedValue(fileContent);
-      jest.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
+      vi.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
 
       const result = await loadFileReference(fileRef, basePath);
 
@@ -191,8 +206,8 @@ describe('fileReference utility functions', () => {
     it('should throw an error for unsupported file types', async () => {
       const fileRef = 'file:///path/to/file.xyz';
 
-      jest.mocked(path.extname).mockReturnValue('.xyz');
-      jest.mocked(isJavascriptFile).mockReturnValue(false);
+      vi.mocked(path.extname).mockReturnValue('.xyz');
+      vi.mocked(isJavascriptFile).mockReturnValue(false);
 
       await expect(loadFileReference(fileRef)).rejects.toThrow('Unsupported file extension: .xyz');
     });
@@ -212,7 +227,7 @@ describe('fileReference utility functions', () => {
       const parsedContent = { name: 'test', value: 42 };
 
       readFileMock.mockResolvedValue(JSON.stringify(parsedContent));
-      jest.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
+      vi.spyOn(JSON, 'parse').mockReturnValue(parsedContent);
 
       const result = await processConfigFileReferences(config);
 
@@ -238,14 +253,14 @@ describe('fileReference utility functions', () => {
         return Promise.resolve('');
       });
 
-      jest.spyOn(JSON, 'parse').mockImplementation((content) => {
+      vi.spyOn(JSON, 'parse').mockImplementation((content) => {
         if (content === '{"key": "value2"}') {
           return { key: 'value2' };
         }
         return {};
       });
 
-      jest.mocked(yaml.load).mockImplementation((content) => {
+      vi.mocked(yaml.load).mockImplementation((content) => {
         if (content === 'key: value3') {
           return { key: 'value3' };
         }
@@ -281,14 +296,14 @@ describe('fileReference utility functions', () => {
         return Promise.resolve('');
       });
 
-      jest.spyOn(JSON, 'parse').mockImplementation((content) => {
+      vi.spyOn(JSON, 'parse').mockImplementation((content) => {
         if (content === '{"name": "item1"}') {
           return { name: 'item1' };
         }
         return {};
       });
 
-      jest.mocked(yaml.load).mockImplementation((content) => {
+      vi.mocked(yaml.load).mockImplementation((content) => {
         if (content === 'name: item2') {
           return { name: 'item2' };
         }

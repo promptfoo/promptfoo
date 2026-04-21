@@ -1,6 +1,6 @@
 ---
 title: ModelAudit - Static Security Scanner for ML Models
-description: Scan AI/ML models for security vulnerabilities, malicious code, and backdoors. Supports PyTorch, TensorFlow, ONNX, Keras, and 15+ model formats.
+description: Scan AI/ML models for security vulnerabilities, malicious code, and backdoors. Supports PyTorch, TensorFlow, ONNX, Keras, and 30+ model formats.
 keywords:
   [
     model security,
@@ -20,9 +20,9 @@ sidebar_position: 1
 
 ## Overview
 
-ModelAudit is a lightweight static security scanner for machine learning models integrated into Promptfoo. It allows you to quickly scan your AI/ML models for potential security risks before deploying them in production environments.
+ModelAudit is a lightweight static security scanner for machine learning models accessible through Promptfoo. It scans AI/ML models for potential security risks before deployment.
 
-By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities.
+Promptfoo provides a wrapper command `promptfoo scan-model` that integrates ModelAudit scanning capabilities.
 
 ![example model scan results](/img/docs/modelaudit/modelaudit-result.png)
 
@@ -149,6 +149,10 @@ promptfoo scan-model model.pkl --sbom sbom.json
 # Enable strict mode for security-critical scans
 promptfoo scan-model model.pkl --strict
 
+# List scanner IDs and run only selected scanners
+promptfoo scan-model --list-scanners
+promptfoo scan-model models/ --scanners pickle,tf_savedmodel
+
 # Preview scan without actually processing
 promptfoo scan-model model.pkl --dry-run
 ```
@@ -175,6 +179,9 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 | `--sbom`            | Generate CycloneDX Software Bill of Materials with license info |
 | `--strict`          | Fail on warnings; enable stricter validation                    |
 | `--dry-run`         | Preview scan without processing files                           |
+| `--scanners`        | Only run selected scanners                                      |
+| `--exclude-scanner` | Exclude scanners from the default scanner set                   |
+| `--list-scanners`   | Print available scanner IDs and class names                     |
 | `--quiet`           | Suppress non-critical output                                    |
 | `--progress`        | Force-enable progress reporting                                 |
 | `--no-cache`        | Disable caching of downloaded files                             |
@@ -195,7 +202,7 @@ Promptfoo includes a web interface for ModelAudit at `/model-audit` with visual 
 
 ## Supported Formats
 
-ModelAudit supports scanning 15+ model formats across major ML frameworks:
+ModelAudit supports scanning 30+ specialized file format scanners across major ML frameworks:
 
 ### Model Formats
 
@@ -336,11 +343,6 @@ ModelAudit supports both NumPy 1.x and 2.x. If you encounter NumPy compatibility
 # Force NumPy 1.x if needed for full compatibility
 pip install modelaudit[numpy1]
 ```
-
-## Next Steps
-
-- **[Advanced Usage](./usage.md)** - Cloud storage, CI/CD integration, and advanced features
-- **[Scanner Reference](./scanners.md)** - Detailed scanner capabilities and security checks
 
 ## See Also
 

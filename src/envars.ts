@@ -1,8 +1,9 @@
 import dotenv from 'dotenv';
-dotenv.config({ quiet: true });
-
 import cliState from './cliState';
+
 import type { EnvOverrides } from './types/env';
+
+dotenv.config({ quiet: true });
 
 // Define the supported environment variables and their types
 type EnvVars = {
@@ -21,11 +22,22 @@ type EnvVars = {
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   PROMPTFOO_DISABLE_CONVERSATION_VAR?: boolean;
   PROMPTFOO_DISABLE_ERROR_LOG?: boolean;
+  PROMPTFOO_DISABLE_DEBUG_LOG?: boolean;
   PROMPTFOO_DISABLE_JSON_AUTOESCAPE?: boolean;
   PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64?: boolean;
   PROMPTFOO_DISABLE_OBJECT_STRINGIFY?: boolean;
   PROMPTFOO_DISABLE_PDF_AS_TEXT?: boolean;
   PROMPTFOO_DISABLE_REDTEAM_MODERATION?: boolean;
+  /**
+   * Disable ALL remote generation (superset of PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION).
+   * Affects: SimulatedUser, red team features, all promptfoo-hosted inference.
+   */
+  PROMPTFOO_DISABLE_REMOTE_GENERATION?: boolean;
+  /**
+   * Disable remote generation for red team features only (subset of PROMPTFOO_DISABLE_REMOTE_GENERATION).
+   * Affects: Harmful content generation, red team strategies, red team simulated users.
+   * Does NOT affect: Regular (non-redteam) SimulatedUser usage.
+   */
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
@@ -40,6 +52,11 @@ type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
+  /**
+   * Enable interactive UI (opt-in). Set to true to enable Ink-based terminal UI.
+   * Requires stdout to be a TTY.
+   */
+  PROMPTFOO_ENABLE_INTERACTIVE_UI?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
@@ -54,7 +71,35 @@ type EnvVars = {
   PROMPTFOO_STRIP_TEST_VARS?: boolean;
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
-  PROMPTFOO_DISABLE_UNBLOCKING?: boolean;
+  PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
+
+  //=========================================================================
+  // OpenTelemetry tracing configuration
+  //=========================================================================
+  /**
+   * Enable OpenTelemetry tracing for all LLM provider calls.
+   */
+  PROMPTFOO_OTEL_ENABLED?: boolean;
+  /**
+   * Service name to use in OTEL traces. Defaults to 'promptfoo'.
+   */
+  PROMPTFOO_OTEL_SERVICE_NAME?: string;
+  /**
+   * OTLP endpoint URL for exporting traces to external backends.
+   */
+  PROMPTFOO_OTEL_ENDPOINT?: string;
+  /**
+   * Whether to export traces to the local TraceStore (SQLite). Defaults to true.
+   */
+  PROMPTFOO_OTEL_LOCAL_EXPORT?: boolean;
+  /**
+   * Enable OTEL debug logging.
+   */
+  PROMPTFOO_OTEL_DEBUG?: boolean;
+  /**
+   * Standard OTEL environment variable for OTLP endpoint.
+   */
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string;
 
   //=========================================================================
   // promptfoo configuration options
@@ -72,14 +117,17 @@ type EnvVars = {
   PROMPTFOO_CSV_STRICT?: boolean;
   PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_FAILED_TEST_EXIT_CODE?: number;
+  PROMPTFOO_INLINE_MEDIA?: boolean;
   PROMPTFOO_INSECURE_SSL?: boolean | string;
   PROMPTFOO_JAILBREAK_TEMPERATURE?: string;
   PROMPTFOO_LOG_DIR?: string;
+  PROMPTFOO_MEDIA_PATH?: string;
   PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST?: number;
   PROMPTFOO_NUM_JAILBREAK_ITERATIONS?: string;
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
   PROMPTFOO_PROMPT_SEPARATOR?: string;
   PROMPTFOO_PYTHON?: string;
+  PROMPTFOO_RUBY?: string;
   PROMPTFOO_REMOTE_API_BASE_URL?: string;
   PROMPTFOO_REMOTE_APP_BASE_URL?: string;
   PROMPTFOO_REMOTE_GENERATION_URL?: string;
@@ -87,6 +135,7 @@ type EnvVars = {
   PROMPTFOO_REQUIRE_JSON_PROMPTS?: boolean;
   PROMPTFOO_SHARING_APP_BASE_URL?: string;
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
+  PROMPTFOO_SHARE_INLINE_BLOBS?: boolean;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
   PROMPTFOO_PFX_CERT_PATH?: string;
@@ -94,6 +143,16 @@ type EnvVars = {
   PROMPTFOO_JKS_CERT_PATH?: string;
   PROMPTFOO_JKS_PASSWORD?: string;
   PROMPTFOO_JKS_ALIAS?: string;
+
+  //=========================================================================
+  // Server security
+  //=========================================================================
+  /**
+   * Comma-separated list of trusted origins allowed to make cross-site
+   * mutating requests to the promptfoo server.
+   * Example: "https://app.example.com,https://admin.example.com"
+   */
+  PROMPTFOO_CSRF_ALLOWED_ORIGINS?: string;
 
   //=========================================================================
   // HTTP proxy settings
@@ -121,6 +180,26 @@ type EnvVars = {
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
 
+  //=========================================================================
+  // MCP (Model Context Protocol) settings
+  //=========================================================================
+  /**
+   * Default timeout in milliseconds for MCP tool calls.
+   * This overrides the MCP SDK's default 60-second timeout.
+   * Can be overridden per-provider via config.mcp.timeout.
+   */
+  MCP_REQUEST_TIMEOUT_MS?: number;
+  /**
+   * Enable debug logging for MCP connections.
+   * Can be overridden per-provider via config.mcp.debug.
+   */
+  MCP_DEBUG?: boolean;
+  /**
+   * Enable verbose output for MCP connections.
+   * Can be overridden per-provider via config.mcp.verbose.
+   */
+  MCP_VERBOSE?: boolean;
+
   // Posthog
   PROMPTFOO_POSTHOG_KEY?: string;
   PROMPTFOO_POSTHOG_HOST?: string;
@@ -128,18 +207,8 @@ type EnvVars = {
   //=========================================================================
   // UI configuration
   //=========================================================================
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_APP_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_API_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
   VITE_PUBLIC_BASENAME?: string;
-  VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL?: string;
   VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
-  VITE_PUBLIC_PROMPTFOO_SHARE_API_URL?: string;
 
   //=========================================================================
   // Continuous Integration
@@ -161,6 +230,10 @@ type EnvVars = {
   //=========================================================================
   // Provider-specific settings
   //=========================================================================
+  // Abliteration
+  ABLIT_API_BASE_URL?: string;
+  ABLIT_KEY?: string;
+
   // AI21
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
@@ -226,6 +299,9 @@ type EnvVars = {
   // CDP
   CDP_DOMAIN?: string;
 
+  // ElevenLabs
+  ELEVENLABS_API_KEY?: string;
+
   // FAL
   FAL_KEY?: string;
 
@@ -286,6 +362,21 @@ type EnvVars = {
   OPENAI_TEMPERATURE?: number;
   OPENAI_TOP_P?: number;
 
+  // OpenAI Codex SDK
+  CODEX_API_KEY?: string;
+
+  // ClawdBot legacy OpenClaw compatibility
+  CLAWDBOT_GATEWAY_PASSWORD?: string;
+  CLAWDBOT_GATEWAY_TOKEN?: string;
+  CLAWDBOT_GATEWAY_URL?: string;
+
+  // OpenClaw
+  OPENCLAW_CONFIG_PATH?: string;
+  OPENCLAW_GATEWAY_PASSWORD?: string;
+  OPENCLAW_GATEWAY_PORT?: number | string;
+  OPENCLAW_GATEWAY_TOKEN?: string;
+  OPENCLAW_GATEWAY_URL?: string;
+
   // OpenRouter
   OPENROUTER_API_KEY?: string;
 
@@ -304,8 +395,24 @@ type EnvVars = {
   REPLICATE_TOP_K?: number;
   REPLICATE_TOP_P?: number;
 
+  // SharePoint
+  SHAREPOINT_BASE_URL?: string;
+  SHAREPOINT_CERT_PATH?: string;
+  SHAREPOINT_CLIENT_ID?: string;
+  SHAREPOINT_TENANT_ID?: string;
+
+  // Slack
+  SLACK_BOT_TOKEN?: string;
+
+  // Snowflake
+  SNOWFLAKE_ACCOUNT_IDENTIFIER?: string;
+  SNOWFLAKE_API_KEY?: string;
+
   // Together AI
   TOGETHER_API_KEY?: string;
+
+  // TrueFoundry
+  TRUEFOUNDRY_API_KEY?: string;
 
   // Vertex AI
   VERTEX_API_VERSION?: string;
@@ -325,6 +432,9 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  // QuiverAI
+  QUIVERAI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
@@ -382,15 +492,13 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
 export function getEnvInt(key: EnvVarKey): number | undefined;
 export function getEnvInt(key: EnvVarKey, defaultValue: number): number;
 export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvString(key) || defaultValue;
-  if (typeof value === 'number') {
-    return Math.floor(value);
+  const str = getEnvString(key);
+  if (str === undefined || str === '') {
+    return defaultValue;
   }
-  if (typeof value === 'string') {
-    const parsedValue = Number.parseInt(value, 10);
-    if (!Number.isNaN(parsedValue)) {
-      return parsedValue;
-    }
+  const parsedValue = Number.parseInt(str, 10);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
   }
   return defaultValue;
 }
@@ -404,15 +512,13 @@ export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undef
 export function getEnvFloat(key: EnvVarKey): number | undefined;
 export function getEnvFloat(key: EnvVarKey, defaultValue: number): number;
 export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvString(key) || defaultValue;
-  if (typeof value === 'number') {
-    return value;
+  const str = getEnvString(key);
+  if (str === undefined || str === '') {
+    return defaultValue;
   }
-  if (typeof value === 'string') {
-    const parsedValue = Number.parseFloat(value);
-    if (!Number.isNaN(parsedValue)) {
-      return parsedValue;
-    }
+  const parsedValue = Number.parseFloat(str);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
   }
   return defaultValue;
 }

@@ -1,4 +1,4 @@
-import { matchesContextRelevance } from '../matchers';
+import { matchesContextRelevance } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 
@@ -20,6 +20,7 @@ export const handleContextRelevance = async ({
   output,
   prompt,
   providerResponse,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(test.vars, 'context-relevance assertion requires a test with variables');
   invariant(
@@ -39,8 +40,9 @@ export const handleContextRelevance = async ({
   const result = await matchesContextRelevance(
     test.vars.query,
     context,
-    assertion.threshold ?? 0,
+    (assertion.threshold as number) ?? 0,
     test.options,
+    providerCallContext,
   );
 
   return {

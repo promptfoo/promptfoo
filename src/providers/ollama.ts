@@ -1,8 +1,9 @@
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from './shared';
 
 import type {
   ApiProvider,
@@ -115,6 +116,12 @@ interface OllamaChatJsonL {
     role: string;
     content: string;
     images: null;
+    tool_calls?: Array<{
+      function: {
+        name: string;
+        arguments: any; // Ollama returns object, but we'll normalize to string for OpenAI compatibility
+      };
+    }>;
   };
   done: boolean;
 
@@ -147,27 +154,57 @@ export class OllamaCompletionProvider implements ApiProvider {
     return `[Ollama Completion Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'ollama',
+      operationName: 'completion',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      maxTokens: this.config.num_predict,
+      stopSequences: this.config.stop,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+  }
+
+  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
     const params = {
       model: this.modelName,
       prompt,
       stream: false,
-      options: Object.keys(this.config).reduce(
-        (options, key) => {
-          const optionName = key as keyof OllamaCompletionOptions;
-          if (
-            OllamaCompletionOptionKeys.has(optionName) &&
-            optionName !== 'think' &&
-            optionName !== 'tools' &&
-            optionName !== 'passthrough'
-          ) {
-            options[optionName] = this.config[optionName];
-          }
-          return options;
-        },
-        {} as Record<string, any>,
-      ),
-      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
+        const optionName = key as keyof OllamaCompletionOptions;
+        if (
+          OllamaCompletionOptionKeys.has(optionName) &&
+          optionName !== 'think' &&
+          optionName !== 'tools' &&
+          optionName !== 'passthrough'
+        ) {
+          options[optionName] = this.config[optionName];
+        }
+        return options;
+      }, {}),
+      ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
 
@@ -176,9 +213,10 @@ export class OllamaCompletionProvider implements ApiProvider {
     }
 
     logger.debug('Calling Ollama API', { params });
-    let response;
+
+    let response: FetchWithCacheResult<string> | undefined;
     try {
-      response = await fetchWithCache(
+      response = await fetchWithCache<string>(
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
@@ -199,9 +237,9 @@ export class OllamaCompletionProvider implements ApiProvider {
       };
     }
     logger.debug(`\tOllama generate API response: ${response.data}`);
-    if (response.data.error) {
+    if (typeof response.data === 'object' && response.data !== null && 'error' in response.data) {
       return {
-        error: `Ollama error: ${response.data.error}`,
+        error: `Ollama error: ${(response.data as { error: string }).error}`,
       };
     }
 
@@ -270,34 +308,72 @@ export class OllamaChatProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'ollama',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      maxTokens: this.config.num_predict,
+      stopSequences: this.config.stop,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const params: any = {
       model: this.modelName,
       messages,
-      options: Object.keys(this.config).reduce(
-        (options, key) => {
-          const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
-            options[optionName] = this.config[optionName];
-          }
-          return options;
-        },
-        {} as Record<string, any>,
-      ),
-      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
+        const optionName = key as keyof OllamaCompletionOptions;
+        if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
+          options[optionName] = this.config[optionName];
+        }
+        return options;
+      }, {}),
+      ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
 
     // Handle tools if configured
     if (this.config.tools) {
-      params.tools = maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+      if (loadedTools !== undefined) {
+        // Transform tools to OpenAI format if needed (Ollama uses OpenAI format)
+        params.tools = transformTools(loadedTools, 'openai');
+      }
     }
 
-    logger.debug('Calling Ollama API', { params });
-    let response;
+    logger.debug('[Ollama Chat] Calling Ollama API', { params });
+
+    let response: FetchWithCacheResult<string> | undefined;
     try {
-      response = await fetchWithCache(
+      response = await fetchWithCache<string>(
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
@@ -318,10 +394,14 @@ export class OllamaChatProvider implements ApiProvider {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
     }
-    logger.debug(`\tOllama generate API response: ${response.data}`);
-    if (response.data.error) {
+    logger.debug('[Ollama Chat] API response received', {
+      status: response.status,
+      dataLength: response.data?.length,
+    });
+
+    if (typeof response.data === 'object' && response.data !== null && 'error' in response.data) {
       return {
-        error: `Ollama error: ${response.data.error}`,
+        error: `Ollama error: ${(response.data as { error: string }).error}`,
       };
     }
 
@@ -331,18 +411,62 @@ export class OllamaChatProvider implements ApiProvider {
         .filter((line: string) => line.trim() !== '')
         .map((line: string) => JSON.parse(line) as OllamaChatJsonL);
 
-      const output = lines
+      // Find the final chunk (with done: true)
+      const finalChunk = lines.find((chunk: OllamaChatJsonL) => chunk.done);
+
+      // Collect all content chunks
+      const contentParts = lines
         .map((parsed: OllamaChatJsonL) => {
           if (parsed.message?.content) {
             return parsed.message.content;
           }
           return null;
         })
-        .filter((s: string | null) => s !== null)
-        .join('');
+        .filter((s: string | null) => s !== null);
+
+      const content = contentParts.join('');
+
+      // Find tool_calls from any chunk (they may appear before done: true)
+      const chunkWithToolCalls = lines.find(
+        (chunk: OllamaChatJsonL) =>
+          chunk.message?.tool_calls && chunk.message.tool_calls.length > 0,
+      );
+      let tool_calls = chunkWithToolCalls?.message?.tool_calls;
+
+      // Normalize tool_calls to match OpenAI format (arguments as JSON string, not object)
+      if (tool_calls && tool_calls.length > 0) {
+        tool_calls = tool_calls.map((call: { function: { name: string; arguments: any } }) => ({
+          function: {
+            name: call.function.name,
+            arguments:
+              typeof call.function.arguments === 'string'
+                ? call.function.arguments
+                : JSON.stringify(call.function.arguments),
+          },
+        }));
+      }
+
+      // Determine output based on message content and tool_calls
+      let output: any;
+      if (tool_calls && tool_calls.length > 0) {
+        // If there are tool calls, return them (similar to OpenAI behavior)
+        logger.debug('[Ollama Chat] Tool calls detected', {
+          toolCallCount: tool_calls.length,
+          hasContent: !!(content && content.trim()),
+        });
+        if (content && content.trim()) {
+          // If there's also content, return the full message object
+          output = { content, tool_calls };
+        } else {
+          // If only tool calls, return just the tool calls
+          output = tool_calls;
+        }
+      } else {
+        // No tool calls, return the content
+        output = content;
+      }
 
       // Extract token usage from the final chunk (where done: true)
-      const finalChunk = lines.find((chunk: OllamaChatJsonL) => chunk.done);
       let tokenUsage: Partial<TokenUsage> | undefined;
 
       if (
@@ -378,9 +502,14 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     };
 
     logger.debug('Calling Ollama API', { params });
-    let response;
+
+    interface OllamaEmbeddingResponse {
+      embedding: number[];
+    }
+
+    let response: FetchWithCacheResult<OllamaEmbeddingResponse>;
     try {
-      response = await fetchWithCache(
+      response = await fetchWithCache<OllamaEmbeddingResponse>(
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embeddings`,
         {
           method: 'POST',

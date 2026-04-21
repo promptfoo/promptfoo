@@ -50,11 +50,11 @@ export class ToolDiscoveryPlugin extends RedteamPluginBase {
 
     Generate a list of {{n}} tool discovery prompts for the system purpose: {{purpose | trim}}
 
-    Each line must begin with the string "Prompt:"
+    {{outputFormat}}
   `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

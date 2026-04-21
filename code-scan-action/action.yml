@@ -1,0 +1,42 @@
+name: 'Promptfoo Code Scan'
+description: 'Scan pull requests for LLM security vulnerabilities'
+author: 'Promptfoo, Inc.'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  api-host:
+    description: 'Promptfoo API host url'
+    required: false
+    default: https://api.promptfoo.app
+  min-severity:
+    description: 'Minimum severity level to report (low|medium|high|critical)'
+    required: false
+    default: 'medium'
+  minimum-severity:
+    description: 'Alias for min-severity (low|medium|high|critical)'
+    required: false
+    default: 'medium'
+  config-path:
+    description: 'Path to YAML configuration file'
+    required: false
+  guidance:
+    description: 'Custom guidance for the security scan'
+    required: false
+  guidance-file:
+    description: 'Path to file containing custom guidance'
+    required: false
+  github-token:
+    description: 'GitHub token for authentication (default: github.token)'
+    required: false
+    default: ${{ github.token }}
+  enable-fork-prs:
+    description: 'Enable scanning PRs from forked repositories'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

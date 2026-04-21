@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { callApi } from '../utils/api';
 
-type CloudConfigData = {
+export type CloudConfigData = {
   appUrl: string;
   isEnabled: boolean;
 };
@@ -46,6 +46,7 @@ export default function useCloudConfig(): {
   /**
    * Fetch on mount.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     fetchCloudConfig();
   }, []);

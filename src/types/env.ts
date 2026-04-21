@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 export const ProviderEnvOverridesSchema = z.object({
+  ABLIT_API_BASE_URL: z.string().optional(),
+  ABLIT_KEY: z.string().optional(),
   AI21_API_BASE_URL: z.string().optional(),
   AI21_API_KEY: z.string().optional(),
   AIML_API_KEY: z.string().optional(),
@@ -23,10 +25,12 @@ export const ProviderEnvOverridesSchema = z.object({
   AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: z.string().optional(),
   AZURE_TENANT_ID: z.string().optional(),
   AZURE_TOKEN_SCOPE: z.string().optional(),
-  BAM_API_HOST: z.string().optional(),
-  BAM_API_KEY: z.string().optional(),
+  CLAUDE_CODE_USE_BEDROCK: z.string().optional(),
+  CLAUDE_CODE_USE_VERTEX: z.string().optional(),
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_API_KEY: z.string().optional(),
+  CLOUDFLARE_GATEWAY_ID: z.string().optional(),
+  CF_AIG_TOKEN: z.string().optional(),
   COMETAPI_KEY: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
   COHERE_CLIENT_NAME: z.string().optional(),
@@ -34,6 +38,7 @@ export const ProviderEnvOverridesSchema = z.object({
   DATABRICKS_WORKSPACE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_BASE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_API_KEY: z.string().optional(),
+  ELEVENLABS_API_KEY: z.string().optional(),
   FAL_KEY: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
   GOOGLE_API_HOST: z.string().optional(),
@@ -59,6 +64,7 @@ export const ProviderEnvOverridesSchema = z.object({
   MISTRAL_API_BASE_URL: z.string().optional(),
   MISTRAL_API_HOST: z.string().optional(),
   MISTRAL_API_KEY: z.string().optional(),
+  MODELSLAB_API_KEY: z.string().optional(),
   NSCALE_SERVICE_TOKEN: z.string().optional(),
   NSCALE_API_KEY: z.string().optional(),
   OLLAMA_API_KEY: z.string().optional(),
@@ -68,6 +74,15 @@ export const ProviderEnvOverridesSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().optional(),
   OPENAI_ORGANIZATION: z.string().optional(),
+  CLAWDBOT_GATEWAY_PASSWORD: z.string().optional(),
+  CLAWDBOT_GATEWAY_TOKEN: z.string().optional(),
+  CLAWDBOT_GATEWAY_URL: z.string().optional(),
+  CODEX_API_KEY: z.string().optional(),
+  OPENCLAW_CONFIG_PATH: z.string().optional(),
+  OPENCLAW_GATEWAY_PASSWORD: z.string().optional(),
+  OPENCLAW_GATEWAY_PORT: z.string().optional(),
+  OPENCLAW_GATEWAY_TOKEN: z.string().optional(),
+  OPENCLAW_GATEWAY_URL: z.string().optional(),
   PALM_API_HOST: z.string().optional(),
   PALM_API_KEY: z.string().optional(),
   PORTKEY_API_KEY: z.string().optional(),
@@ -78,8 +93,15 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_JKS_PASSWORD: z.string().optional(),
   PROMPTFOO_JKS_ALIAS: z.string().optional(),
   PROMPTFOO_INSECURE_SSL: z.string().optional(),
+  QUIVERAI_API_KEY: z.string().optional(),
   REPLICATE_API_KEY: z.string().optional(),
   REPLICATE_API_TOKEN: z.string().optional(),
+  SHAREPOINT_BASE_URL: z.string().optional(),
+  SHAREPOINT_CERT_PATH: z.string().optional(),
+  SHAREPOINT_CLIENT_ID: z.string().optional(),
+  SHAREPOINT_TENANT_ID: z.string().optional(),
+  VERCEL_AI_GATEWAY_API_KEY: z.string().optional(),
+  VERCEL_AI_GATEWAY_BASE_URL: z.string().optional(),
   VERTEX_API_HOST: z.string().optional(),
   VERTEX_API_KEY: z.string().optional(),
   VERTEX_API_VERSION: z.string().optional(),
@@ -92,6 +114,8 @@ export const ProviderEnvOverridesSchema = z.object({
   WATSONX_AI_AUTH_TYPE: z.string().optional(),
   WATSONX_AI_BEARER_TOKEN: z.string().optional(),
   WATSONX_AI_PROJECT_ID: z.string().optional(),
+  XAI_API_BASE_URL: z.string().optional(),
+  XAI_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_ENDPOINT: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_KEY: z.string().optional(),
   AZURE_CONTENT_SAFETY_API_VERSION: z.string().optional(),
@@ -104,4 +128,7 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
+// Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
+// while maintaining type safety for known env vars
+export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
+  Record<string, string | undefined>;

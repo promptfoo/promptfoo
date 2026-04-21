@@ -12,8 +12,11 @@ export async function extractSystemPurpose(
   provider: ApiProvider,
   prompts: string[],
 ): Promise<string> {
-  if (prompts.length === 0) {
-    logger.debug('[purpose] No prompts provided, returning default purpose');
+  const onlyTemplatePrompt =
+    prompts.length === 1 && prompts[0] && prompts[0].trim().replace(/\s+/g, '') === '{{prompt}}';
+
+  if (prompts.length === 0 || onlyTemplatePrompt) {
+    logger.debug('[purpose] No meaningful prompts provided, returning default purpose');
     return DEFAULT_PURPOSE;
   }
 

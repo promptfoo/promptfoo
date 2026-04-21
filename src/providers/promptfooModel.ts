@@ -75,8 +75,8 @@ export class PromptfooModelProvider implements ApiProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _context?: CallApiContextParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     logger.debug(`[PromptfooModel] Calling API with model: ${this.model}`);
 
@@ -145,6 +145,7 @@ export class PromptfooModelProvider implements ApiProvider {
           total: modelResponse.usage?.total_tokens || 0,
           prompt: modelResponse.usage?.prompt_tokens || 0,
           completion: modelResponse.usage?.completion_tokens || 0,
+          numRequests: 1,
         },
       };
     } catch (error) {

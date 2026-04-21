@@ -1,151 +1,94 @@
 import React from 'react';
 
-import FilterAltIcon from '@mui/icons-material/FilterAlt';
-import Box from '@mui/material/Box';
-import { green, orange, red } from '@mui/material/colors';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import IconButton from '@mui/material/IconButton';
-import { alpha, useTheme } from '@mui/material/styles';
-import {
-  DataGrid,
-  type GridColDef,
-  GridColumnGroupingModel,
-  GridToolbarContainer,
-  GridToolbarFilterButton,
-  GridToolbarQuickFilter,
-} from '@mui/x-data-grid';
+import { DataTable } from '@app/components/data-table/data-table';
+import { Button } from '@app/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import { FilterIcon } from '@app/components/ui/icons';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { cn } from '@app/lib/utils';
 import {
   deserializePolicyIdFromMetric,
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
-  isValidPolicyObject,
-  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
+import { useApplyFilterFromMetric } from './hooks';
 import { useTableStore } from './store';
-import type { PolicyObject } from '@promptfoo/redteam/types';
+import { getNamedMetricTotal } from './utils';
+import type { ColumnDef } from '@tanstack/react-table';
 
 type MetricScore = {
   score: number;
-  count: number;
+  total: number;
   hasScore: boolean;
 };
 
 interface MetricRow {
   id: string;
   metric: string;
-  [key: string]: any; // For dynamic prompt columns
+  [key: string]: string | MetricScore; // For dynamic prompt columns (prompt_${idx})
 }
 
 const MetricsTable = ({ onClose }: { onClose: () => void }) => {
-  const { table, filters, addFilter, config } = useTableStore();
-  const theme = useTheme();
+  const { table, config } = useTableStore();
+  const applyFilterFromMetric = useApplyFilterFromMetric();
 
   if (!table || !table.head || !table.head.prompts) {
     return null;
   }
 
-  const policiesById = React.useMemo(() => {
-    const map: Record<PolicyObject['id'], PolicyObject> = {};
-    config?.redteam?.plugins?.forEach((plugin) => {
-      if (typeof plugin !== 'string' && plugin.id === 'policy') {
-        const policy = plugin?.config?.policy;
-        if (policy) {
-          if (isValidPolicyObject(policy)) {
-            map[policy.id] = policy;
-          } else {
-            const id = makeInlinePolicyId(policy);
-            map[id] = { id, text: policy };
-          }
-        }
-      }
-    });
-    return map;
-  }, [config]);
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   /**
-   * Given the pass rate percentages, calculates the color and text color for the cell.
+   * Given the pass rate percentages, calculates the Tailwind classes for the cell.
    * Uses a diverging RdYlGn scale.
    * @param percentage - The pass rate percentage.
-   * @returns The background color and text color for the cell.
+   * @returns The Tailwind class names for styling.
    * @see https://observablehq.com/@d3/color-schemes#diverging
    */
-  function getPercentageColors(percentage: number) {
-    let backgroundColor;
-    let color;
-
+  const getPercentageClasses = React.useCallback((percentage: number): string => {
     if (percentage >= 75) {
-      let shade = 700;
       if (percentage >= 90) {
-        shade = 900;
-      } else if (percentage >= 80) {
-        shade = 800;
+        return 'bg-green-900/90 text-white dark:bg-green-800/90';
       }
-      color = theme.palette.success.contrastText;
-      backgroundColor = alpha(green[shade as keyof typeof green], percentage / 100);
-    } else if (percentage >= 50) {
-      let shade = 700;
-      if (percentage >= 70) {
-        shade = 900;
-      } else if (percentage >= 60) {
-        shade = 800;
+      if (percentage >= 80) {
+        return 'bg-green-800/90 text-white dark:bg-green-700/90';
       }
-      color = theme.palette.warning.contrastText;
-      backgroundColor = alpha(orange[shade as keyof typeof orange], percentage / 100);
-    } else {
-      let shade = 400;
-      if (percentage <= 10) {
-        shade = 900;
-      } else if (percentage <= 20) {
-        shade = 800;
-      } else if (percentage <= 30) {
-        shade = 600;
-      } else if (percentage <= 40) {
-        shade = 500;
-      }
-      color = theme.palette.error.contrastText;
-      backgroundColor = alpha(red[shade as keyof typeof red], 1 - percentage / 100);
+      return 'bg-green-700/90 text-white dark:bg-green-600/90';
     }
-
-    return {
-      backgroundColor,
-      color,
-    };
-  }
+    if (percentage >= 50) {
+      if (percentage >= 70) {
+        return 'bg-orange-900/90 text-white dark:bg-orange-800/90';
+      }
+      if (percentage >= 60) {
+        return 'bg-orange-800/90 text-white dark:bg-orange-700/90';
+      }
+      return 'bg-orange-700/90 text-white dark:bg-orange-600/90';
+    }
+    // Red scale for low percentages
+    if (percentage <= 10) {
+      return 'bg-red-900 text-white dark:bg-red-800';
+    }
+    if (percentage <= 20) {
+      return 'bg-red-800 text-white dark:bg-red-700';
+    }
+    if (percentage <= 30) {
+      return 'bg-red-600 text-white dark:bg-red-500';
+    }
+    if (percentage <= 40) {
+      return 'bg-red-500 text-white dark:bg-red-400 dark:text-black';
+    }
+    return 'bg-red-400 text-white dark:bg-red-300 dark:text-black';
+  }, []);
 
   /**
-   * Applies the metric as a filter and switches to the results tab.
+   * Applies the metric as a filter and closes the dialog.
    */
   const handleMetricFilterClick = React.useCallback(
-    (metric: string | null) => {
-      if (!metric) {
-        return;
-      }
-      const asPolicy = isPolicyMetric(metric);
-      const filter = {
-        type: asPolicy ? ('policy' as const) : ('metric' as const),
-        operator: 'equals' as const,
-        value: asPolicy ? deserializePolicyIdFromMetric(metric) : metric,
-        logicOperator: 'or' as const,
-      };
-
-      // If this filter is already applied, do not re-apply it.
-      if (
-        Object.values(filters.values).find(
-          (f) =>
-            f.type === filter.type &&
-            f.value === filter.value &&
-            f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
-        )
-      ) {
-        return;
-      }
-
-      addFilter(filter);
+    (metric: string) => {
+      applyFilterFromMetric(metric);
       onClose();
     },
-    [addFilter, filters.values],
+    [applyFilterFromMetric, onClose],
   );
 
   // Extract aggregated metric names from prompts
@@ -159,25 +102,25 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     return Array.from(metrics).sort();
   }, [table.head.prompts]);
 
-  // Create columns for DataGrid
-  const columns: GridColDef[] = React.useMemo(() => {
-    const cols: GridColDef[] = [
+  // Create columns for DataTable
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  const columns: ColumnDef<MetricRow>[] = React.useMemo(() => {
+    const cols: ColumnDef<MetricRow>[] = [
       {
-        field: 'metric',
-        headerName: 'Metric',
-        flex: 1,
-        headerAlign: 'left',
-        valueGetter: (value) => {
+        accessorKey: 'metric',
+        header: 'Metric',
+        size: 300,
+        cell: ({ getValue }) => {
+          const value = getValue<string>();
           if (isPolicyMetric(value)) {
             const policyId = deserializePolicyIdFromMetric(value);
             const policy = policiesById[policyId];
             if (!policy) {
               return value;
             }
-            return formatPolicyIdentifierAsMetric(policy.name ?? policy.id);
-          } else {
-            return value;
+            return formatPolicyIdentifierAsMetric(policy.name ?? policy.id, value);
           }
+          return value;
         },
       },
     ];
@@ -185,165 +128,120 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
     // Add a column for each prompt
     table.head.prompts.forEach((prompt, idx) => {
       const columnId = `prompt_${idx}`;
+      const providerName = prompt.provider;
 
       cols.push({
-        field: `${columnId}_pass_rate`,
-        headerName: 'Pass Rate',
-        flex: 0.33,
-        type: 'number',
-        valueGetter: (_, row) => {
-          const { hasScore, score, count } = row[columnId] as MetricScore;
-          return hasScore && typeof count === 'number' && count > 0 ? (score / count) * 100 : 0;
-        },
-        renderCell: (params) => {
-          const { backgroundColor, color } = getPercentageColors(params.value);
+        accessorKey: `${columnId}_pass_rate`,
+        header: `${providerName} - Pass Rate`,
+        size: 150,
+        cell: ({ row }) => {
+          const metricScore = row.original[columnId] as MetricScore;
+          const { hasScore, score, total } = metricScore;
+          const percentage =
+            hasScore && typeof total === 'number' && total > 0 ? (score / total) * 100 : 0;
+          const classes = getPercentageClasses(percentage);
+
           return (
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-                height: '100%',
-              }}
-            >
-              <Box
-                component="span"
-                sx={{
-                  backgroundColor,
-                  color,
-                  borderRadius: '4px',
-                  width: '80px',
-                  height: '24px',
-                  display: 'inline-flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  fontWeight: 500,
-                  fontSize: '0.875rem',
-                  lineHeight: 1,
-                }}
+            <div className="flex justify-end items-center h-full">
+              <span
+                className={cn(
+                  'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
+                  classes,
+                )}
               >
-                {params.value.toFixed(2)}%
-              </Box>
-            </Box>
+                {percentage.toFixed(2)}%
+              </span>
+            </div>
           );
         },
       });
       cols.push({
-        field: `${columnId}_score`,
-        headerName: 'Pass Count',
-        flex: 0.33,
-        type: 'number',
-        valueGetter: (_, row) => {
-          const { hasScore, score } = row[columnId] as MetricScore;
-          return hasScore ? score : 0;
+        accessorKey: `${columnId}_score`,
+        header: `${providerName} - Metric Score`,
+        size: 120,
+        cell: ({ row }) => {
+          const metricScore = row.original[columnId] as MetricScore;
+          const { hasScore, score } = metricScore;
+          return <span className="text-sm">{hasScore ? score : 0}</span>;
         },
       });
       cols.push({
-        field: `${columnId}_count`,
-        headerName: 'Test Count',
-        flex: 0.33,
-        type: 'number',
-        valueGetter: (_, row) => {
-          const { count } = row[columnId] as MetricScore;
-          return count;
+        accessorKey: `${columnId}_total`,
+        header: `${providerName} - Metric Total`,
+        size: 120,
+        cell: ({ row }) => {
+          const metricScore = row.original[columnId] as MetricScore;
+          const { total } = metricScore;
+          return <span className="text-sm">{total}</span>;
         },
       });
     });
 
     cols.push({
-      field: 'avg_pass_rate',
-      headerName: 'Avg. Pass Rate',
-      flex: 0.33,
-      type: 'number',
-      valueGetter: (_, row) => {
+      accessorKey: 'avg_pass_rate',
+      header: 'Avg. Pass Rate',
+      size: 150,
+      cell: ({ row }) => {
         let promptCount = 0;
         let totalPassRate = 0;
-        Object.entries(row).forEach(([key, value]) => {
+        Object.entries(row.original).forEach(([key, value]) => {
           if (key.startsWith('prompt_')) {
-            const { score, count, hasScore } = value as MetricScore;
-            if (hasScore && typeof count === 'number' && count > 0) {
+            const { score, total, hasScore } = value as MetricScore;
+            if (hasScore && typeof total === 'number' && total > 0) {
               promptCount++;
-              totalPassRate += (score / count) * 100;
+              totalPassRate += (score / total) * 100;
             }
           }
         });
-        return promptCount > 0 ? totalPassRate / promptCount : 0;
-      },
-      renderCell: (params) => {
-        const { backgroundColor, color } = getPercentageColors(params.value);
+        const percentage = promptCount > 0 ? totalPassRate / promptCount : 0;
+        const classes = getPercentageClasses(percentage);
+
         return (
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              alignItems: 'center',
-              height: '100%',
-            }}
-          >
-            <Box
-              component="span"
-              sx={{
-                backgroundColor,
-                color,
-                borderRadius: '4px',
-                width: '80px',
-                height: '24px',
-                display: 'inline-flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                fontWeight: 500,
-                fontSize: '0.875rem',
-                lineHeight: 1,
-              }}
+          <div className="flex justify-end items-center h-full">
+            <span
+              className={cn(
+                'rounded px-2 py-1 text-sm font-medium inline-flex justify-center items-center min-w-20',
+                classes,
+              )}
             >
-              {params.value.toFixed(2)}%
-            </Box>
-          </Box>
+              {percentage.toFixed(2)}%
+            </span>
+          </div>
         );
       },
     });
 
     // Actions Column:
     cols.push({
-      field: 'actions',
-      headerName: '',
-      flex: 0.25,
-      align: 'right',
-      renderCell: (params) => {
+      id: 'actions',
+      header: '',
+      size: 80,
+      cell: ({ row }) => {
         return (
-          <IconButton
-            onClick={() => handleMetricFilterClick(params.row.metric)}
-            className="filter-icon"
-            size="small"
-            sx={{
-              '&:hover': {
-                color: 'primary.main',
-                backgroundColor: 'action.hover',
-              },
-            }}
-          >
-            <FilterAltIcon />
-          </IconButton>
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleMetricFilterClick(row.original.metric)}
+              className="filter-icon size-8 p-0"
+            >
+              <FilterIcon className="size-4" />
+            </Button>
+          </div>
         );
       },
     });
 
     return cols;
-  }, [table.head.prompts, promptMetricNames]);
+  }, [
+    table.head.prompts,
+    promptMetricNames,
+    policiesById,
+    getPercentageClasses,
+    handleMetricFilterClick,
+  ]);
 
-  const columnGroupingModel: GridColumnGroupingModel = React.useMemo(() => {
-    return table.head.prompts.map((prompt, idx) => ({
-      groupId: `prompt_${idx}`,
-      headerName: prompt.provider,
-      children: [
-        { field: `prompt_${idx}_pass_rate` },
-        { field: `prompt_${idx}_score` },
-        { field: `prompt_${idx}_count` },
-      ],
-    }));
-  }, [table.head.prompts]);
-
-  // Create rows for DataGrid
+  // Create rows for DataTable
   const rows: MetricRow[] = React.useMemo(() => {
     return promptMetricNames.map((metric) => {
       const row: MetricRow = {
@@ -354,12 +252,12 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       // Add data for each prompt
       table.head.prompts.forEach((prompt, idx) => {
         const score = prompt.metrics?.namedScores?.[metric];
-        const count = prompt.metrics?.namedScoresCount?.[metric];
+        const total = getNamedMetricTotal(prompt.metrics, metric);
         const hasScore = score !== undefined;
 
         row[`prompt_${idx}`] = {
-          score,
-          count,
+          score: score ?? 0,
+          total: total ?? 0,
           hasScore,
         };
       });
@@ -373,41 +271,15 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
   }
 
   return (
-    <DataGrid
-      rows={rows}
+    <DataTable
       columns={columns}
-      columnGroupingModel={columnGroupingModel}
-      density="compact"
-      disableRowSelectionOnClick
-      initialState={{
-        sorting: {
-          sortModel: [{ field: 'metric', sort: 'asc' }],
-        },
-        pagination: { paginationModel: { pageSize: 50 } },
-      }}
-      sx={{
-        '& .MuiDataGrid-row:hover': {
-          backgroundColor: 'action.hover',
-        },
-      }}
-      slots={{
-        toolbar: () => (
-          <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <GridToolbarFilterButton />
-            </Box>
-            <Box sx={{ flexGrow: 1 }} />
-            <GridToolbarQuickFilter
-              sx={{
-                '& .MuiInputBase-root': {
-                  borderRadius: 2,
-                  backgroundColor: theme.palette.background.paper,
-                },
-              }}
-            />
-          </GridToolbarContainer>
-        ),
-      }}
+      data={rows}
+      getRowId={(row) => row.id}
+      initialSorting={[{ id: 'metric', desc: false }]}
+      emptyMessage="No metrics available"
+      showToolbar
+      showFilter
+      showColumnToggle
     />
   );
 };
@@ -420,8 +292,11 @@ export default function CustomMetricsDialog({
   onClose: () => void;
 }) {
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xl">
-      <DialogContent sx={{ height: '80vh' }}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-[90vw] h-[80vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle>Custom Metrics</DialogTitle>
+        </DialogHeader>
         <MetricsTable onClose={onClose} />
       </DialogContent>
     </Dialog>

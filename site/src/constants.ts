@@ -1,3 +1,4 @@
-export const SITE_CONSTANTS = {
-  USER_COUNT_DISPLAY: '150,000',
-};
+import generatedStats from './.generated-stats.json';
+import siteStats from './site-stats.json';
+
+export const SITE_CONSTANTS = { ...siteStats, ...generatedStats };

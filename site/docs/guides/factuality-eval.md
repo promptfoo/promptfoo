@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-title: Evaluating factuality
+title: Evaluating Factuality
 description: How to evaluate the factual accuracy of LLM outputs against reference information using promptfoo's factuality assertion
 ---
 
@@ -38,10 +38,10 @@ The fastest way to get started with factuality evaluation is to use our pre-buil
 
 ```bash
 # Initialize the example - this command creates a new directory with all necessary files
-npx promptfoo@latest init --example huggingface-dataset-factuality
+npx promptfoo@latest init --example huggingface/dataset-factuality
 
 # Change into the newly created directory
-cd huggingface-dataset-factuality
+cd huggingface/dataset-factuality
 
 # Run the evaluation - this executes the factuality tests using the models specified in the config
 npx promptfoo eval
@@ -52,7 +52,7 @@ npx promptfoo view
 
 What these commands do:
 
-1. The first command initializes a new project using our huggingface-dataset-factuality example template
+1. The first command initializes a new project using our huggingface/dataset-factuality example template
 2. The second command navigates into the project directory
 3. The third command runs the factuality evaluation against the TruthfulQA dataset
 4. The final command opens the results in your browser for analysis
@@ -109,7 +109,7 @@ To set up a simple factuality evaluation for your LLM outputs:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 prompts:
   - |
     Please answer the following question accurately:
@@ -137,9 +137,9 @@ Factuality evaluation is especially useful for comparing how different models pe
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
-  - anthropic:claude-3-7-sonnet-20250219
+  - openai:gpt-5-mini
+  - openai:gpt-5
+  - anthropic:claude-sonnet-4-6
   - google:gemini-2.0-flash
 prompts:
   - |
@@ -207,13 +207,13 @@ The quality of your reference answers is crucial for accurate factuality evaluat
 
 ### Selecting the Grading Provider
 
-By default, promptfoo uses `gpt-4.1-2025-04-14` for grading. To specify a different grading model:
+By default, promptfoo uses `gpt-5` for grading. To specify a different grading model:
 
 ```yaml
 defaultTest:
   options:
     # Set the provider for grading factuality
-    provider: openai:gpt-4.1
+    provider: openai:gpt-5
 ```
 
 You can also override it per assertion:
@@ -222,13 +222,13 @@ You can also override it per assertion:
 assert:
   - type: factuality
     value: The capital of California is Sacramento
-    provider: anthropic:claude-3-7-sonnet-20250219
+    provider: anthropic:claude-sonnet-4-6
 ```
 
 Or via the command line:
 
 ```bash
-promptfoo eval --grader openai:gpt-4.1
+promptfoo eval --grader openai:gpt-5
 ```
 
 ### Customizing Scoring Weights
@@ -325,4 +325,4 @@ When setting up factuality evaluations:
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more evaluation options
 - [Factuality assertion reference](/docs/configuration/expected-outputs/model-graded/factuality)
-- [TruthfulQA example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset-factuality) - Complete code for the TruthfulQA factuality evaluation example
+- [TruthfulQA example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface/dataset-factuality) - Complete code for the TruthfulQA factuality evaluation example

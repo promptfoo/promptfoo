@@ -117,6 +117,83 @@ flowchart TB
     class Start,End start_end;
 ```
 
+## Unblocking Feature
+
+### Overview
+
+The unblocking feature helps red team providers handle situations where a target model asks clarifying questions that block the conversation from progressing. When enabled, it automatically detects and responds to these blocking questions to keep the adversarial conversation flowing.
+
+### How It Works
+
+During a red team attack (e.g., Crescendo, GOAT, Custom providers), the unblocking system:
+
+1. Analyzes the target model's response to detect if it's asking a blocking question
+2. If a blocking question is detected, generates an appropriate answer
+3. Sends the answer to continue the conversation
+4. Continues with the red team attack
+
+**Example blocking questions:**
+
+- "What specific industry are you in?"
+- "Can you provide more details about your use case?"
+- "Which country are you located in?"
+
+### When to Enable
+
+**Enable unblocking (`PROMPTFOO_ENABLE_UNBLOCKING=true`) when:**
+
+- Testing conversational agents that frequently ask clarifying questions
+- Running red team evaluations against customer service bots or domain-specific assistants
+- You want more realistic multi-turn adversarial conversations
+- The target system requires contextual information to proceed
+
+**Keep disabled (default) when:**
+
+- Testing simple question-answering systems
+- You want faster red team evaluations (fewer API calls)
+- You want to measure how well the target handles ambiguous queries
+- Budget constraints are a concern (each unblocking check adds cost)
+
+### Configuration
+
+Set the environment variable before running red team evaluations:
+
+```bash
+# Enable unblocking
+export PROMPTFOO_ENABLE_UNBLOCKING=true
+
+# Run red team eval
+promptfoo eval
+```
+
+### Tradeoffs
+
+**Pros:**
+
+- More realistic adversarial testing
+- Better coverage for conversational systems
+- Helps surface vulnerabilities in multi-turn scenarios
+
+**Cons:**
+
+- Increases evaluation time and cost
+- Adds extra API calls to the remote inference service
+- May generate unnecessary responses if the target model isn't actually blocking
+
+### Implementation Details
+
+The unblocking feature is implemented in `shared.ts` and uses:
+
+- Remote inference for blocking question detection
+- The `blocking-question-analysis` task
+- Conversation history and goal context for generating appropriate answers
+
+Unblocking is available in:
+
+- Crescendo Provider
+- GOAT Provider
+- Custom Provider
+
 ## References
 
 - Based on research from: [Jailbroken: How Does LLM Safety Training Fail?](https://arxiv.org/abs/2307.02483)

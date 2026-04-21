@@ -1,8 +1,8 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getEvalSummaries } from '../../../models/eval';
 import { evaluationCache, paginate } from '../lib/performance';
 import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**
  * Tool to list and browse evaluation runs
@@ -16,26 +16,24 @@ export function registerListEvaluationsTool(server: McpServer) {
         .string()
         .optional()
         .describe(
-          'Filter evaluations by dataset ID. Example: "dataset_123" or leave empty to see all evaluations',
+          'Filter evaluations by dataset ID (SHA256 hash). Example: "0e65b35936119614815dfb3a2bd2c09863d8abbcd32d0cae1e98902b04b5df4e" or leave empty to see all evaluations',
         ),
       page: z
-        .number()
         .int()
         .positive()
         .optional()
-        .default(1)
+        .prefault(1)
         .describe('Page number for pagination (default: 1)'),
       pageSize: z
-        .number()
         .int()
         .min(1)
         .max(100)
         .optional()
-        .default(20)
+        .prefault(20)
         .describe('Number of items per page (1-100, default: 20)'),
     },
     async (args) => {
-      const { datasetId, page = 1, pageSize = 20 } = args;
+      const { datasetId, page, pageSize } = args;
 
       try {
         // Check cache first
@@ -56,7 +54,7 @@ export function registerListEvaluationsTool(server: McpServer) {
         // Add helpful summary information
         const summary = {
           totalCount: paginatedResult.pagination.totalItems,
-          recentCount: evals.filter((e: any) => {
+          recentCount: evals.filter((e) => {
             const createdAt = new Date(e.createdAt);
             const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
             return createdAt > dayAgo;

@@ -44,7 +44,6 @@ export class ReasoningDosGrader extends RedteamGraderBase {
 
   getSuggestions({
     rawPrompt,
-    renderedValue,
   }: {
     rawPrompt: string;
     renderedValue?: AssertionValue;

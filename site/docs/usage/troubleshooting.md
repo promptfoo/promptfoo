@@ -1,6 +1,6 @@
 ---
 sidebar_position: 60
-description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, and native builds in your LLM testing pipeline
+description: Debug and resolve common promptfoo issues with solutions for memory optimization, API configuration, Node.js errors, native builds, and network/proxy setup in your LLM testing pipeline
 ---
 
 # Troubleshooting
@@ -10,7 +10,28 @@ description: Debug and resolve common promptfoo issues with solutions for memory
 Before troubleshooting specific issues, you can access detailed logs to help diagnose problems:
 
 - **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
+- **Custom log directory**: Set the `PROMPTFOO_LOG_DIR` environment variable to write logs to a different directory (e.g., `PROMPTFOO_LOG_DIR=./logs promptfoo eval`)
 - **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
+
+### Live Debug Toggle
+
+During `promptfoo redteam run`, you can toggle debug logging on and off in real-time without restarting:
+
+- **Press `v`** at any time to toggle verbose/debug output
+- Works only in interactive terminal mode (not in CI or when output is piped)
+- Useful for investigating issues mid-run without overwhelming log output
+
+When you start a scan, you'll see:
+
+```
+  Tip: Press v to toggle debug output
+```
+
+Press `v` to enable debug logs and see detailed request metadata, provider response summaries, and grading status. Sensitive payloads, credentials, and raw response bodies may be redacted or summarized. Press `v` again to return to clean output.
+
+:::tip
+This is especially helpful when a scan seems stuck or you want to understand what's happening with a specific test case.
+:::
 
 ## Out of memory error
 
@@ -158,11 +179,46 @@ npm install --build-from-source
 npm rebuild
 ```
 
+## Network and proxy issues
+
+If you're behind a corporate proxy or firewall and having trouble connecting to LLM APIs:
+
+### Configure proxy settings
+
+Set standard proxy environment variables before running promptfoo:
+
+```bash
+# Set proxy for HTTPS requests (most common)
+export HTTPS_PROXY=http://proxy.company.com:8080
+
+# With authentication if needed
+export HTTPS_PROXY=http://username:password@proxy.company.com:8080
+
+# Exclude specific hosts from proxying
+export NO_PROXY=localhost,127.0.0.1,internal.domain.com
+```
+
+### Custom CA certificates
+
+For environments with custom certificate authorities:
+
+```bash
+export PROMPTFOO_CA_CERT_PATH=/path/to/ca-bundle.crt
+```
+
+### Verify your configuration
+
+Run `promptfoo debug` to see detected proxy settings and verify your network configuration is correct.
+
+See the [FAQ](/docs/faq/#how-do-i-configure-promptfoo-for-corporate-networks-or-proxies) for complete proxy and SSL configuration details.
+
 ## OpenAI API key is not set
 
 If you're using OpenAI, set the `OPENAI_API_KEY` environment variable or add `apiKey` to the provider config.
 
-If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `llm-rubric` or `similar` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader).
+For default text-only model grading and synthesis, you can also install `@openai/codex-sdk`, sign in through the Codex CLI, and let Promptfoo use `openai:codex-sdk` automatically when no higher-priority API credentials are set. This does not cover embedding or moderation providers.
+
+If you're not using OpenAI but still receiving this message, you probably have some [model-graded metric](/docs/configuration/expected-outputs/model-graded/) such as `similar` or `moderation` that requires you to [override the grader](/docs/configuration/expected-outputs/model-graded/#overriding-the-llm-grader) or configure an embedding/moderation provider explicitly.
 
 Follow the instructions to override the grader, e.g., using the `defaultTest` property:
 
@@ -178,6 +234,75 @@ defaultTest:
         id: azureopenai:embeddings:text-embedding-ada-002-deployment
         config:
           apiHost: xxx.openai.azure.com
+```
+
+## Python/JavaScript tool files require function name
+
+If you see errors like `Python files require a function name` when loading tools from Python or JavaScript files, you need to specify the function name that returns the tool definitions.
+
+### Solution
+
+Python and JavaScript tool files must specify a function name using the `file://path:function_name` format:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-4.1-mini
+    config:
+      # Correct - specifies function name
+      tools: file://./tools.py:get_tools
+      # or for JavaScript/TypeScript
+      tools: file://./tools.js:getTools
+```
+
+The function must return a tool definitions array (can be synchronous or asynchronous):
+
+```python title="tools.py"
+def get_tools():
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_weather",
+                "description": "Get the current weather in a given location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA"
+                        }
+                    },
+                    "required": ["location"]
+                }
+            }
+        }
+    ]
+```
+
+```javascript title="tools.js"
+function getTools() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'get_current_weather',
+        description: 'Get the current weather in a given location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description: 'The city and state, e.g. San Francisco, CA',
+            },
+          },
+          required: ['location'],
+        },
+      },
+    },
+  ];
+}
+
+module.exports = { getTools };
 ```
 
 ## How to triage stuck evals
@@ -339,11 +464,8 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 
 ## Finding log files
 
-promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
-`PROMPTFOO_LOG_DIR` defaults to the current working directory, so the log file
-is created next to where you run your command.
+Promptfoo logs errors and verbose logs to `~/.promptfoo/logs` by default.
 
-Set `PROMPTFOO_DISABLE_ERROR_LOG=true` to turn off file logging, or change the
-location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+Change the location by setting `PROMPTFOO_LOG_DIR` to a different directory.
 
-Increase verbosity by running commands with `LOG_LEVEL=debug`.
+For each run an error log and a debug log will be created.

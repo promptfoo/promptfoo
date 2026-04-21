@@ -18,7 +18,7 @@ To reference prompts in Portkey:
      - 'portkey://pp-test-promp-669f48'
 
    providers:
-     - openai:gpt-4.1-mini
+     - openai:gpt-5-mini
 
    tests:
      - vars:
@@ -31,13 +31,15 @@ Note that promptfoo does not follow the temperature, model, and other parameters
 
 ## Using Portkey gateway
 
-The Portkey AI gateway is directly supported by promptfoo. See also [portkey's documentation on integrating promptfoo](https://portkey.ai/docs/integrations/libraries/promptfoo).
+The Portkey AI gateway is directly supported by promptfoo. See also:
+
+- [Portkey's documentation on integrating promptfoo](https://portkey.ai/docs/integrations/libraries/promptfoo)
 
 Example:
 
 ```yaml
 providers:
-  id: portkey:gpt-4.1-mini
+  id: portkey:gpt-5-mini
   config:
     portkeyProvider: openai
 ```
@@ -46,7 +48,7 @@ More complex portkey configurations are also supported.
 
 ```yaml
 providers:
-  id: portkey:gpt-4.1-mini
+  id: portkey:gpt-5-mini
   config:
     # Can alternatively set environment variable, e.g. PORTKEY_API_KEY
     portkeyApiKey: xxx
