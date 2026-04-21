@@ -5,6 +5,7 @@ import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
+import { mockProcessEnv } from '../util/utils';
 
 // Windows CI has severe filesystem delays - allow up to 90s
 const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
@@ -13,7 +14,7 @@ const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 // This test ensures paths like C:\ don't break the protocol parsing
 describe('PythonProvider Windows Path Handling', () => {
   let tempDir: string;
-  let previousCacheEnabled: string | undefined;
+  let restoreEnv: () => void;
   let pathProvider: PythonProvider;
   let concurrentProvider: PythonProvider;
   let protocolProvider: PythonProvider;
@@ -36,9 +37,7 @@ describe('PythonProvider Windows Path Handling', () => {
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
 
-    // Disable caching for tests
-    previousCacheEnabled = process.env.PROMPTFOO_CACHE_ENABLED;
-    process.env.PROMPTFOO_CACHE_ENABLED = 'false';
+    restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'false' });
 
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-windows-path-test-'));
 
@@ -125,11 +124,7 @@ def call_api(prompt, options, context):
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
 
-    if (previousCacheEnabled === undefined) {
-      delete process.env.PROMPTFOO_CACHE_ENABLED;
-    } else {
-      process.env.PROMPTFOO_CACHE_ENABLED = previousCacheEnabled;
-    }
+    restoreEnv();
 
     if (shutdownFailures.length > 0) {
       throw new Error(`PythonProvider shutdown failed: ${shutdownFailures.join('; ')}`);

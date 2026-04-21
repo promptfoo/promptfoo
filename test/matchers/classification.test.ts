@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { matchesClassification } from '../../src/matchers/classification';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
+import { createMockProvider } from '../factories/provider';
 
 import type {
   ApiProvider,
@@ -98,11 +99,9 @@ describe('matchesClassification', () => {
 
   it('should fail cleanly when expected is undefined and no scores are returned', async () => {
     const grading: GradingConfig = {
-      provider: {
-        id: () => 'empty-classification-provider',
-        callApi: vi.fn(),
+      provider: Object.assign(createMockProvider({ id: 'empty-classification-provider' }), {
         callClassificationApi: vi.fn().mockResolvedValue({ classification: {} }),
-      },
+      }),
     };
 
     await expect(matchesClassification(undefined, 'Sample output', 0.5, grading)).resolves.toEqual({

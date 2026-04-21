@@ -425,11 +425,13 @@ export default class GoatProvider implements ApiProvider {
           }
         }
 
-        // Build target vars - handle multi-input mode
-        const targetVars: Record<string, VarValue> = {
-          ...context.vars,
+        const attackerVars = {
           [this.config.injectVar]: processedMessage,
           ...(currentInputVars || {}),
+        };
+        const targetVars: Record<string, VarValue> = {
+          ...context.vars,
+          ...attackerVars,
         };
 
         const renderedAttackerPrompt = await renderPrompt(
@@ -437,7 +439,7 @@ export default class GoatProvider implements ApiProvider {
           targetVars,
           context.filters,
           targetProvider,
-          [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+          Object.keys(attackerVars),
         );
 
         messages.push({

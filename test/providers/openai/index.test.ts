@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { OpenAiGenericProvider } from '../../../src/providers/openai/index';
+import { mockProcessEnv } from '../../util/utils';
 
 describe('OpenAI Provider', () => {
   describe('OpenAiGenericProvider', () => {
@@ -11,7 +12,7 @@ describe('OpenAI Provider', () => {
     });
 
     beforeEach(() => {
-      process.env = {};
+      mockProcessEnv({}, { clear: true });
     });
 
     it('should generate correct API URL', () => {
@@ -37,7 +38,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should get organization from env', () => {
-      process.env.OPENAI_ORGANIZATION = 'env-org';
+      mockProcessEnv({ OPENAI_ORGANIZATION: 'env-org' });
       const envProvider = new OpenAiGenericProvider('test-model');
       expect(envProvider.getOrganization()).toBe('env-org');
     });
@@ -47,13 +48,13 @@ describe('OpenAI Provider', () => {
     });
 
     it('should get API key from env', () => {
-      process.env.OPENAI_API_KEY = 'env-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'env-key' });
       const envProvider = new OpenAiGenericProvider('test-model');
       expect(envProvider.getApiKey()).toBe('env-key');
     });
 
     it('should get API key from custom env var', () => {
-      process.env.CUSTOM_API_KEY = 'custom-key';
+      mockProcessEnv({ CUSTOM_API_KEY: 'custom-key' });
       const customProvider = new OpenAiGenericProvider('test-model', {
         config: { apiKeyEnvar: 'CUSTOM_API_KEY' },
       });

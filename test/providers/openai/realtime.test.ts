@@ -3,6 +3,7 @@ import WebSocket from 'ws';
 import { disableCache, enableCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
+import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime';
@@ -33,9 +34,9 @@ describe('OpenAI Realtime Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     disableCache();
-    process.env.OPENAI_API_KEY = 'test-api-key';
-    delete process.env.OPENAI_API_BASE_URL;
-    delete process.env.OPENAI_BASE_URL;
+    mockProcessEnv({ OPENAI_API_KEY: 'test-api-key' });
+    mockProcessEnv({ OPENAI_API_BASE_URL: undefined });
+    mockProcessEnv({ OPENAI_BASE_URL: undefined });
     mockHandlers = {
       open: [],
       message: [],
@@ -119,7 +120,7 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('should use default missing API key error message', async () => {
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         env: {
           OPENAI_API_KEY: undefined,
@@ -130,8 +131,8 @@ describe('OpenAI Realtime Provider', () => {
     });
 
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_REALTIME_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_REALTIME_API_KEY: undefined });
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: {
           apiKeyEnvar: 'CUSTOM_REALTIME_API_KEY',

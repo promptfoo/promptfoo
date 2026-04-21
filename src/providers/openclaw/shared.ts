@@ -153,8 +153,11 @@ function resolveGatewayPortOverride(env?: Record<string, string | undefined>): n
 
 function toAuthSecret(
   kind: OpenClawAuthSecret['kind'],
-  value: string | undefined,
+  value: unknown,
 ): OpenClawAuthSecret | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
   const trimmed = value?.trim();
   return trimmed ? { kind, value: trimmed } : undefined;
 }

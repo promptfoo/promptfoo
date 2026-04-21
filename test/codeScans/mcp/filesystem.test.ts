@@ -51,15 +51,21 @@ describe('filesystem MCP server management', () => {
   });
 
   it('strips npm before config when spawning the filesystem MCP server', () => {
-    process.env.NPM_CONFIG_BEFORE = '2026-03-29T00:00:00.000Z';
-    process.env.npm_config_before = '2026-03-29T00:00:00.000Z';
-    mocks.spawn.mockReturnValue(createFakeProcess());
+    const restoreNpmConfig = mockProcessEnv({
+      NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z',
+      npm_config_before: '2026-03-29T00:00:00.000Z',
+    });
+    try {
+      mocks.spawn.mockReturnValue(createFakeProcess());
 
-    startFilesystemMcpServer(process.cwd());
+      startFilesystemMcpServer(process.cwd());
 
-    const spawnOptions = mocks.spawn.mock.calls[0]?.[2];
-    expect(spawnOptions?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
-    expect(spawnOptions?.env?.npm_config_before).toBeUndefined();
+      const spawnOptions = mocks.spawn.mock.calls[0]?.[2];
+      expect(spawnOptions?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
+      expect(spawnOptions?.env?.npm_config_before).toBeUndefined();
+    } finally {
+      restoreNpmConfig();
+    }
   });
 
   it('resolves when the filesystem MCP server prints its ready marker', async () => {

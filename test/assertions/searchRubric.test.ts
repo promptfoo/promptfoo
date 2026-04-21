@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSearchRubric } from '../../src/assertions/searchRubric';
 import { matchesSearchRubric } from '../../src/matchers/search';
+import { createMockProvider } from '../factories/provider';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
@@ -164,10 +165,7 @@ describe('handleSearchRubric', () => {
   });
 
   it('should pass provider to matchesSearchRubric', async () => {
-    const mockProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn(),
-    };
+    const mockProvider = createMockProvider();
 
     const params: AssertionParams = {
       ...defaultParams,

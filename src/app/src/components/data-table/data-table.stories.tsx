@@ -79,22 +79,30 @@ const longNameData: Evaluation[] = [
   },
 ];
 
-// Generate more data for pagination demo
-const generateLargeDataset = (count: number): Evaluation[] => {
+// Generate more data for virtualization demos
+const createEvaluation = (index: number): Evaluation => {
   const statuses: Array<'passed' | 'failed' | 'pending'> = ['passed', 'failed', 'pending'];
   const providers = ['openai', 'anthropic', 'google', 'meta', 'mistral'];
-  return Array.from({ length: count }, (_, i) => ({
-    id: String(i + 1),
-    name: `Evaluation ${i + 1}`,
-    status: statuses[i % 3],
-    score: Math.floor(Math.random() * 100),
-    provider: providers[i % providers.length],
-    createdAt: new Date(2024, 0, 15 - (i % 30)).toISOString().split('T')[0],
-  }));
+
+  return {
+    id: String(index + 1),
+    name: `Evaluation ${index + 1}`,
+    status: statuses[index % 3],
+    score: (index * 37) % 100,
+    provider: providers[index % providers.length],
+    createdAt: new Date(2024, 0, 15 - (index % 30)).toISOString().split('T')[0],
+  };
+};
+
+const generateLargeDataset = (count: number): Evaluation[] => {
+  return Array.from({ length: count }, (_, index) => createEvaluation(index));
 };
 
 const largeDataset = generateLargeDataset(100);
 const printDataset = generateLargeDataset(30); // 30 rows to test print all rows (>25)
+const serverVirtualRowCount = 10_000;
+const serverVirtualPageSize = 100;
+const serverVirtualLoadDelayMs = 400;
 const taggedData: TaggedEvaluation[] = [
   {
     id: 'tag-1',
@@ -423,11 +431,9 @@ export const WithoutToolbar: Story = {
   render: () => <DataTable columns={columns} data={sampleData} showToolbar={false} />,
 };
 
-// Minimal - no toolbar, no pagination
+// Minimal - no toolbar
 export const Minimal: Story = {
-  render: () => (
-    <DataTable columns={columns} data={sampleData} showToolbar={false} showPagination={false} />
-  ),
+  render: () => <DataTable columns={columns} data={sampleData} showToolbar={false} />,
 };
 
 // With custom toolbar actions
@@ -479,43 +485,129 @@ export const SelectionWithActions: Story = {
   },
 };
 
-// Large dataset with pagination
-export const WithPagination: Story = {
-  render: () => <DataTable columns={columns} data={largeDataset} initialPageSize={10} />,
+// Large dataset with client-side virtualization (default row display mode)
+export const ClientVirtualizedDefault: Story = {
+  render: () => <DataTable columns={columns} data={largeDataset} maxHeight="400px" />,
 };
 
-// Server-side / manual pagination
-export const ManualPagination: Story = {
+export const LargeClientVirtualizedDataset: Story = {
+  render: () => <DataTable columns={columns} data={generateLargeDataset(5000)} maxHeight="500px" />,
+};
+
+export const ServerVirtualizedDataset: Story = {
   render: () => {
-    const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: 10 });
-    const totalRows = largeDataset.length;
-    const pageCount = Math.ceil(totalRows / pagination.pageSize);
-    const pageData = largeDataset.slice(
-      pagination.pageIndex * pagination.pageSize,
-      (pagination.pageIndex + 1) * pagination.pageSize,
+    const [rowsByIndex, setRowsByIndex] = React.useState<Map<number, Evaluation>>(() => new Map());
+    const [loadingPages, setLoadingPages] = React.useState<Set<number>>(() => new Set());
+    const [lastRequestedRange, setLastRequestedRange] = React.useState('none yet');
+    const loadedPagesRef = React.useRef(new Set<number>());
+    const loadingPagesRef = React.useRef(new Set<number>());
+
+    const loadRows = React.useCallback(
+      ({
+        startIndex,
+        endIndex,
+        signal,
+      }: {
+        startIndex: number;
+        endIndex: number;
+        signal: AbortSignal;
+      }) => {
+        const firstPage = Math.floor(startIndex / serverVirtualPageSize);
+        const lastPage = Math.floor(endIndex / serverVirtualPageSize);
+        const pagesToLoad: number[] = [];
+
+        for (let page = firstPage; page <= lastPage; page += 1) {
+          if (!loadedPagesRef.current.has(page) && !loadingPagesRef.current.has(page)) {
+            pagesToLoad.push(page);
+          }
+        }
+
+        setLastRequestedRange(
+          `${startIndex}-${endIndex}${
+            pagesToLoad.length > 0 ? ` (fetching page ${pagesToLoad.join(', ')})` : ' (cached)'
+          }`,
+        );
+
+        if (pagesToLoad.length === 0) {
+          return;
+        }
+
+        pagesToLoad.forEach((page) => loadingPagesRef.current.add(page));
+        setLoadingPages(new Set(loadingPagesRef.current));
+
+        const timeoutId = window.setTimeout(() => {
+          if (signal.aborted) {
+            return;
+          }
+
+          setRowsByIndex((prev) => {
+            const next = new Map(prev);
+
+            pagesToLoad.forEach((page) => {
+              const pageStartIndex = page * serverVirtualPageSize;
+              const pageEndIndex = Math.min(
+                pageStartIndex + serverVirtualPageSize,
+                serverVirtualRowCount,
+              );
+
+              for (let index = pageStartIndex; index < pageEndIndex; index += 1) {
+                next.set(index, createEvaluation(index));
+              }
+            });
+
+            return next;
+          });
+
+          pagesToLoad.forEach((page) => {
+            loadedPagesRef.current.add(page);
+            loadingPagesRef.current.delete(page);
+          });
+          setLoadingPages(new Set(loadingPagesRef.current));
+        }, serverVirtualLoadDelayMs);
+
+        const abortLoad = () => {
+          window.clearTimeout(timeoutId);
+          pagesToLoad.forEach((page) => loadingPagesRef.current.delete(page));
+          setLoadingPages(new Set(loadingPagesRef.current));
+        };
+
+        signal.addEventListener('abort', abortLoad, { once: true });
+      },
+      [],
     );
 
     return (
-      <DataTable
-        columns={columns}
-        data={pageData}
-        manualPagination={true}
-        rowCount={totalRows}
-        pageCount={pageCount}
-        pageIndex={pagination.pageIndex}
-        pageSize={pagination.pageSize}
-        onPaginationChange={setPagination}
-        onPageSizeChange={(size) => setPagination({ pageIndex: 0, pageSize: size })}
-      />
+      <div className="space-y-3">
+        <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+          <div>
+            Loaded rows: {rowsByIndex.size.toLocaleString()} /{' '}
+            {serverVirtualRowCount.toLocaleString()}
+          </div>
+          <div>Loading pages: {loadingPages.size > 0 ? [...loadingPages].join(', ') : 'none'}</div>
+          <div>Last requested range: {lastRequestedRange}</div>
+        </div>
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          virtualOverscan={5}
+          serverVirtualization={{
+            rowCount: serverVirtualRowCount,
+            pageSize: serverVirtualPageSize,
+            getRow: (index) => rowsByIndex.get(index),
+            loadRows,
+            isRowLoading: (index) => !rowsByIndex.has(index),
+          }}
+        />
+      </div>
     );
   },
 };
 
 // With max height (scrollable)
 export const WithMaxHeight: Story = {
-  render: () => (
-    <DataTable columns={columns} data={largeDataset} maxHeight="400px" showPagination={false} />
-  ),
+  render: () => <DataTable columns={columns} data={largeDataset} maxHeight="400px" />,
 };
 
 // With hidden columns
@@ -544,7 +636,7 @@ export const WithExportHandlers: Story = {
 // Column header filters — hover over a column header to see the filter icon.
 // Columns with `filterVariant: 'select'` show a dropdown, others show a text input with operators.
 export const WithColumnHeaderFilters: Story = {
-  render: () => <DataTable columns={columns} data={largeDataset} initialPageSize={10} />,
+  render: () => <DataTable columns={columns} data={largeDataset} />,
 };
 
 // Multi-select tag filtering with array-valued cells.
@@ -555,7 +647,7 @@ export const WithMultiTagColumnFilter: Story = {
         Hover the Tags header, choose "is any of", and select multiple tags to filter rows that
         include any selected tag.
       </p>
-      <DataTable columns={taggedColumns} data={taggedData} showPagination={false} />
+      <DataTable columns={taggedColumns} data={taggedData} />
     </div>
   ),
   parameters: {
@@ -716,9 +808,9 @@ export const PrintStyles: Story = {
         <p className="text-sm text-gray-400 mb-4">
           This table has 30 rows to test the "print all rows" functionality. Use your browser's
           print preview (Cmd/Ctrl + P) to see how it renders in light mode for printing. All rows
-          should be visible in print, bypassing pagination.
+          should be visible in print, bypassing virtualization.
         </p>
-        <DataTable columns={columns} data={printDataset} initialPageSize={10} />
+        <DataTable columns={columns} data={printDataset} />
       </div>
     </div>
   ),
@@ -726,7 +818,7 @@ export const PrintStyles: Story = {
     docs: {
       description: {
         story:
-          'The DataTable includes print-specific styles that force light mode colors and show all rows when printing, ensuring readability regardless of the current theme or pagination settings.',
+          'The DataTable includes print-specific styles that force light mode colors and show all rows when printing, ensuring readability regardless of the current theme or virtualization settings.',
       },
     },
   },
@@ -958,16 +1050,12 @@ export const WithExplicitTailwindColors: Story = {
       <div className="space-y-6">
         <div className="rounded-lg border p-4">
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-3">Light mode</p>
-          <DataTable columns={colorColumns} data={sampleData.slice(0, 3)} showPagination={false} />
+          <DataTable columns={colorColumns} data={sampleData.slice(0, 3)} />
         </div>
         <div className="rounded-lg border p-4 dark bg-zinc-950">
           <p className="text-sm text-zinc-300 mb-3">Dark mode</p>
           <div className="dark">
-            <DataTable
-              columns={colorColumns}
-              data={sampleData.slice(0, 3)}
-              showPagination={false}
-            />
+            <DataTable columns={colorColumns} data={sampleData.slice(0, 3)} />
           </div>
         </div>
       </div>
