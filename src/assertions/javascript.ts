@@ -108,15 +108,18 @@ export function buildFunctionBody(code: string): string {
   return `return ${trimmed}`;
 }
 
-async function validateResult(result: unknown): Promise<boolean | number | GradingResult> {
+const validateResult = async (result: unknown): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
   if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
     return result;
+  } else {
+    throw new Error(
+      `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(
+        result,
+      )}`,
+    );
   }
-  throw new Error(
-    `Custom function must return a boolean, number, or GradingResult object. Got type ${typeof result}: ${JSON.stringify(result)}`,
-  );
-}
+};
 
 type JavascriptWorkerRequest =
   | {
@@ -255,9 +258,10 @@ function loadCjsModule(modulePath) {
 
 async function importModuleWithFallback(modulePath) {
   try {
-    // Register tsx loader for TypeScript files (same as main-thread importModule)
     if (modulePath.endsWith('.ts') || modulePath.endsWith('.cts') || modulePath.endsWith('.mts')) {
-      try { require('tsx/cjs'); } catch (e) { /* tsx not available */ }
+      try {
+        require('tsx/cjs');
+      } catch {}
     }
     const importedModule = await import(pathToFileURL(modulePath).toString());
     return importedModule?.default?.default || importedModule?.default || importedModule;
@@ -271,8 +275,11 @@ async function importModuleWithFallback(modulePath) {
 }
 
 function resolveExportedFunction(requiredModule, filePath, functionName) {
-  if (functionName && typeof requiredModule?.[functionName] === 'function') {
-    return requiredModule[functionName];
+  if (functionName) {
+    const exported = functionName.split('.').reduce((value, key) => value?.[key], requiredModule);
+    if (typeof exported === 'function') {
+      return exported;
+    }
   }
   if (typeof requiredModule === 'function') {
     return requiredModule;
@@ -287,7 +294,7 @@ function resolveExportedFunction(requiredModule, filePath, functionName) {
   );
 }
 
-function getProcessShim() {
+function getWorkerProcessShim() {
   const processShim = Object.create(process);
   if (!processShim.mainModule || typeof processShim.mainModule.require !== 'function') {
     processShim.mainModule = { require };
@@ -299,7 +306,7 @@ async function runRequest(request) {
   switch (request.mode) {
     case 'inline': {
       const customFunction = new Function('output', 'context', 'process', request.functionBody);
-      return customFunction(request.output, request.context, getProcessShim());
+      return customFunction(request.output, request.context, getWorkerProcessShim());
     }
     case 'file': {
       const requiredModule = await importModuleWithFallback(request.filePath);
@@ -315,16 +322,19 @@ async function runRequest(request) {
   }
 }
 
-/**
- * Shim the context so that provider.id works as both a string and a function.
- * The main-thread context has provider.id as a function (provider.id()), but
- * after serialization to the worker it becomes a plain string. This wraps it
- * so that both context.provider.id and context.provider.id() work.
- */
 function shimContext(ctx) {
   if (ctx && ctx.provider && typeof ctx.provider.id === 'string') {
     const idValue = ctx.provider.id;
-    ctx.provider.id = Object.assign(function() { return idValue; }, { toString: function() { return idValue; }, valueOf: function() { return idValue; } });
+    ctx.provider.id = Object.assign(function () {
+      return idValue;
+    }, {
+      toString: function () {
+        return idValue;
+      },
+      valueOf: function () {
+        return idValue;
+      },
+    });
   }
   return ctx;
 }
@@ -342,11 +352,6 @@ parentPort.on('message', async (request) => {
 });
 `;
 
-/**
- * Converts a value to a worker-safe (structuredClone-compatible) form.
- * Primitives pass through directly. Objects are round-tripped through JSON
- * to strip functions, circular references, and other non-transferable values.
- */
 function toWorkerValue(value: unknown): unknown {
   if (
     value == null ||
@@ -398,7 +403,6 @@ function parseJavascriptFileReference(renderedValue: string): {
   functionName?: string;
 } {
   const { filePath, functionName } = parseFileUrl(renderedValue);
-
   const basePath = cliState.basePath || '';
   const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(basePath, filePath);
   return { filePath: resolvedPath, functionName };
@@ -485,7 +489,90 @@ function runJavascriptInWorker(
   });
 }
 
-export async function handleJavascript({
+function serializeFunctionAssertion(assertion: AssertionParams['assertion']) {
+  invariant(
+    typeof assertion.value === 'function',
+    `function-valued javascript assertion (type: ${assertion.type}) must have a function value`,
+  );
+  const functionString = assertion.value.toString();
+  return {
+    ...assertion,
+    value: functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
+  };
+}
+
+function normalizeResultAssertion(
+  assertion: GradingResult['assertion'],
+  fallbackAssertion: AssertionParams['assertion'],
+) {
+  const assertionToNormalize = assertion ?? fallbackAssertion;
+
+  if (typeof assertionToNormalize.value === 'function') {
+    return serializeFunctionAssertion(assertionToNormalize);
+  }
+
+  return assertionToNormalize;
+}
+
+function appendRenderedValueToReason(
+  reason: string,
+  renderedValue?: AssertionParams['renderedValue'],
+): string {
+  return typeof renderedValue === 'string' && renderedValue
+    ? `${reason}\n${renderedValue}`
+    : reason;
+}
+
+function normalizeJavascriptAssertionResult(
+  assertion: AssertionParams['assertion'],
+  result: boolean | number | GradingResult,
+  inverse: boolean,
+  renderedValue?: string,
+): GradingResult {
+  const normalizedAssertion = normalizeResultAssertion(undefined, assertion);
+  const getFailureReason = (rawPass: boolean) => {
+    return appendRenderedValueToReason(
+      `Custom function returned ${rawPass ? 'true' : 'false'}`,
+      renderedValue,
+    );
+  };
+
+  if (typeof result === 'boolean') {
+    const pass = result !== inverse;
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: pass ? 'Assertion passed' : getFailureReason(result),
+      assertion: normalizedAssertion,
+    };
+  }
+
+  if (typeof result === 'number') {
+    const rawPass = assertion.threshold === undefined ? result > 0 : result >= assertion.threshold;
+    const pass = rawPass !== inverse;
+    return {
+      pass,
+      score: result,
+      reason: pass ? 'Assertion passed' : getFailureReason(rawPass),
+      assertion: normalizedAssertion,
+    };
+  }
+
+  const pass = result.pass !== inverse;
+  return {
+    ...result,
+    pass,
+    reason:
+      pass === result.pass
+        ? result.reason
+        : pass
+          ? 'Assertion passed'
+          : `Custom function returned ${result.pass ? 'true' : 'false'}`,
+    assertion: normalizeResultAssertion(result.assertion, assertion),
+  };
+}
+
+export const handleJavascript = async ({
   assertion,
   renderedValue,
   valueFromScript,
@@ -495,52 +582,26 @@ export async function handleJavascript({
   inverse,
   timeoutMs,
   abortSignal,
-}: AssertionParams): Promise<GradingResult> {
-  let pass;
-  let score;
+}: AssertionParams): Promise<GradingResult> => {
   try {
     const shouldUseIsolatedRuntime = (timeoutMs ?? 0) > 0;
     const workerContext = shouldUseIsolatedRuntime ? buildWorkerContext(assertionValueContext) : {};
 
     if (typeof assertion.value === 'function') {
-      // Function-type assertions are defined programmatically (not from YAML).
-      // They cannot be serialized to a worker because toString() loses closure
-      // variables and method shorthand syntax is not a valid function expression.
-      // Run on the main thread; the evaluator-level timeout still applies for
-      // async work, but synchronous infinite loops here cannot be interrupted.
-      const ret = await validateResult(assertion.value(outputString, assertionValueContext));
-
-      if (typeof ret === 'object') {
-        if (!ret.assertion) {
-          const functionString = assertion.value.toString();
-          ret.assertion = {
-            type: 'javascript',
-            value:
-              functionString.length > 50 ? functionString.slice(0, 50) + '...' : functionString,
-          };
-        }
-        return ret;
-      }
-
-      if (typeof ret === 'boolean') {
-        pass = ret !== inverse;
-        score = pass ? 1 : 0;
-      } else {
-        pass = assertion.threshold !== undefined ? ret >= assertion.threshold : ret > 0;
-        score = ret;
-      }
-      return {
-        pass,
-        score,
-        reason: pass
-          ? 'Assertion passed'
-          : `Custom function returned ${inverse ? 'true' : 'false'}`,
-        assertion,
-      };
+      const result = await validateResult(assertion.value(outputString, assertionValueContext));
+      return normalizeJavascriptAssertionResult(assertion, result, inverse);
     }
     invariant(typeof renderedValue === 'string', 'javascript assertion must have a string value');
 
-    // Trim trailing whitespace/newlines from YAML block scalars (e.g. value: |)
+    /**
+     * Removes trailing newline from the rendered value.
+     * This is necessary for handling multi-line string literals in YAML
+     * that are defined on a single line in the YAML file.
+     *
+     * @example
+     * value: |
+     *   output === 'true'
+     */
     renderedValue = renderedValue.trimEnd();
 
     let result: boolean | number | GradingResult;
@@ -550,7 +611,6 @@ export async function handleJavascript({
       const functionBody = renderedValue.includes('\n')
         ? renderedValue
         : buildFunctionBody(renderedValue);
-
       if (shouldUseIsolatedRuntime) {
         const request: JavascriptWorkerRequest = renderedValue.startsWith('file://')
           ? {
@@ -565,8 +625,7 @@ export async function handleJavascript({
               output: toWorkerValue(output),
               context: workerContext,
             };
-        const workerResult = await runJavascriptInWorker(request, timeoutMs, abortSignal);
-        result = await validateResult(workerResult);
+        result = await validateResult(await runJavascriptInWorker(request, timeoutMs, abortSignal));
       } else {
         // Pass process shim for ESM compatibility - allows process.mainModule.require to work
         const customFunction = new Function('output', 'context', 'process', functionBody);
@@ -584,34 +643,17 @@ export async function handleJavascript({
       result = await validateResult(valueFromScript);
     }
 
-    if (typeof result === 'boolean') {
-      pass = result !== inverse;
-      score = pass ? 1 : 0;
-    } else if (typeof result === 'number') {
-      pass = assertion.threshold !== undefined ? result >= assertion.threshold : result > 0;
-      score = result;
-    } else if (typeof result === 'object') {
-      return result;
-    } else {
-      throw new Error('Custom function must return a boolean or number');
-    }
+    return normalizeJavascriptAssertionResult(assertion, result, inverse, renderedValue);
   } catch (err) {
     return {
       pass: false,
       score: 0,
-      reason: `Custom function threw error: ${(err as Error).message}
-Stack Trace: ${(err as Error).stack}
-${renderedValue}`,
-      assertion,
+      reason: appendRenderedValueToReason(
+        `Custom function threw error: ${(err as Error).message}
+Stack Trace: ${(err as Error).stack}`,
+        renderedValue,
+      ),
+      assertion: normalizeResultAssertion(undefined, assertion),
     };
   }
-  return {
-    pass,
-    score,
-    reason: pass
-      ? 'Assertion passed'
-      : `Custom function returned ${inverse ? 'true' : 'false'}
-${renderedValue}`,
-    assertion,
-  };
-}
+};

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -18,9 +19,22 @@ const setAuthHeaders = (
   (provider as any).initialized = true;
 };
 
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
+const originalOpenAiMaxTokens = process.env.OPENAI_MAX_TOKENS;
+const originalOpenAiMaxCompletionTokens = process.env.OPENAI_MAX_COMPLETION_TOKENS;
+const originalOpenAiTopP = process.env.OPENAI_TOP_P;
+const originalOpenAiPresencePenalty = process.env.OPENAI_PRESENCE_PENALTY;
+const originalOpenAiFrequencyPenalty = process.env.OPENAI_FREQUENCY_PENALTY;
+
 describe('AzureChatCompletionProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
+    mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
+    mockProcessEnv({ OPENAI_TOP_P: undefined });
+    mockProcessEnv({ OPENAI_PRESENCE_PENALTY: undefined });
+    mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: undefined });
     vi.spyOn(AzureChatCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
       'api-key': 'test-key',
     });
@@ -28,6 +42,36 @@ describe('AzureChatCompletionProvider', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    if (originalOpenAiTemperature === undefined) {
+      mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_TEMPERATURE: originalOpenAiTemperature });
+    }
+    if (originalOpenAiMaxTokens === undefined) {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: originalOpenAiMaxTokens });
+    }
+    if (originalOpenAiMaxCompletionTokens === undefined) {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: originalOpenAiMaxCompletionTokens });
+    }
+    if (originalOpenAiTopP === undefined) {
+      mockProcessEnv({ OPENAI_TOP_P: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_TOP_P: originalOpenAiTopP });
+    }
+    if (originalOpenAiPresencePenalty === undefined) {
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: originalOpenAiPresencePenalty });
+    }
+    if (originalOpenAiFrequencyPenalty === undefined) {
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: originalOpenAiFrequencyPenalty });
+    }
   });
 
   describe('config merging', () => {
@@ -197,6 +241,55 @@ describe('AzureChatCompletionProvider', () => {
       };
       const { body } = await (provider as any).getOpenAiBody('test prompt', context);
       expect(body.response_format.json_schema.name).toBe('dynamic_schema');
+    });
+
+    it('should omit default parameters when omitDefaults is true', async () => {
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          omitDefaults: true,
+        },
+      });
+      setAuthHeaders(provider);
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.max_tokens).toBeUndefined();
+      expect('max_tokens' in body).toBe(false);
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+      expect(body.top_p).toBeUndefined();
+      expect('top_p' in body).toBe(false);
+      expect(body.presence_penalty).toBeUndefined();
+      expect('presence_penalty' in body).toBe(false);
+      expect(body.frequency_penalty).toBeUndefined();
+      expect('frequency_penalty' in body).toBe(false);
+    });
+
+    it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
+      mockProcessEnv({ OPENAI_TEMPERATURE: '0.5' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+      mockProcessEnv({ OPENAI_TOP_P: '0.9' });
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: '0.1' });
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: '0.2' });
+
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          omitDefaults: true,
+        },
+      });
+      setAuthHeaders(provider);
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.max_tokens).toBe(2048);
+      expect(body.temperature).toBe(0.5);
+      expect(body.top_p).toBe(0.9);
+      expect(body.presence_penalty).toBe(0.1);
+      expect(body.frequency_penalty).toBe(0.2);
     });
   });
 
@@ -586,6 +679,26 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
+    it('flags Claude Opus 4.7 via isClaudeOpus47 without treating it as reasoning', () => {
+      // Claude Opus 4.7 uses the chat body's standard max_tokens path but
+      // rejects `temperature` at the model level. Must NOT flip to the
+      // reasoning-model branch (which would swap max_tokens and send
+      // reasoning_effort).
+      const opus47 = new AzureChatCompletionProvider('claude-opus-4-7', { config: {} });
+      expect((opus47 as any).isReasoningModel()).toBe(false);
+      expect((opus47 as any).isClaudeOpus47()).toBe(true);
+
+      // Opus 4.6 regression: not matched.
+      const opus46 = new AzureChatCompletionProvider('claude-opus-4-6-20260205', { config: {} });
+      expect((opus46 as any).isReasoningModel()).toBe(false);
+      expect((opus46 as any).isClaudeOpus47()).toBe(false);
+
+      // Boundary: a hypothetical `claude-opus-4-70` or `claude-opus-4-7N`
+      // model must not be accidentally matched by the 4.7 predicate.
+      const opus470 = new AzureChatCompletionProvider('claude-opus-4-70', { config: {} });
+      expect((opus470 as any).isClaudeOpus47()).toBe(false);
+    });
+
     it('should detect reasoning models with isReasoningModel flag', () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
@@ -605,6 +718,22 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
+    it('omits temperature for Claude Opus 4.7 while keeping the standard chat body', async () => {
+      const provider = new AzureChatCompletionProvider('claude-opus-4-7', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('reasoning_effort');
+    });
+
     it('should use max_completion_tokens for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
@@ -618,6 +747,51 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('max_tokens');
     });
 
+    it('should omit default max_completion_tokens when omitDefaults is true for reasoning models', async () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+      expect(body.max_completion_tokens).toBeUndefined();
+      expect('max_completion_tokens' in body).toBe(false);
+    });
+
+    it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: '4096' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body).toHaveProperty('max_completion_tokens', 4096);
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body).toHaveProperty('max_completion_tokens', 2048);
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
     it('should use reasoning_effort for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
@@ -627,6 +801,20 @@ describe('AzureChatCompletionProvider', () => {
       });
       const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).toHaveProperty('reasoning_effort', 'high');
+    });
+
+    it('should omit default reasoning_effort when omitDefaults is true for reasoning models', async () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.reasoning_effort).toBeUndefined();
+      expect('reasoning_effort' in body).toBe(false);
     });
 
     it('should not include temperature for reasoning models', async () => {

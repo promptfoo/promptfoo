@@ -7,13 +7,17 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
+import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
+import { AbliterationProvider } from '../../src/providers/abliteration';
 import { AnthropicCompletionProvider } from '../../src/providers/anthropic/completion';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
+import { AIStudioEmbeddingProvider } from '../../src/providers/google/ai.studio';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { GoogleVideoProvider } from '../../src/providers/google/video';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
@@ -33,8 +37,10 @@ import {
 } from '../../src/providers/ollama';
 import { OpenAiAssistantProvider } from '../../src/providers/openai/assistant';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
+import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import {
   ReplicateImageProvider,
@@ -48,6 +54,9 @@ import RedteamGoatProvider from '../../src/redteam/providers/goat';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import RedteamImageIterativeProvider from '../../src/redteam/providers/iterativeImage';
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
+import { checkProviderApiKeys } from '../../src/util/provider';
+import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
@@ -131,6 +140,11 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 vi.mock('../../src/providers/websocket');
 
+vi.mock('../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock('../../src/globalConfig/cloud', () => {
   return {
     CLOUD_API_HOST: 'https://api.promptfoo.app',
@@ -162,18 +176,26 @@ const defaultMockResponse = {
   },
 };
 
+beforeEach(() => {
+  mockExecFile.mockReset();
+  mockFsReadFileSync.mockReset();
+  mockFsExistsSync.mockReset();
+  mockFsMkdirSync.mockReset();
+  mockFsWriteFileSync.mockReset();
+});
+
 describe('call provider apis', () => {
   beforeEach(() => {
     // Set Azure environment variables for Azure provider tests
-    process.env.AZURE_API_HOST = 'test.openai.azure.com';
-    process.env.AZURE_API_KEY = 'test-api-key';
+    mockProcessEnv({ AZURE_API_HOST: 'test.openai.azure.com' });
+    mockProcessEnv({ AZURE_API_KEY: 'test-api-key' });
   });
 
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
-    delete process.env.AZURE_API_HOST;
-    delete process.env.AZURE_API_KEY;
+    mockProcessEnv({ AZURE_API_HOST: undefined });
+    mockProcessEnv({ AZURE_API_KEY: undefined });
   });
 
   it('AzureOpenAiCompletionProvider callApi', async () => {
@@ -489,6 +511,29 @@ describe('loadApiProvider', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    // Clean up env vars set by #7079 regression tests (explicit list to avoid
+    // accidentally deleting pre-existing env vars with a broad pattern match)
+    const keysToClean = [
+      'TEST_TENANT_7079',
+      'TEST_APPLICATION_7079',
+      'TEST_BASE_URL_7079',
+      'TEST_SERVICE_7079',
+      'TEST_VERSION_7079',
+      'TEST_APP_7079_RESOLVED',
+      'TEST_URL_7079_RESOLVED',
+      'TEST_APP_7079_HTTP',
+      'TEST_BASE_7079_HTTP',
+      'TEST_SVC_7079_HTTP',
+      'TEST_VER_7079_HTTP',
+      'TEST_SESSION_7079_HTTP',
+      'TEST_MISSING_VAR_7079',
+    ];
+    for (const key of keysToClean) {
+      mockProcessEnv({ [key]: undefined });
+    }
+  });
+
   it('loadApiProvider with yaml filepath', async () => {
     const mockYamlContent = dedent`
     id: 'openai:gpt-5.1-mini'
@@ -639,10 +684,23 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with openrouter', async () => {
-    const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     // OpenRouter provider now returns id with prefix
-    expect(provider.id()).toBe('openrouter:mistralai/mistral-medium');
+    expect(provider.id()).toBe('openrouter:anthropic/claude-opus-4.7');
+  });
+
+  it('loadApiProvider with openrouter preserves a custom apiBaseUrl override', async () => {
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7', {
+      options: {
+        config: {
+          apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+        },
+      },
+    });
+
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
   });
 
   it('loadApiProvider with github', async () => {
@@ -666,6 +724,33 @@ describe('loadApiProvider', () => {
     );
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     expect(provider.id()).toBe('meta/meta-llama/Meta-Llama-3-8B-Instruct');
+  });
+
+  it('loadApiProvider with abliteration', async () => {
+    const provider = await loadApiProvider('abliteration:abliterated-model');
+    expect(provider).toBeInstanceOf(AbliterationProvider);
+    expect(provider.id()).toBe('abliteration:abliterated-model');
+    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+    expect(provider.config.showThinking).toBe(false);
+  });
+
+  it('loadApiProvider with abliteration chat format', async () => {
+    const provider = await loadApiProvider('abliteration:chat:abliterated-model');
+    expect(provider).toBeInstanceOf(AbliterationProvider);
+    expect(provider.id()).toBe('abliteration:abliterated-model');
+    expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+    expect(provider.config.apiKeyEnvar).toBe('ABLIT_KEY');
+    expect(provider.config.showThinking).toBe(false);
+  });
+
+  it('loadApiProvider rejects malformed abliteration routes', async () => {
+    await expect(loadApiProvider('abliteration:chat')).rejects.toThrow(
+      'Abliteration provider requires a model name. Use format: abliteration:<model_name> or abliteration:chat:<model_name>',
+    );
+    await expect(loadApiProvider('abliteration:')).rejects.toThrow(
+      'Abliteration provider requires a model name. Use format: abliteration:<model_name> or abliteration:chat:<model_name>',
+    );
   });
 
   it('loadApiProvider with litellm default (chat)', async () => {
@@ -726,10 +811,28 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('vertex:vertex-embedding-model');
   });
 
+  it('loadApiProvider with google:embedding', async () => {
+    const provider = await loadApiProvider('google:embedding:gemini-embedding-001');
+    expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
+  });
+
+  it('loadApiProvider with google:embeddings', async () => {
+    const provider = await loadApiProvider('google:embeddings:gemini-embedding-001');
+    expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
+  });
+
   it('loadApiProvider with vertex:modelname', async () => {
     const provider = await loadApiProvider('vertex:vertex-chat-model');
     expect(provider).toBeInstanceOf(VertexChatProvider);
     expect(provider.id()).toBe('vertex:vertex-chat-model');
+  });
+
+  it('loadApiProvider with vertex:video:modelname', async () => {
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    expect(provider).toBeInstanceOf(GoogleVideoProvider);
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
   });
 
   it('loadApiProvider with replicate:modelname', async () => {
@@ -766,6 +869,23 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('replicate:moderation:foo/bar:abc123');
     expect(provider).toBeInstanceOf(ReplicateModerationProvider);
     expect(provider.id()).toBe('replicate:foo/bar:abc123');
+  });
+
+  it('loadApiProvider with modelslab:image:modelName', async () => {
+    const provider = await loadApiProvider('modelslab:image:flux');
+    expect(provider.id()).toBe('modelslab:image:flux');
+  });
+
+  it('loadApiProvider with modelslab:image: throws for empty model name', async () => {
+    await expect(loadApiProvider('modelslab:image:')).rejects.toThrow(/Model name is required/);
+  });
+
+  it('loadApiProvider with modelslab:image prefers provider-level env over context env', async () => {
+    const provider = await loadApiProvider('modelslab:image:flux', {
+      options: { env: { MODELSLAB_API_KEY: 'provider-key' } },
+      env: { MODELSLAB_API_KEY: 'context-key' } as any,
+    });
+    expect((provider as any).apiKey).toBe('provider-key');
   });
 
   it('loadApiProvider with file://*.py', async () => {
@@ -830,18 +950,116 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProviders with ProviderFunction', async () => {
-    const providerFunction: ProviderFunction = async (prompt) => {
+    const providerFunction: ProviderFunction & { transform?: (output: string) => string } = async (
+      prompt,
+    ) => {
       return {
         output: `Output for ${prompt}`,
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       };
     };
+    providerFunction.transform = (output) => output.toUpperCase();
+
     const providers = await loadApiProviders(providerFunction);
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('custom-function');
+    expect(providers[0].transform).toBe(providerFunction.transform);
     const response = await providers[0].callApi('Test prompt');
     expect(response.output).toBe('Output for Test prompt');
     expect(response.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
+  it('loadApiProviders with bare ProviderFunction leaves metadata properties unset', async () => {
+    const bareProviderFunction: ProviderFunction = async (prompt) => ({
+      output: `Output for ${prompt}`,
+    });
+
+    const providers = await loadApiProviders([bareProviderFunction] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-function-0');
+    // Metadata fields should be absent on the resulting ApiProvider (not set to undefined)
+    // so downstream merges like `config ?? {}` aren't clobbered.
+    expect('label' in providers[0]).toBe(false);
+    expect('transform' in providers[0]).toBe(false);
+    expect('delay' in providers[0]).toBe(false);
+    expect('inputs' in providers[0]).toBe(false);
+    expect('config' in providers[0]).toBe(false);
+  });
+
+  it('loadApiProviders with ProviderFunction preserves metadata properties', async () => {
+    const providerFunction: ProviderFunction & {
+      label?: string;
+      transform?: (output: string) => string;
+      delay?: number;
+      inputs?: any;
+      config?: any;
+    } = async (prompt) => ({ output: `Output for ${prompt}` });
+    providerFunction.label = 'My Function';
+    providerFunction.transform = (output) => output.toUpperCase();
+    providerFunction.delay = 500;
+    providerFunction.inputs = [{ role: 'user', content: 'hi' }];
+    providerFunction.config = { custom: 'value' };
+
+    const providers = await loadApiProviders([providerFunction] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('My Function');
+    expect(providers[0].label).toBe('My Function');
+    expect(providers[0].transform).toBe(providerFunction.transform);
+    expect(providers[0].delay).toBe(500);
+    expect(providers[0].inputs).toBe(providerFunction.inputs);
+    expect(providers[0].config).toEqual({ custom: 'value' });
+  });
+
+  it('loadApiProviders and getProviderIds agree on the id of a labeled ProviderFunction in an array', async () => {
+    // Regression guard: the array-branch of loadApiProviders used to hardcode
+    // `custom-function-${idx}` regardless of `.label`, while getProviderIds and
+    // the single-function branch honored the label. They only agreed by accident
+    // (via the label fallback inside `createProviderFromFunction`). Use the
+    // descriptor-derived id so the two call sites can never drift again.
+    const providerFunction: ProviderFunction & { label?: string } = async (prompt) => ({
+      output: `Output for ${prompt}`,
+    });
+    providerFunction.label = 'Labeled Function';
+
+    const providers = await loadApiProviders([providerFunction, providerFunction] as any);
+    const providerIds = getProviderIds([providerFunction, providerFunction] as any);
+
+    expect(providers.map((p) => p.id())).toEqual(providerIds);
+    expect(providerIds).toEqual(['Labeled Function', 'Labeled Function']);
+  });
+
+  it('loadApiProviders with ApiProvider object preserves the provider instance', async () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async (prompt: string) => ({ output: `Output for ${prompt}` }),
+      transform: (output: string | object) => String(output).toUpperCase(),
+    };
+
+    const providers = await loadApiProviders([apiProvider] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBe(apiProvider);
+    expect(providers[0].id()).toBe('custom-api-provider');
+    expect(providers[0].transform).toBe(apiProvider.transform);
+    await expect(providers[0].callApi('Test prompt')).resolves.toEqual({
+      output: 'Output for Test prompt',
+    });
+  });
+
+  it('loadApiProviders with top-level ApiProvider object preserves the provider instance', async () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async (prompt: string) => ({ output: `Output for ${prompt}` }),
+    };
+
+    const providers = await loadApiProviders(apiProvider);
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBe(apiProvider);
+  });
+
+  it('loadApiProviders rejects id-only objects instead of treating them as ApiProvider instances', async () => {
+    await expect(loadApiProviders([{ id: () => 'missing-call-api' }] as any)).rejects.toThrow(
+      'Invalid provider at index 0',
+    );
   });
 
   it('loadApiProviders with CustomApiProvider', async () => {
@@ -913,6 +1131,46 @@ describe('loadApiProvider', () => {
     expect(providers[2]).toBeInstanceOf(AnthropicCompletionProvider);
   });
 
+  it('loadApiProviders uses ProviderOptionsMap keys for loading and nested ids for labels', async () => {
+    const providers = await loadApiProviders([
+      {
+        'openai:responses:gpt-5.4': {
+          id: 'custom-openai',
+          label: 'Custom OpenAI',
+          config: { apiKey: 'test-key' },
+        },
+      },
+    ]);
+
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBeInstanceOf(OpenAiResponsesProvider);
+    expect(providers[0].id()).toBe('custom-openai');
+    expect(providers[0].label).toBe('Custom OpenAI');
+  });
+
+  it('redacts invalid provider config details before formatting load errors', async () => {
+    const provider = {
+      config: {
+        apiKey: 'sk-proj-invalid-provider-secret',
+      },
+      headers: {
+        Authorization: 'Bearer invalid-provider-secret-token',
+      },
+    };
+
+    let message = '';
+    try {
+      await loadApiProviders([provider as any]);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+
+    expect(message).toContain('Invalid provider at index 0');
+    expect(message).toContain('[REDACTED]');
+    expect(message).not.toContain('sk-proj-invalid-provider-secret');
+    expect(message).not.toContain('Bearer invalid-provider-secret-token');
+  });
+
   it('loadApiProvider sets provider.delay', async () => {
     const providerOptions = {
       id: 'test-delay',
@@ -924,8 +1182,8 @@ describe('loadApiProvider', () => {
   });
 
   it('supports templating in provider URL', async () => {
-    process.env.MY_HOST = 'api.example.com';
-    process.env.MY_PORT = '8080';
+    mockProcessEnv({ MY_HOST: 'api.example.com' });
+    mockProcessEnv({ MY_PORT: '8080' });
 
     const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
       options: {
@@ -935,8 +1193,8 @@ describe('loadApiProvider', () => {
       },
     });
     expect(provider.id()).toBe('https://api.example.com:8080/query');
-    delete process.env.MY_HOST;
-    delete process.env.MY_PORT;
+    mockProcessEnv({ MY_HOST: undefined });
+    mockProcessEnv({ MY_PORT: undefined });
   });
 
   it('supports templating in provider URL with context env overrides', async () => {
@@ -953,6 +1211,128 @@ describe('loadApiProvider', () => {
     });
 
     expect(provider.id()).toBe('https://api.example.com:8080/query');
+  });
+
+  it('resolves env templates in provider IDs loaded from file references', async () => {
+    mockProcessEnv({ TEST_TENANT_7079: 'tenant-a' });
+    mockProcessEnv({ TEST_APPLICATION_7079: 'myapp' });
+    mockProcessEnv({ TEST_BASE_URL_7079: 'example.com' });
+    mockProcessEnv({ TEST_SERVICE_7079: 'users' });
+    mockProcessEnv({ TEST_VERSION_7079: 'v3' });
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_TENANT_7079}}-{{env.TEST_APPLICATION_7079}}.{{env.TEST_BASE_URL_7079}}/api/{{env.TEST_SERVICE_7079}}/{{env.TEST_VERSION_7079}}'
+      config:
+        method: 'GET'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providers = await loadApiProviders('file://path/to/provider.yaml');
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('https://tenant-a-myapp.example.com/api/users/v3');
+
+    mockProcessEnv({ TEST_TENANT_7079: undefined });
+    mockProcessEnv({ TEST_APPLICATION_7079: undefined });
+    mockProcessEnv({ TEST_BASE_URL_7079: undefined });
+    mockProcessEnv({ TEST_SERVICE_7079: undefined });
+    mockProcessEnv({ TEST_VERSION_7079: undefined });
+  });
+
+  it('preserves undefined env templates in provider IDs loaded from file references', async () => {
+    mockProcessEnv({ TEST_APPLICATION_7079: 'myapp' });
+    mockProcessEnv({ TEST_BASE_URL_7079: 'example.com' });
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_APPLICATION_7079}}-{{env.TEST_MISSING_VAR_7079}}.{{env.TEST_BASE_URL_7079}}/api'
+      config:
+        method: 'GET'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const providers = await loadApiProviders('file://path/to/provider.yaml');
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('https://myapp-{{env.TEST_MISSING_VAR_7079}}.example.com/api');
+
+    mockProcessEnv({ TEST_APPLICATION_7079: undefined });
+    mockProcessEnv({ TEST_BASE_URL_7079: undefined });
+  });
+
+  it('resolves env templates when file:// providers are pre-resolved via resolveProviderConfigs', async () => {
+    mockProcessEnv({ TEST_APP_7079_RESOLVED: 'myapp' });
+    mockProcessEnv({ TEST_URL_7079_RESOLVED: 'example.com' });
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_APP_7079_RESOLVED}}.{{env.TEST_URL_7079_RESOLVED}}/api/v1'
+      config:
+        method: 'GET'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    // This is the production path: resolveProviderConfigs resolves file:// to raw ProviderOptions,
+    // then loadApiProviders processes the resolved ProviderOptions (not file:// strings)
+    const resolved = resolveProviderConfigs(['file://path/to/provider.yaml']);
+    expect(Array.isArray(resolved)).toBe(true);
+
+    const providers = await loadApiProviders(resolved);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('https://myapp.example.com/api/v1');
+
+    mockProcessEnv({ TEST_APP_7079_RESOLVED: undefined });
+    mockProcessEnv({ TEST_URL_7079_RESOLVED: undefined });
+  });
+
+  it('resolves env templates in HTTP provider URL and config from file reference (#7079)', async () => {
+    mockProcessEnv({ TEST_APP_7079_HTTP: 'myapp' });
+    mockProcessEnv({ TEST_BASE_7079_HTTP: 'example.com' });
+    mockProcessEnv({ TEST_SVC_7079_HTTP: 'users' });
+    mockProcessEnv({ TEST_VER_7079_HTTP: 'v3' });
+    mockProcessEnv({ TEST_SESSION_7079_HTTP: 'abc123' });
+
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_APP_7079_HTTP}}.{{env.TEST_BASE_7079_HTTP}}/api/{{env.TEST_SVC_7079_HTTP}}/{{env.TEST_VER_7079_HTTP}}'
+      config:
+        method: 'GET'
+        headers:
+          Cookie: 'SESSION={{env.TEST_SESSION_7079_HTTP}}'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const provider = await loadApiProvider('file://path/to/provider.yaml');
+    expect(provider.id()).toBe('https://myapp.example.com/api/users/v3');
+    expect(provider.config.headers?.Cookie).toBe('SESSION=abc123');
+
+    mockProcessEnv({ TEST_APP_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_BASE_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_SVC_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_VER_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_SESSION_7079_HTTP: undefined });
+  });
+
+  it('lets explicit env overrides win for providers loaded from file references', async () => {
+    const mockYamlContent = dedent`
+      id: 'https://{{env.TEST_FILE_PROVIDER_ENV}}.example.com/api'
+      env:
+        TEST_FILE_PROVIDER_ENV: 'file-default'
+      config:
+        method: 'GET'
+        headers:
+          Authorization: 'Bearer {{env.TEST_FILE_PROVIDER_ENV}}'
+    `;
+    mockFsReadFileSync.mockReturnValue(mockYamlContent);
+
+    const provider = await loadApiProvider('file://path/to/provider.yaml', {
+      env: {
+        TEST_FILE_PROVIDER_ENV: 'context-env',
+      },
+      options: {
+        env: {
+          TEST_FILE_PROVIDER_ENV: 'explicit-env',
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('https://explicit-env.example.com/api');
+    expect(provider.config.headers?.Authorization).toBe('Bearer explicit-env');
   });
 
   it('uses provider env overrides when rendering provider config', async () => {
@@ -983,6 +1363,152 @@ describe('loadApiProvider', () => {
     })) as OpenAiChatCompletionProvider;
 
     expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('preserves merged env overrides for Abliteration providers', async () => {
+    const originalAblitKey = process.env.ABLIT_KEY;
+    const originalAblitApiBaseUrl = process.env.ABLIT_API_BASE_URL;
+    mockProcessEnv({ ABLIT_KEY: undefined });
+    mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
+
+    try {
+      const provider = (await loadApiProvider('abliteration:abliterated-model', {
+        env: {
+          ABLIT_API_BASE_URL: 'https://context.example.com/v1',
+        },
+        options: {
+          env: {
+            ABLIT_KEY: 'provider-key',
+          },
+        },
+      })) as AbliterationProvider;
+
+      expect(provider.env?.ABLIT_API_BASE_URL).toBe('https://context.example.com/v1');
+      expect(provider.env?.ABLIT_KEY).toBe('provider-key');
+      expect(provider.config.apiBaseUrl).toBe('https://context.example.com/v1');
+      expect(provider.getApiKey()).toBe('provider-key');
+    } finally {
+      if (originalAblitKey === undefined) {
+        mockProcessEnv({ ABLIT_KEY: undefined });
+      } else {
+        mockProcessEnv({ ABLIT_KEY: originalAblitKey });
+      }
+
+      if (originalAblitApiBaseUrl === undefined) {
+        mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
+      } else {
+        mockProcessEnv({ ABLIT_API_BASE_URL: originalAblitApiBaseUrl });
+      }
+    }
+  });
+
+  it('uses cliState env values for Abliteration providers loaded without context env', async () => {
+    const originalConfig = cliState.config;
+    cliState.config = {
+      env: {
+        ABLIT_API_BASE_URL: 'https://cli-state.example.com/v1',
+      },
+    };
+
+    try {
+      const provider = (await loadApiProvider('abliteration:abliterated-model', {
+        options: {
+          env: {
+            ABLIT_KEY: 'provider-key',
+          },
+        },
+      })) as AbliterationProvider;
+
+      expect(provider.env?.ABLIT_API_BASE_URL).toBeUndefined();
+      expect(provider.config.apiBaseUrl).toBe('https://cli-state.example.com/v1');
+      expect(provider.getApiKey()).toBe('provider-key');
+    } finally {
+      cliState.config = originalConfig;
+    }
+  });
+
+  it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
+    mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
+
+    const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
+      options: {
+        env: {
+          CLAUDE_CODE_USE_VERTEX: 'true',
+        },
+      },
+    });
+
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
+  });
+
+  it('loads OpenAI Codex app-server providers with model-in-path config', async () => {
+    const provider = (await loadApiProvider('openai:codex-app-server:gpt-5.4', {
+      options: {
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+      },
+    })) as OpenAICodexAppServerProvider;
+
+    expect(provider).toBeInstanceOf(OpenAICodexAppServerProvider);
+    expect(provider.id()).toBe('openai:codex-app-server:gpt-5.4');
+    expect(provider.config.model).toBe('gpt-5.4');
+    expect(provider.getApiKey()).toBe('override-key');
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
+  });
+
+  it('preserves OpenAI Codex app-server provider env overrides from object configs', async () => {
+    const [provider] = (await loadApiProviders([
+      {
+        id: 'openai:codex-app-server:gpt-5.4',
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+      },
+    ])) as OpenAICodexAppServerProvider[];
+
+    expect(provider).toBeInstanceOf(OpenAICodexAppServerProvider);
+    expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+    expect(provider.getApiKey()).toBe('override-key');
+    expect(checkProviderApiKeys([provider]).size).toBe(0);
+  });
+
+  it('merges context env into OpenAI Codex app-server providers', async () => {
+    const contextOnlyProvider = (await loadApiProvider('openai:codex-app-server', {
+      env: {
+        OPENAI_API_KEY: 'context-key',
+      },
+      options: {},
+    })) as OpenAICodexAppServerProvider;
+
+    expect(contextOnlyProvider.getApiKey()).toBe('context-key');
+
+    const mergedProvider = (await loadApiProvider('openai:codex-app-server', {
+      env: {
+        CODEX_API_KEY: 'context-codex-key',
+        OPENAI_API_KEY: 'context-openai-key',
+      },
+      options: {
+        env: {
+          OPENAI_API_KEY: 'options-openai-key',
+        },
+      },
+    })) as OpenAICodexAppServerProvider;
+
+    expect(mergedProvider.env?.CODEX_API_KEY).toBe('context-codex-key');
+    expect(mergedProvider.env?.OPENAI_API_KEY).toBe('options-openai-key');
+    expect(mergedProvider.getApiKey()).toBe('options-openai-key');
+  });
+
+  it('loads OpenAI Codex desktop alias providers', async () => {
+    const provider = (await loadApiProvider('openai:codex-desktop:gpt-5.4', {
+      options: {},
+    })) as OpenAICodexAppServerProvider;
+
+    expect(provider).toBeInstanceOf(OpenAICodexAppServerProvider);
+    expect(provider.id()).toBe('openai:codex-desktop:gpt-5.4');
+    expect(provider.config.model).toBe('gpt-5.4');
   });
 
   it('isolates env overrides between multiple provider loads', async () => {
@@ -1111,7 +1637,7 @@ describe('loadApiProvider', () => {
   });
 
   it('renders label using Nunjucks', async () => {
-    process.env.someVariable = 'foo';
+    mockProcessEnv({ someVariable: 'foo' });
     const providerOptions = {
       id: 'openai:chat:gpt-4o',
       config: {},
@@ -1122,9 +1648,9 @@ describe('loadApiProvider', () => {
   });
 
   it('renders environment variables in provider config while preserving runtime vars', async () => {
-    process.env.MY_DEPLOYMENT = 'test-deployment';
-    process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
-    process.env.API_VERSION = '2024-02-15';
+    mockProcessEnv({ MY_DEPLOYMENT: 'test-deployment' });
+    mockProcessEnv({ AZURE_ENDPOINT: 'test.openai.azure.com' });
+    mockProcessEnv({ API_VERSION: '2024-02-15' });
 
     const providerOptions = {
       config: {
@@ -1148,9 +1674,9 @@ describe('loadApiProvider', () => {
       message: '{{ vars.userMessage }}',
     });
 
-    delete process.env.MY_DEPLOYMENT;
-    delete process.env.AZURE_ENDPOINT;
-    delete process.env.API_VERSION;
+    mockProcessEnv({ MY_DEPLOYMENT: undefined });
+    mockProcessEnv({ AZURE_ENDPOINT: undefined });
+    mockProcessEnv({ API_VERSION: undefined });
   });
 
   it('loadApiProvider with xai', async () => {
@@ -1382,12 +1908,72 @@ describe('getProviderIds', () => {
     ]);
   });
 
+  it('calls id() for ApiProvider objects', () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async () => ({ output: 'test' }),
+    };
+
+    const providerIds = getProviderIds([apiProvider] as any);
+    expect(providerIds).toEqual(['custom-api-provider']);
+  });
+
   it('extracts id from ProviderOptionsMap objects', () => {
     const providerIds = getProviderIds([
       { 'openai:gpt-4o-mini': { config: { temperature: 0.5 } } },
       { 'anthropic:messages:claude-3-5-sonnet-20241022': { id: 'custom-id' } },
     ]);
     expect(providerIds).toEqual(['openai:gpt-4o-mini', 'custom-id']);
+  });
+
+  it('does not treat option-only provider objects as ProviderOptionsMap objects', () => {
+    expect(() => getProviderIds([{ config: { temperature: 0.5 } } as any])).toThrow(
+      'Invalid provider at index 0',
+    );
+    expect(() => getProviderIds([{ prompts: ['prompt1'] } as any])).toThrow(
+      'Invalid provider at index 0',
+    );
+  });
+
+  it('does not treat multi-key objects as ProviderOptionsMap objects', () => {
+    expect(() =>
+      getProviderIds([
+        {
+          'openai:gpt-4o-mini': { config: { temperature: 0.5 } },
+          'anthropic:messages:claude-3-5-sonnet-20241022': { config: { temperature: 0.4 } },
+        } as any,
+      ]),
+    ).toThrow('Invalid provider at index 0');
+  });
+
+  it('formats invalid provider errors for circular objects', () => {
+    const provider: any = { config: { temperature: 0.5 } };
+    provider.self = provider;
+
+    expect(() => getProviderIds([provider])).toThrow('Invalid provider at index 0');
+  });
+
+  it('redacts invalid provider config details before formatting id extraction errors', () => {
+    const provider = {
+      config: {
+        apiKey: 'sk-proj-invalid-provider-secret',
+      },
+      headers: {
+        Authorization: 'Bearer invalid-provider-secret-token',
+      },
+    };
+
+    let message = '';
+    try {
+      getProviderIds([provider as any]);
+    } catch (err) {
+      message = (err as Error).message;
+    }
+
+    expect(message).toContain('Invalid provider at index 0');
+    expect(message).toContain('[REDACTED]');
+    expect(message).not.toContain('sk-proj-invalid-provider-secret');
+    expect(message).not.toContain('Bearer invalid-provider-secret-token');
   });
 
   it('does not treat file:// paths without yaml/yml/json extension as file references', () => {
@@ -1406,16 +1992,8 @@ describe('resolveProvider', () => {
   let mockProvider2: any;
 
   beforeEach(async () => {
-    mockProvider1 = {
-      id: () => 'provider-1',
-      label: 'Provider One',
-      callApi: vi.fn(),
-    };
-
-    mockProvider2 = {
-      id: () => 'provider-2',
-      callApi: vi.fn(),
-    };
+    mockProvider1 = createMockProvider({ id: 'provider-1', label: 'Provider One' });
+    mockProvider2 = createMockProvider({ id: 'provider-2' });
 
     mockProviderMap = {
       'provider-1': mockProvider1,
@@ -1469,6 +2047,8 @@ describe('resolveProvider', () => {
       return { output: `Response for: ${prompt}` };
     });
     mockFunctionProvider.label = 'My Custom Provider';
+    mockFunctionProvider.transform = (output: string) => output.toUpperCase();
+    mockFunctionProvider.delay = 250;
 
     const result = await resolveProvider(mockFunctionProvider, mockProviderMap);
 
@@ -1476,6 +2056,8 @@ describe('resolveProvider', () => {
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('My Custom Provider');
     expect(result.callApi).toBe(mockFunctionProvider);
+    expect(result.transform).toBe(mockFunctionProvider.transform);
+    expect(result.delay).toBe(250);
   });
 
   it('should handle function provider without label', async () => {
@@ -1509,10 +2091,7 @@ describe('resolveProvider', () => {
     const { resolveProvider } = await import('../../src/providers');
 
     // Test that 'echo' gets resolved from providerMap instead of loadApiProvider
-    const mockEchoProvider = {
-      id: () => 'echo-from-map',
-      callApi: vi.fn(),
-    };
+    const mockEchoProvider = createMockProvider({ id: 'echo-from-map' });
 
     const mapWithEcho = {
       ...mockProviderMap,

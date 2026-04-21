@@ -91,7 +91,7 @@ export async function loadFunction<T extends Function>({
  *
  * The function name suffix is only recognized when:
  * - The colon is not at index 1 (to skip Windows drive letters like C:)
- * - The part after the colon is a valid JS/Python identifier (letters, digits, underscores)
+ * - The part after the colon is a valid function reference (identifier or dotted path)
  *
  * This means paths containing colons (e.g., file:///tmp/assert:one.js) are
  * treated as literal filenames when the suffix doesn't look like an identifier.

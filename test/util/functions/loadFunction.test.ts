@@ -16,11 +16,11 @@ vi.mock('../../../src/python/pythonUtils', () => ({
 }));
 
 // Use hoisted mock values that work on all platforms
-const { TEST_JS_PATH, TEST_PY_PATH, mockResolve } = vi.hoisted(() => {
+const { TEST_JS_PATH, TEST_PY_PATH, TEST_TXT_PATH, mockResolve } = vi.hoisted(() => {
   const TEST_JS_PATH = '/test/resolved/function.js';
   const TEST_PY_PATH = '/test/resolved/function.py';
   const TEST_TXT_PATH = '/test/resolved/function.txt';
-  const mockResolve = vi.fn((...args: string[]) => {
+  const mockResolve = vi.fn((...args: string[]): string => {
     const lastArg = args[args.length - 1] || '';
     if (lastArg.endsWith('.py')) {
       return TEST_PY_PATH;
@@ -30,7 +30,7 @@ const { TEST_JS_PATH, TEST_PY_PATH, mockResolve } = vi.hoisted(() => {
     }
     return TEST_JS_PATH;
   });
-  return { TEST_JS_PATH, TEST_PY_PATH, mockResolve };
+  return { TEST_JS_PATH, TEST_PY_PATH, TEST_TXT_PATH, mockResolve };
 });
 
 vi.mock('path', async () => {
@@ -54,6 +54,17 @@ vi.mock('../../../src/cliState', () => ({
 describe('loadFunction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolve.mockReset();
+    mockResolve.mockImplementation((...args: string[]) => {
+      const lastArg = args[args.length - 1] || '';
+      if (lastArg.endsWith('.py')) {
+        return TEST_PY_PATH;
+      }
+      if (lastArg.endsWith('.txt')) {
+        return TEST_TXT_PATH;
+      }
+      return TEST_JS_PATH;
+    });
     // Clear the function cache
     Object.keys(functionCache).forEach((key) => delete functionCache[key]);
   });
@@ -236,6 +247,65 @@ describe('parseFileUrl', () => {
     expect(result).toEqual({
       filePath: './path/to/file.js',
       functionName: 'functionName',
+    });
+  });
+
+  it('should handle Windows drive-letter paths without function name', () => {
+    expect(parseFileUrl('file://C:\\repo\\assert.js')).toEqual({
+      filePath: 'C:\\repo\\assert.js',
+    });
+  });
+
+  it('should handle Windows drive-letter paths with function name', () => {
+    expect(parseFileUrl('file://C:\\repo\\assert.js:myFunc')).toEqual({
+      filePath: 'C:\\repo\\assert.js',
+      functionName: 'myFunc',
+    });
+  });
+
+  it('should handle paths with multiple dots', () => {
+    expect(parseFileUrl('file://my.test.assert.js:validate')).toEqual({
+      filePath: 'my.test.assert.js',
+      functionName: 'validate',
+    });
+  });
+
+  it.each([
+    ['ts', 'assert.ts', 'myFunc'],
+    ['mjs', 'assert.mjs', 'myFunc'],
+    ['rb', 'assert.rb', 'check'],
+    ['py', 'script.py', 'validate'],
+  ])('should handle .%s files with function names', (_extension, filePath, functionName) => {
+    expect(parseFileUrl(`file://${filePath}:${functionName}`)).toEqual({
+      filePath,
+      functionName,
+    });
+  });
+
+  it('should handle colons in filenames when suffix is not an identifier', () => {
+    expect(parseFileUrl('file:///tmp/assert:one.js')).toEqual({
+      filePath: '/tmp/assert:one.js',
+    });
+  });
+
+  it('should handle colons in filenames with a function suffix', () => {
+    expect(parseFileUrl('file:///tmp/assert:one.js:myFunc')).toEqual({
+      filePath: '/tmp/assert:one.js',
+      functionName: 'myFunc',
+    });
+  });
+
+  it('should handle dotted class method references', () => {
+    expect(parseFileUrl('file://prompt.py:Prompt.prompt')).toEqual({
+      filePath: 'prompt.py',
+      functionName: 'Prompt.prompt',
+    });
+  });
+
+  it('should handle dotted namespace function references', () => {
+    expect(parseFileUrl('file://assert.js:validators.checkLength')).toEqual({
+      filePath: 'assert.js',
+      functionName: 'validators.checkLength',
     });
   });
 });
