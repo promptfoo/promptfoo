@@ -42,10 +42,13 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # Use the Node.js version specified in .nvmrc (Node.js >= 20.0.0 required)
+   # Use the Node.js version specified in .nvmrc
    nvm use
 
-   # Install dependencies (npm, pnpm, or yarn all work)
+   # If you're using npm, match the major used in CI so release-age policy is applied
+   npm install -g npm@11
+
+   # Install dependencies (CI uses npm; pnpm and yarn also work for local development)
    npm install
    ```
 
@@ -56,6 +59,7 @@ We particularly welcome contributions in the following areas:
    Now install node based dependencies:
 
    ```bash
+   npm install -g npm@11
    npm install
    ```
 

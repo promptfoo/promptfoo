@@ -19,7 +19,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-import { stripAnsi } from '../util/utils';
+import { mockProcessEnv, stripAnsi } from '../util/utils';
 
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
@@ -243,6 +243,75 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'goat',
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        maxCharsPerMessage: 12,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            maxCharsPerMessage: 12,
+            modifiers: expect.objectContaining({
+              maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+            }),
+          }),
+        }),
+      );
+      expect(mockStrategyAction).toHaveBeenCalledWith(
+        expect.any(Array),
+        'query',
+        expect.objectContaining({
+          maxCharsPerMessage: 12,
+        }),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              pluginId: 'test-plugin',
+              pluginConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+              modifiers: expect.objectContaining({
+                maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              strategyConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+            }),
+          }),
+        ]),
+      );
     });
 
     it('should warn about unregistered plugins', async () => {
@@ -987,21 +1056,21 @@ describe('synthesize', () => {
 
   describe('Logger', () => {
     it('debug log level hides progress bar', async () => {
-      const originalLogLevel = process.env.LOG_LEVEL;
-      process.env.LOG_LEVEL = 'debug';
+      const restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug' });
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
 
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-        targetIds: ['test-provider'],
-      });
-
-      expect(cliProgress.SingleBar).not.toHaveBeenCalled();
-
-      process.env.LOG_LEVEL = originalLogLevel;
+        expect(cliProgress.SingleBar).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -2022,14 +2091,11 @@ describe('Language configuration', () => {
       expect(result.testCases).toHaveLength(4);
 
       // Check that we have tests for both languages
-      const languageCounts = result.testCases.reduce(
-        (acc, tc) => {
-          const lang = tc.metadata?.language || 'en';
-          acc[lang] = (acc[lang] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
+      const languageCounts = result.testCases.reduce<Record<string, number>>((acc, tc) => {
+        const lang = tc.metadata?.language || 'en';
+        acc[lang] = (acc[lang] || 0) + 1;
+        return acc;
+      }, {});
 
       expect(languageCounts).toEqual({
         en: 2,

@@ -152,7 +152,7 @@ export function getHeaderFilterState<TData>(column: Column<TData, unknown>): Hea
   const defaultOperator: FilterOperator = isSelectFilter ? 'equals' : 'contains';
   const filterValue = column.getFilterValue();
 
-  if (!filterValue || typeof filterValue !== 'object' || filterValue === null) {
+  if (typeof filterValue !== 'object' || filterValue === null) {
     return { operator: defaultOperator, value: isSelectFilter ? '' : '' };
   }
 
@@ -414,15 +414,15 @@ export function DataTableHeaderFilter<TData>({ column }: { column: Column<TData,
     typeof column.columnDef.header === 'string' ? column.columnDef.header : column.id;
 
   React.useEffect(() => {
-    if (!isSelectFilter) {
-      setTextValue(typeof value === 'string' ? value : '');
-    } else if (isSelectFilter) {
+    if (isSelectFilter) {
       setSelectValue(
         Array.isArray(value) ? (value[0] ?? '') : typeof value === 'string' ? value : '',
       );
       setMultiSelectValues(
         Array.isArray(value) ? value : typeof value === 'string' && value ? [value] : [],
       );
+    } else {
+      setTextValue(typeof value === 'string' ? value : '');
     }
   }, [isSelectFilter, value]);
 

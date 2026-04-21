@@ -17,6 +17,7 @@ const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
 const ROOT_DIR = path.resolve(__dirname, '../..');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const CONFIGS_DIR = path.resolve(FIXTURES_DIR, 'configs');
+const FRONTEND_TS_PROJECT_DIR = path.resolve(FIXTURES_DIR, 'frontend-ts-provider');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-jsts');
 
 /**
@@ -144,6 +145,42 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
       expect(parsed.results.results[0].success).toBe(true);
       expect(parsed.results.results[0].response.output).toContain('ESM Echo:');
     });
+
+    it('3.2.5 - skill-used assertion passes with local ESM provider metadata', () => {
+      const configPath = path.join(CONFIGS_DIR, 'skill-used-provider-esm.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'skill-used-provider-esm-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.success).toBe(true);
+      expect(result.response.output).toContain('Skill smoke:');
+      expect(result.response.metadata.skillCalls).toEqual([
+        {
+          name: 'smoke-skill',
+          source: 'tool',
+        },
+      ]);
+      expect(result.gradingResult.componentResults).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            pass: true,
+            assertion: expect.objectContaining({ type: 'skill-used' }),
+          }),
+          expect.objectContaining({
+            pass: true,
+            assertion: expect.objectContaining({ type: 'not-skill-used' }),
+          }),
+        ]),
+      );
+    });
   });
 
   describe('3.3 TypeScript Providers', () => {
@@ -161,6 +198,48 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
       const parsed = JSON.parse(content);
       expect(parsed.results.results[0].success).toBe(true);
       expect(parsed.results.results[0].response.output).toContain('TypeScript Echo:');
+    });
+
+    it('3.3.2 - TypeScript provider class with transitive TypeScript imports', () => {
+      const configPath = path.join(CONFIGS_DIR, 'provider-ts-transitive.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'ts-provider-transitive-output.json');
+
+      const { exitCode, stderr } = runCli(
+        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
+        {
+          cwd: CONFIGS_DIR,
+        },
+      );
+
+      expect(exitCode, stderr).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].response.output).toContain('TypeScript Transitive Echo:');
+    });
+
+    it('3.3.3 - TypeScript provider with enum and tsconfig path alias', () => {
+      const configPath = path.join(FRONTEND_TS_PROJECT_DIR, 'promptfooconfig.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'ts-provider-frontend-output.json');
+
+      const { exitCode, stderr } = runCli(
+        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
+        {
+          cwd: FRONTEND_TS_PROJECT_DIR,
+          env: {
+            PROMPTFOO_CONFIG_DIR: path.join(OUTPUT_DIR, 'frontend-ts-config'),
+            PROMPTFOO_LOG_DIR: path.join(OUTPUT_DIR, 'frontend-ts-logs'),
+          },
+        },
+      );
+
+      expect(exitCode, stderr).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].response.output).toContain('frontend enum: hello frontend');
     });
   });
 });
@@ -266,7 +345,6 @@ describe('Script Assertion Smoke Tests', () => {
       if (exitCode !== 0) {
         const output = stdout + stderr;
         if (output.toLowerCase().includes('python') && output.toLowerCase().includes('not found')) {
-          console.warn('Skipping Python assertion test - Python not available');
           return;
         }
       }

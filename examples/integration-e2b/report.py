@@ -9,7 +9,8 @@ def gen_report(out_dir=".promptfoo_results", out_md="promptfoo_report.md"):
     rows = []
     for f in files:
         try:
-            j = json.load(open(f))
+            with open(f, encoding="utf-8") as result_file:
+                j = json.load(result_file)
             rows.append(j)
         except Exception:
             continue
@@ -21,7 +22,8 @@ def gen_report(out_dir=".promptfoo_results", out_md="promptfoo_report.md"):
         lines.append(
             f"|{r.get('task_id', '-')}|{r.get('provider', '-')}|{r.get('model', '-')}|{r.get('success')}|{r.get('runtime_s')}|"
         )
-    open(out_md, "w").write("\n".join(lines))
+    with open(out_md, "w", encoding="utf-8") as report_file:
+        report_file.write("\n".join(lines))
     print("Wrote", out_md)
 
 

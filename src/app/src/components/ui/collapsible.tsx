@@ -21,4 +21,4 @@ function CollapsibleTrigger({
 
 const CollapsibleContent = CollapsiblePrimitive.CollapsibleContent;
 
-export { Collapsible, CollapsibleTrigger, CollapsibleContent };
+export { Collapsible, CollapsibleContent, CollapsibleTrigger };

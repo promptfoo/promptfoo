@@ -25,7 +25,7 @@ In a controlled lab, we tested a local OpenClaw deployment with browser access, 
 
 <!-- truncate -->
 
-This post documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary, leading to capability disclosure, local document access, local artifact creation, and unauthorized messages to loopback sinks.
+This post documents one exploit chain in a permissive OpenClaw deployment where browsing, local file access, and outbound actions shared a trust boundary. That led to capability disclosure, local document access, secret aggregation into new files, and unauthorized messages to loopback sinks.
 
 Indirect prompt injection from websites and files is already a known agent risk. This case study looks at what happens when that risk is combined with a local agent that can browse attacker-controlled pages, read and write local files, and send messages through connected channels. It focuses on one exploit chain rather than behavior across OpenClaw versions, model providers, or approval modes.
 
@@ -57,7 +57,7 @@ With attacker-controlled pages in the browsing path, the agent began enumerating
 
 ### Phase 2: Artifact Creation
 
-Once the agent was acting on that capability map, the next step was local file access. In the lab, the same agent context could read local documents and write new summaries derived from local material. A compromised retrieval step does not end with a bad answer. It can become a durable local artifact that other prompts, users, or workflows may later trust.
+Once the agent was acting on that capability map, the next step was local file access. In the lab, the same agent context could read local documents and write new files derived from local material, including a durable handoff file containing exact passwords, a token, and contact details. A compromised retrieval step does not end with a bad answer. It can become a durable local artifact that other prompts, users, or workflows may later trust.
 
 ### Phase 3: Unauthorized Outbound Action
 
@@ -83,7 +83,7 @@ This deployment placed three capabilities inside one trust boundary:
 
 That combination is enough to turn a malicious webpage into an endpoint-security problem. An agent with access to internal documents, writable local state, and messaging integrations is a privileged endpoint that happens to speak natural language.
 
-A local deployment with browsing capabilities and meaningful privileges can generate false messages and durable local artifacts.
+A local deployment with browsing capabilities and meaningful privileges can generate false messages and compile sensitive local data into durable artifacts.
 
 **Do not broadly deploy browser-capable local agents with company data access and messaging integrations unless outbound actions are explicitly approved and local access is tightly constrained.**
 
