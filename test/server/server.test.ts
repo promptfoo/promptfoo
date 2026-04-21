@@ -112,6 +112,13 @@ describe('server', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      MockSocketIOServer.mockReset().mockImplementation(function SocketIOServer() {
+        return {
+          close: mockSocketClose,
+          emit: mockSocketEmit,
+          on: vi.fn(),
+        };
+      });
       mockSocketClose.mockImplementation((callback?: () => void) => callback?.());
 
       // Track signal handlers using a Map to support multiple handlers per event
