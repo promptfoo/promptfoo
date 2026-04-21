@@ -11,7 +11,11 @@ import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
-import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  getAuthor,
+  promptForEmailUnverified,
+} from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -32,12 +36,14 @@ import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { isUuid } from '../util/uuid';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
@@ -316,24 +322,12 @@ export async function doEval(
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
-    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath);
     }
 
-    // Check if config has redteam section but no test cases
-    if (
-      config.redteam &&
-      (!testSuite.tests || testSuite.tests.length === 0) &&
-      (!testSuite.scenarios || testSuite.scenarios.length === 0)
-    ) {
-      logger.warn(
-        chalk.yellow(dedent`
-        Warning: Config file has a redteam section but no test cases.
-        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
-        `),
-      );
-    }
+    warnIfRedteamConfigHasNoTests(config, testSuite);
 
     // TODO(faizan): Crazy condition to see when we run the example redteam config.
     // Remove this once we have a better way to track this.
@@ -391,7 +385,7 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
-    if (cache === false || repeat > 1) {
+    if (cache === false) {
       logger.info('Cache is disabled.');
       disableCache();
     }
@@ -457,6 +451,23 @@ export async function doEval(
       );
     }
 
+    // Check for missing API keys after provider filtering
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+
+    if (missingApiKeys.size > 0) {
+      for (const [envVar, providerIds] of missingApiKeys) {
+        logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+      }
+      logger.error('');
+      logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
+      for (const envVar of missingApiKeys.keys()) {
+        logger.error(`    export ${envVar}=your-api-key-here`);
+      }
+      logger.error('');
+      process.exitCode = 1;
+      return new Eval({}, { persisted: false });
+    }
+
     await checkCloudPermissions(config as UnifiedConfig);
 
     const options: EvaluateOptions = {
@@ -464,11 +475,11 @@ export async function doEval(
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
-          : cmdObj.progressBar !== undefined
-            ? cmdObj.progressBar !== false
-            : evaluateOptions.showProgressBar !== undefined
-              ? evaluateOptions.showProgressBar
-              : true,
+          : cmdObj.progressBar === undefined
+            ? evaluateOptions.showProgressBar === undefined
+              ? true
+              : evaluateOptions.showProgressBar
+            : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
@@ -530,11 +541,12 @@ export async function doEval(
     }
 
     // Create or load eval record
+    const author = getAuthor();
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
-        : new Eval(config, { runtimeOptions: options });
+        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
+        : new Eval(config, { author, runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
@@ -727,6 +739,9 @@ export async function doEval(
     const duration = Math.round((Date.now() - startTime) / 1000);
     const tracker = TokenUsageTracker.getInstance();
 
+    // Check if scan was aborted due to target error (efficient DB query, not loading all results)
+    const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
       evalId: evalRecord.id,
@@ -744,6 +759,7 @@ export async function doEval(
       duration,
       maxConcurrency,
       tracker,
+      targetErrorStatus,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't
@@ -1111,7 +1127,9 @@ export function evalCommand(
           evalCmd.help();
           return;
         }
-        logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+        logger.error(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+        process.exitCode = 1;
+        return;
       }
 
       if (validatedOpts.help) {

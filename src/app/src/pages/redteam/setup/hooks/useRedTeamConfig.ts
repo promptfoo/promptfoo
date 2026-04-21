@@ -63,6 +63,7 @@ const defaultConfig: Config = {
   purpose: '',
   entities: [],
   numTests: REDTEAM_DEFAULTS.NUM_TESTS,
+  maxCharsPerMessage: undefined,
   maxConcurrency: REDTEAM_DEFAULTS.MAX_CONCURRENCY,
   applicationDefinition: {
     purpose: '',
@@ -253,6 +254,7 @@ export const EXAMPLE_CONFIG: Config = {
   purpose: applicationDefinitionToPurpose(CUSTOMER_SERVICE_BOT_EXAMPLE_APPLICATION_DEFINITION),
   entities: [],
   numTests: REDTEAM_DEFAULTS.NUM_TESTS,
+  maxCharsPerMessage: undefined,
   maxConcurrency: 5,
   applicationDefinition: CUSTOMER_SERVICE_BOT_EXAMPLE_APPLICATION_DEFINITION,
 };

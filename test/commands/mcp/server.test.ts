@@ -75,7 +75,7 @@ const mcpServerMocks = vi.hoisted(() => {
   const mcpServerCalls: Array<{ name: string; version: string; description?: string }> = [];
 
   // Create a mock class that can be instantiated with `new`
-  const MockMcpServer = vi.fn(function MockMcpServer(
+  const mockMcpServerImplementation = function MockMcpServer(
     this: {
       connect: ReturnType<typeof vi.fn>;
       tool: ReturnType<typeof vi.fn>;
@@ -87,9 +87,10 @@ const mcpServerMocks = vi.hoisted(() => {
     this.connect = vi.fn();
     this.tool = vi.fn();
     this.resource = vi.fn();
-  });
+  };
+  const MockMcpServer = vi.fn(mockMcpServerImplementation);
 
-  return { mcpServerCalls, MockMcpServer };
+  return { mcpServerCalls, MockMcpServer, mockMcpServerImplementation };
 });
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
@@ -111,6 +112,9 @@ const { mcpServerCalls } = mcpServerMocks;
 describe('MCP Server', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mcpServerMocks.MockMcpServer.mockReset().mockImplementation(
+      mcpServerMocks.mockMcpServerImplementation,
+    );
     mcpServerCalls.length = 0;
   });
 

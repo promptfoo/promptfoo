@@ -1,5 +1,5 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
@@ -9,11 +9,14 @@ vi.mock('./store');
 const mockUseReportStore = vi.mocked(useReportStore);
 
 describe('ReportSettingsDialogButton', () => {
+  const mockSetShowUntestedPlugins = vi.fn();
   const mockSetPluginPassRateThreshold = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseReportStore.mockReturnValue({
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -37,6 +40,8 @@ describe('ReportSettingsDialogButton', () => {
   it('should call setPluginPassRateThreshold with the new value when the slider is moved', async () => {
     const user = userEvent.setup();
     mockUseReportStore.mockReturnValue({
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: 0.5,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -47,8 +52,11 @@ describe('ReportSettingsDialogButton', () => {
 
     const slider = screen.getByRole('slider');
 
-    // Simulate changing the slider value directly via fireEvent
-    fireEvent.change(slider, { target: { value: '0.75' } });
+    slider.focus();
+    // jsdom does not apply native range keyboard defaults, so set the DOM value directly.
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(slider, '0.75');
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(mockSetPluginPassRateThreshold).toHaveBeenCalled();
     const calls = mockSetPluginPassRateThreshold.mock.calls;
@@ -83,6 +91,8 @@ describe('ReportSettingsDialogButton', () => {
     const user = userEvent.setup();
     const threshold = 0.75;
     mockUseReportStore.mockReturnValue({
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: threshold,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -102,6 +112,8 @@ describe('ReportSettingsDialogButton', () => {
 
   it('should display "NaN%" when pluginPassRateThreshold is NaN', async () => {
     mockUseReportStore.mockReturnValue({
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: NaN,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -118,5 +130,47 @@ describe('ReportSettingsDialogButton', () => {
     // Label and value are now in separate elements
     expect(within(dialog).getByText('Plugin Pass Rate Threshold')).toBeInTheDocument();
     expect(within(dialog).getByText('NaN%')).toBeInTheDocument();
+  });
+
+  it('should render the "Show untested plugins" checkbox based on the store value (unchecked)', async () => {
+    const user = userEvent.setup();
+    mockUseReportStore.mockReturnValue({
+      showUntestedPlugins: false,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
+      pluginPassRateThreshold: 1.0,
+      setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
+    });
+
+    renderWithProviders(<ReportSettingsDialogButton />);
+
+    const settingsButton = screen.getByLabelText('settings');
+    await user.click(settingsButton);
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Show untested plugins',
+    });
+    expect(checkbox).toHaveAttribute('data-state', 'unchecked');
+  });
+
+  it('should call setShowUntestedPlugins when the "Show untested plugins" checkbox is toggled', async () => {
+    const user = userEvent.setup();
+    mockUseReportStore.mockReturnValue({
+      showUntestedPlugins: false,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
+      pluginPassRateThreshold: 1.0,
+      setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
+    });
+
+    renderWithProviders(<ReportSettingsDialogButton />);
+
+    const settingsButton = screen.getByLabelText('settings');
+    await user.click(settingsButton);
+
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Show untested plugins',
+    });
+    await user.click(checkbox);
+
+    expect(mockSetShowUntestedPlugins).toHaveBeenCalledWith(true);
   });
 });

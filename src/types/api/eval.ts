@@ -124,8 +124,6 @@ export const GetJobParamsSchema = z.object({
   id: z.string().uuid(),
 });
 
-const JobStatusSchema = z.enum(['in-progress', 'complete', 'error']);
-
 export const GetJobResponseSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('in-progress'),
@@ -147,7 +145,6 @@ export const GetJobResponseSchema = z.discriminatedUnion('status', [
 
 export type GetJobParams = z.infer<typeof GetJobParamsSchema>;
 export type GetJobResponse = z.infer<typeof GetJobResponseSchema>;
-export type JobStatus = z.infer<typeof JobStatusSchema>;
 
 // PATCH /api/eval/:id
 
