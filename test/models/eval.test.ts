@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
-import { getUserEmail } from '../../src/globalConfig/accounts';
+import { updateSignalFile } from '../../src/database/signal';
+import { getAuthor } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
 import Eval, {
   buildSafeJsonPath,
@@ -19,6 +20,15 @@ vi.mock('../../src/globalConfig/accounts', async () => {
   return {
     ...actual,
     getUserEmail: vi.fn(),
+    getAuthor: vi.fn(),
+  };
+});
+
+vi.mock('../../src/database/signal', async () => {
+  const actual = await vi.importActual('../../src/database/signal');
+  return {
+    ...actual,
+    updateSignalFile: vi.fn(),
   };
 });
 
@@ -28,6 +38,9 @@ describe('evaluator', () => {
   });
 
   beforeEach(async () => {
+    vi.mocked(getAuthor).mockReset();
+    vi.mocked(updateSignalFile).mockClear();
+
     // Clear all tables before each test
     const db = getDb();
     // Delete related tables first
@@ -37,6 +50,50 @@ describe('evaluator', () => {
     await db.run('DELETE FROM evals_to_tags');
     // Then delete from main table
     await db.run('DELETE FROM evals');
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  describe('addPrompts', () => {
+    it('should notify watchers when persisted prompt metadata changes', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      vi.mocked(updateSignalFile).mockClear();
+
+      await eval_.addPrompts([
+        {
+          raw: 'Summarize the latest changelog entry',
+          label: 'Summarize the latest changelog entry',
+          provider: 'test-provider',
+        },
+      ]);
+
+      expect(updateSignalFile).toHaveBeenCalledWith(eval_.id);
+
+      const reloaded = await Eval.findById(eval_.id);
+      expect(reloaded?.prompts).toEqual([
+        expect.objectContaining({
+          raw: 'Summarize the latest changelog entry',
+          label: 'Summarize the latest changelog entry',
+          provider: 'test-provider',
+        }),
+      ]);
+    });
+
+    it('should not notify watchers for in-memory evals', async () => {
+      const eval_ = new Eval({});
+
+      await eval_.addPrompts([
+        {
+          raw: 'In-memory prompt',
+          label: 'In-memory prompt',
+          provider: 'test-provider',
+        },
+      ]);
+
+      expect(updateSignalFile).not.toHaveBeenCalled();
+    });
   });
 
   describe('summaryResults', () => {
@@ -176,26 +233,59 @@ describe('evaluator', () => {
   describe('create', () => {
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
+      // Spy must not be called — opts.author is explicit, so getAuthor() is bypassed.
+      vi.mocked(getAuthor).mockReturnValue('should-not-be-used@example.com');
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts, { author: providedAuthor });
       expect(evaluation.author).toBe(providedAuthor);
+      expect(vi.mocked(getAuthor)).not.toHaveBeenCalled();
       const persistedEval = await Eval.findById(evaluation.id);
       expect(persistedEval?.author).toBe(providedAuthor);
     });
 
-    it('should use default author from getUserEmail when not provided', async () => {
-      const mockEmail = 'default@example.com';
-      vi.mocked(getUserEmail).mockReturnValue(mockEmail);
+    it('should honor an explicit author even when the current user is cloud-authed (import regression)', async () => {
+      // Simulate cloud-authed user with a different identity than the imported eval.
+      vi.mocked(getAuthor).mockReturnValue('current-cloud-user@example.com');
+      const config = { description: 'Imported eval' };
+      const renderedPrompts: Prompt[] = [
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
+      ];
+      const evaluation = await Eval.create(config, renderedPrompts, {
+        author: 'original-author@example.com',
+      });
+      expect(evaluation.author).toBe('original-author@example.com');
+      expect(vi.mocked(getAuthor)).not.toHaveBeenCalled();
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.author).toBe('original-author@example.com');
+    });
+
+    it('should persist null when author is explicitly null', async () => {
+      vi.mocked(getAuthor).mockReturnValue('should-not-be-used@example.com');
+      const config = { description: 'Test eval' };
+      const renderedPrompts: Prompt[] = [
+        { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
+      ];
+      const evaluation = await Eval.create(config, renderedPrompts, { author: null });
+      expect(evaluation.author).toBeNull();
+      expect(vi.mocked(getAuthor)).not.toHaveBeenCalled();
+      const persistedEval = await Eval.findById(evaluation.id);
+      expect(persistedEval?.author).toBeNull();
+    });
+
+    it('should fall back to getAuthor when author is not provided', async () => {
+      const mockAuthor = 'default@example.com';
+      vi.mocked(getAuthor).mockReturnValue(mockAuthor);
       const config = { description: 'Test eval' };
       const renderedPrompts: Prompt[] = [
         { raw: 'Test prompt', display: 'Test prompt', label: 'Test label' } as Prompt,
       ];
       const evaluation = await Eval.create(config, renderedPrompts);
+      expect(evaluation.author).toBe(mockAuthor);
       const persistedEval = await Eval.findById(evaluation.id);
-      expect(persistedEval?.author).toBe(mockEmail);
+      expect(persistedEval?.author).toBe(mockAuthor);
     });
   });
 
@@ -491,6 +581,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       });
     });
@@ -523,6 +615,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       });
     });
@@ -573,6 +667,8 @@ describe('evaluator', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
       });
     });

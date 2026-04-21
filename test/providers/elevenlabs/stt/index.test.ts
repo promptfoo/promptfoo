@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsSTTProvider } from '../../../../src/providers/elevenlabs/stt';
+import { mockProcessEnv } from '../../../util/utils';
 
 // Mock dependencies
 vi.mock('../../../../src/providers/elevenlabs/client');
@@ -9,11 +10,11 @@ vi.mock('../../../../src/providers/elevenlabs/cost-tracker');
 describe('ElevenLabsSTTProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ELEVENLABS_API_KEY = 'test-api-key';
+    mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
-    delete process.env.ELEVENLABS_API_KEY;
+    mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -25,7 +26,7 @@ describe('ElevenLabsSTTProvider', () => {
     });
 
     it('should throw error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsSTTProvider('elevenlabs:stt')).toThrow(
         'ElevenLabs API key not found',
@@ -46,6 +47,16 @@ describe('ElevenLabsSTTProvider', () => {
       expect(provider.config.diarization).toBe(true);
       expect(provider.config.maxSpeakers).toBe(3);
       expect(provider.config.language).toBe('es');
+    });
+
+    it('should preserve explicit zero retries', () => {
+      const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
+        config: {
+          retries: 0,
+        },
+      });
+
+      expect(provider.config.retries).toBe(0);
     });
 
     it('should use custom label if provided', () => {
@@ -141,7 +152,7 @@ describe('ElevenLabsSTTProvider', () => {
     });
 
     it('should support custom API key environment variable', () => {
-      process.env.CUSTOM_ELEVENLABS_KEY = 'custom-key';
+      mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: 'custom-key' });
 
       const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
         config: { apiKeyEnvar: 'CUSTOM_ELEVENLABS_KEY' },
@@ -149,13 +160,13 @@ describe('ElevenLabsSTTProvider', () => {
 
       expect(provider).toBeDefined();
 
-      delete process.env.CUSTOM_ELEVENLABS_KEY;
+      mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: undefined });
     });
   });
 
   describe('error handling', () => {
     it('should throw meaningful error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsSTTProvider('elevenlabs:stt')).toThrow(/ELEVENLABS_API_KEY/i);
     });

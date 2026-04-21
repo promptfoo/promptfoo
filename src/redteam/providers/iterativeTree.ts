@@ -40,12 +40,13 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
-  type TargetResponse,
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -545,10 +546,9 @@ async function runRedteamConversation({
 
   let bestResponse = '';
 
-  let stoppingReason: StopReason = 'MAX_DEPTH';
+  let stoppingReason: StopReason;
 
   const treeOutputs: TreeSearchOutput[] = [];
-  let lastResponse: TargetResponse | undefined = undefined;
 
   // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
   let lastTransformDisplayVars: Record<string, string> | undefined;
@@ -690,7 +690,6 @@ async function runRedteamConversation({
           testIdx: context?.testIdx,
           promptIdx: context?.promptIdx,
         });
-        lastResponse = targetResponse;
         // Count the target request even when the target returns an error.
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
@@ -781,12 +780,10 @@ async function runRedteamConversation({
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             // Create test object with iteration-specific vars
-            const iterationTest = test
-              ? {
-                  ...test,
-                  vars: iterationVars,
-                }
-              : { vars: iterationVars };
+            const iterationTest = {
+              ...test,
+              vars: iterationVars,
+            };
 
             // Build grading context with exfil tracking data
             let gradingContext:
@@ -853,18 +850,14 @@ async function runRedteamConversation({
               targetResponse.output,
               iterationTest,
               gradingProvider,
-              assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              getGraderAssertionValue(assertToUse),
               additionalRubric,
               undefined, // skipRefusalCheck
               gradingContext,
             );
             storedGraderResult = {
               ...grade,
-              assertion: grade.assertion
-                ? { ...grade.assertion, value: rubric }
-                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                  ? { ...assertToUse, value: rubric }
-                  : undefined,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             };
             graderPassed = grade.pass;
           }
@@ -1075,7 +1068,6 @@ async function runRedteamConversation({
     context,
     options,
   );
-  lastResponse = finalTargetResponse;
   if (finalTargetResponse.tokenUsage) {
     accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
   }
@@ -1102,7 +1094,9 @@ async function runRedteamConversation({
     sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
-    output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
+    output:
+      bestResponse ||
+      (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
     prompt: bestNode.prompt,
     metadata: {
       highestScore: maxScore,
@@ -1119,7 +1113,7 @@ async function runRedteamConversation({
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse?.guardrails,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
   };
 }
 

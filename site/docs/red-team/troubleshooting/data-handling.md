@@ -22,7 +22,7 @@ Your target model is always evaluated locally. Promptfoo never receives your tar
 
 ## Default Behavior (No API Key)
 
-Without an `OPENAI_API_KEY`, promptfoo uses hosted inference for test generation and grading. The following data is sent to `api.promptfoo.app`:
+Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses hosted inference for test generation and grading. The following data is sent to `api.promptfoo.app`:
 
 **For test generation:**
 
@@ -59,6 +59,10 @@ redteam:
 ```
 
 With this configuration, promptfoo servers receive only [telemetry](#telemetry).
+
+## With Your ChatGPT Subscription
+
+If Codex is installed and signed in with ChatGPT, Promptfoo can use `openai:codex-sdk` locally for default text generation and grading when no higher-priority API credentials are configured. Remote-only plugins still use hosted inference, and embedding/moderation assertions still require a provider override with API credentials.
 
 ## Remote-Only Plugins
 
@@ -137,11 +141,11 @@ See the [Enterprise Overview](/docs/enterprise/) for deployment options.
 
 ## Configuration Summary
 
-| Requirement                  | Configuration                                                             |
-| ---------------------------- | ------------------------------------------------------------------------- |
-| No data to promptfoo servers | Set `OPENAI_API_KEY` + `PROMPTFOO_DISABLE_TELEMETRY=1`                    |
-| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local provider |
-| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                               |
+| Requirement                  | Configuration                                                                                                                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No data to Promptfoo servers | Use API-key/local providers for every generation, grading, embedding, and moderation path; avoid remote-only plugins; set `PROMPTFOO_DISABLE_TELEMETRY=1` |
+| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local provider                                                                                 |
+| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                                                                                                               |
 
 ## Related Documentation
 

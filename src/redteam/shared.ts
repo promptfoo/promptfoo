@@ -85,7 +85,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     redteamConfig = await doGenerateRedteam({
       ...passThroughOptions,
       ...(options.liveRedteamConfig?.commandLineOptions || {}),
-      ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
+      ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
       config: configPath,
       output: redteamPath,
       force: options.force,

@@ -84,6 +84,8 @@ export interface ProbeEstimateRange {
   breakdown: ProbeEstimateBreakdownItem[];
 }
 
+type ProbeEstimateBounds = Pick<ProbeEstimateBreakdownItem, 'min' | 'likely' | 'max' | 'ceiling'>;
+
 interface StrategyProfile {
   minMultiplier: number;
   likelyMultiplier: number;
@@ -241,14 +243,101 @@ function asStringArray(value: unknown): string[] {
   return [];
 }
 
-function clampEstimate(
-  estimate: Pick<ProbeEstimateBreakdownItem, 'min' | 'likely' | 'max' | 'ceiling'>,
-): Pick<ProbeEstimateBreakdownItem, 'min' | 'likely' | 'max' | 'ceiling'> {
+function clampEstimate(estimate: ProbeEstimateBounds): ProbeEstimateBounds {
   const min = Math.max(0, Math.floor(estimate.min));
   const likely = Math.max(min, Math.floor(estimate.likely));
   const max = Math.max(likely, Math.floor(estimate.max));
   const ceiling = Math.max(max, Math.floor(estimate.ceiling));
   return { min, likely, max, ceiling };
+}
+
+function isDeterministicProfile(profile: StrategyProfile): boolean {
+  return (
+    profile.minMultiplier === DETERMINISTIC_PROFILE.minMultiplier &&
+    profile.likelyMultiplier === DETERMINISTIC_PROFILE.likelyMultiplier &&
+    profile.maxMultiplier === DETERMINISTIC_PROFILE.maxMultiplier &&
+    profile.ceilingMultiplier === DETERMINISTIC_PROFILE.ceilingMultiplier
+  );
+}
+
+function getBasePluginEstimate(
+  plugin: unknown,
+  defaultNumTests: number,
+  globalLanguageCount: number,
+  includeBaseTests: boolean,
+): { probeCount: number; breakdownItem?: ProbeEstimateBreakdownItem } {
+  const pluginId = typeof plugin === 'string' ? plugin : (plugin as { id: string }).id;
+  const configuredTests =
+    typeof plugin === 'string'
+      ? defaultNumTests
+      : toNonNegativeInteger((plugin as { numTests?: number }).numTests, defaultNumTests);
+  const languageCount = getPluginLanguageCount(plugin, globalLanguageCount);
+  const pluginBase = configuredTests * languageCount;
+
+  if (!includeBaseTests || pluginBase <= 0) {
+    return { probeCount: pluginBase };
+  }
+
+  const baseEstimate = clampEstimate({
+    min: pluginBase,
+    likely: pluginBase,
+    max: pluginBase,
+    ceiling: pluginBase,
+  });
+
+  return {
+    probeCount: pluginBase,
+    breakdownItem: {
+      pluginId,
+      strategyId: BASE_STRATEGY_ID,
+      ...baseEstimate,
+      reason:
+        languageCount > 1
+          ? `Base plugin probes expanded across ${languageCount} languages.`
+          : 'Base plugin probes before strategy expansion.',
+    },
+  };
+}
+
+function getRetryContribution(
+  strategyConfig: Record<string, unknown> | undefined,
+  includeBaseTests: boolean,
+  totalPluginProbes: number,
+): { contribution: ProbeEstimateBounds; assumption?: string } {
+  const configuredRetryTests = toPositiveIntegerOrNull(strategyConfig?.numTests);
+
+  if (configuredRetryTests === null) {
+    const retryBaseline = includeBaseTests ? totalPluginProbes : 0;
+    return {
+      contribution: clampEstimate({
+        min: retryBaseline * 0.2,
+        likely: retryBaseline,
+        max: retryBaseline * 1.5,
+        ceiling: retryBaseline * 2,
+      }),
+      assumption: 'Retry strategy without numTests cap can vary at runtime.',
+    };
+  }
+
+  return {
+    contribution: clampEstimate({
+      min: configuredRetryTests,
+      likely: configuredRetryTests,
+      max: configuredRetryTests,
+      ceiling: configuredRetryTests,
+    }),
+  };
+}
+
+function getStrategyReason(
+  profile: StrategyProfile,
+  strategyReasonSuffix: string,
+  strategyCap: number | null,
+): string {
+  if (strategyCap === null) {
+    return `${profile.reason}${strategyReasonSuffix}`;
+  }
+  return `${profile.reason}${strategyReasonSuffix} Capped at numTests=${strategyCap}.`;
 }
 
 function normalizeStrategy(strategy: RedteamStrategy): {
@@ -348,35 +437,18 @@ export function estimateProbeRange(config: Config): ProbeEstimateRange {
     assumptions.add('Basic strategy is disabled, so baseline tests are excluded.');
   }
 
-  const totalPluginProbes = plugins.reduce((sum, plugin) => {
-    const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
-    const configuredTests =
-      typeof plugin === 'string'
-        ? defaultNumTests
-        : toNonNegativeInteger((plugin as { numTests?: number }).numTests, defaultNumTests);
-    const languageCount = getPluginLanguageCount(plugin, globalLanguageCount);
-    const pluginBase = configuredTests * languageCount;
-
-    if (includeBaseTests && pluginBase > 0) {
-      const baseEstimate = clampEstimate({
-        min: pluginBase,
-        likely: pluginBase,
-        max: pluginBase,
-        ceiling: pluginBase,
-      });
-      breakdown.push({
-        pluginId,
-        strategyId: BASE_STRATEGY_ID,
-        ...baseEstimate,
-        reason:
-          languageCount > 1
-            ? `Base plugin probes expanded across ${languageCount} languages.`
-            : 'Base plugin probes before strategy expansion.',
-      });
-    }
-
-    return sum + pluginBase;
-  }, 0);
+  const basePluginEstimates = plugins.map((plugin) =>
+    getBasePluginEstimate(plugin, defaultNumTests, globalLanguageCount, includeBaseTests),
+  );
+  const totalPluginProbes = basePluginEstimates.reduce(
+    (sum, estimate) => sum + estimate.probeCount,
+    0,
+  );
+  breakdown.push(
+    ...basePluginEstimates.flatMap((estimate) =>
+      estimate.breakdownItem ? [estimate.breakdownItem] : [],
+    ),
+  );
 
   let totals = clampEstimate({
     min: includeBaseTests ? totalPluginProbes : 0,
@@ -417,23 +489,14 @@ export function estimateProbeRange(config: Config): ProbeEstimateRange {
     });
 
     if (strategy.id === 'retry') {
-      const configuredRetryTests = toPositiveIntegerOrNull(strategyConfig?.numTests);
-      if (configuredRetryTests !== null) {
-        contribution = clampEstimate({
-          min: configuredRetryTests,
-          likely: configuredRetryTests,
-          max: configuredRetryTests,
-          ceiling: configuredRetryTests,
-        });
-      } else {
-        const retryBaseline = includeBaseTests ? totalPluginProbes : 0;
-        contribution = clampEstimate({
-          min: retryBaseline * 0.2,
-          likely: retryBaseline,
-          max: retryBaseline * 1.5,
-          ceiling: retryBaseline * 2,
-        });
-        assumptions.add('Retry strategy without numTests cap can vary at runtime.');
+      const retryEstimate = getRetryContribution(
+        strategyConfig,
+        includeBaseTests,
+        totalPluginProbes,
+      );
+      contribution = retryEstimate.contribution;
+      if (retryEstimate.assumption) {
+        assumptions.add(retryEstimate.assumption);
       }
     }
 
@@ -447,7 +510,7 @@ export function estimateProbeRange(config: Config): ProbeEstimateRange {
       assumptions.add(`${strategy.id} uses numTests=${strategyCap} cap.`);
     }
 
-    if (profile !== DETERMINISTIC_PROFILE) {
+    if (!isDeterministicProfile(profile)) {
       assumptions.add(profile.reason);
     }
     if (scalingAdjustment.note) {
@@ -462,10 +525,7 @@ export function estimateProbeRange(config: Config): ProbeEstimateRange {
       pluginId: ALL_PLUGINS_BREAKDOWN_ID,
       strategyId: strategy.id,
       ...contribution,
-      reason:
-        strategyCap !== null
-          ? `${profile.reason}${strategyReasonSuffix} Capped at numTests=${strategyCap}.`
-          : `${profile.reason}${strategyReasonSuffix}`,
+      reason: getStrategyReason(profile, strategyReasonSuffix, strategyCap),
     });
 
     totals = clampEstimate({

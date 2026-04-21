@@ -2,9 +2,11 @@ import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../../src/cache';
+import logger from '../../../src/logger';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
+import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
 
@@ -25,6 +27,18 @@ const mcpMocks = vi.hoisted(() => {
   }
 
   return { cleanup, getAllTools, initialize, instances, MockMCPClient };
+});
+
+const claudeCodeAuthMocks = vi.hoisted(() => ({
+  loadClaudeCodeCredential: vi.fn(),
+}));
+
+vi.mock('../../../src/providers/anthropic/claudeCodeAuth', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    loadClaudeCodeCredential: claudeCodeAuthMocks.loadClaudeCodeCredential,
+  };
 });
 
 vi.mock('proxy-agent', async (importOriginal) => {
@@ -57,7 +71,7 @@ const mockMaybeLoadResponseFormatFromExternalFile =
   >;
 
 const TEST_API_KEY = 'test-api-key';
-const originalEnv = process.env;
+const originalEnv = { ...process.env };
 let mockMCPClient: Mocked<MCPClient> | undefined;
 
 const createProvider = (
@@ -78,19 +92,20 @@ describe('AnthropicMessagesProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    process.env = { ...originalEnv, ANTHROPIC_API_KEY: TEST_API_KEY };
+    mockProcessEnv({ ...originalEnv, ANTHROPIC_API_KEY: TEST_API_KEY }, { clear: true });
     mockMCPClient = undefined;
     mcpMocks.instances.length = 0;
     mcpMocks.initialize.mockReset();
     mcpMocks.cleanup.mockReset();
     mcpMocks.getAllTools.mockReset();
     mcpMocks.getAllTools.mockReturnValue([]);
+    claudeCodeAuthMocks.loadClaudeCodeCredential.mockReset();
   });
 
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     mcpMocks.instances.length = 0;
   });
 
@@ -297,6 +312,157 @@ describe('AnthropicMessagesProvider', () => {
         },
         {},
       );
+    });
+
+    it('should include top_p and top_k in API call when configured', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          top_p: 0.9,
+          top_k: 40,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      expect(callArgs).toMatchObject({
+        top_p: 0.9,
+        top_k: 40,
+      });
+      // Anthropic rejects temperature + top_p together, so temperature should be omitted
+      expect(callArgs).not.toHaveProperty('temperature');
+    });
+
+    it('should suppress top_k when thinking is enabled', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          top_k: 40,
+          thinking: { type: 'enabled', budget_tokens: 5000 },
+          max_tokens: 8000,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      // top_k should be suppressed when thinking is enabled
+      expect(callArgs).not.toHaveProperty('top_k');
+      expect(callArgs).toHaveProperty('thinking');
+    });
+
+    it('should preserve non-thinking parameters when thinking is explicitly disabled', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          thinking: { type: 'disabled' },
+          top_k: 40,
+          temperature: 0.7,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      expect(callArgs).toMatchObject({
+        max_tokens: 1024,
+        temperature: 0.7,
+        thinking: { type: 'disabled' },
+        top_k: 40,
+      });
+    });
+
+    it('should include cache_control in API call when configured', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          cache_control: { type: 'ephemeral' },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cache_control: { type: 'ephemeral' },
+        }),
+        {},
+      );
+    });
+
+    it('should include stop_sequences in API call when configured', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          stop_sequences: ['\n\nHuman:', 'STOP'],
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stop_sequences: ['\n\nHuman:', 'STOP'],
+        }),
+        {},
+      );
+    });
+
+    it('should include metadata in API call when configured', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          metadata: { user_id: 'user-123' },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: { user_id: 'user-123' },
+        }),
+        {},
+      );
+    });
+
+    it('should ignore metadata when deriving the cache key', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          metadata: { user_id: 'user-123' },
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      provider.config.metadata = { user_id: 'user-456' };
+      const cachedResult = await provider.callApi('Test prompt');
+
+      expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
+      expect(cachedResult.cached).toBe(true);
+      expect(cachedResult.output).toBe('Test response');
     });
 
     it('should not use cache if caching is disabled for ToolUse requests', async () => {
@@ -629,7 +795,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.output).toBe('Quick response without thinking');
     });
 
-    it('should respect explicit temperature when thinking is enabled', async () => {
+    it('should omit explicit temperature when thinking is enabled', async () => {
       const provider = createProvider('claude-3-7-sonnet-20250219', {
         config: {
           thinking: {
@@ -645,25 +811,178 @@ describe('AnthropicMessagesProvider', () => {
       } as Anthropic.Messages.Message);
 
       await provider.callApi('Test prompt');
-      expect(provider.anthropic.messages.create).toHaveBeenCalledWith(
-        {
-          model: 'claude-3-7-sonnet-20250219',
-          max_tokens: 2048,
-          messages: [
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      // Anthropic docs: temperature is incompatible with extended thinking
+      expect(callArgs).not.toHaveProperty('temperature');
+      expect(callArgs).toHaveProperty('thinking');
+    });
+
+    it('should clamp top_p to [0.95, 1.0] when thinking is enabled', async () => {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 2048 },
+          top_p: 0.5,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      expect(callArgs).toMatchObject({ top_p: 0.95 });
+      expect(callArgs).not.toHaveProperty('temperature');
+    });
+
+    it('should not clamp top_p when thinking is explicitly disabled', async () => {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: { type: 'disabled' },
+          top_p: 0.5,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      expect(callArgs).toMatchObject({
+        max_tokens: 1024,
+        thinking: { type: 'disabled' },
+        top_p: 0.5,
+      });
+    });
+
+    it('should suppress forced tool_choice when thinking is enabled', async () => {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 2048 },
+          tool_choice: 'required' as any,
+          tools: [
             {
-              role: 'user',
-              content: [{ type: 'text', text: 'Test prompt' }],
+              name: 'test_tool',
+              description: 'A test tool',
+              input_schema: { type: 'object' as const, properties: {} },
             },
           ],
-          stream: false,
-          temperature: 0.7,
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 2048,
-          },
         },
-        {},
-      );
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      // Forced tool use (type: 'any' from 'required') is incompatible with thinking
+      expect(callArgs).not.toHaveProperty('tool_choice');
+    });
+
+    it('should allow tool_choice none when thinking is enabled', async () => {
+      const provider = createProvider('claude-3-7-sonnet-20250219', {
+        config: {
+          thinking: { type: 'enabled', budget_tokens: 2048 },
+          tool_choice: 'none',
+          tools: [
+            {
+              name: 'test_tool',
+              description: 'A test tool',
+              input_schema: { type: 'object' as const, properties: {} },
+            },
+          ],
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      expect(callArgs).toMatchObject({
+        tool_choice: { type: 'none' },
+      });
+    });
+
+    it('should omit temperature when both temperature and top_p are set', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022', {
+        config: {
+          temperature: 0.7,
+          top_p: 0.9,
+        },
+      });
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Test prompt');
+
+      const callArgs = vi.mocked(provider.anthropic.messages.create).mock.calls[0][0];
+      // temperature must be omitted (Anthropic rejects temperature + top_p)
+      expect(callArgs).not.toHaveProperty('temperature');
+      expect(callArgs).toMatchObject({ top_p: 0.9 });
+    });
+
+    it('should forward cache tokens to cost calculation and token usage', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022');
+
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Test response' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 50,
+          output_tokens: 20,
+          cache_read_input_tokens: 100,
+          cache_creation_input_tokens: 30,
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Test prompt');
+
+      // Verify token usage includes cache tokens
+      expect(result.tokenUsage).toMatchObject({
+        prompt: 180, // 50 + 100 + 30
+        completion: 20,
+        total: 200, // 180 + 20
+        completionDetails: {
+          cacheReadInputTokens: 100,
+          cacheCreationInputTokens: 30,
+        },
+      });
+
+      // Verify cost is calculated (should be defined for known model)
+      expect(result.cost).toBeDefined();
+      expect(typeof result.cost).toBe('number');
+      expect(result.cost).toBeGreaterThan(0);
+    });
+
+    it('should forward cache tokens from cached responses', async () => {
+      const provider = createProvider('claude-3-5-sonnet-20241022');
+
+      // First call populates cache
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [{ type: 'text', text: 'Cached response' }],
+        stop_reason: 'end_turn',
+        usage: {
+          input_tokens: 50,
+          output_tokens: 20,
+          cache_read_input_tokens: 100,
+          cache_creation_input_tokens: 0,
+          server_tool_use: null,
+        },
+      } as unknown as Anthropic.Messages.Message);
+
+      await provider.callApi('Cache test prompt');
+
+      // Second call should return cached response with cache-aware cost
+      const cachedResult = await provider.callApi('Cache test prompt');
+      expect(cachedResult.cached).toBe(true);
+      expect(cachedResult.cost).toBeDefined();
     });
 
     it('should include beta features header when specified', async () => {
@@ -895,6 +1214,7 @@ describe('AnthropicMessagesProvider', () => {
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
         role: 'assistant',
+        stop_details: null,
         stop_reason: 'end_turn',
         stop_sequence: null,
         type: 'message',
@@ -1155,6 +1475,7 @@ describe('AnthropicMessagesProvider', () => {
         id: 'msg_123',
         model: 'claude-sonnet-4-5-20250929',
         role: 'assistant',
+        stop_details: null,
         stop_reason: 'end_turn',
         stop_sequence: null,
         type: 'message',
@@ -1376,7 +1697,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('should support all effort levels', async () => {
-      for (const effort of ['low', 'medium', 'high', 'max'] as const) {
+      for (const effort of ['low', 'medium', 'high', 'xhigh', 'max'] as const) {
         const provider = createProvider('claude-opus-4-6', {
           config: { effort },
         });
@@ -1521,6 +1842,529 @@ describe('AnthropicMessagesProvider', () => {
         }),
         {},
       );
+    });
+  });
+
+  describe('Opus 4.6 prefill warning', () => {
+    it('should warn when assistant prefilling is used with claude-opus-4-6', async () => {
+      const provider = createProvider('claude-opus-4-6', { config: {} });
+      const mockResp = {
+        content: [{ type: 'text', text: 'Output' }],
+        model: 'claude-opus-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'I will' },
+        ]),
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Assistant message prefilling is not supported on Claude Opus 4.6'),
+      );
+    });
+
+    it('should not warn for non-Opus 4.6 models with prefilling', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      const mockResp = {
+        content: [{ type: 'text', text: 'Output' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi(
+        JSON.stringify([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'I will' },
+        ]),
+      );
+
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Assistant message prefilling is not supported'),
+      );
+    });
+  });
+
+  describe('Opus 4.7 temperature handling', () => {
+    const mockResp = {
+      content: [{ type: 'text', text: 'ok' }],
+      model: 'claude-opus-4-7',
+      id: 'test-id',
+      role: 'assistant',
+      stop_reason: 'end_turn',
+      stop_details: null,
+      stop_sequence: null,
+      type: 'message',
+      usage: { input_tokens: 10, output_tokens: 5 },
+    } as Anthropic.Messages.Message;
+
+    it('omits temperature entirely for Opus 4.7 (no explicit config)', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: {} });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+    });
+
+    it('omits temperature and warns when explicitly set on Opus 4.7', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: { temperature: 0.5 } });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Opus 4.7'),
+      );
+    });
+
+    it('omits temperature when config.temperature is 0 on Opus 4.7', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: { temperature: 0 } });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Opus 4.7'),
+      );
+    });
+
+    it('warns once per provider when called multiple times on Opus 4.7', async () => {
+      const provider = createProvider('claude-opus-4-7', { config: { temperature: 0.5 } });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+      await provider.callApi('Hello again');
+      await provider.callApi('Hello once more');
+
+      const warnings = warnSpy.mock.calls.filter((call) =>
+        String(call[0] ?? '').includes('temperature is deprecated on Claude Opus 4.7'),
+      );
+      expect(warnings).toHaveLength(1);
+    });
+
+    it('warns on Opus 4.7 when temperature set via env override', async () => {
+      const provider = createProvider('claude-opus-4-7', {
+        config: {},
+        env: { ANTHROPIC_TEMPERATURE: '0.3' },
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).not.toHaveProperty('temperature');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('temperature is deprecated on Claude Opus 4.7'),
+      );
+    });
+
+    it('still sends temperature on Opus 4.6 (regression)', async () => {
+      const provider = createProvider('claude-opus-4-6', { config: { temperature: 0 } });
+      const createSpy = vi
+        .spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValue({ ...mockResp, model: 'claude-opus-4-6' });
+
+      await provider.callApi('Hello');
+
+      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(params).toHaveProperty('temperature', 0);
+    });
+  });
+
+  describe('refusal stop_details handling', () => {
+    it('should include guardrails in response when stop_reason is refusal', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      const refusalResponse = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'cyber',
+          explanation: 'Request involves prohibited activities',
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(refusalResponse);
+
+      const result = await provider.callApi('How to hack a system');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: cyber'),
+      });
+      expect(result.finishReason).toBe('content_filter');
+    });
+
+    it('should not include guardrails for non-refusal responses', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      const normalResponse = {
+        content: [{ type: 'text', text: 'Hello' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(normalResponse);
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.guardrails).toBeUndefined();
+    });
+
+    it('should include guardrails in cached response when stop_reason is refusal', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: {} });
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [],
+      } as unknown as Anthropic.Messages.Message);
+
+      // Manually populate cache with a refusal response (like the existing legacy cache test pattern)
+      const refusalMessage = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'cyber',
+          explanation: 'Prohibited content',
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      };
+      const cacheKey =
+        'anthropic:{"model":"claude-sonnet-4-6","max_tokens":1024,"messages":[{"role":"user","content":[{"type":"text","text":"Hack something"}]}],"stream":false,"temperature":0}';
+      const cache = await getCache();
+      await cache.set(cacheKey, JSON.stringify(refusalMessage));
+
+      const result = await provider.callApi('Hack something');
+      expect(result.cached).toBe(true);
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: cyber'),
+      });
+    });
+
+    it('should include guardrails in streaming response when stop_reason is refusal', async () => {
+      const provider = createProvider('claude-sonnet-4-6', { config: { stream: true } });
+      const refusalResponse = {
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'bio',
+          explanation: null,
+        },
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'stream').mockReturnValue({
+        finalMessage: vi.fn().mockResolvedValue(refusalResponse),
+      } as any);
+
+      const result = await provider.callApi('Dangerous request');
+
+      expect(result.guardrails).toEqual({
+        flagged: true,
+        reason: expect.stringContaining('category: bio'),
+      });
+    });
+  });
+
+  describe('claude-mythos-preview model', () => {
+    it('should accept claude-mythos-preview as a valid model without warning', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createProvider('claude-mythos-preview', { config: {} });
+      const mockResp = {
+        content: [{ type: 'text', text: 'Response' }],
+        model: 'claude-mythos-preview',
+        id: 'test-id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message;
+      vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue(mockResp);
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.output).toBe('Response');
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Using unknown Anthropic model'),
+      );
+    });
+  });
+
+  describe('Claude Code OAuth authentication', () => {
+    const validCredential = () => ({
+      accessToken: 'sk-ant-oat-test',
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const mockMessageResponse = (model = 'claude-sonnet-4-6') =>
+      ({
+        content: [{ type: 'text', text: 'ok' }],
+        model,
+        id: 'id',
+        role: 'assistant',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        type: 'message',
+        usage: { input_tokens: 1, output_tokens: 2 },
+      }) as Anthropic.Messages.Message;
+
+    it('throws with guidance when no API key and no Claude Code credential are available', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
+      const oauthProvider = createProvider('claude-sonnet-4-6');
+
+      await expect(oauthProvider.callApi('hello')).rejects.toThrow(
+        /Anthropic API key is not set.*apiKeyRequired: false/s,
+      );
+    });
+
+    it('injects the Claude Code identity block and beta headers when constructed with apiKeyRequired: false', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false },
+      });
+
+      expect(oauthProvider.usingClaudeCodeOAuth).toBe(true);
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('system: Grade this response\nuser: the response');
+
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      const [params, requestOptions] = createSpy.mock.calls[0];
+      expect(params.system).toEqual([
+        { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+        { type: 'text', text: 'Grade this response' },
+      ]);
+      const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+      expect(headers['anthropic-beta']).toContain('claude-code-20250219');
+      expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
+      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['x-app']).toBe('cli');
+    });
+
+    it('adds the Claude Code identity block even when no user system prompt is provided', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello world');
+
+      const [params] = createSpy.mock.calls[0];
+      expect(params.system).toEqual([
+        { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+      ]);
+    });
+
+    it('does not inject the Claude Code identity block for API-key authenticated calls', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: TEST_API_KEY });
+      const apiKeyProvider = createProvider('claude-sonnet-4-6');
+      expect(apiKeyProvider.usingClaudeCodeOAuth).toBe(false);
+
+      const createSpy = vi
+        .spyOn(apiKeyProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await apiKeyProvider.callApi('system: Grade this\nuser: hi');
+
+      const [params, requestOptions] = createSpy.mock.calls[0];
+      expect(params.system).toEqual([{ type: 'text', text: 'Grade this' }]);
+      const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+      expect(headers['anthropic-beta'] ?? '').not.toContain('oauth-2025-04-20');
+      expect(headers['user-agent']).toBeUndefined();
+      expect(headers['x-app']).toBeUndefined();
+    });
+
+    it('throws at request time when the Claude Code credential is expired', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue({
+        accessToken: 'sk-ant-oat-expired',
+        expiresAt: Date.now() - 1000,
+      });
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false },
+      });
+
+      await expect(oauthProvider.callApi('hello')).rejects.toThrow(
+        /Claude Code OAuth credential is expired.*claude \/login/s,
+      );
+    });
+
+    it('preserves user config.beta entries alongside the Claude Code beta features', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: {
+          apiKeyRequired: false,
+          beta: ['prompt-caching-2024-07-31'],
+        },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello');
+
+      const [, requestOptions] = createSpy.mock.calls[0];
+      const betaHeader = (requestOptions?.headers as Record<string, string>)['anthropic-beta'];
+      expect(betaHeader).toContain('prompt-caching-2024-07-31');
+      expect(betaHeader).toContain('claude-code-20250219');
+      expect(betaHeader).toContain('oauth-2025-04-20');
+    });
+
+    it('merges user-supplied config.headers[anthropic-beta] with OAuth beta flags', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: {
+          apiKeyRequired: false,
+          headers: { 'anthropic-beta': 'user-supplied-beta, another-beta' },
+        },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello');
+
+      const [, requestOptions] = createSpy.mock.calls[0];
+      const betaHeader = (requestOptions?.headers as Record<string, string>)['anthropic-beta'];
+      expect(betaHeader).toContain('user-supplied-beta');
+      expect(betaHeader).toContain('another-beta');
+      expect(betaHeader).toContain('claude-code-20250219');
+      expect(betaHeader).toContain('oauth-2025-04-20');
+    });
+
+    it('deduplicates Claude Code beta features when the user also supplies them', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: {
+          apiKeyRequired: false,
+          beta: ['oauth-2025-04-20'],
+        },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello');
+
+      const [, requestOptions] = createSpy.mock.calls[0];
+      const betaHeader = (requestOptions?.headers as Record<string, string>)['anthropic-beta'];
+      const occurrences = betaHeader.split(',').filter((f) => f.trim() === 'oauth-2025-04-20');
+      expect(occurrences).toHaveLength(1);
+    });
+
+    it('forces the Claude Code user-agent even when config.headers tries to override it', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: {
+          apiKeyRequired: false,
+          headers: { 'user-agent': 'custom/1.2.3', 'x-app': 'custom-app' },
+        },
+      });
+
+      const createSpy = vi
+        .spyOn(oauthProvider.anthropic.messages, 'create')
+        .mockResolvedValue(mockMessageResponse());
+
+      await oauthProvider.callApi('hello');
+
+      const [, requestOptions] = createSpy.mock.calls[0];
+      const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['x-app']).toBe('cli');
+    });
+
+    it('injects the Claude Code identity block and beta headers on the streaming path', async () => {
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+      claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
+      const oauthProvider = createProvider('claude-sonnet-4-6', {
+        config: { apiKeyRequired: false, stream: true },
+      });
+
+      const finalMessage = mockMessageResponse();
+      const streamSpy = vi.spyOn(oauthProvider.anthropic.messages, 'stream').mockReturnValue({
+        finalMessage: () => Promise.resolve(finalMessage),
+      } as any);
+
+      await oauthProvider.callApi('system: Grade\nuser: hi');
+
+      expect(streamSpy).toHaveBeenCalledTimes(1);
+      const [params, requestOptions] = streamSpy.mock.calls[0];
+      expect(params.system).toEqual([
+        { type: 'text', text: "You are Claude Code, Anthropic's official CLI for Claude." },
+        { type: 'text', text: 'Grade' },
+      ]);
+      const headers = (requestOptions?.headers ?? {}) as Record<string, string>;
+      expect(headers['anthropic-beta']).toContain('claude-code-20250219');
+      expect(headers['anthropic-beta']).toContain('oauth-2025-04-20');
+      expect(headers['user-agent']).toBe('claude-cli/1.0.0 (external, promptfoo)');
+      expect(headers['x-app']).toBe('cli');
     });
   });
 });

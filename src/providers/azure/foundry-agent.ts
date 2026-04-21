@@ -271,12 +271,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
   private warnForUnsupportedConfig(config: AzureAssistantOptions) {
     const unsupportedFields = [
-      config.frequency_penalty !== undefined ? 'frequency_penalty' : null,
-      config.presence_penalty !== undefined ? 'presence_penalty' : null,
+      config.frequency_penalty === undefined ? null : 'frequency_penalty',
+      config.presence_penalty === undefined ? null : 'presence_penalty',
       config.retryOptions ? 'retryOptions' : null,
-      config.seed !== undefined ? 'seed' : null,
+      config.seed === undefined ? null : 'seed',
       config.stop?.length ? 'stop' : null,
-      config.timeoutMs !== undefined ? 'timeoutMs' : null,
+      config.timeoutMs === undefined ? null : 'timeoutMs',
       config.tool_resources ? 'tool_resources' : null,
     ].filter(Boolean) as string[];
 
@@ -348,10 +348,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       ...(config.instructions ? { instructions: config.instructions } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...(config.modelName ? { model: config.modelName } : {}),
-      ...(maxOutputTokens !== undefined ? { max_output_tokens: maxOutputTokens } : {}),
+      ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
-      ...(config.top_p !== undefined ? { top_p: config.top_p } : {}),
+      ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
+      ...(config.top_p === undefined ? {} : { top_p: config.top_p }),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(loadedTools ? { tools: loadedTools } : {}),
       ...(text ? { text } : {}),

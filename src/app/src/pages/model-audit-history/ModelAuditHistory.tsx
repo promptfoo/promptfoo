@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { DataTable } from '@app/components/data-table/data-table';
+import {
+  DataTable,
+  useDataTableServerSorting,
+  useServerVirtualizedRows,
+} from '@app/components/data-table';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
@@ -24,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
+import { type ListScansQuery, MODEL_AUDIT_SORT_FIELDS } from '../../../../types/api/modelAudit';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -38,24 +43,55 @@ export default function ModelAuditHistory() {
     historyError,
     totalCount,
     pageSize,
-    currentPage,
     sortModel,
     fetchHistoricalScans,
+    fetchHistoricalScanRange,
     deleteHistoricalScan,
-    setPageSize,
-    setCurrentPage,
+    setSortModel,
   } = useModelAuditHistoryStore();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [scanToDelete, setScanToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const abortController = new AbortController();
     fetchHistoricalScans(abortController.signal);
     return () => abortController.abort();
-  }, [fetchHistoricalScans, pageSize, currentPage, sortModel]);
+  }, [fetchHistoricalScans]);
+
+  const { sorting: tableSorting, onSortingChange: handleSortingChange } = useDataTableServerSorting<
+    NonNullable<ListScansQuery['sort']>
+  >({
+    sortModel,
+    setSortModel,
+    defaultSortField: 'createdAt',
+    allowedFields: MODEL_AUDIT_SORT_FIELDS,
+  });
+
+  const fetchVirtualRows = useCallback(
+    async ({
+      startIndex,
+      endIndex,
+      signal,
+    }: {
+      startIndex: number;
+      endIndex: number;
+      signal: AbortSignal;
+    }) => {
+      const { scans, offset } = await fetchHistoricalScanRange({ startIndex, endIndex }, signal);
+      return { rows: scans, offset };
+    },
+    [fetchHistoricalScanRange],
+  );
+
+  const { serverVirtualization, loadedRowCount } = useServerVirtualizedRows<HistoricalScan>({
+    initialRows: historicalScans,
+    rowCount: totalCount,
+    pageSize,
+    fetchRows: fetchVirtualRows,
+    resetKey: sortModel,
+  });
 
   const handleRowClick = useCallback(
     (row: HistoricalScan) => {
@@ -252,7 +288,7 @@ export default function ModelAuditHistory() {
               <h3 className="text-lg font-semibold text-destructive mb-1">Error loading history</h3>
               <p className="text-sm text-muted-foreground">{historyError}</p>
             </div>
-          ) : historicalScans.length === 0 && !isLoadingHistory ? (
+          ) : totalCount === 0 && historicalScans.length === 0 && !isLoadingHistory ? (
             <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
               <div className="text-4xl">🔍</div>
               <h3 className="text-lg font-semibold">No scan history found</h3>
@@ -267,77 +303,20 @@ export default function ModelAuditHistory() {
               </Button>
             </div>
           ) : (
-            <>
-              <DataTable
-                columns={columns}
-                data={historicalScans}
-                isLoading={isLoadingHistory}
-                onRowClick={handleRowClick}
-                getRowId={(row) => row.id}
-                initialSorting={sortModel.map((s) => ({ id: s.field, desc: s.sort === 'desc' }))}
-                showToolbar={false}
-                showPagination={false}
-              />
-
-              {/* Server-side Pagination */}
-              {historicalScans.length > 0 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-                  <div className="text-sm text-muted-foreground">
-                    Showing {currentPage * pageSize + 1} to{' '}
-                    {Math.min((currentPage + 1) * pageSize, totalCount)} of {totalCount} scans
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={pageSize}
-                      onChange={(e) => {
-                        setPageSize(Number(e.target.value));
-                        setCurrentPage(0);
-                      }}
-                      className="px-3 py-1.5 rounded-md border border-border bg-background text-sm"
-                    >
-                      <option value={10}>10 / page</option>
-                      <option value={25}>25 / page</option>
-                      <option value={50}>50 / page</option>
-                      <option value={100}>100 / page</option>
-                    </select>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(0)}
-                        disabled={currentPage === 0}
-                      >
-                        First
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                        disabled={currentPage === 0}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                        disabled={(currentPage + 1) * pageSize >= totalCount}
-                      >
-                        Next
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize) - 1)}
-                        disabled={(currentPage + 1) * pageSize >= totalCount}
-                      >
-                        Last
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
+            <DataTable
+              columns={columns}
+              data={historicalScans}
+              isLoading={isLoadingHistory && loadedRowCount === 0}
+              onRowClick={handleRowClick}
+              getRowId={(row) => row.id}
+              rowDisplayMode="server-virtualized"
+              maxHeight="70vh"
+              manualSorting
+              sorting={tableSorting}
+              onSortingChange={handleSortingChange}
+              showToolbar={false}
+              serverVirtualization={serverVirtualization}
+            />
           )}
         </Card>
       </div>

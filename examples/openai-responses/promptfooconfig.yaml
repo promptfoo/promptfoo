@@ -6,9 +6,8 @@ prompts:
 providers:
   # GPT-5 models showcasing latest capabilities
   - id: openai:responses:gpt-5.4
-    label: gpt-5.4-text-format
+    label: gpt-5.4-json-schema
     config:
-      temperature: 0.7
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
       response_format:
         type: 'json_schema'
@@ -33,10 +32,9 @@ providers:
           required: ['event_name', 'date', 'location', 'participants']
           additionalProperties: false
 
-  - id: openai:responses:gpt-5-nano
-    label: gpt-5-nano-json-object
+  - id: openai:responses:gpt-5.4-nano
+    label: gpt-5.4-nano-json-schema
     config:
-      temperature: 0.7
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
       response_format:
         type: 'json_schema'
@@ -62,10 +60,9 @@ providers:
           additionalProperties: false
       store: true
 
-  - id: openai:responses:gpt-5-mini
-    label: gpt-5-mini-json-schema
+  - id: openai:responses:gpt-5.4-mini
+    label: gpt-5.4-mini-json-schema
     config:
-      temperature: 0.7
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
       response_format:
         type: 'json_schema'

@@ -6,15 +6,10 @@ import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
+import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
-import type {
-  ApiProvider,
-  Assertion,
-  AtomicTestCase,
-  GradingResult,
-  ProviderResponse,
-} from '../../src/types/index';
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
@@ -94,8 +89,9 @@ vi.mock('../../src/cliState', () => ({
   },
   basePath: '/base/path',
 }));
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
+vi.mock('../../src/matchers/rag', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');
   return {
     ...actual,
     matchesContextRelevance: vi
@@ -1892,6 +1888,11 @@ describe('runAssertion', () => {
     value: 'This is the expected output.',
     threshold: 0.75,
   };
+  const notRougeNAssertion: Assertion = {
+    type: 'not-rouge-n',
+    value: 'This is the expected output.',
+    threshold: 0.75,
+  };
 
   it('should pass when the rouge-n assertion passes', async () => {
     const output = 'This is the expected output.';
@@ -1923,6 +1924,40 @@ describe('runAssertion', () => {
       pass: false,
       reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
     });
+  });
+
+  it('should pass when the not-rouge-n assertion score is below threshold', async () => {
+    const output = 'some different output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notRougeNAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
+    });
+    expect(result.score).toBeCloseTo(0.78, 2);
+  });
+
+  it('should fail when the not-rouge-n assertion score is above threshold', async () => {
+    const output = 'This is the expected output.';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notRougeNAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'ROUGE-N score 1.00 is greater than or equal to threshold 0.75',
+    });
+    expect(result.score).toBe(0);
   });
 
   // Test for starts-with assertion
@@ -1973,14 +2008,10 @@ describe('runAssertion', () => {
     };
 
     // Test grader fails
-    const BogusGrader: ApiProvider = {
-      id(): string {
-        return 'BogusGrader';
-      },
-      async callApi(): Promise<ProviderResponse> {
-        throw new Error('Should not be called');
-      },
-    };
+    const BogusGrader = createMockProvider({
+      id: 'BogusGrader',
+      callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(new Error('Should not be called')),
+    });
     const test: AtomicTestCase = {
       assert: [assertion],
       options: {
@@ -3280,6 +3311,112 @@ describe('runAssertion', () => {
         pass: true,
         reason: 'Assertion passed',
       });
+    });
+  });
+
+  describe('inline function transforms (Node.js package)', () => {
+    it('should support a function as assertion transform', async () => {
+      const output = 'hello world';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'HELLO WORLD',
+        transform: (output) => String(output).toUpperCase(),
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should pass context to inline function transform', async () => {
+      const output = 'raw output';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'search, calculate',
+        transform: (_output, context: any) => {
+          const tools = context.metadata?.toolCalls ?? [];
+          return tools.map((t: any) => t.name).join(', ');
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output,
+          metadata: { toolCalls: [{ name: 'search' }, { name: 'calculate' }] },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should support async function as assertion transform', async () => {
+      const output = 'hello';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'hello async',
+        transform: async (output) => output + ' async',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should surface synchronous errors thrown by an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: () => {
+          throw new Error('inline transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('inline transform boom');
+    });
+
+    it('should surface async rejections from an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: async () => {
+          throw new Error('async transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('async transform boom');
     });
   });
 

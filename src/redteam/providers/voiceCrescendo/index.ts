@@ -239,8 +239,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
   constructor(config: VoiceCrescendoConfig) {
     this.config = { ...config };
-    this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
-    this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
 
     // Cap turns for unauthenticated users
     if (!isLoggedIntoCloud()) {
@@ -250,7 +250,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     this.nunjucks = getNunjucksEngine();
     this.memory = new VoiceMemorySystem();
     this.conversationId = crypto.randomUUID();
-    this.delayBetweenTurns = config.delayBetweenTurns || 500;
+    this.delayBetweenTurns = config.delayBetweenTurns ?? 500;
 
     logger.debug('[VoiceCrescendo] Provider initialized', { config });
   }
