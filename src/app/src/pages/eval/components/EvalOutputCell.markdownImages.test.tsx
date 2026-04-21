@@ -1,8 +1,10 @@
+import type React from 'react';
+
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell from './EvalOutputCell';
 
@@ -34,10 +36,6 @@ vi.mock('./store', () => ({
 vi.mock('../../../hooks/useShiftKey', () => ({
   useShiftKey: () => false,
 }));
-
-beforeAll(() => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
-});
 
 interface MockEvalOutputCellProps extends EvalOutputCellProps {
   firstOutput: EvaluateTableOutput;
@@ -86,17 +84,24 @@ describe('EvalOutputCell markdown image previews', () => {
   });
 
   beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.resetAllMocks();
   });
 
   it('renders and previews markdown images even when renderMarkdown is disabled', async () => {
     const props = createProps();
     const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     const image = screen.getByAltText('Preview');
     expect(image).toBeInTheDocument();
 
-    await userEvent.click(image);
+    await user.click(image);
     expect(container.querySelector('.lightbox')).toBeInTheDocument();
   });
 });

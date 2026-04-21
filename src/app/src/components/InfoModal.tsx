@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { cn } from '@app/lib/utils';
-import { BookOpen, Bug, Calendar, ExternalLink, Github, MessageCircle } from 'lucide-react';
+import { BookOpen, Bug, Calendar, ExternalLink, GitBranch, MessageCircle } from 'lucide-react';
 
 const links: { icon: React.ReactElement; text: string; href: string }[] = [
   {
@@ -17,7 +17,7 @@ const links: { icon: React.ReactElement; text: string; href: string }[] = [
     href: 'https://www.promptfoo.dev/docs/intro',
   },
   {
-    icon: <Github className="size-4" />,
+    icon: <GitBranch className="size-4" />,
     text: 'GitHub Repository',
     href: 'https://github.com/promptfoo/promptfoo',
   },

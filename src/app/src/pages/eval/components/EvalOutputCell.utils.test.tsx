@@ -3,7 +3,7 @@ import {
   extractMarkdownImageSources,
   normalizeImageSrcForComparison,
   resolveEvalImageOutputSource,
-} from './EvalOutputCell';
+} from './EvalOutputCell.utils';
 
 // Helper function to handle string image resolution (extracted to reduce complexity)
 function resolveImageString(image: string): string | undefined {
@@ -163,17 +163,17 @@ describe('extractMarkdownImageSources', () => {
     expect(sources).toEqual(['https://example.com/image with spaces.png']);
   });
 
-  it('extracts HTML img tag sources', () => {
+  it('ignores HTML img tag sources because ReactMarkdown does not render raw HTML', () => {
     const html = '<img src="https://example.com/image.png" alt="Test">';
     const sources = extractMarkdownImageSources(html);
-    expect(sources).toEqual(['https://example.com/image.png']);
+    expect(sources).toEqual([]);
   });
 
-  it('extracts both markdown and HTML image sources', () => {
+  it('extracts markdown image sources without treating raw HTML images as rendered images', () => {
     const mixed =
       '![Markdown](https://example.com/md.png) <img src="https://example.com/html.jpg">';
     const sources = extractMarkdownImageSources(mixed);
-    expect(sources).toEqual(['https://example.com/md.png', 'https://example.com/html.jpg']);
+    expect(sources).toEqual(['https://example.com/md.png']);
   });
 
   it('handles empty markdown', () => {
@@ -239,14 +239,14 @@ describe('extractMarkdownImageSources', () => {
   it('handles HTML img tags with single quotes', () => {
     const html = "<img src='https://example.com/image.png' alt='Test'>";
     const sources = extractMarkdownImageSources(html);
-    expect(sources).toEqual(['https://example.com/image.png']);
+    expect(sources).toEqual([]);
   });
 
   it('handles HTML img tags with extra attributes', () => {
     const html =
       '<img width="100" height="100" src="https://example.com/image.png" alt="Test" loading="lazy">';
     const sources = extractMarkdownImageSources(html);
-    expect(sources).toEqual(['https://example.com/image.png']);
+    expect(sources).toEqual([]);
   });
 
   it('skips markdown images with empty URL', () => {

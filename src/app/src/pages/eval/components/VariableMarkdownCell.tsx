@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 
+import { cn } from '@app/lib/utils';
 import ReactMarkdown from 'react-markdown';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
-import { REMARK_PLUGINS } from './markdown-config';
+import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import TruncatedText from './TruncatedText';
 
 interface VariableMarkdownCellProps {
@@ -35,7 +36,7 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
           src={src}
           alt={alt}
           onClick={() => onImageClick?.(src)}
-          style={onImageClick ? { cursor: 'pointer' } : undefined}
+          className={cn(onImageClick && 'cursor-pointer')}
         />
       ),
     }),
@@ -46,7 +47,11 @@ const VariableMarkdownCell = React.memo(function VariableMarkdownCell({
     <MarkdownErrorBoundary fallback={value}>
       <TruncatedText
         text={
-          <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
+          <ReactMarkdown
+            remarkPlugins={REMARK_PLUGINS}
+            urlTransform={IDENTITY_URL_TRANSFORM}
+            components={markdownComponents}
+          >
             {value}
           </ReactMarkdown>
         }

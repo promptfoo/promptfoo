@@ -62,7 +62,7 @@ Now, let's configure promptfoo to run this LangChain script with a bunch of test
 ```yaml
 prompts: file://prompt.txt
 providers:
-  - openai:chat:gpt-5
+  - openai:chat:gpt-5.4
   - exec:python langchain_example.py
 tests:
   - vars:
@@ -84,9 +84,9 @@ tests:
 For an in-depth look at configuration, see the [guide](/docs/configuration/guide). Note the following:
 
 - **prompts**: `prompt.txt` is just a file that contains `{{question}}`, since we're passing the question directly through to the provider.
-- **providers**: We list GPT-5 in order to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.
+- **providers**: We list GPT-5.4 in order to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.
 
-In this example, the end result is a side-by-side comparison of GPT-5 vs. LangChain math performance:
+In this example, the end result is a side-by-side comparison of GPT-5.4 vs. LangChain math performance:
 
 ![langchain eval](/img/docs/langchain-eval.png)
 

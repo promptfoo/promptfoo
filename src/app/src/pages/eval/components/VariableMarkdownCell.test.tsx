@@ -54,6 +54,13 @@ describe('VariableMarkdownCell', () => {
       expect(onImageClick).toHaveBeenCalledWith('https://example.com/image.png');
     });
 
+    it('preserves data URI markdown images', () => {
+      const dataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB';
+      render(<VariableMarkdownCell value={`![Preview](${dataUri})`} maxTextLength={100} />);
+
+      expect(screen.getByAltText('Preview')).toHaveAttribute('src', dataUri);
+    });
+
     it('renders markdown code blocks', () => {
       render(<VariableMarkdownCell value="`inline code`" maxTextLength={100} />);
 

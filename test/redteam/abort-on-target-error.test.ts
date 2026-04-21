@@ -2,11 +2,12 @@ import { randomUUID } from 'crypto';
 import http from 'http';
 import { AddressInfo } from 'net';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { findTargetErrorStatus, isNonTransientHttpStatus } from '../../src/util/fetch/errors';
+import { createMockProvider } from '../factories/provider';
 
 import type { ApiProvider, Prompt, TestSuite } from '../../src/types';
 
@@ -50,9 +51,9 @@ describe('abort on target error', () => {
     const startTime = Date.now();
 
     // Create a mock provider that returns 403
-    const mockApiProvider: ApiProvider = {
-      id: () => 'test-http-provider',
-      callApi: async () => {
+    const mockApiProvider = createMockProvider({
+      id: 'test-http-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         // Simulate HTTP call to our mock server
         const response = await fetch(serverUrl, {
           method: 'POST',
@@ -68,8 +69,8 @@ describe('abort on target error', () => {
             },
           },
         };
-      },
-    };
+      }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -110,9 +111,9 @@ describe('abort on target error', () => {
 
   it('should include HTTP status in result metadata', async () => {
     // Create a mock provider that returns 403
-    const mockApiProvider: ApiProvider = {
-      id: () => 'test-http-provider',
-      callApi: async () => {
+    const mockApiProvider = createMockProvider({
+      id: 'test-http-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         const response = await fetch(serverUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -127,8 +128,8 @@ describe('abort on target error', () => {
             },
           },
         };
-      },
-    };
+      }),
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -175,9 +176,9 @@ describe('non-transient HTTP status detection', () => {
 describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
   it('should find target error via database query without loading all results', async () => {
     // Create a mock provider that returns 403
-    const mockApiProvider: ApiProvider = {
-      id: () => 'test-http-provider-db',
-      callApi: async () => ({
+    const mockApiProvider = createMockProvider({
+      id: 'test-http-provider-db',
+      response: {
         output: 'Forbidden',
         metadata: {
           http: {
@@ -185,8 +186,8 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
             statusText: 'Forbidden',
           },
         },
-      }),
-    };
+      },
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -207,9 +208,9 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
 
   it('should return undefined when no target error exists', async () => {
     // Create a mock provider that returns 200
-    const mockApiProvider: ApiProvider = {
-      id: () => 'test-http-provider-ok',
-      callApi: async () => ({
+    const mockApiProvider = createMockProvider({
+      id: 'test-http-provider-ok',
+      response: {
         output: 'Success',
         metadata: {
           http: {
@@ -217,8 +218,8 @@ describe('Eval.findTargetErrorStatus() - efficient DB query', () => {
             statusText: 'OK',
           },
         },
-      }),
-    };
+      },
+    });
 
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

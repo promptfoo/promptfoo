@@ -5,7 +5,11 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
 
@@ -49,6 +53,19 @@ async function generateCompositePrompts(
         ...(config.n && { n: config.n }),
         ...(config.modelFamily && { modelFamily: config.modelFamily }),
         ...(inputs && { inputs }),
+        // Composite pipeline configuration
+        ...(config.techniques && { techniques: config.techniques }),
+        ...(config.evasions && { evasions: config.evasions }),
+        ...(config.alwaysIncludeTechniques && {
+          alwaysIncludeTechniques: config.alwaysIncludeTechniques,
+        }),
+        ...(config.compositionOrder && { compositionOrder: config.compositionOrder }),
+        ...(config.combinationMode && { combinationMode: config.combinationMode }),
+        ...(config.includeEvasionGuidance != null && {
+          includeEvasionGuidance: config.includeEvasionGuidance,
+        }),
+        ...(config.evasionGuidance && { evasionGuidance: config.evasionGuidance }),
+        ...(config.targetContext && { targetContext: config.targetContext }),
       };
 
       interface CompositeGenerationResponse {
@@ -128,7 +145,7 @@ export async function addCompositeTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
-    throw new Error('Composite jailbreak strategy requires remote generation to be enabled');
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('Composite jailbreak strategy'));
   }
 
   const compositeTestCases = await generateCompositePrompts(testCases, injectVar, config);

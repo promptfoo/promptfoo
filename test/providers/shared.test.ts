@@ -16,6 +16,7 @@ import {
   transformToolChoice,
   transformTools,
 } from '../../src/providers/shared';
+import { createMockProvider } from '../factories/provider';
 
 vi.mock('../../src/envars');
 
@@ -151,6 +152,91 @@ describe('Shared Provider Functions', () => {
       expect(cost).toBe(7.5);
     });
 
+    it('should use separate config input and output costs when provided', () => {
+      const cost = calculateCost(
+        'model1',
+        { inputCost: 0.003, outputCost: 0.007 },
+        1000,
+        500,
+        models,
+      );
+      expect(cost).toBe(6.5);
+    });
+
+    it('should prefer separate config costs over config cost', () => {
+      const cost = calculateCost(
+        'model1',
+        { cost: 0.005, inputCost: 0.003, outputCost: 0.007 },
+        1000,
+        500,
+        models,
+      );
+      expect(cost).toBe(6.5);
+    });
+
+    it('should use config cost as the fallback for partial separate overrides', () => {
+      expect(calculateCost('model1', { cost: 0.005, inputCost: 0.003 }, 1000, 500, models)).toBe(
+        5.5,
+      );
+      expect(calculateCost('model1', { cost: 0.005, outputCost: 0.007 }, 1000, 500, models)).toBe(
+        8.5,
+      );
+    });
+
+    it('should use long-context rates when prompt tokens exceed the model threshold', () => {
+      const cost = calculateCost('model1', {}, 1_001, 500, [
+        {
+          id: 'model1',
+          cost: {
+            input: 0.001,
+            output: 0.002,
+            longContext: {
+              threshold: 1_000,
+              input: 0.003,
+              output: 0.004,
+            },
+          },
+        },
+      ]);
+      expect(cost).toBeCloseTo(5.003);
+    });
+
+    it('should prefer config cost over model long-context rates', () => {
+      const cost = calculateCost('model1', { cost: 0.005 }, 1_001, 500, [
+        {
+          id: 'model1',
+          cost: {
+            input: 0.001,
+            output: 0.002,
+            longContext: {
+              threshold: 1_000,
+              input: 0.003,
+              output: 0.004,
+            },
+          },
+        },
+      ]);
+      expect(cost).toBeCloseTo(7.505);
+    });
+
+    it('should prefer separate config costs over model long-context rates', () => {
+      const cost = calculateCost('model1', { inputCost: 0.005, outputCost: 0.006 }, 1_001, 500, [
+        {
+          id: 'model1',
+          cost: {
+            input: 0.001,
+            output: 0.002,
+            longContext: {
+              threshold: 1_000,
+              input: 0.003,
+              output: 0.004,
+            },
+          },
+        },
+      ]);
+      expect(cost).toBeCloseTo(8.005);
+    });
+
     it('should return undefined if model not found', () => {
       const cost = calculateCost('nonexistent', {}, 1000, 500, models);
       expect(cost).toBeUndefined();
@@ -169,52 +255,33 @@ describe('Shared Provider Functions', () => {
 
   describe('isPromptfooSampleTarget', () => {
     it('should return true when url includes promptfoo.app', () => {
-      const provider = {
-        id: () => 'test',
-        callApi: vi.fn(),
-        config: {
-          url: 'https://api.promptfoo.app/v1',
-        },
-      };
+      const provider = createMockProvider({
+        config: { url: 'https://api.promptfoo.app/v1' },
+      });
       expect(isPromptfooSampleTarget(provider)).toBe(true);
     });
 
     it('should return true when url includes promptfoo.dev', () => {
-      const provider = {
-        id: () => 'test',
-        callApi: vi.fn(),
-        config: {
-          url: 'https://api.promptfoo.dev/v1',
-        },
-      };
+      const provider = createMockProvider({
+        config: { url: 'https://api.promptfoo.dev/v1' },
+      });
       expect(isPromptfooSampleTarget(provider)).toBe(true);
     });
 
     it('should return false when url does not include promptfoo domains', () => {
-      const provider = {
-        id: () => 'test',
-        callApi: vi.fn(),
-        config: {
-          url: 'https://api.other-domain.com/v1',
-        },
-      };
+      const provider = createMockProvider({
+        config: { url: 'https://api.other-domain.com/v1' },
+      });
       expect(isPromptfooSampleTarget(provider)).toBe(false);
     });
 
     it('should return false when provider.config is undefined', () => {
-      const provider = {
-        id: () => 'test',
-        callApi: vi.fn(),
-      };
+      const provider = createMockProvider();
       expect(isPromptfooSampleTarget(provider) ?? false).toBe(false);
     });
 
     it('should return false when provider.config.url is undefined', () => {
-      const provider = {
-        id: () => 'test',
-        callApi: vi.fn(),
-        config: {},
-      };
+      const provider = createMockProvider({ config: {} });
       expect(isPromptfooSampleTarget(provider) ?? false).toBe(false);
     });
   });
@@ -249,8 +316,8 @@ describe('Shared Provider Functions', () => {
         expect(openaiToolChoiceToAnthropic('auto')).toEqual({ type: 'auto' });
       });
 
-      it('should convert none to auto (Anthropic has no none)', () => {
-        expect(openaiToolChoiceToAnthropic('none')).toEqual({ type: 'auto' });
+      it('should convert none', () => {
+        expect(openaiToolChoiceToAnthropic('none')).toEqual({ type: 'none' });
       });
 
       it('should convert required to any', () => {
@@ -338,6 +405,7 @@ describe('Shared Provider Functions', () => {
 
       it('should transform OpenAI format for Anthropic', () => {
         expect(transformToolChoice('auto', 'anthropic')).toEqual({ type: 'auto' });
+        expect(transformToolChoice('none', 'anthropic')).toEqual({ type: 'none' });
         expect(transformToolChoice('required', 'anthropic')).toEqual({ type: 'any' });
       });
 

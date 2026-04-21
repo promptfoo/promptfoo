@@ -154,14 +154,14 @@ export function listCommand(program: Command) {
             );
             if (item.errorCount && item.errorCount > 0) {
               logger.info(
-                `${chalk.red('Errors:')} ${item.errorCount} test${item.errorCount !== 1 ? 's' : ''} failed to run`,
+                `${chalk.red('Errors:')} ${item.errorCount} test${item.errorCount === 1 ? '' : 's'} failed to run`,
               );
             }
           } else {
             logger.info(`${chalk.yellow('Status:')} No results yet`);
             if (item.testCount) {
               logger.info(
-                `${chalk.gray('Configured:')} ${item.testCount} test${item.testCount !== 1 ? 's' : ''}`,
+                `${chalk.gray('Configured:')} ${item.testCount} test${item.testCount === 1 ? '' : 's'}`,
               );
             }
           }
@@ -178,7 +178,7 @@ export function listCommand(program: Command) {
           // Prompts & Vars
           if (item.promptCount && item.promptCount > 0) {
             logger.info(
-              `${chalk.white('Prompts:')} ${item.promptCount}${item.vars.length > 0 ? chalk.gray(` × ${item.vars.length} var${item.vars.length !== 1 ? 's' : ''}`) : ''}`,
+              `${chalk.white('Prompts:')} ${item.promptCount}${item.vars.length > 0 ? chalk.gray(` × ${item.vars.length} var${item.vars.length === 1 ? '' : 's'}`) : ''}`,
             );
           }
 
@@ -268,7 +268,7 @@ export function listCommand(program: Command) {
           const item = result.selectedItem as PromptItem;
           logger.info('');
           logger.info(chalk.cyan.bold(`Prompt: ${item.id.slice(0, 8)}`));
-          logger.info(`Used in: ${item.evalCount} evaluation${item.evalCount !== 1 ? 's' : ''}`);
+          logger.info(`Used in: ${item.evalCount} evaluation${item.evalCount === 1 ? '' : 's'}`);
           if (item.recentEvalId) {
             logger.info(`Most recent eval: ${item.recentEvalId}`);
           }
@@ -349,7 +349,7 @@ export function listCommand(program: Command) {
           logger.info('');
           logger.info(chalk.cyan.bold(`Dataset: ${item.id.slice(0, 8)}`));
           logger.info(`Test cases: ${item.testCount}`);
-          logger.info(`Used in: ${item.evalCount} evaluation${item.evalCount !== 1 ? 's' : ''}`);
+          logger.info(`Used in: ${item.evalCount} evaluation${item.evalCount === 1 ? '' : 's'}`);
           if (item.bestPromptId) {
             logger.info(`Best performing prompt: ${item.bestPromptId.slice(0, 8)}`);
           }

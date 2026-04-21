@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider setup OpenAI-compatible HTTP smoke
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: https
+    label: provider-setup-openai-compatible
+    config:
+      url: '{{env.PROVIDER_SETUP_OPENAI_COMPAT_URL}}'
+      method: POST
+      stateful: false
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.PROVIDER_SETUP_OPENAI_COMPAT_TOKEN}}'
+      body:
+        model: fake-chat
+        messages:
+          - role: system
+            content: Return concise smoke-test answers.
+          - role: user
+            content: '{{prompt}}'
+        metadata:
+          user_id: '{{user_id}}'
+      transformResponse: json.choices[0].message.content
+
+tests:
+  - description: endpoint returns chat completion content
+    vars:
+      user_id: qa-openai-compatible
+      message: Say exactly PONG.
+    assert:
+      - type: contains
+        value: PONG
+      - type: contains
+        value: qa-openai-compatible
