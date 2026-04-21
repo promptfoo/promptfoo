@@ -29,6 +29,14 @@ import type {
   TestSuiteConfig,
 } from '../types/index';
 
+type StandaloneTestsFileMetadata = {
+  resolvedVarsPath: string;
+  pathWithoutFunction: string;
+  maybeFunctionName: string | undefined;
+  fileExtension: string;
+  extensionWithoutSheet: string;
+};
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
@@ -80,6 +88,106 @@ export async function readStandaloneTestsFile(
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
+
+  if (varsPath.startsWith('huggingface://datasets/')) {
+    telemetry.record('feature_used', {
+      feature: 'huggingface dataset',
+    });
+    return await fetchHuggingFaceDataset(varsPath);
+  }
+
+  let rows: CsvRow[];
+  if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
+    telemetry.record('feature_used', {
+      feature: 'csv tests file - google sheet',
+    });
+    rows = await fetchCsvFromGoogleSheet(varsPath);
+  } else if (/https:\/\/[^/]+\.sharepoint\.com\//i.test(varsPath)) {
+    telemetry.record('feature_used', {
+      feature: 'csv tests file - sharepoint',
+    });
+    rows = await fetchCsvFromSharepoint(varsPath);
+  } else {
+    return readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
+  }
+
+  return csvRowsToTestCases(rows);
+}
+
+async function readLocalStandaloneTestsFile(
+  varsPath: string,
+  basePath: string,
+  finalConfig: Record<string, any> | undefined,
+): Promise<TestCase[]> {
+  const {
+    resolvedVarsPath,
+    pathWithoutFunction,
+    maybeFunctionName,
+    fileExtension,
+    extensionWithoutSheet,
+  } = getStandaloneTestsFileMetadata(varsPath, basePath);
+
+  if (isJavascriptFile(pathWithoutFunction)) {
+    telemetry.record('feature_used', {
+      feature: 'js tests file',
+    });
+    return readJavascriptTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
+  }
+  if (fileExtension === 'py') {
+    telemetry.record('feature_used', {
+      feature: 'python tests file',
+    });
+    return readPythonTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
+  }
+
+  if (fileExtension === 'csv') {
+    telemetry.record('feature_used', {
+      feature: 'csv tests file - local',
+    });
+    return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
+  }
+  if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    return csvRowsToTestCases(await parseXlsxFile(resolvedVarsPath));
+  }
+  if (fileExtension === 'json') {
+    telemetry.record('feature_used', {
+      feature: 'json tests file',
+    });
+    return readJsonTestCases(resolvedVarsPath);
+  }
+  if (fileExtension === 'jsonl') {
+    telemetry.record('feature_used', {
+      feature: 'jsonl tests file',
+    });
+    return readJsonlTestCases(resolvedVarsPath);
+  }
+  if (fileExtension === 'yaml' || fileExtension === 'yml') {
+    telemetry.record('feature_used', {
+      feature: 'yaml tests file',
+    });
+    const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
+    const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
+    return csvRowsToTestCases(rows);
+  }
+
+  return [];
+}
+
+function csvRowsToTestCases(rows: CsvRow[]): TestCase[] {
+  return rows.map((row, idx) => {
+    const test = testCaseFromCsvRow(row);
+    test.description ||= `Row #${idx + 1}`;
+    return test;
+  });
+}
+
+function getStandaloneTestsFileMetadata(
+  varsPath: string,
+  basePath: string,
+): StandaloneTestsFileMetadata {
   const resolvedVarsPath = path.resolve(basePath, varsPath.replace(/^file:\/\//, ''));
   // Split on the last colon to handle Windows drive letters correctly
   const colonCount = resolvedVarsPath.split(':').length - 1;
@@ -101,141 +209,93 @@ export async function readStandaloneTestsFile(
   // For xlsx/xls files, remove sheet specifier (e.g., #Sheet1) from extension
   const extensionWithoutSheet = fileExtension.split('#')[0];
 
-  if (varsPath.startsWith('huggingface://datasets/')) {
-    telemetry.record('feature_used', {
-      feature: 'huggingface dataset',
-    });
-    return await fetchHuggingFaceDataset(varsPath);
+  return {
+    resolvedVarsPath,
+    pathWithoutFunction,
+    maybeFunctionName,
+    fileExtension,
+    extensionWithoutSheet,
+  };
+}
+
+async function readJavascriptTestCases(
+  pathWithoutFunction: string,
+  maybeFunctionName: string | undefined,
+  finalConfig: Record<string, any> | undefined,
+): Promise<TestCase[]> {
+  const mod = await importModule(pathWithoutFunction, maybeFunctionName);
+  return typeof mod === 'function' ? await mod(finalConfig) : mod;
+}
+
+async function readPythonTestCases(
+  pathWithoutFunction: string,
+  maybeFunctionName: string | undefined,
+  finalConfig: Record<string, any> | undefined,
+): Promise<TestCase[]> {
+  const args = finalConfig === undefined ? [] : [finalConfig];
+  const result = await runPython(pathWithoutFunction, maybeFunctionName ?? 'generate_tests', args);
+  if (!Array.isArray(result)) {
+    throw new Error(`Python test function must return a list of test cases, got ${typeof result}`);
   }
-  if (isJavascriptFile(pathWithoutFunction)) {
-    telemetry.record('feature_used', {
-      feature: 'js tests file',
-    });
-    const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-    return typeof mod === 'function' ? await mod(finalConfig) : mod;
-  }
-  if (fileExtension === 'py') {
-    telemetry.record('feature_used', {
-      feature: 'python tests file',
-    });
-    const args = finalConfig === undefined ? [] : [finalConfig];
-    const result = await runPython(
-      pathWithoutFunction,
-      maybeFunctionName ?? 'generate_tests',
-      args,
-    );
-    if (!Array.isArray(result)) {
-      throw new Error(
-        `Python test function must return a list of test cases, got ${typeof result}`,
-      );
+  return result;
+}
+
+function parseLocalCsv(fileContent: string, delimiter: string, relaxQuotes: boolean): CsvRow[] {
+  return parseCsv(fileContent, {
+    columns: true,
+    bom: true,
+    delimiter,
+    relax_quotes: relaxQuotes,
+  });
+}
+
+async function readLocalCsvRows(resolvedVarsPath: string): Promise<CsvRow[]> {
+  const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
+  const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+  const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
+
+  try {
+    if (enforceStrict) {
+      return parseLocalCsv(fileContent, delimiter, false);
     }
-    return result;
-  }
-
-  let rows: CsvRow[] = [];
-
-  if (varsPath.startsWith('https://docs.google.com/spreadsheets/')) {
-    telemetry.record('feature_used', {
-      feature: 'csv tests file - google sheet',
-    });
-    rows = await fetchCsvFromGoogleSheet(varsPath);
-  } else if (/https:\/\/[^/]+\.sharepoint\.com\//i.test(varsPath)) {
-    telemetry.record('feature_used', {
-      feature: 'csv tests file - sharepoint',
-    });
-    rows = await fetchCsvFromSharepoint(varsPath);
-  } else if (fileExtension === 'csv') {
-    telemetry.record('feature_used', {
-      feature: 'csv tests file - local',
-    });
-    const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
-    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-    const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
     try {
-      // First try parsing with strict mode if enforced
-      if (enforceStrict) {
-        rows = parseCsv(fileContent, {
-          columns: true,
-          bom: true,
-          delimiter,
-          relax_quotes: false,
-        });
-      } else {
-        // Try strict mode first, fall back to relaxed if it fails
-        try {
-          rows = parseCsv(fileContent, {
-            columns: true,
-            bom: true,
-            delimiter,
-            relax_quotes: false,
-          });
-        } catch {
-          // If strict parsing fails, try with relaxed quotes
-          rows = parseCsv(fileContent, {
-            columns: true,
-            bom: true,
-            delimiter,
-            relax_quotes: true,
-          });
-        }
-      }
-    } catch (err) {
-      // Add helpful context to the error message
-      const e = err as { code?: string; message: string };
-      if (e.code === 'CSV_INVALID_OPENING_QUOTE') {
-        throw new Error(e.message);
-      }
-      throw e;
+      return parseLocalCsv(fileContent, delimiter, false);
+    } catch {
+      return parseLocalCsv(fileContent, delimiter, true);
     }
-  } else if (extensionWithoutSheet === 'xlsx' || extensionWithoutSheet === 'xls') {
-    telemetry.record('feature_used', {
-      feature: 'xlsx tests file - local',
-    });
-    rows = await parseXlsxFile(resolvedVarsPath);
-  } else if (fileExtension === 'json') {
-    telemetry.record('feature_used', {
-      feature: 'json tests file',
-    });
-    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-    const jsonData = yaml.load(fileContent) as any;
-    const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
-    return testCases.map((item, idx) => ({
-      ...item,
-      description: item.description || `Row #${idx + 1}`,
-    }));
+  } catch (err) {
+    const e = err as { code?: string; message: string };
+    if (e.code === 'CSV_INVALID_OPENING_QUOTE') {
+      throw new Error(e.message);
+    }
+    throw e;
   }
-  // Handle .jsonl files
-  else if (fileExtension === 'jsonl') {
-    telemetry.record('feature_used', {
-      feature: 'jsonl tests file',
+}
+
+async function readJsonTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
+  const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+  const jsonData = yaml.load(fileContent) as any;
+  const testCases: TestCase[] = Array.isArray(jsonData) ? jsonData : [jsonData];
+  return testCases.map((item, idx) => ({
+    ...item,
+    description: item.description || `Row #${idx + 1}`,
+  }));
+}
+
+async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]> {
+  const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
+
+  return fileContent
+    .split('\n')
+    .filter((line) => line.trim())
+    .map((line, idx) => {
+      const row = JSON.parse(line);
+      return {
+        ...row,
+        description: `Row #${idx + 1}`,
+      };
     });
-
-    const fileContent = await fsPromises.readFile(resolvedVarsPath, 'utf-8');
-
-    return fileContent
-      .split('\n')
-      .filter((line) => line.trim())
-      .map((line, idx) => {
-        const row = JSON.parse(line);
-        return {
-          ...row,
-          description: `Row #${idx + 1}`,
-        };
-      });
-  } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-    telemetry.record('feature_used', {
-      feature: 'yaml tests file',
-    });
-    const rawContent = yaml.load(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as any;
-  }
-
-  return rows.map((row, idx) => {
-    const test = testCaseFromCsvRow(row);
-    test.description ||= `Row #${idx + 1}`;
-    return test;
-  });
 }
 
 async function loadTestWithVars(

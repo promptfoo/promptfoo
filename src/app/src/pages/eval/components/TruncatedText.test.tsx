@@ -1,6 +1,7 @@
 import React from 'react';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import TruncatedText from './TruncatedText';
 
@@ -13,7 +14,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
@@ -29,7 +30,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={shortText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     expect(mainDiv).toHaveTextContent(shortText);
@@ -39,21 +40,22 @@ describe('TruncatedText', () => {
     expect(screen.queryByText('Show less')).not.toBeInTheDocument();
   });
 
-  it("should expand to show the full text and display the 'Show less' UI when the user clicks the truncated text", () => {
+  it("should expand to show the full text and display the 'Show less' UI when the user clicks the truncated text", async () => {
+    const user = userEvent.setup();
     const longText =
       'This is a very long piece of text that is intended to be truncated by the component.';
     const maxLength = 20;
 
     const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
     expect(truncationToggler).toHaveStyle('cursor: pointer');
 
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
 
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
@@ -67,7 +69,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
@@ -83,7 +85,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={reactElement} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
@@ -103,12 +105,12 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={nodes} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     if (!mainDiv) {
       throw new Error(
-        'mainDiv is null. The element with id "eval-output-cell-text" was not found.',
+        'mainDiv is null. The element with id starting with "eval-output-cell-text-" was not found.',
       );
     }
 
@@ -129,7 +131,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={numericInput} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
     expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
     expect(screen.queryByText(numericInput.toString())).not.toBeInTheDocument();
@@ -142,7 +144,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={shortText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     // Should show the full text without truncation
@@ -159,7 +161,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={exactText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     // Text at exact length should not be truncated
@@ -174,7 +176,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={overByOneText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     // Should be truncated and show ellipsis
@@ -182,11 +184,12 @@ describe('TruncatedText', () => {
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
-  it('should preserve user expanded state when maxLength changes', () => {
+  it('should preserve user expanded state when maxLength changes', async () => {
+    const user = userEvent.setup();
     const longText = 'This is a very long piece of text that exceeds maxLength';
     const { container, rerender } = render(<TruncatedText text={longText} maxLength={20} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
 
     // Initially should be truncated
     expect(mainDiv).toHaveTextContent(`${longText.slice(0, 20)}...`);
@@ -195,8 +198,7 @@ describe('TruncatedText', () => {
     expect(truncationToggler).toBeInTheDocument();
     expect(truncationToggler).toHaveStyle('cursor: pointer');
 
-    // User clicks to expand
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
 
@@ -204,7 +206,7 @@ describe('TruncatedText', () => {
     rerender(<TruncatedText text={longText} maxLength={25} />);
 
     // User's expanded state should be preserved
-    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    const mainDivAfter = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
     expect(mainDivAfter).toHaveTextContent(longText);
@@ -219,7 +221,7 @@ describe('TruncatedText', () => {
       <TruncatedText text={shortText} maxLength={maxLength} />,
     );
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
 
     // Initially should not be truncated
     expect(mainDiv).toHaveTextContent(shortText);
@@ -229,7 +231,7 @@ describe('TruncatedText', () => {
     rerender(<TruncatedText text={longText} maxLength={maxLength} />);
 
     // Now should be truncated
-    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    const mainDivAfter = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDivAfter).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
     expect(screen.getByText('...')).toBeInTheDocument();
   });
@@ -241,7 +243,7 @@ describe('TruncatedText', () => {
 
     const { container, rerender } = render(<TruncatedText text={longText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
 
     // Initially should be truncated
     expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
@@ -251,7 +253,7 @@ describe('TruncatedText', () => {
 
     // Wait for React to update and then check everything
     await waitFor(() => {
-      const element = container.querySelector('#eval-output-cell-text');
+      const element = container.querySelector('[id^="eval-output-cell-text-"]');
       expect(element).toHaveTextContent(shortText);
       expect(element).not.toHaveTextContent('...');
       // Use data attribute to verify the component state instead of style
@@ -263,7 +265,7 @@ describe('TruncatedText', () => {
     rerender(<TruncatedText text={longText} maxLength={maxLength} />);
 
     // Should be truncated again
-    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    const mainDivAfter = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDivAfter).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
     expect(screen.getByText('...')).toBeInTheDocument();
   });
@@ -280,7 +282,7 @@ describe('TruncatedText', () => {
       <TruncatedText text={initialElement} maxLength={maxLength} />,
     );
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
 
     // Initially should be truncated
     expect(mainDiv).toHaveTextContent(`${longText.slice(0, maxLength)}...`);
@@ -305,7 +307,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     // Should display full text without truncation
@@ -323,7 +325,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     // Should display full text without truncation
@@ -351,7 +353,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={nestedElement} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
@@ -375,7 +377,7 @@ describe('TruncatedText', () => {
       <TruncatedText text={elementWithoutChildren} maxLength={maxLength} />,
     );
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     // Should not show ellipsis since element has no text content
@@ -386,11 +388,12 @@ describe('TruncatedText', () => {
     expect(mainDiv?.querySelector('img')).toBeInTheDocument();
   });
 
-  it('should preserve expanded state when maxLength is reduced', () => {
+  it('should preserve expanded state when maxLength is reduced', async () => {
+    const user = userEvent.setup();
     const longText = 'This is a very long piece of text that exceeds any reasonable maxLength';
     const { container, rerender } = render(<TruncatedText text={longText} maxLength={30} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
 
     // Initially should be truncated
     expect(mainDiv).toHaveTextContent('...');
@@ -399,8 +402,7 @@ describe('TruncatedText', () => {
     expect(truncationToggler).toBeInTheDocument();
     expect(truncationToggler).toHaveStyle('cursor: pointer');
 
-    // User clicks to expand
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
 
@@ -408,7 +410,7 @@ describe('TruncatedText', () => {
     rerender(<TruncatedText text={longText} maxLength={10} />);
 
     // Should still be expanded (preserve user's choice)
-    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    const mainDivAfter = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
     expect(mainDivAfter).toHaveTextContent(longText);
@@ -420,7 +422,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={emptyArray} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     // Should not show ellipsis since array is empty (no text content)
@@ -431,7 +433,8 @@ describe('TruncatedText', () => {
     expect(mainDiv?.textContent || '').toBe('');
   });
 
-  it('should prevent event propagation when the truncation toggler is clicked', () => {
+  it('should prevent event propagation when the truncation toggler is clicked', async () => {
+    const user = userEvent.setup();
     const longText =
       'This is a very long piece of text that is intended to be truncated by the component.';
     const maxLength = 20;
@@ -444,18 +447,19 @@ describe('TruncatedText', () => {
       </div>,
     );
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
 
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
 
     expect(parentClickHandler).not.toHaveBeenCalled();
   });
 
-  it('should prevent click event propagation to parent elements when toggling truncation', () => {
+  it('should prevent click event propagation to parent elements when toggling truncation', async () => {
+    const user = userEvent.setup();
     const longText = 'This is a very long piece of text that is intended to be truncated.';
     const maxLength = 20;
     const parentClickHandler = vi.fn();
@@ -467,7 +471,7 @@ describe('TruncatedText', () => {
     );
 
     const truncationToggler = screen.getByText('...');
-    fireEvent.click(truncationToggler);
+    await user.click(truncationToggler);
 
     expect(parentClickHandler).not.toHaveBeenCalled();
   });
@@ -489,14 +493,15 @@ describe('TruncatedText', () => {
       <TruncatedText text={JSON.stringify(complexObject)} maxLength={maxLength} />,
     );
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
-  it('should reset truncation state when text changes to different content that still exceeds maxLength', () => {
+  it('should reset truncation state when text changes to different content that still exceeds maxLength', async () => {
+    const user = userEvent.setup();
     const longText1 = 'This is a very long piece of text that exceeds maxLength - 1';
     const longText2 = 'This is another very long piece of text that exceeds maxLength - 2';
     const maxLength = 20;
@@ -505,33 +510,34 @@ describe('TruncatedText', () => {
       <TruncatedText text={longText1} maxLength={maxLength} />,
     );
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
 
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
     expect(screen.getByText('Show less')).toBeInTheDocument();
     expect(screen.getByText(longText1)).toBeInTheDocument();
 
     rerender(<TruncatedText text={longText2} maxLength={maxLength} />);
 
-    const mainDivAfter = container.querySelector('#eval-output-cell-text');
+    const mainDivAfter = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDivAfter).toBeInTheDocument();
 
     expect(screen.getByText('Show less')).toBeInTheDocument();
     expect(screen.getByText(longText2)).toBeInTheDocument();
   });
 
-  it('should call preventDefault and stopPropagation when the truncation toggler is clicked', () => {
+  it('should call preventDefault and stopPropagation when the truncation toggler is clicked', async () => {
+    const user = userEvent.setup();
     const longText =
       'This is a very long piece of text that is intended to be truncated by the component.';
     const maxLength = 20;
 
     const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
@@ -540,7 +546,7 @@ describe('TruncatedText', () => {
     const preventDefaultSpy = vi.spyOn(Event.prototype, 'preventDefault');
     const stopPropagationSpy = vi.spyOn(Event.prototype, 'stopPropagation');
 
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
 
     expect(preventDefaultSpy).toHaveBeenCalled();
     expect(stopPropagationSpy).toHaveBeenCalled();
@@ -557,7 +563,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={longText} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
     expect(mainDiv).toHaveTextContent(`${expectedTruncatedText}...`);
 
@@ -584,7 +590,7 @@ describe('TruncatedText', () => {
 
     const { container } = render(<TruncatedText text={textArray} maxLength={maxLength} />);
 
-    const mainDiv = container.querySelector('#eval-output-cell-text');
+    const mainDiv = container.querySelector('[id^="eval-output-cell-text-"]');
     expect(mainDiv).toBeInTheDocument();
 
     expect(mainDiv).toHaveTextContent('Hello, World!');

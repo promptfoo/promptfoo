@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderRateLimitState } from '../../src/scheduler/providerRateLimitState';
 
 // Fast retry policy for tests - minimal delays
@@ -13,6 +13,7 @@ describe('ProviderRateLimitState', () => {
   let state: ProviderRateLimitState;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     state = new ProviderRateLimitState({
       rateLimitKey: 'test-provider',
       maxConcurrency: 5,
@@ -23,6 +24,7 @@ describe('ProviderRateLimitState', () => {
 
   afterEach(() => {
     state.dispose();
+    vi.useRealTimers();
   });
 
   describe('Constructor', () => {
@@ -212,31 +214,8 @@ describe('ProviderRateLimitState', () => {
     it('should retry on rate limit and eventually succeed', async () => {
       let attempt = 0;
 
-      const result = await state.executeWithRetry(
-        'req-1',
-        async () => {
-          attempt++;
-          if (attempt < 2) {
-            throw new Error('Rate limit');
-          }
-          return 'success';
-        },
-        {
-          // Provide fast retry-after to avoid 60-second default
-          getRetryAfter: () => 1,
-        },
-      );
-
-      expect(attempt).toBe(2);
-      expect(result).toBe('success');
-    });
-
-    it('should emit retrying event', async () => {
-      const events: any[] = [];
-      state.on('request:retrying', (data) => events.push(data));
-
-      let attempt = 0;
-      await state.executeWithRetry(
+      // Start the request - it will retry after rate limit
+      const promise = state.executeWithRetry(
         'req-1',
         async () => {
           attempt++;
@@ -252,6 +231,41 @@ describe('ProviderRateLimitState', () => {
         },
       );
 
+      // Run all timers to completion (handles retry delays and rate limit resets)
+      await vi.runAllTimersAsync();
+
+      const result = await promise;
+
+      expect(attempt).toBe(2);
+      expect(result).toBe('success');
+    });
+
+    it('should emit retrying event', async () => {
+      const events: any[] = [];
+      state.on('request:retrying', (data) => events.push(data));
+
+      let attempt = 0;
+      const promise = state.executeWithRetry(
+        'req-1',
+        async () => {
+          attempt++;
+          if (attempt < 2) {
+            throw new Error('Rate limit');
+          }
+          return 'success';
+        },
+        {
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
+          getRetryAfter: () => 0,
+        },
+      );
+
+      // Run all timers to completion
+      await vi.runAllTimersAsync();
+
+      await promise;
+
       expect(events.length).toBe(1);
       expect(events[0].attempt).toBe(1);
       expect(events[0].reason).toBe('ratelimit');
@@ -259,7 +273,7 @@ describe('ProviderRateLimitState', () => {
 
     it('should increment retriedRequests', async () => {
       let attempt = 0;
-      await state.executeWithRetry(
+      const promise = state.executeWithRetry(
         'req-1',
         async () => {
           attempt++;
@@ -269,9 +283,16 @@ describe('ProviderRateLimitState', () => {
           return 'success';
         },
         {
-          getRetryAfter: () => 1,
+          // Use 0 for immediate retry to avoid timing-dependent flakiness
+          // (non-zero values race against slot queue's resetAt timer)
+          getRetryAfter: () => 0,
         },
       );
+
+      // Run all timers to completion
+      await vi.runAllTimersAsync();
+
+      await promise;
 
       const metrics = state.getMetrics();
       expect(metrics.retriedRequests).toBe(2);
@@ -313,6 +334,73 @@ describe('ProviderRateLimitState', () => {
 
       expect(events.length).toBe(1); // Still 1, not 2
     });
+
+    it('should not call markRateLimited for successful responses with retry-after headers', async () => {
+      // If a provider or proxy includes retry-after headers in successful (200) responses,
+      // the queue should NOT be blocked. Only rate-limited responses should trigger blocking.
+      const state2 = new ProviderRateLimitState({
+        rateLimitKey: 'test-no-block',
+        maxConcurrency: 5,
+        minConcurrency: 1,
+        retryPolicy: FAST_RETRY_POLICY,
+      });
+
+      // First request: successful response with retry-after-ms header
+      await state2.executeWithRetry('req-1', async () => 'success', {
+        getHeaders: () => ({
+          'retry-after-ms': '5000',
+          'x-ratelimit-remaining-requests': '50',
+          'x-ratelimit-limit-requests': '100',
+        }),
+        isRateLimited: () => false, // Response is NOT rate-limited
+      });
+
+      // Second request should succeed immediately without being blocked
+      // If markRateLimited was incorrectly called, remainingRequests would be 0
+      // and the queue would block until the reset timer fires
+      const result = await state2.executeWithRetry('req-2', async () => 'second-success', {
+        getHeaders: () => ({
+          'x-ratelimit-remaining-requests': '49',
+          'x-ratelimit-limit-requests': '100',
+        }),
+        isRateLimited: () => false,
+      });
+
+      expect(result).toBe('second-success');
+      const metrics = state2.getMetrics();
+      expect(metrics.completedRequests).toBe(2);
+      expect(metrics.rateLimitHits).toBe(0);
+      state2.dispose();
+    });
+
+    it('should call markRateLimited for rate-limited responses with retry-after headers', async () => {
+      const state2 = new ProviderRateLimitState({
+        rateLimitKey: 'test-block-on-429',
+        maxConcurrency: 5,
+        minConcurrency: 1,
+        retryPolicy: { maxRetries: 0, baseDelayMs: 1, maxDelayMs: 1, jitterFactor: 0 },
+      });
+
+      const hitEvents: any[] = [];
+      state2.on('ratelimit:hit', (data) => hitEvents.push(data));
+
+      // Rate-limited response with retry-after-ms header
+      try {
+        await state2.executeWithRetry('req-1', async () => 'rate-limited-result', {
+          getHeaders: () => ({
+            'retry-after-ms': '5000',
+          }),
+          isRateLimited: () => true, // Response IS rate-limited
+        });
+      } catch {
+        // Expected - rate limit exhausted with maxRetries=0
+      }
+
+      expect(hitEvents.length).toBe(1);
+      expect(hitEvents[0].retryAfterMs).toBeUndefined(); // getRetryAfter not provided
+      expect(state2.getMetrics().rateLimitHits).toBe(1);
+      state2.dispose();
+    });
   });
 
   describe('Adaptive concurrency', () => {
@@ -335,7 +423,8 @@ describe('ProviderRateLimitState', () => {
             throw new Error('Rate limit');
           },
           {
-            getRetryAfter: () => 1, // Fast retry to avoid 60s default
+            // Use 0 for immediate retry (not used here since maxRetries=0, but for consistency)
+            getRetryAfter: () => 0,
           },
         );
       } catch {}
@@ -363,10 +452,14 @@ describe('ProviderRateLimitState', () => {
             throw new Error('Rate limit');
           },
           {
-            getRetryAfter: () => 1,
+            // Use 0 for immediate retry (not used here since maxRetries=0, but for consistency)
+            getRetryAfter: () => 0,
           },
         );
       } catch {}
+
+      // Advance past the rate limit reset time to allow subsequent requests
+      vi.advanceTimersByTime(10);
 
       const events: any[] = [];
       testState.on('concurrency:increased', (data) => events.push(data));

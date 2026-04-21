@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evals local Python provider smoke
+
+prompts:
+  - 'Reply about {{topic}} with PONG and trace id {{trace_id}}.'
+
+providers:
+  - id: file://./provider.py:call_api
+    label: evals-local-python-provider
+    config:
+      workers: 1
+      timeout: 30000
+      defaultTopic: py-config-topic
+      defaultTraceId: py-config-trace
+
+tests:
+  - description: Python PONG response carries trace id
+    vars:
+      topic: smoke
+      trace_id: eval-py-123
+    assert:
+      - type: contains
+        value: PONG python
+      - type: regex
+        value: trace id eval-py-123
+      - type: javascript
+        value: output.includes(context.vars.topic)
+    metadata:
+      area: smoke
+  - description: Python PONG response carries alternate case metadata
+    vars:
+      topic: billing
+      trace_id: eval-py-456
+    assert:
+      - type: contains
+        value: topic=billing
+      - type: contains
+        value: trace id eval-py-456
+    metadata:
+      area: billing
+  - description: Python PONG response uses provider config defaults
+    assert:
+      - type: contains
+        value: topic=py-config-topic
+      - type: contains
+        value: trace id py-config-trace
+    metadata:
+      area: config-defaults

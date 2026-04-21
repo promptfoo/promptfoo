@@ -6,6 +6,7 @@ import {
   TrueFoundryProvider,
 } from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
+import { mockProcessEnv } from '../util/utils';
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
 
@@ -170,11 +171,11 @@ describe('TrueFoundry', () => {
 
     describe('callApi', () => {
       beforeEach(() => {
-        process.env.TRUEFOUNDRY_API_KEY = 'test-key';
+        mockProcessEnv({ TRUEFOUNDRY_API_KEY: 'test-key' });
       });
 
       afterEach(() => {
-        delete process.env.TRUEFOUNDRY_API_KEY;
+        mockProcessEnv({ TRUEFOUNDRY_API_KEY: undefined });
       });
 
       it('should call TrueFoundry API and return output with correct structure', async () => {
@@ -196,6 +197,7 @@ describe('TrueFoundry', () => {
           model: 'openai/gpt-4',
           messages: [{ role: 'user', content: 'Test prompt' }],
           max_tokens: 1024,
+          temperature: 0,
         };
 
         expect(mockedFetchWithRetries).toHaveBeenCalledWith(
@@ -428,11 +430,11 @@ describe('TrueFoundry', () => {
     const embeddingProvider = new TrueFoundryEmbeddingProvider('openai/text-embedding-3-large', {});
 
     beforeEach(() => {
-      process.env.TRUEFOUNDRY_API_KEY = 'test-key';
+      mockProcessEnv({ TRUEFOUNDRY_API_KEY: 'test-key' });
     });
 
     afterEach(() => {
-      delete process.env.TRUEFOUNDRY_API_KEY;
+      mockProcessEnv({ TRUEFOUNDRY_API_KEY: undefined });
     });
 
     it('should initialize with correct model name', () => {

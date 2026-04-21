@@ -666,8 +666,6 @@ redteam:
     - harmful:self-harm
     - harmful:sexual
     - harmful:violence
-    - jailbreak:composite
-    - jailbreak:meta
   strategies:
     - id: jailbreak:composite
     - id: jailbreak:meta

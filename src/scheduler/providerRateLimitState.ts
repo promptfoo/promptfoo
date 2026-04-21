@@ -131,11 +131,21 @@ export class ProviderRateLimitState extends EventEmitter {
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+      /**
+       * Per-call override for `maxRetries` only. Preserves the state's other
+       * policy fields (backoff, jitter) so provider config cannot silently
+       * reset them.
+       */
+      maxRetriesOverride?: number;
     },
   ): Promise<T> {
     this.totalRequests++;
     let attempt = 0;
     let lastError: Error | undefined;
+    const retryPolicy =
+      options.maxRetriesOverride === undefined
+        ? this.retryPolicy
+        : { ...this.retryPolicy, maxRetries: options.maxRetriesOverride };
 
     while (true) {
       // Acquire slot (may wait for rate limit window via queue)
@@ -167,7 +177,7 @@ export class ProviderRateLimitState extends EventEmitter {
 
         // Update state from headers BEFORE releasing slot
         if (headers) {
-          this.updateFromHeaders(headers);
+          this.updateFromHeaders(headers, isRateLimited);
         }
 
         // Release slot
@@ -177,10 +187,10 @@ export class ProviderRateLimitState extends EventEmitter {
           this.handleRateLimit(retryAfterMs);
 
           // Check if we should retry
-          if (shouldRetry(attempt, undefined, true, this.retryPolicy)) {
+          if (shouldRetry(attempt, undefined, true, retryPolicy)) {
             attempt++;
             this.retriedRequests++;
-            const delay = getRetryDelay(attempt, this.retryPolicy, retryAfterMs);
+            const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
 
             this.emit('request:retrying', {
               rateLimitKey: this.rateLimitKey,
@@ -229,10 +239,10 @@ export class ProviderRateLimitState extends EventEmitter {
         }
 
         // Check if we should retry
-        if (shouldRetry(attempt, lastError, isRateLimited, this.retryPolicy)) {
+        if (shouldRetry(attempt, lastError, isRateLimited, retryPolicy)) {
           attempt++;
           this.retriedRequests++;
-          const delay = getRetryDelay(attempt, this.retryPolicy, retryAfterMs);
+          const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
 
           this.emit('request:retrying', {
             rateLimitKey: this.rateLimitKey,
@@ -254,8 +264,12 @@ export class ProviderRateLimitState extends EventEmitter {
 
   /**
    * Update state from response headers.
+   * @param headers - Response headers
+   * @param isRateLimited - Whether the response indicates a rate limit (e.g., HTTP 429).
+   *   When false, retry-after headers are ignored to prevent incorrectly blocking the
+   *   queue on successful responses from providers/proxies that include these headers.
    */
-  private updateFromHeaders(headers: Record<string, string>): void {
+  private updateFromHeaders(headers: Record<string, string>, isRateLimited: boolean): void {
     const parsed = parseRateLimitHeaders(headers);
 
     // Emit ratelimit:learned only once per provider when we first see limit headers
@@ -271,11 +285,13 @@ export class ProviderRateLimitState extends EventEmitter {
       });
     }
 
-    // Update slot queue with new state
+    // Update slot queue with new state (remaining counts, limits, reset times)
     this.slotQueue.updateRateLimitState(parsed);
 
-    // If headers include retry-after-ms, apply it immediately
-    if (parsed.retryAfterMs !== undefined) {
+    // Only apply retry-after as a rate limit enforcement when the response is actually
+    // rate-limited. This prevents incorrectly blocking the queue if a provider or proxy
+    // includes retry-after headers in successful (200) responses.
+    if (isRateLimited && parsed.retryAfterMs !== undefined) {
       this.slotQueue.markRateLimited(parsed.retryAfterMs);
     }
 

@@ -43,9 +43,9 @@ OWASP defines two types of prompt injection vulnerabilities:
 - **Direct Prompt Injection**: A user's prompt directly changes the LLM's behavior in an unintended way.
 - **Indirect Prompt Injection**: An LLM accepts input from an external source (like websites or files) that subsequently alters the LLM's behavior in unintended ways.
 
-Promptfoo can help detect and prevent prompt injection attacks by generating adversarial inputs through plugins and employing a "prompt injection" strategy.
+Promptfoo can help detect and prevent prompt injection attacks by generating adversarial inputs through plugins and applying jailbreak strategies.
 
-Each plugin automatically produces adversarial inputs for a certain harm area and tests whether the output is affected. Adding the prompt injection strategy modifies the way that adversarial inputs are sent.
+Each plugin automatically produces adversarial inputs for a certain harm area and tests whether the output is affected. Adding jailbreak strategies modifies the way that adversarial inputs are sent.
 
 Example configuration:
 
@@ -58,10 +58,9 @@ redteam:
     - politics
     # ...
   strategies:
-    # Add prompt injection strategy
-    - prompt-injection
-    # Additional strategies such as "jailbreak" are related to prompt injection
-    - jailbreak
+    # Add jailbreak strategies
+    - jailbreak:meta
+    - jailbreak:composite
 ```
 
 ## 2. Sensitive Information Disclosure (LLM02)
