@@ -23,49 +23,49 @@
           "$ref": "#/definitions/__schema10"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema25"
-        },
-        "defaultTest": {
-          "$ref": "#/definitions/__schema26"
-        },
-        "outputPath": {
-          "$ref": "#/definitions/__schema27"
-        },
-        "sharing": {
-          "$ref": "#/definitions/__schema28"
-        },
-        "nunjucksFilters": {
-          "$ref": "#/definitions/__schema29"
-        },
-        "env": {
-          "$ref": "#/definitions/__schema30"
-        },
-        "derivedMetrics": {
-          "$ref": "#/definitions/__schema31"
-        },
-        "extensions": {
-          "$ref": "#/definitions/__schema32"
-        },
-        "metadata": {
-          "$ref": "#/definitions/__schema33"
-        },
-        "redteam": {
-          "$ref": "#/definitions/__schema34"
-        },
-        "writeLatestResults": {
           "$ref": "#/definitions/__schema35"
         },
-        "tracing": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema36"
         },
-        "evaluateOptions": {
+        "outputPath": {
           "$ref": "#/definitions/__schema37"
         },
-        "commandLineOptions": {
+        "sharing": {
           "$ref": "#/definitions/__schema38"
         },
-        "targets": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema39"
+        },
+        "env": {
+          "$ref": "#/definitions/__schema40"
+        },
+        "derivedMetrics": {
+          "$ref": "#/definitions/__schema41"
+        },
+        "extensions": {
+          "$ref": "#/definitions/__schema42"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema43"
+        },
+        "redteam": {
+          "$ref": "#/definitions/__schema44"
+        },
+        "writeLatestResults": {
+          "$ref": "#/definitions/__schema45"
+        },
+        "tracing": {
+          "$ref": "#/definitions/__schema46"
+        },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema47"
+        },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema48"
+        },
+        "targets": {
+          "$ref": "#/definitions/__schema49"
         }
       },
       "required": ["prompts"],
@@ -638,13 +638,13 @@
                 "$ref": "#/definitions/__schema11"
               },
               {
-                "$ref": "#/definitions/__schema24"
+                "$ref": "#/definitions/__schema34"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema24"
+          "$ref": "#/definitions/__schema34"
         }
       ]
     },
@@ -673,16 +673,16 @@
           "$ref": "#/definitions/__schema18"
         },
         "assertScoringFunction": {
-          "$ref": "#/definitions/__schema20"
+          "$ref": "#/definitions/__schema30"
         },
         "options": {
-          "$ref": "#/definitions/__schema21"
+          "$ref": "#/definitions/__schema31"
         },
         "threshold": {
-          "$ref": "#/definitions/__schema22"
+          "$ref": "#/definitions/__schema32"
         },
         "metadata": {
-          "$ref": "#/definitions/__schema23"
+          "$ref": "#/definitions/__schema33"
         }
       },
       "additionalProperties": false
@@ -804,172 +804,28 @@
       "type": "object",
       "properties": {
         "type": {
-          "anyOf": [
-            {
-              "type": "string",
-              "enum": [
-                "answer-relevance",
-                "bleu",
-                "classifier",
-                "contains",
-                "contains-all",
-                "contains-any",
-                "contains-html",
-                "contains-json",
-                "contains-sql",
-                "contains-xml",
-                "context-faithfulness",
-                "context-recall",
-                "context-relevance",
-                "conversation-relevance",
-                "cost",
-                "equals",
-                "factuality",
-                "finish-reason",
-                "g-eval",
-                "gleu",
-                "guardrails",
-                "icontains",
-                "icontains-all",
-                "icontains-any",
-                "is-html",
-                "is-json",
-                "is-refusal",
-                "is-sql",
-                "is-valid-function-call",
-                "is-valid-openai-function-call",
-                "is-valid-openai-tools-call",
-                "is-xml",
-                "javascript",
-                "latency",
-                "levenshtein",
-                "llm-rubric",
-                "pi",
-                "meteor",
-                "model-graded-closedqa",
-                "model-graded-factuality",
-                "moderation",
-                "perplexity",
-                "perplexity-score",
-                "python",
-                "regex",
-                "rouge-n",
-                "ruby",
-                "similar",
-                "similar:cosine",
-                "similar:dot",
-                "similar:euclidean",
-                "starts-with",
-                "tool-call-f1",
-                "skill-used",
-                "trajectory:goal-success",
-                "trajectory:tool-args-match",
-                "trajectory:step-count",
-                "trajectory:tool-sequence",
-                "trajectory:tool-used",
-                "trace-error-spans",
-                "trace-span-count",
-                "trace-span-duration",
-                "search-rubric",
-                "webhook",
-                "word-count"
-              ]
-            },
-            {
-              "type": "string",
-              "enum": [
-                "answer-relevance",
-                "bleu",
-                "classifier",
-                "contains",
-                "contains-all",
-                "contains-any",
-                "contains-html",
-                "contains-json",
-                "contains-sql",
-                "contains-xml",
-                "context-faithfulness",
-                "context-recall",
-                "context-relevance",
-                "conversation-relevance",
-                "cost",
-                "equals",
-                "factuality",
-                "finish-reason",
-                "g-eval",
-                "gleu",
-                "guardrails",
-                "icontains",
-                "icontains-all",
-                "icontains-any",
-                "is-html",
-                "is-json",
-                "is-refusal",
-                "is-sql",
-                "is-valid-function-call",
-                "is-valid-openai-function-call",
-                "is-valid-openai-tools-call",
-                "is-xml",
-                "javascript",
-                "latency",
-                "levenshtein",
-                "llm-rubric",
-                "pi",
-                "meteor",
-                "model-graded-closedqa",
-                "model-graded-factuality",
-                "moderation",
-                "perplexity",
-                "perplexity-score",
-                "python",
-                "regex",
-                "rouge-n",
-                "ruby",
-                "similar",
-                "similar:cosine",
-                "similar:dot",
-                "similar:euclidean",
-                "starts-with",
-                "tool-call-f1",
-                "skill-used",
-                "trajectory:goal-success",
-                "trajectory:tool-args-match",
-                "trajectory:step-count",
-                "trajectory:tool-sequence",
-                "trajectory:tool-used",
-                "trace-error-spans",
-                "trace-span-count",
-                "trace-span-duration",
-                "search-rubric",
-                "webhook",
-                "word-count"
-              ]
-            },
-            {
-              "type": "string",
-              "enum": ["select-best", "human", "max-score"]
-            },
-            {}
-          ]
+          "$ref": "#/definitions/__schema20"
         },
-        "value": {},
+        "value": {
+          "$ref": "#/definitions/__schema21"
+        },
         "config": {
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {}
+          "$ref": "#/definitions/__schema22"
         },
         "threshold": {
-          "type": "number"
+          "$ref": "#/definitions/__schema23"
         },
         "weight": {
-          "type": "number"
+          "$ref": "#/definitions/__schema24"
         },
-        "provider": {},
-        "rubricPrompt": {},
+        "provider": {
+          "$ref": "#/definitions/__schema25"
+        },
+        "rubricPrompt": {
+          "$ref": "#/definitions/__schema26"
+        },
         "metric": {
-          "type": "string"
+          "$ref": "#/definitions/__schema27"
         },
         "transform": {
           "type": "string"
@@ -985,12 +841,186 @@
       "anyOf": [
         {
           "type": "string",
+          "enum": [
+            "answer-relevance",
+            "bleu",
+            "classifier",
+            "contains",
+            "contains-all",
+            "contains-any",
+            "contains-html",
+            "contains-json",
+            "contains-sql",
+            "contains-xml",
+            "context-faithfulness",
+            "context-recall",
+            "context-relevance",
+            "conversation-relevance",
+            "cost",
+            "equals",
+            "factuality",
+            "finish-reason",
+            "g-eval",
+            "gleu",
+            "guardrails",
+            "icontains",
+            "icontains-all",
+            "icontains-any",
+            "is-html",
+            "is-json",
+            "is-refusal",
+            "is-sql",
+            "is-valid-function-call",
+            "is-valid-openai-function-call",
+            "is-valid-openai-tools-call",
+            "is-xml",
+            "javascript",
+            "latency",
+            "levenshtein",
+            "llm-rubric",
+            "pi",
+            "meteor",
+            "model-graded-closedqa",
+            "model-graded-factuality",
+            "moderation",
+            "perplexity",
+            "perplexity-score",
+            "python",
+            "regex",
+            "rouge-n",
+            "ruby",
+            "similar",
+            "similar:cosine",
+            "similar:dot",
+            "similar:euclidean",
+            "starts-with",
+            "tool-call-f1",
+            "skill-used",
+            "trajectory:goal-success",
+            "trajectory:tool-args-match",
+            "trajectory:step-count",
+            "trajectory:tool-sequence",
+            "trajectory:tool-used",
+            "trace-error-spans",
+            "trace-span-count",
+            "trace-span-duration",
+            "search-rubric",
+            "webhook",
+            "word-count"
+          ]
+        },
+        {
+          "type": "string",
+          "enum": [
+            "answer-relevance",
+            "bleu",
+            "classifier",
+            "contains",
+            "contains-all",
+            "contains-any",
+            "contains-html",
+            "contains-json",
+            "contains-sql",
+            "contains-xml",
+            "context-faithfulness",
+            "context-recall",
+            "context-relevance",
+            "conversation-relevance",
+            "cost",
+            "equals",
+            "factuality",
+            "finish-reason",
+            "g-eval",
+            "gleu",
+            "guardrails",
+            "icontains",
+            "icontains-all",
+            "icontains-any",
+            "is-html",
+            "is-json",
+            "is-refusal",
+            "is-sql",
+            "is-valid-function-call",
+            "is-valid-openai-function-call",
+            "is-valid-openai-tools-call",
+            "is-xml",
+            "javascript",
+            "latency",
+            "levenshtein",
+            "llm-rubric",
+            "pi",
+            "meteor",
+            "model-graded-closedqa",
+            "model-graded-factuality",
+            "moderation",
+            "perplexity",
+            "perplexity-score",
+            "python",
+            "regex",
+            "rouge-n",
+            "ruby",
+            "similar",
+            "similar:cosine",
+            "similar:dot",
+            "similar:euclidean",
+            "starts-with",
+            "tool-call-f1",
+            "skill-used",
+            "trajectory:goal-success",
+            "trajectory:tool-args-match",
+            "trajectory:step-count",
+            "trajectory:tool-sequence",
+            "trajectory:tool-used",
+            "trace-error-spans",
+            "trace-span-count",
+            "trace-span-duration",
+            "search-rubric",
+            "webhook",
+            "word-count"
+          ]
+        },
+        {
+          "type": "string",
+          "enum": ["select-best", "human", "max-score"]
+        },
+        {}
+      ]
+    },
+    "__schema21": {},
+    "__schema22": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
+    },
+    "__schema23": {
+      "type": "number"
+    },
+    "__schema24": {
+      "type": "number"
+    },
+    "__schema25": {},
+    "__schema26": {},
+    "__schema27": {
+      "type": "string"
+    },
+    "__schema28": {
+      "type": "string"
+    },
+    "__schema29": {
+      "type": "string"
+    },
+    "__schema30": {
+      "anyOf": [
+        {
+          "type": "string",
           "pattern": "^file:\\/\\/.*\\.(js|cjs|mjs|ts|cts|mts|py)(?::[\\w.]+)?$"
         },
         {}
       ]
     },
-    "__schema21": {
+    "__schema31": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1098,10 +1128,10 @@
       },
       "additionalProperties": {}
     },
-    "__schema22": {
+    "__schema32": {
       "type": "number"
     },
-    "__schema23": {
+    "__schema33": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1109,7 +1139,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema24": {
+    "__schema34": {
       "type": "object",
       "properties": {
         "path": {
@@ -1162,7 +1192,7 @@
       "required": ["path"],
       "additionalProperties": false
     },
-    "__schema25": {
+    "__schema35": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1232,28 +1262,28 @@
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema20"
+                          "$ref": "#/definitions/__schema30"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema21"
+                          "$ref": "#/definitions/__schema31"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema22"
+                          "$ref": "#/definitions/__schema32"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema23"
+                          "$ref": "#/definitions/__schema33"
                         }
                       ]
                     }
@@ -1274,7 +1304,7 @@
         ]
       }
     },
-    "__schema26": {
+    "__schema36": {
       "anyOf": [
         {
           "type": "string"
@@ -1301,23 +1331,23 @@
               "$ref": "#/definitions/__schema18"
             },
             "assertScoringFunction": {
-              "$ref": "#/definitions/__schema20"
+              "$ref": "#/definitions/__schema30"
             },
             "options": {
-              "$ref": "#/definitions/__schema21"
+              "$ref": "#/definitions/__schema31"
             },
             "threshold": {
-              "$ref": "#/definitions/__schema22"
+              "$ref": "#/definitions/__schema32"
             },
             "metadata": {
-              "$ref": "#/definitions/__schema23"
+              "$ref": "#/definitions/__schema33"
             }
           },
           "additionalProperties": false
         }
       ]
     },
-    "__schema27": {
+    "__schema37": {
       "anyOf": [
         {
           "type": "string"
@@ -1330,7 +1360,7 @@
         }
       ]
     },
-    "__schema28": {
+    "__schema38": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1349,7 +1379,7 @@
         }
       ]
     },
-    "__schema29": {
+    "__schema39": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1358,7 +1388,7 @@
         "type": "string"
       }
     },
-    "__schema30": {
+    "__schema40": {
       "anyOf": [
         {
           "$ref": "#/definitions/__schema7"
@@ -1384,7 +1414,7 @@
         }
       ]
     },
-    "__schema31": {
+    "__schema41": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1405,7 +1435,7 @@
         "additionalProperties": false
       }
     },
-    "__schema32": {
+    "__schema42": {
       "anyOf": [
         {
           "type": "array",
@@ -1418,14 +1448,14 @@
         }
       ]
     },
-    "__schema33": {
+    "__schema43": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema34": {
+    "__schema44": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -2852,10 +2882,10 @@
         }
       }
     },
-    "__schema35": {
+    "__schema45": {
       "type": "boolean"
     },
-    "__schema36": {
+    "__schema46": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2943,7 +2973,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema37": {
+    "__schema47": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2986,7 +3016,7 @@
       },
       "additionalProperties": false
     },
-    "__schema38": {
+    "__schema48": {
       "type": "object",
       "properties": {
         "description": {
@@ -3162,7 +3192,7 @@
       },
       "additionalProperties": false
     },
-    "__schema39": {
+    "__schema49": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

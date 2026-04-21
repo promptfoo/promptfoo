@@ -304,8 +304,14 @@ async function aggregateAssertions(
           WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
             (
               SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
+              FROM json_tree(grading_result, '$.componentResults') AS component
+              WHERE component.type = 'object'
+                AND COALESCE(CAST(json_extract(component.value, '$.metadata.isMetricOnly') AS INTEGER), 0) != 1
+                AND (
+                  json_type(component.value, '$.assertion') = 'object'
+                  OR COALESCE(json_array_length(component.value, '$.componentResults'), 0) = 0
+                )
+                AND CAST(json_extract(component.value, '$.pass') AS INTEGER) = 1
             )
           ELSE 0
         END
@@ -315,8 +321,14 @@ async function aggregateAssertions(
           WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
             (
               SELECT COUNT(*)
-              FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
+              FROM json_tree(grading_result, '$.componentResults') AS component
+              WHERE component.type = 'object'
+                AND COALESCE(CAST(json_extract(component.value, '$.metadata.isMetricOnly') AS INTEGER), 0) != 1
+                AND (
+                  json_type(component.value, '$.assertion') = 'object'
+                  OR COALESCE(json_array_length(component.value, '$.componentResults'), 0) = 0
+                )
+                AND CAST(json_extract(component.value, '$.pass') AS INTEGER) = 0
             )
           ELSE 0
         END

@@ -382,6 +382,84 @@ describe('calculateFilteredMetrics', () => {
       expect(totalAssertions).toBe(10);
     });
 
+    it('should skip metric-only and anonymous wrapper componentResults', async () => {
+      const eval_ = await Eval.create(
+        {
+          providers: [{ id: 'test-provider' }],
+          prompts: ['Prompt 1'],
+          tests: [{ vars: { test: 'value' } }],
+        },
+        [{ raw: 'Prompt 1', label: 'Prompt 1' }],
+      );
+
+      await eval_.addResult({
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { test: 'value' } },
+        promptId: 'prompt-0',
+        provider: { id: 'test-provider', label: 'test' },
+        prompt: { raw: 'Prompt 1', label: 'Prompt 1' },
+        vars: { test: 'value' },
+        response: { output: 'test output', tokenUsage: { total: 10, prompt: 5, completion: 5 } },
+        error: null,
+        failureReason: ResultFailureReason.NONE,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Test reason',
+          componentResults: [
+            {
+              pass: true,
+              score: 0.25,
+              reason: 'Metric only',
+              assertion: { type: 'cost', metric: 'total_cost' },
+              metadata: { isMetricOnly: true },
+            },
+            {
+              pass: true,
+              score: 1,
+              reason: 'Anonymous wrapper',
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'Nested pass',
+                  assertion: { type: 'contains', value: 'test' },
+                },
+                {
+                  pass: true,
+                  score: 0.25,
+                  reason: 'Nested metric only',
+                  assertion: { type: 'cost', metric: 'nested_cost' },
+                  metadata: { isMetricOnly: true },
+                },
+              ],
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'Anonymous leaf failure',
+            },
+          ],
+        },
+        namedScores: {},
+        cost: 0.001,
+        metadata: {},
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics[0].assertPassCount).toBe(1);
+      expect(metrics[0].assertFailCount).toBe(1);
+    });
+
     it('should handle results without grading results', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,
