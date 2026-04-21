@@ -39,6 +39,7 @@ const UnicodePlayground: React.FC = () => {
   };
 
   // Encode the message in real-time
+  // biome-ignore lint/correctness/useExhaustiveDependencies: textToBinary and binaryToInvisible are stable helper functions
   useEffect(() => {
     if (!hiddenMessage) {
       setEncodedResult(visibleText);

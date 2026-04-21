@@ -1,27 +1,29 @@
 import React from 'react';
 
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import DeleteIcon from '@mui/icons-material/Delete';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import Alert from '@mui/material/Alert';
-import Autocomplete from '@mui/material/Autocomplete';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import IconButton from '@mui/material/IconButton';
-import Switch from '@mui/material/Switch';
-import TextField from '@mui/material/TextField';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Switch } from '@app/components/ui/switch';
+import { Textarea } from '@app/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import { cn } from '@app/lib/utils';
 import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
@@ -29,29 +31,24 @@ import {
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
+import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
+import type { StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { StrategyCardData } from './strategies/types';
 
-// Maximum allowed value for maxTurns/numIterations in agentic strategies
-// Based on empirical testing: beyond 30 iterations, success rates plateau while
-// cost and time increase linearly. See docs for attack strategy benchmarks.
 const MAX_ITERATIONS_LIMIT = 30;
 const MIN_ITERATIONS = 3;
 const MIN_TURNS = 1;
 const MAX_ITERATIONS_LIMIT_MESSAGE =
-  'This is the maximum—higher values show diminishing returns while increasing scan time and cost.';
+  'This is the maximum - higher values show diminishing returns while increasing scan time and cost.';
 const MAX_ITERATIONS_ERROR_MESSAGE =
   'Must be 30 or less. Higher values show diminishing returns while increasing scan time and cost.';
 const INVALID_NUMBER_ERROR_MESSAGE = 'Please enter a valid positive number.';
 
-/**
- * Validates an iteration/turn value for agentic strategies.
- * Returns an error message if invalid, or null if valid.
- */
 function validateIterationValue(value: unknown, min: number): string | null {
   if (value === undefined || value === null || value === '') {
-    return null; // Allow empty/undefined (will use default)
+    return null;
   }
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return INVALID_NUMBER_ERROR_MESSAGE;
@@ -72,7 +69,7 @@ function validateIterationValue(value: unknown, min: number): string | null {
 const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
 
 // Type for layer strategy steps (can be strings or objects with nested config)
-type StepType = string | { id: string; config?: Record<string, any> };
+type StepType = string | { id: string; config?: Partial<StrategyConfig> };
 
 // Helper to extract step ID from either format
 const getStepId = (step: StepType): string => {
@@ -81,17 +78,17 @@ const getStepId = (step: StepType): string => {
 
 // Stable empty arrays to avoid infinite loops in useEffect dependencies
 const EMPTY_PLUGINS_ARRAY: string[] = [];
-const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Record<string, any> }> = [];
+const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Partial<StrategyConfig> }> = [];
 
 interface StrategyConfigDialogProps {
   open: boolean;
   strategy: string | null;
-  config: Record<string, any>;
+  config: Partial<StrategyConfig>;
   onClose: () => void;
-  onSave: (strategy: string, config: Record<string, any>) => void;
+  onSave: (strategy: string, config: Partial<StrategyConfig>) => void;
   strategyData: StrategyCardData | null;
   selectedPlugins?: string[];
-  allStrategies?: Array<string | { id: string; config?: Record<string, any> }>;
+  allStrategies?: Array<string | { id: string; config?: Partial<StrategyConfig> }>;
 }
 
 export default function StrategyConfigDialog({
@@ -104,14 +101,29 @@ export default function StrategyConfigDialog({
   selectedPlugins = EMPTY_PLUGINS_ARRAY,
   allStrategies = EMPTY_STRATEGIES_ARRAY,
 }: StrategyConfigDialogProps) {
-  const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
+  const { data: cloudConfig } = useCloudConfig();
+  const isCloudEnabled = cloudConfig?.isEnabled ?? false;
+
+  // Agentic strategy iterations are capped globally because higher values have diminishing returns.
+  const maxTurnsLimit = MAX_ITERATIONS_LIMIT;
+  const maxIterationsLimit = MAX_ITERATIONS_LIMIT;
+  const treeMaxDepthLimit = isCloudEnabled ? 50 : 5;
+  const treeMaxAttemptsLimit = isCloudEnabled ? 500 : 30;
+  const treeMaxWidthLimit = isCloudEnabled ? 20 : 3;
+  const treeBranchingLimit = isCloudEnabled ? 10 : 2;
+  const treeNoImprovementLimit = isCloudEnabled ? 50 : 10;
+
+  const clampValue = (value: number, min: number, max: number) =>
+    Math.min(Math.max(value, min), max);
+
+  const [localConfig, setLocalConfig] = React.useState<Partial<StrategyConfig>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
     config.enabled === undefined ? true : config.enabled,
   );
   const [numTests, setNumTests] = React.useState<string>(config.numTests?.toString() || '10');
   const [error, setError] = React.useState<string>('');
 
-  const [steps, setSteps] = React.useState<StepType[]>(config.steps || []);
+  const [steps, setSteps] = React.useState<StepType[]>((config.steps as StepType[]) || []);
   const [newStep, setNewStep] = React.useState<string>('');
   const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
   // Plugin targeting: 'all' or 'specific'
@@ -181,7 +193,8 @@ export default function StrategyConfigDialog({
 
         if (strategy === 'custom') {
           // Custom strategy needs strategyText
-          return !!(config?.strategyText && config.strategyText.trim());
+          const strategyText = config?.strategyText;
+          return !!(strategyText && typeof strategyText === 'string' && strategyText.trim());
         }
       }
 
@@ -277,16 +290,16 @@ export default function StrategyConfigDialog({
       return;
     }
 
-    const nextConfig = config ?? {};
+    const nextConfig = config || {};
 
     setLocalConfig({ ...nextConfig });
     setEnabled(nextConfig.enabled === undefined ? true : nextConfig.enabled);
-    setNumTests(nextConfig.numTests !== undefined ? String(nextConfig.numTests) : '10');
+    setNumTests(nextConfig.numTests === undefined ? '10' : String(nextConfig.numTests));
     setError('');
 
     if (strategy === 'layer') {
       // Keep steps as-is (can be strings or objects with {id, config})
-      const rawSteps = nextConfig.steps || [];
+      const rawSteps = (nextConfig.steps as StepType[]) || [];
       setSteps(rawSteps);
 
       // Filter layerPlugins to only include plugins that are in availablePlugins
@@ -304,16 +317,11 @@ export default function StrategyConfigDialog({
     setNewStep('');
   }, [open, strategy, config, selectedPlugins]);
 
-  const handlePluginTargetingChange = (
-    _event: React.MouseEvent<HTMLElement>,
-    newTargeting: 'all' | 'specific' | null,
-  ) => {
-    if (newTargeting !== null) {
-      setPluginTargeting(newTargeting);
-      if (newTargeting === 'all') {
-        // Clear plugin selection when switching to "all"
-        setLayerPlugins([]);
-      }
+  const handlePluginTargetingChange = (newTargeting: 'all' | 'specific') => {
+    setPluginTargeting(newTargeting);
+    if (newTargeting === 'all') {
+      // Clear plugin selection when switching to "all"
+      setLayerPlugins([]);
     }
   };
 
@@ -349,7 +357,7 @@ export default function StrategyConfigDialog({
               return id === trimmedValue;
             });
 
-            if (strategyConfig && typeof strategyConfig === 'object') {
+            if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
               // Add step with its config
               setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
             } else {
@@ -424,15 +432,27 @@ export default function StrategyConfigDialog({
 
   const isCustomStrategyValid = () => {
     if (strategy === 'custom') {
-      return localConfig.strategyText && localConfig.strategyText.trim().length > 0;
+      const strategyText = localConfig.strategyText;
+      return !!strategyText && typeof strategyText === 'string' && strategyText.trim().length > 0;
     }
     return true;
   };
 
-  // Validate that maxTurns/numIterations is within valid range
+  const getIterationHelperText = (value: unknown, min: number, defaultText: string) =>
+    validateIterationValue(value, min) ??
+    (value === MAX_ITERATIONS_LIMIT ? MAX_ITERATIONS_LIMIT_MESSAGE : defaultText);
+
+  const getIterationHelperClassName = (value: unknown, min: number) =>
+    cn(
+      'text-xs',
+      validateIterationValue(value, min) ? 'text-destructive' : 'text-muted-foreground',
+    );
+
+  const getIterationInputClassName = (value: unknown, min: number) =>
+    validateIterationValue(value, min) ? 'border-destructive' : undefined;
+
   const isIterationLimitValid = React.useCallback(() => {
     const { maxTurns, numIterations } = localConfig;
-    // Only validate if values are defined (undefined uses defaults)
     if (maxTurns !== undefined && validateIterationValue(maxTurns, MIN_TURNS) !== null) {
       return false;
     }
@@ -477,7 +497,7 @@ export default function StrategyConfigDialog({
       }
       onSave(strategy, localConfig);
     } else if (strategy === 'layer') {
-      const layerConfig: Record<string, any> = {
+      const layerConfig: Partial<StrategyConfig> = {
         ...localConfig,
       };
       // Add plugins first, then steps to maintain order in YAML output
@@ -502,761 +522,873 @@ export default function StrategyConfigDialog({
     onClose();
   };
 
-  const renderStrategyConfig = () => {
-    if (strategy === 'basic') {
-      return (
-        <>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            The basic strategy determines whether to include the original plugin-generated test
-            cases in your evaluation. These are the default test cases created by each plugin before
-            any strategies are applied.
-          </Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-                color="primary"
-              />
-            }
-            label={
-              <Box>
-                <Typography variant="body1">Include plugin-generated test cases</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Turn off to run only strategy-modified tests
-                </Typography>
-              </Box>
-            }
-          />
-        </>
-      );
-    } else if (strategy === 'jailbreak') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Iterative Jailbreak strategy parameters.
-          </Typography>
+  const handleRemovePlugin = (pluginToRemove: string) => {
+    setLayerPlugins((prev) => prev.filter((p) => p !== pluginToRemove));
+  };
 
-          <TextField
-            fullWidth
-            label="Number of Iterations"
-            type="number"
-            value={localConfig.numIterations ?? 10}
-            onChange={(e) => {
-              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
-              setLocalConfig({ ...localConfig, numIterations: value });
-            }}
-            placeholder="Number of iterations (default: 10)"
-            InputProps={{ inputProps: { min: MIN_ITERATIONS, max: MAX_ITERATIONS_LIMIT } }}
-            error={validateIterationValue(localConfig.numIterations, MIN_ITERATIONS) !== null}
-            helperText={
-              validateIterationValue(localConfig.numIterations, MIN_ITERATIONS) ??
-              (localConfig.numIterations === MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_LIMIT_MESSAGE
-                : 'Number of iterations to try (more iterations increase chance of success)')
-            }
-          />
-        </Box>
-      );
-    } else if (strategy === 'retry') {
-      return (
-        <>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Automatically reuse previously failed test cases to identify additional vulnerabilities
-            and identify regressions.
-          </Typography>
-          <TextField
-            fullWidth
-            label="Maximum Tests Per Plugin"
-            type="number"
-            value={numTests}
-            onChange={handleNumTestsChange}
-            error={!!error}
-            helperText={error || 'Default: 10'}
-            inputProps={{
-              min: 1,
-              max: 100,
-              step: 1,
-            }}
-            sx={{ mt: 1 }}
-          />
-        </>
-      );
-    } else if (strategy === 'best-of-n') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Best-of-N strategy parameters. This strategy tries multiple variations of
-            the input prompt.
-          </Typography>
+  const renderBasicStrategyConfig = () => (
+    <>
+      <p className="mb-3 text-sm text-muted-foreground">
+        The basic strategy determines whether to include the original plugin-generated test cases in
+        your evaluation. These are the default test cases created by each plugin before any
+        strategies are applied.
+      </p>
+      <div className="flex items-start gap-3">
+        <Switch
+          id="basic-enabled"
+          checked={enabled}
+          onCheckedChange={setEnabled}
+          className="mt-0.5"
+        />
+        <div className="space-y-1">
+          <Label htmlFor="basic-enabled" className="text-sm font-normal">
+            Include plugin-generated test cases
+          </Label>
+          <p className="text-sm text-muted-foreground">
+            Turn off to run only strategy-modified tests
+          </p>
+        </div>
+      </div>
+    </>
+  );
 
-          <TextField
-            fullWidth
-            label="Max Concurrency"
-            type="number"
-            value={localConfig.maxConcurrency || 3}
-            onChange={(e) =>
-              setLocalConfig({
-                ...localConfig,
-                maxConcurrency: Number.parseInt(e.target.value, 10),
-              })
-            }
-            placeholder="Maximum number of concurrent requests (default: 3)"
-            InputProps={{ inputProps: { min: 1 } }}
-            helperText="Maximum number of concurrent prompt variations to try"
-          />
+  const renderJailbreakStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Configure the Iterative Jailbreak strategy parameters.
+      </p>
 
-          <TextField
-            fullWidth
-            label="Number of Steps"
-            type="number"
-            value={localConfig.nSteps || ''}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
-              setLocalConfig({ ...localConfig, nSteps: value });
-            }}
-            placeholder="Number of steps (optional)"
-            InputProps={{ inputProps: { min: 1 } }}
-            helperText="Number of steps to explore in the best-of-N search (optional)"
-          />
+      <div className="space-y-2">
+        <Label htmlFor="num-iterations">Number of Iterations</Label>
+        <Input
+          id="num-iterations"
+          type="number"
+          value={localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)}
+          onChange={(e) => {
+            const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
+            setLocalConfig({ ...localConfig, numIterations: value });
+          }}
+          placeholder="Number of iterations (default: 10)"
+          min={MIN_ITERATIONS}
+          max={maxIterationsLimit}
+          className={getIterationInputClassName(localConfig.numIterations, MIN_ITERATIONS)}
+        />
+        <p className={getIterationHelperClassName(localConfig.numIterations, MIN_ITERATIONS)}>
+          {getIterationHelperText(
+            localConfig.numIterations,
+            MIN_ITERATIONS,
+            'Number of iterations to try (more iterations increase chance of success)',
+          )}
+        </p>
+      </div>
+    </div>
+  );
 
-          <TextField
-            fullWidth
-            label="Max Candidates Per Step"
-            type="number"
-            value={localConfig.maxCandidatesPerStep || ''}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
-              setLocalConfig({ ...localConfig, maxCandidatesPerStep: value });
-            }}
-            placeholder="Maximum candidates per step (optional)"
-            InputProps={{ inputProps: { min: 1 } }}
-            helperText="Maximum number of candidate prompts to generate in each step (optional)"
-          />
-        </Box>
-      );
-    } else if (strategy === 'custom') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Define your custom multi-turn strategy with specific instructions for the AI agent.
-          </Typography>
+  const renderRetryStrategyConfig = () => (
+    <>
+      <p className="mb-2 text-sm text-muted-foreground">
+        Automatically reuse previously failed test cases to identify additional vulnerabilities and
+        identify regressions.
+      </p>
+      <div className="mt-1 space-y-2">
+        <Label htmlFor="max-tests">Maximum Tests Per Plugin</Label>
+        <Input
+          id="max-tests"
+          type="number"
+          value={numTests}
+          onChange={handleNumTestsChange}
+          min={1}
+          max={100}
+          className={error ? 'border-destructive' : ''}
+        />
+        <p className={cn('text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>
+          {error || 'Default: 10'}
+        </p>
+      </div>
+    </>
+  );
 
-          <TextField
-            fullWidth
-            multiline
+  const renderBestOfNStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Configure the Best-of-N strategy parameters. This strategy tries multiple variations of the
+        input prompt.
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="max-concurrency">Max Concurrency</Label>
+        <Input
+          id="max-concurrency"
+          type="number"
+          value={localConfig.maxConcurrency === undefined ? 3 : Number(localConfig.maxConcurrency)}
+          onChange={(e) =>
+            setLocalConfig({
+              ...localConfig,
+              maxConcurrency: Number.parseInt(e.target.value, 10),
+            })
+          }
+          placeholder="Maximum number of concurrent requests (default: 3)"
+          min={1}
+        />
+        <p className="text-xs text-muted-foreground">
+          Maximum number of concurrent prompt variations to try
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="n-steps">Number of Steps</Label>
+        <Input
+          id="n-steps"
+          type="number"
+          value={localConfig.nSteps === undefined ? '' : Number(localConfig.nSteps)}
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
+            setLocalConfig({ ...localConfig, nSteps: value });
+          }}
+          placeholder="Number of steps (optional)"
+          min={1}
+        />
+        <p className="text-xs text-muted-foreground">
+          Number of steps to explore in the best-of-N search (optional)
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="max-candidates">Max Candidates Per Step</Label>
+        <Input
+          id="max-candidates"
+          type="number"
+          value={
+            localConfig.maxCandidatesPerStep === undefined
+              ? ''
+              : Number(localConfig.maxCandidatesPerStep)
+          }
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
+            setLocalConfig({ ...localConfig, maxCandidatesPerStep: value });
+          }}
+          placeholder="Maximum candidates per step (optional)"
+          min={1}
+        />
+        <p className="text-xs text-muted-foreground">
+          Maximum number of candidate prompts to generate in each step (optional)
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderCustomStrategyConfig = () => {
+    const strategyText = String(localConfig.strategyText || '');
+    const isStrategyTextEmpty = strategyText.trim().length === 0;
+
+    return (
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">
+          Define your custom multi-turn strategy with specific instructions for the AI agent.
+        </p>
+
+        <div className="space-y-2">
+          <Label htmlFor="strategy-text">Strategy Text</Label>
+          <Textarea
+            id="strategy-text"
             rows={6}
-            label="Strategy Text"
-            value={localConfig.strategyText || ''}
+            value={localConfig.strategyText === undefined ? '' : String(localConfig.strategyText)}
             onChange={(e) => {
               setLocalConfig({ ...localConfig, strategyText: e.target.value });
             }}
             placeholder="For turns 0-3: Try to establish trust and gather information about {{conversationObjective}}. For turns 4-{{maxTurns}}: Use gathered info to achieve the objective. Analyze {{lastResponse}} for signs of resistance or cooperation to adapt your next message."
-            helperText={
-              !localConfig.strategyText || localConfig.strategyText.trim().length === 0
-                ? 'Strategy text is required for custom strategy'
-                : 'Define how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc.'
-            }
-            error={!localConfig.strategyText || localConfig.strategyText.trim().length === 0}
+            className={isStrategyTextEmpty ? 'border-destructive' : ''}
           />
+          <p
+            className={cn(
+              'text-xs',
+              isStrategyTextEmpty ? 'text-destructive' : 'text-muted-foreground',
+            )}
+          >
+            {isStrategyTextEmpty
+              ? 'Strategy text is required for custom strategy'
+              : 'Define how the AI should behave across conversation turns. You can reference variables like conversationObjective, currentRound, maxTurns, lastResponse, application purpose, etc.'}
+          </p>
+        </div>
 
-          <TextField
-            fullWidth
-            label="Max Turns"
+        <div className="space-y-2">
+          <Label htmlFor="max-turns">Max Turns</Label>
+          <Input
+            id="max-turns"
             type="number"
-            value={localConfig.maxTurns ?? 10}
+            value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
             onChange={(e) => {
               const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
             placeholder="Maximum number of conversation turns (default: 10)"
-            InputProps={{ inputProps: { min: MIN_TURNS, max: MAX_ITERATIONS_LIMIT } }}
-            error={validateIterationValue(localConfig.maxTurns, MIN_TURNS) !== null}
-            helperText={
-              validateIterationValue(localConfig.maxTurns, MIN_TURNS) ??
-              (localConfig.maxTurns === MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_LIMIT_MESSAGE
-                : 'Maximum number of back-and-forth exchanges with the model')
-            }
+            min={MIN_TURNS}
+            max={maxTurnsLimit}
+            className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
           />
+          <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
+            {getIterationHelperText(
+              localConfig.maxTurns,
+              MIN_TURNS,
+              'Maximum number of back-and-forth exchanges with the model',
+            )}
+          </p>
+        </div>
 
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localConfig.stateful !== false}
-                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
-                color="primary"
-              />
-            }
-            label={
-              <Box component="span">
-                <Typography variant="body2" component="span">
-                  Stateful
-                </Typography>
-                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                  - Enable to maintain conversation history (recommended)
-                </Typography>
-              </Box>
-            }
+        <div className="flex items-start gap-3">
+          <Switch
+            id="custom-stateful"
+            checked={localConfig.stateful !== false}
+            onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
+            className="mt-0.5"
           />
-        </Box>
-      );
-    } else if (strategy === 'jailbreak:hydra') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Hydra multi-turn jailbreak. Hydra branches across multiple conversations,
-            reuses what it learns during the scan, and automatically aligns with target session
-            settings.
-          </Typography>
+          <Label htmlFor="custom-stateful" className="text-sm font-normal">
+            When enabled, Promptfoo should only send the current request and assume your system
+            remembers interaction history
+          </Label>
+        </div>
+      </div>
+    );
+  };
 
-          <TextField
-            fullWidth
-            label="Max Turns"
-            type="number"
-            value={localConfig.maxTurns ?? 10}
-            onChange={(e) => {
-              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
-              setLocalConfig({ ...localConfig, maxTurns: value });
-            }}
-            placeholder="Maximum conversation turns (default: 10)"
-            InputProps={{ inputProps: { min: MIN_TURNS, max: MAX_ITERATIONS_LIMIT } }}
-            error={validateIterationValue(localConfig.maxTurns, MIN_TURNS) !== null}
-            helperText={
-              validateIterationValue(localConfig.maxTurns, MIN_TURNS) ??
-              (localConfig.maxTurns === MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_LIMIT_MESSAGE
-                : 'Maximum number of back-and-forth exchanges with the target model.')
+  const renderHydraStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Configure the Hydra multi-turn jailbreak. Hydra branches across multiple conversations,
+        reuses what it learns during the scan, and automatically aligns with target session
+        settings.
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="hydra-max-turns">Max Turns</Label>
+        <Input
+          id="hydra-max-turns"
+          type="number"
+          value={localConfig.maxTurns === undefined ? 10 : Number(localConfig.maxTurns)}
+          onChange={(e) => {
+            const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
+            setLocalConfig({ ...localConfig, maxTurns: value });
+          }}
+          placeholder="Maximum conversation turns (default: 10)"
+          min={MIN_TURNS}
+          max={maxTurnsLimit}
+          className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
+        />
+        <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
+          {getIterationHelperText(
+            localConfig.maxTurns,
+            MIN_TURNS,
+            'Maximum number of back-and-forth exchanges with the target model.',
+          )}
+        </p>
+      </div>
+
+      <div className="flex items-start gap-3">
+        <Switch
+          id="hydra-stateful"
+          checked={localConfig.stateful === true}
+          onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
+          className="mt-0.5"
+        />
+        <Label htmlFor="hydra-stateful" className="text-sm font-normal">
+          Enable when your target maintains server-side sessions and expects a session ID per turn.
+        </Label>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Hydra requires Promptfoo Cloud remote generation.
+      </p>
+    </div>
+  );
+
+  const renderMultiTurnStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">Configure the multi-turn strategy parameters.</p>
+
+      <div className="space-y-2">
+        <Label htmlFor="multi-turn-max-turns">Max Turns</Label>
+        <Input
+          id="multi-turn-max-turns"
+          type="number"
+          value={localConfig.maxTurns === undefined ? 5 : Number(localConfig.maxTurns)}
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
+            setLocalConfig({ ...localConfig, maxTurns: value });
+          }}
+          onBlur={(e) => {
+            const parsed = Number.parseInt(e.target.value, 10);
+            if (!e.target.value || Number.isNaN(parsed) || parsed < MIN_TURNS) {
+              setLocalConfig({ ...localConfig, maxTurns: 5 });
             }
-          />
+          }}
+          placeholder="5"
+          min={MIN_TURNS}
+          max={maxTurnsLimit}
+          className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
+        />
+        <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
+          {getIterationHelperText(
+            localConfig.maxTurns,
+            MIN_TURNS,
+            'Maximum number of back-and-forth exchanges with the model (default: 5)',
+          )}
+        </p>
+      </div>
 
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localConfig.stateful === true}
-                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
-                color="primary"
-              />
-            }
-            label={
-              <Box component="span">
-                <Typography variant="body2" component="span">
-                  Stateful
-                </Typography>
-                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                  - Enable when your target maintains server-side sessions and expects a session ID
-                  per turn.
-                </Typography>
-              </Box>
-            }
-          />
+      <div className="flex items-start gap-3">
+        <Switch
+          id="multi-turn-stateful"
+          checked={localConfig.stateful !== false}
+          onCheckedChange={(checked) => setLocalConfig({ ...localConfig, stateful: checked })}
+          className="mt-0.5"
+        />
+        <Label htmlFor="multi-turn-stateful" className="text-sm font-normal">
+          When enabled, Promptfoo should only send the current request and assume your system
+          remembers interaction history
+        </Label>
+      </div>
+    </div>
+  );
 
-          <Typography variant="caption" color="text.secondary">
-            Hydra requires Promptfoo Cloud remote generation.
-          </Typography>
-        </Box>
-      );
-    } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the multi-turn strategy parameters.
-          </Typography>
+  const renderMetaStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Configure the Meta-Agent Jailbreak strategy parameters.
+      </p>
 
-          <TextField
-            fullWidth
-            label="Max Turns"
-            type="number"
-            value={localConfig.maxTurns ?? 5}
-            onChange={(e) => {
-              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
-              setLocalConfig({ ...localConfig, maxTurns: value });
-            }}
-            onBlur={(e) => {
-              const parsed = Number.parseInt(e.target.value, 10);
-              if (!e.target.value || Number.isNaN(parsed) || parsed < MIN_TURNS) {
-                setLocalConfig({ ...localConfig, maxTurns: 5 });
+      <div className="space-y-2">
+        <Label htmlFor="meta-num-iterations">Number of Iterations</Label>
+        <Input
+          id="meta-num-iterations"
+          type="number"
+          value={localConfig.numIterations === undefined ? 10 : Number(localConfig.numIterations)}
+          onChange={(e) => {
+            const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
+            setLocalConfig({ ...localConfig, numIterations: value });
+          }}
+          placeholder="Number of iterations (default: 10)"
+          min={MIN_ITERATIONS}
+          max={maxIterationsLimit}
+          className={getIterationInputClassName(localConfig.numIterations, MIN_ITERATIONS)}
+        />
+        <p className={getIterationHelperClassName(localConfig.numIterations, MIN_ITERATIONS)}>
+          {getIterationHelperText(
+            localConfig.numIterations,
+            MIN_ITERATIONS,
+            'Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions.',
+          )}
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderTreeStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Configure the Tree-based Jailbreak strategy parameters.
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="tree-max-depth">Maximum Depth</Label>
+        <Input
+          id="tree-max-depth"
+          type="number"
+          value={localConfig.maxDepth === undefined ? 25 : Number(localConfig.maxDepth)}
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
+            setLocalConfig({
+              ...localConfig,
+              maxDepth: clampValue(value, 3, treeMaxDepthLimit),
+            });
+          }}
+          placeholder="Maximum tree depth (default: 25)"
+          min={3}
+          max={treeMaxDepthLimit}
+        />
+        <p className="text-xs text-muted-foreground">
+          Maximum depth of the search tree
+          {!isCloudEnabled && ' — sign in for higher limits'}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="tree-max-attempts">Maximum Attempts</Label>
+        <Input
+          id="tree-max-attempts"
+          type="number"
+          value={localConfig.maxAttempts === undefined ? 250 : Number(localConfig.maxAttempts)}
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 250;
+            setLocalConfig({
+              ...localConfig,
+              maxAttempts: clampValue(value, 10, treeMaxAttemptsLimit),
+            });
+          }}
+          placeholder="Maximum attempts (default: 250)"
+          min={10}
+          max={treeMaxAttemptsLimit}
+        />
+        <p className="text-xs text-muted-foreground">
+          Maximum number of attempts to try (note: higher values are more expensive)
+          {!isCloudEnabled && ' — sign in for higher limits'}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="tree-max-width">Max Width</Label>
+        <Input
+          id="tree-max-width"
+          type="number"
+          value={localConfig.maxWidth === undefined ? 10 : Number(localConfig.maxWidth)}
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+            setLocalConfig({
+              ...localConfig,
+              maxWidth: clampValue(value, 2, treeMaxWidthLimit),
+            });
+          }}
+          placeholder="Maximum width (default: 10)"
+          min={2}
+          max={treeMaxWidthLimit}
+        />
+        <p className="text-xs text-muted-foreground">
+          Number of top-scoring nodes to keep during tree pruning
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="tree-branching">Branching Factor</Label>
+        <Input
+          id="tree-branching"
+          type="number"
+          value={
+            localConfig.branchingFactor === undefined ? 4 : Number(localConfig.branchingFactor)
+          }
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 4;
+            setLocalConfig({
+              ...localConfig,
+              branchingFactor: clampValue(value, 2, treeBranchingLimit),
+            });
+          }}
+          placeholder="Branching factor (default: 4)"
+          min={2}
+          max={treeBranchingLimit}
+        />
+        <p className="text-xs text-muted-foreground">
+          Number of child nodes to generate at each step
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="tree-no-improvement">Max No Improvement</Label>
+        <Input
+          id="tree-no-improvement"
+          type="number"
+          value={
+            localConfig.maxNoImprovement === undefined ? 25 : Number(localConfig.maxNoImprovement)
+          }
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
+            setLocalConfig({
+              ...localConfig,
+              maxNoImprovement: clampValue(value, 5, treeNoImprovementLimit),
+            });
+          }}
+          placeholder="Max consecutive iterations without improvement (default: 25)"
+          min={5}
+          max={treeNoImprovementLimit}
+        />
+        <p className="text-xs text-muted-foreground">
+          Stop after this many consecutive iterations without score improvement
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderGcgStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Configure the Greedy Coordinate Gradient (GCG) attack parameters.
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="gcg-n">Number of Outputs (n)</Label>
+        <Input
+          id="gcg-n"
+          type="number"
+          value={localConfig.n === undefined ? 5 : Number(localConfig.n)}
+          onChange={(e) => {
+            const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
+            setLocalConfig({ ...localConfig, n: value });
+          }}
+          placeholder="Number of adversarial outputs to generate (default: 5)"
+          min={1}
+          max={20}
+        />
+        <p className="text-xs text-muted-foreground">
+          More outputs increase chance of success but cost more
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderCitationStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">
+        Configure the Citation-based attack parameters.
+      </p>
+
+      <div className="flex items-start gap-3">
+        <Switch
+          id="citation-academic"
+          checked={localConfig.useAcademic !== false}
+          onCheckedChange={(checked) => setLocalConfig({ ...localConfig, useAcademic: checked })}
+          className="mt-0.5"
+        />
+        <div className="space-y-0.5">
+          <Label htmlFor="citation-academic" className="text-sm font-normal">
+            Use Academic Citations
+          </Label>
+          <span className="ml-1 text-sm text-muted-foreground">
+            - Generate academic-style citations (recommended)
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3">
+        <Switch
+          id="citation-journals"
+          checked={localConfig.useJournals !== false}
+          onCheckedChange={(checked) => setLocalConfig({ ...localConfig, useJournals: checked })}
+          className="mt-0.5"
+        />
+        <div className="space-y-0.5">
+          <Label htmlFor="citation-journals" className="text-sm font-normal">
+            Include Journal Citations
+          </Label>
+          <span className="ml-1 text-sm text-muted-foreground">
+            - Include journal articles in citation types
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-3">
+        <Switch
+          id="citation-books"
+          checked={localConfig.useBooks !== false}
+          onCheckedChange={(checked) => setLocalConfig({ ...localConfig, useBooks: checked })}
+          className="mt-0.5"
+        />
+        <div className="space-y-0.5">
+          <Label htmlFor="citation-books" className="text-sm font-normal">
+            Include Book Citations
+          </Label>
+          <span className="ml-1 text-sm text-muted-foreground">
+            - Include books in citation types
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderLayerModeAlerts = () => {
+    const modeInfo = getLayerModeDescription();
+    const orderingWarnings = getOrderingWarnings();
+
+    return (
+      <>
+        <Alert variant="info" className="py-2">
+          <Info className="size-4" />
+          <AlertContent>
+            <AlertTitle className="text-sm font-semibold">{modeInfo.title}</AlertTitle>
+            <AlertDescription className="text-sm text-muted-foreground">
+              {modeInfo.description}
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
+
+        {orderingWarnings.map((warning) => (
+          <Alert key={warning} variant="warning" className="py-2">
+            <AlertTriangle className="size-4" />
+            <AlertContent>
+              <AlertDescription className="text-sm">{warning}</AlertDescription>
+            </AlertContent>
+          </Alert>
+        ))}
+      </>
+    );
+  };
+
+  const renderLayerPluginControls = () => (
+    <div>
+      <Label className="mb-1.5 block font-semibold">Target Plugins</Label>
+      <div className={cn('mb-2 grid grid-cols-2 gap-1', pluginTargeting === 'specific' && 'mb-4')}>
+        <Button
+          type="button"
+          variant={pluginTargeting === 'all' ? 'default' : 'outline'}
+          onClick={() => handlePluginTargetingChange('all')}
+          className="w-full"
+        >
+          All plugins
+        </Button>
+        <Button
+          type="button"
+          variant={pluginTargeting === 'specific' ? 'default' : 'outline'}
+          onClick={() => handlePluginTargetingChange('specific')}
+          className="w-full"
+        >
+          Specific plugins only
+        </Button>
+      </div>
+
+      {pluginTargeting === 'specific' && (
+        <div className="space-y-2">
+          <Select
+            value=""
+            onValueChange={(value) => {
+              if (value && !layerPlugins.includes(value)) {
+                setLayerPlugins([...layerPlugins, value]);
               }
             }}
-            placeholder="5"
-            InputProps={{ inputProps: { min: MIN_TURNS, max: MAX_ITERATIONS_LIMIT } }}
-            error={validateIterationValue(localConfig.maxTurns, MIN_TURNS) !== null}
-            helperText={
-              validateIterationValue(localConfig.maxTurns, MIN_TURNS) ??
-              (localConfig.maxTurns === MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_LIMIT_MESSAGE
-                : 'Maximum number of back-and-forth exchanges with the model (default: 5)')
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select plugins" />
+            </SelectTrigger>
+            <SelectContent>
+              {availablePlugins
+                .filter((p) => !layerPlugins.includes(p))
+                .map((plugin) => (
+                  <SelectItem key={plugin} value={plugin}>
+                    {plugin}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          {layerPlugins.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {layerPlugins.map((plugin) => (
+                <Badge key={plugin} variant="secondary" className="gap-1 pr-1">
+                  {plugin}
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePlugin(plugin)}
+                    className="rounded-full p-0.5 hover:bg-muted"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderLayerStepCard = (step: StepType, index: number) => {
+    const stepId = getStepId(step);
+    const hasConfig = typeof step === 'object' && step.config;
+    const isAgentic = isAgenticStrategy(step);
+    const isMultiModal = isMultiModalStrategy(step);
+    const canMoveUp =
+      index > 0 &&
+      !(isMultiModal && index === steps.length - 1) &&
+      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]));
+    const canMoveDown =
+      index < steps.length - 1 &&
+      !(index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]));
+
+    return (
+      <div
+        key={`${stepId}-${index}`}
+        className="flex items-center rounded border border-border bg-background p-3 transition-colors hover:bg-muted/50"
+      >
+        <div className="flex flex-1 items-center gap-2 font-mono text-sm">
+          <span>{index + 1}.</span>
+          <span>{stepId}</span>
+          {hasConfig && (
+            <Badge className="h-5 bg-emerald-600 text-[0.7rem] text-white">configured</Badge>
+          )}
+          {isAgentic && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge className="h-5 bg-primary text-[0.7rem] text-primary-foreground">
+                  agentic
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                Orchestrates multi-turn or multi-attempt attacks. Should be first step.
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {isMultiModal && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="secondary" className="h-5 text-[0.7rem]">
+                  multi-modal
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>Converts text to audio or image. Must be last step.</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+        <div className="flex gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => handleMoveStepUp(index)}
+            disabled={!canMoveUp}
+            aria-label="move step up"
+            className={cn('size-8', !canMoveUp && 'opacity-30')}
+          >
+            <ArrowUp className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => handleMoveStepDown(index)}
+            disabled={!canMoveDown}
+            aria-label="move step down"
+            className={cn('size-8', !canMoveDown && 'opacity-30')}
+          >
+            <ArrowDown className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={() => handleRemoveStep(index)}
+            aria-label="delete step"
+            className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderLayerStepsSection = () => (
+    <div>
+      <Label className="mb-1 block font-semibold">Steps (in order)</Label>
+      <p className="mb-2 text-sm text-muted-foreground">
+        Select strategies from the dropdown or enter custom file:// paths
+      </p>
+
+      <div className="flex gap-2">
+        <Select
+          value=""
+          onValueChange={(value) => {
+            if (value) {
+              handleAddStep(value);
             }
-          />
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localConfig.stateful !== false}
-                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
-                color="primary"
-              />
-            }
-            label={
-              <Box component="span">
-                <Typography variant="body2" component="span">
-                  Stateful
-                </Typography>
-                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                  - Enable to maintain conversation history (recommended)
-                </Typography>
-              </Box>
-            }
-          />
-        </Box>
-      );
-    } else if (strategy === 'jailbreak:meta') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Meta-Agent Jailbreak strategy parameters.
-          </Typography>
-
-          <TextField
-            fullWidth
-            label="Number of Iterations"
-            type="number"
-            value={localConfig.numIterations ?? 10}
-            onChange={(e) => {
-              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
-              setLocalConfig({ ...localConfig, numIterations: value });
-            }}
-            placeholder="Number of iterations (default: 10)"
-            InputProps={{ inputProps: { min: MIN_ITERATIONS, max: MAX_ITERATIONS_LIMIT } }}
-            error={validateIterationValue(localConfig.numIterations, MIN_ITERATIONS) !== null}
-            helperText={
-              validateIterationValue(localConfig.numIterations, MIN_ITERATIONS) ??
-              (localConfig.numIterations === MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_LIMIT_MESSAGE
-                : 'Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions.')
-            }
-          />
-        </Box>
-      );
-    } else if (strategy === 'jailbreak:tree') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Tree-based Jailbreak strategy parameters.
-          </Typography>
-
-          <TextField
-            fullWidth
-            label="Maximum Depth"
-            type="number"
-            value={localConfig.maxDepth || 25}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
-              setLocalConfig({ ...localConfig, maxDepth: value });
-            }}
-            placeholder="Maximum tree depth (default: 25)"
-            InputProps={{ inputProps: { min: 3, max: 50 } }}
-            helperText="Maximum depth of the search tree"
-          />
-
-          <TextField
-            fullWidth
-            label="Maximum Attempts"
-            type="number"
-            value={localConfig.maxAttempts || 250}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 250;
-              setLocalConfig({ ...localConfig, maxAttempts: value });
-            }}
-            placeholder="Maximum attempts (default: 250)"
-            InputProps={{ inputProps: { min: 50, max: 500 } }}
-            helperText="Maximum number of attempts to try (note: higher values are more expensive)"
-          />
-
-          <TextField
-            fullWidth
-            label="Max Width"
-            type="number"
-            value={localConfig.maxWidth || 10}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
-              setLocalConfig({ ...localConfig, maxWidth: value });
-            }}
-            placeholder="Maximum width (default: 10)"
-            InputProps={{ inputProps: { min: 3, max: 20 } }}
-            helperText="Number of top-scoring nodes to keep during tree pruning"
-          />
-
-          <TextField
-            fullWidth
-            label="Branching Factor"
-            type="number"
-            value={localConfig.branchingFactor || 4}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 4;
-              setLocalConfig({ ...localConfig, branchingFactor: value });
-            }}
-            placeholder="Branching factor (default: 4)"
-            InputProps={{ inputProps: { min: 2, max: 10 } }}
-            helperText="Number of child nodes to generate at each step"
-          />
-
-          <TextField
-            fullWidth
-            label="Max No Improvement"
-            type="number"
-            value={localConfig.maxNoImprovement || 25}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 25;
-              setLocalConfig({ ...localConfig, maxNoImprovement: value });
-            }}
-            placeholder="Max consecutive iterations without improvement (default: 25)"
-            InputProps={{ inputProps: { min: 5, max: 50 } }}
-            helperText="Stop after this many consecutive iterations without score improvement"
-          />
-        </Box>
-      );
-    } else if (strategy === 'gcg') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Greedy Coordinate Gradient (GCG) attack parameters.
-          </Typography>
-
-          <TextField
-            fullWidth
-            label="Number of Outputs (n)"
-            type="number"
-            value={localConfig.n || 5}
-            onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 5;
-              setLocalConfig({ ...localConfig, n: value });
-            }}
-            placeholder="Number of adversarial outputs to generate (default: 5)"
-            InputProps={{ inputProps: { min: 1, max: 20 } }}
-            helperText="More outputs increase chance of success but cost more"
-          />
-        </Box>
-      );
-    } else if (strategy === 'citation') {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Citation-based attack parameters.
-          </Typography>
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localConfig.useAcademic !== false}
-                onChange={(e) => setLocalConfig({ ...localConfig, useAcademic: e.target.checked })}
-                color="primary"
-              />
-            }
-            label={
-              <Box component="span">
-                <Typography variant="body2" component="span">
-                  Use Academic Citations
-                </Typography>
-                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                  - Generate academic-style citations (recommended)
-                </Typography>
-              </Box>
-            }
-          />
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localConfig.useJournals !== false}
-                onChange={(e) => setLocalConfig({ ...localConfig, useJournals: e.target.checked })}
-                color="primary"
-              />
-            }
-            label={
-              <Box component="span">
-                <Typography variant="body2" component="span">
-                  Include Journal Citations
-                </Typography>
-                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                  - Include journal articles in citation types
-                </Typography>
-              </Box>
-            }
-          />
-
-          <FormControlLabel
-            control={
-              <Switch
-                checked={localConfig.useBooks !== false}
-                onChange={(e) => setLocalConfig({ ...localConfig, useBooks: e.target.checked })}
-                color="primary"
-              />
-            }
-            label={
-              <Box component="span">
-                <Typography variant="body2" component="span">
-                  Include Book Citations
-                </Typography>
-                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
-                  - Include books in citation types
-                </Typography>
-              </Box>
-            }
-          />
-        </Box>
-      );
-    } else if (strategy === 'layer') {
-      const modeInfo = getLayerModeDescription();
-      const orderingWarnings = getOrderingWarnings();
-
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* Mode description */}
-          <Alert severity="info" icon={<InfoOutlinedIcon fontSize="small" />} sx={{ py: 0.5 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {modeInfo.title}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {modeInfo.description}
-            </Typography>
-          </Alert>
-
-          {/* Ordering warnings */}
-          {orderingWarnings.map((warning, idx) => (
-            <Alert
-              key={idx}
-              severity="warning"
-              icon={<WarningAmberIcon fontSize="small" />}
-              sx={{ py: 0.5 }}
-            >
-              <Typography variant="body2">{warning}</Typography>
-            </Alert>
-          ))}
-
-          <Box>
-            <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600 }}>
-              Target Plugins
-            </Typography>
-            <ToggleButtonGroup
-              value={pluginTargeting}
-              exclusive
-              onChange={handlePluginTargetingChange}
-              fullWidth
-              sx={{ mb: pluginTargeting === 'specific' ? 2 : 0 }}
-            >
-              <ToggleButton value="all">All plugins</ToggleButton>
-              <ToggleButton value="specific">Specific plugins only</ToggleButton>
-            </ToggleButtonGroup>
-
-            {pluginTargeting === 'specific' && (
-              <Autocomplete
-                multiple
-                options={availablePlugins}
-                value={layerPlugins}
-                onChange={(_, newValue) => setLayerPlugins(newValue)}
-                renderInput={(params) => (
-                  <TextField {...params} label="Select Plugins" placeholder="Choose plugins" />
-                )}
-                renderTags={(value, getTagProps) =>
-                  value.map((option, index) => {
-                    const tagProps = getTagProps({ index });
-                    return <Chip label={option} size="small" {...tagProps} key={option} />;
-                  })
-                }
-              />
-            )}
-          </Box>
-
-          <Box>
-            <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
-              Steps (in order)
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Select strategies from the dropdown or enter custom file:// paths
-            </Typography>
-
-            <Autocomplete
-              value={null}
-              onChange={(_, newValue) => {
-                if (newValue) {
-                  handleAddStep(newValue);
-                }
-              }}
-              inputValue={newStep}
-              onInputChange={(_, newInputValue) => setNewStep(newInputValue)}
-              options={newStep.startsWith('file://') ? [] : availableStrategies}
-              freeSolo
-              clearOnBlur={false}
-              selectOnFocus
-              handleHomeEndKeys
-              disabled={availableStrategies.length === 0 && !newStep.startsWith('file://')}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Add Strategy Step"
-                  placeholder={
-                    availableStrategies.length === 0
-                      ? 'No more strategies available'
-                      : 'Select a strategy or type file://path/to/custom.js'
-                  }
-                  helperText={
-                    steps.length === 0
-                      ? 'Add at least one strategy step (required)'
-                      : getValidationMessage() || 'Press Enter to add'
-                  }
-                  error={steps.length === 0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && newStep.trim()) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleAddStep(newStep);
-                    }
-                  }}
-                />
-              )}
+          }}
+          disabled={availableStrategies.length === 0 && !newStep.startsWith('file://')}
+        >
+          <SelectTrigger className="flex-1">
+            <SelectValue
+              placeholder={
+                availableStrategies.length === 0
+                  ? 'No more strategies available'
+                  : 'Select a strategy'
+              }
             />
+          </SelectTrigger>
+          <SelectContent>
+            {availableStrategies.map((strat) => (
+              <SelectItem key={strat} value={strat}>
+                {strat}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
-            {steps.length > 0 && (
-              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {steps.map((step, index) => {
-                  const stepId = getStepId(step);
-                  const hasConfig = typeof step === 'object' && step.config;
-                  const isAgentic = isAgenticStrategy(step);
-                  const isMultiModal = isMultiModalStrategy(step);
+      <div className="mt-2 flex gap-2">
+        <Input
+          value={newStep}
+          onChange={(e) => setNewStep(e.target.value)}
+          placeholder="Or type file://path/to/custom.js"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && newStep.trim()) {
+              e.preventDefault();
+              handleAddStep(newStep);
+            }
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => handleAddStep(newStep)}
+          disabled={!newStep.trim()}
+        >
+          Add
+        </Button>
+      </div>
 
-                  return (
-                    <Box
-                      key={`${stepId}-${index}`}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        p: 1.5,
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                        bgcolor: 'background.paper',
-                        '&:hover': {
-                          bgcolor: 'action.hover',
-                        },
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          flex: 1,
-                          fontFamily: 'monospace',
-                          fontSize: '0.9rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                        }}
-                      >
-                        <span>{index + 1}.</span>
-                        <span>{stepId}</span>
-                        {hasConfig && (
-                          <Chip
-                            label="configured"
-                            size="small"
-                            sx={{
-                              height: 20,
-                              fontSize: '0.7rem',
-                              bgcolor: 'success.main',
-                              color: 'success.contrastText',
-                            }}
-                          />
-                        )}
-                        {isAgentic && (
-                          <Tooltip title="Orchestrates multi-turn or multi-attempt attacks. Should be first step.">
-                            <Chip
-                              label="agentic"
-                              size="small"
-                              sx={{
-                                height: 20,
-                                fontSize: '0.7rem',
-                                bgcolor: 'primary.main',
-                                color: 'primary.contrastText',
-                              }}
-                            />
-                          </Tooltip>
-                        )}
-                        {isMultiModal && (
-                          <Tooltip title="Converts text to audio or image. Must be last step.">
-                            <Chip
-                              label="multi-modal"
-                              size="small"
-                              sx={{
-                                height: 20,
-                                fontSize: '0.7rem',
-                                bgcolor: 'secondary.main',
-                                color: 'secondary.contrastText',
-                              }}
-                            />
-                          </Tooltip>
-                        )}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleMoveStepUp(index)}
-                          disabled={
-                            index === 0 ||
-                            (isMultiModal && index === steps.length - 1) ||
-                            (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
-                          }
-                          aria-label="move step up"
-                          sx={{
-                            opacity:
-                              index === 0 ||
-                              (isMultiModal && index === steps.length - 1) ||
-                              (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
-                                ? 0.3
-                                : 1,
-                          }}
-                        >
-                          <ArrowUpwardIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleMoveStepDown(index)}
-                          disabled={
-                            index === steps.length - 1 ||
-                            (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
-                          }
-                          aria-label="move step down"
-                          sx={{
-                            opacity:
-                              index === steps.length - 1 ||
-                              (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
-                                ? 0.3
-                                : 1,
-                          }}
-                        >
-                          <ArrowDownwardIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleRemoveStep(index)}
-                          aria-label="delete step"
-                          color="error"
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </Box>
-            )}
-          </Box>
-        </Box>
-      );
-    } else {
-      return (
-        <Typography color="text.secondary">
-          No configuration options available for this strategy.
-        </Typography>
-      );
+      <p
+        className={cn(
+          'mt-1 text-xs',
+          steps.length === 0 ? 'text-destructive' : 'text-muted-foreground',
+        )}
+      >
+        {steps.length === 0
+          ? 'Add at least one strategy step (required)'
+          : getValidationMessage() || 'Add steps to build your transform chain'}
+      </p>
+
+      {steps.length > 0 && (
+        <div className="mt-2 flex flex-col gap-1">
+          {steps.map((step, index) => renderLayerStepCard(step, index))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderLayerStrategyConfig = () => (
+    <div className="flex flex-col gap-4">
+      {renderLayerModeAlerts()}
+      {renderLayerPluginControls()}
+      {renderLayerStepsSection()}
+    </div>
+  );
+
+  const renderStrategyConfig = () => {
+    switch (strategy) {
+      case 'basic':
+        return renderBasicStrategyConfig();
+      case 'jailbreak':
+        return renderJailbreakStrategyConfig();
+      case 'retry':
+        return renderRetryStrategyConfig();
+      case 'best-of-n':
+        return renderBestOfNStrategyConfig();
+      case 'custom':
+        return renderCustomStrategyConfig();
+      case 'jailbreak:hydra':
+        return renderHydraStrategyConfig();
+      case 'jailbreak:meta':
+        return renderMetaStrategyConfig();
+      case 'jailbreak:tree':
+        return renderTreeStrategyConfig();
+      case 'gcg':
+        return renderGcgStrategyConfig();
+      case 'citation':
+        return renderCitationStrategyConfig();
+      case 'layer':
+        return renderLayerStrategyConfig();
+      default:
+        if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
+          return renderMultiTurnStrategyConfig();
+        }
+        return (
+          <p className="text-muted-foreground">
+            No configuration options available for this strategy.
+          </p>
+        );
     }
   };
 
@@ -1265,24 +1397,29 @@ export default function StrategyConfigDialog({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Configure {strategyData?.name ?? strategy}</DialogTitle>
-      <DialogContent>{renderStrategyConfig()}</DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button
-          onClick={handleSave}
-          variant="contained"
-          disabled={
-            (strategy === 'retry' && (!!error || !numTests)) ||
-            !isCustomStrategyValid() ||
-            !isIterationLimitValid() ||
-            (strategy === 'layer' && steps.length === 0)
-          }
-        >
-          Save
-        </Button>
-      </DialogActions>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
+        <DialogHeader>
+          <DialogTitle>Configure {strategyData?.name ?? strategy}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto py-4">{renderStrategyConfig()}</div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={
+              (strategy === 'retry' && (!!error || !numTests)) ||
+              !isCustomStrategyValid() ||
+              !isIterationLimitValid() ||
+              (strategy === 'layer' && steps.length === 0)
+            }
+          >
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

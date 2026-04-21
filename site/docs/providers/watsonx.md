@@ -191,3 +191,107 @@ providers:
   - watsonx:mistralai/mistral-large
   - watsonx:mistralai/mixtral-8x7b-instruct-v01
 ```
+
+## Configuration Options
+
+### Text Generation Parameters
+
+The WatsonX provider supports the full range of text generation parameters from the IBM SDK:
+
+| Parameter             | Type     | Description                                |
+| --------------------- | -------- | ------------------------------------------ |
+| `maxNewTokens`        | number   | Maximum tokens to generate (default: 100)  |
+| `minNewTokens`        | number   | Minimum tokens before stop sequences apply |
+| `temperature`         | number   | Sampling temperature (0-2)                 |
+| `topP`                | number   | Nucleus sampling parameter (0-1)           |
+| `topK`                | number   | Top-k sampling parameter                   |
+| `decodingMethod`      | string   | `'greedy'` or `'sample'`                   |
+| `stopSequences`       | string[] | Sequences that cause generation to stop    |
+| `repetitionPenalty`   | number   | Penalty for repeated tokens                |
+| `randomSeed`          | number   | Seed for reproducible outputs              |
+| `timeLimit`           | number   | Time limit in milliseconds                 |
+| `truncateInputTokens` | number   | Max input tokens before truncation         |
+| `includeStopSequence` | boolean  | Include stop sequence in output            |
+| `lengthPenalty`       | object   | Length penalty configuration               |
+
+#### Example with Parameters
+
+```yaml
+providers:
+  - id: watsonx:ibm/granite-3-3-8b-instruct
+    config:
+      temperature: 0.7
+      topP: 0.9
+      topK: 50
+      maxNewTokens: 1024
+      stopSequences: ['END', 'STOP']
+      repetitionPenalty: 1.1
+      decodingMethod: sample
+```
+
+#### Length Penalty
+
+For more control over output length:
+
+```yaml
+providers:
+  - id: watsonx:ibm/granite-3-3-8b-instruct
+    config:
+      lengthPenalty:
+        decayFactor: 1.5
+        startIndex: 10
+```
+
+## Chat Mode
+
+WatsonX also supports chat-style interactions using the `textChat` API. Use the `watsonx:chat:` prefix:
+
+```yaml
+providers:
+  - id: watsonx:chat:ibm/granite-3-3-8b-instruct
+    config:
+      temperature: 0.7
+      maxNewTokens: 1024
+```
+
+Chat mode automatically parses messages in JSON format:
+
+```yaml
+prompts:
+  - |
+    [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "{{question}}"}
+    ]
+
+providers:
+  - watsonx:chat:ibm/granite-3-3-8b-instruct
+```
+
+For plain text prompts, the chat provider automatically wraps them as a user message.
+
+### Chat vs Text Generation
+
+| Feature         | Text Generation (`watsonx:`) | Chat (`watsonx:chat:`)       |
+| --------------- | ---------------------------- | ---------------------------- |
+| API Method      | `generateText`               | `textChat`                   |
+| Input Format    | Plain text                   | Messages array or plain text |
+| Best For        | Completion tasks             | Conversational applications  |
+| System Messages | Not supported                | Supported                    |
+
+## Environment Variables
+
+| Variable                  | Description                                 |
+| ------------------------- | ------------------------------------------- |
+| `WATSONX_AI_APIKEY`       | IBM Cloud API key for IAM authentication    |
+| `WATSONX_AI_BEARER_TOKEN` | Bearer token for token-based authentication |
+| `WATSONX_AI_PROJECT_ID`   | WatsonX project ID                          |
+| `WATSONX_AI_AUTH_TYPE`    | Force auth type: `iam` or `bearertoken`     |
+
+## Migrating from IBM BAM
+
+The IBM BAM provider has been deprecated (sunset March 2025). To migrate:
+
+1. Change provider prefix from `bam:` to `watsonx:`
+2. Update authentication to use WatsonX credentials
+3. Update model IDs to WatsonX equivalents (e.g., `ibm/granite-3-3-8b-instruct`)
