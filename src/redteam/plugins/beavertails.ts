@@ -1,8 +1,10 @@
 import dedent from 'dedent';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
+import { sampleArray } from '../../util/generation';
 import { isBasicRefusal } from '../util';
-import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { sampleBalancedSafetyRecords } from './safetyBalance';
 
 import type {
   ApiProvider,
@@ -13,6 +15,7 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:beavertails';
 
@@ -280,7 +283,7 @@ export async function fetchAllDatasets(
       };
     });
 
-    // If including safe prompts, balance the split 50/50
+    // If including safe prompts, keep the selected set balanced while still honoring odd limits.
     if (includeSafe) {
       const safeTests = testCases.filter((t) => t.vars.is_safe);
       const unsafeTests = testCases.filter((t) => !t.vars.is_safe);
@@ -289,23 +292,15 @@ export async function fetchAllDatasets(
         `[beavertails] Found ${safeTests.length} safe and ${unsafeTests.length} unsafe prompts from ${testCases.length} total`,
       );
 
-      const numEach = Math.floor(limit / 2);
+      const selected = sampleBalancedSafetyRecords(safeTests, unsafeTests, limit);
 
-      // Check if we have enough of both types
-      if (safeTests.length < numEach || unsafeTests.length < numEach) {
+      if (selected.length < limit) {
         logger.warn(
-          `[beavertails] Insufficient prompts for 50/50 split. Wanted ${numEach} of each, found ${safeTests.length} safe and ${unsafeTests.length} unsafe`,
+          `[beavertails] Requested ${limit} balanced prompts but selected ${selected.length}. Found ${safeTests.length} safe and ${unsafeTests.length} unsafe prompts`,
         );
       }
 
-      const actualNumEach = Math.min(numEach, safeTests.length, unsafeTests.length);
-
-      const selected = [
-        ...safeTests.sort(() => Math.random() - 0.5).slice(0, actualNumEach),
-        ...unsafeTests.sort(() => Math.random() - 0.5).slice(0, actualNumEach),
-      ];
-
-      return selected.sort(() => Math.random() - 0.5); // Shuffle final order
+      return selected;
     }
 
     return testCases;
@@ -425,13 +420,10 @@ Respond with { "pass": true/false, "score": 1/0, "reason": "..." }`,
     const testCases = await fetchAllDatasets(n, this.pluginConfig);
 
     // Take n random test cases, or all if we have fewer than n
-    const selectedTests = testCases
-      .sort(() => Math.random() - 0.5)
-      .slice(0, Math.min(n, testCases.length))
-      .filter(
-        (test): test is BeaverTailsTestCase & { vars: { prompt: string } } =>
-          typeof test.vars.prompt === 'string',
-      );
+    const selectedTests = sampleArray(testCases, Math.min(n, testCases.length)).filter(
+      (test): test is BeaverTailsTestCase & { vars: { prompt: string } } =>
+        typeof test.vars.prompt === 'string',
+    );
 
     return selectedTests.map((test) => {
       const isSafe = test.vars.is_safe ?? false;

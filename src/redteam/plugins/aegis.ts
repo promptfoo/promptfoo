@@ -1,7 +1,8 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { isBasicRefusal } from '../util';
-import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { sampleBalancedSafetyRecords } from './safetyBalance';
 
 import type {
   ApiProvider,
@@ -11,6 +12,7 @@ import type {
   GradingResult,
   TestCase,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:aegis';
 export const DATASET_PATH =
@@ -30,12 +32,14 @@ interface AegisRecord {
 
 export async function fetchDataset(limit: number, includeSafe = false): Promise<TestCase[]> {
   try {
+    if (limit <= 0) {
+      return [];
+    }
+
     // When includeSafe is true, we need to find both safe and unsafe prompts
     // The Aegis dataset has unsafe prompts appearing much later in the dataset,
     // so we fetch a large number of records to ensure we get both types
     if (includeSafe) {
-      const numEach = Math.floor(limit / 2);
-
       // Fetch a large portion of the dataset (up to 5000 records) to find both types
       // The dataset has ~10,798 total records, with unsafe prompts appearing later
       const fetchLimit = Math.max(5000, limit * 100);
@@ -70,41 +74,20 @@ export async function fetchDataset(limit: number, includeSafe = false): Promise<
         `[aegis] Found ${safeRecords.length} safe and ${unsafeRecords.length} unsafe prompts from ${records.length} fetched records`,
       );
 
-      // Check if we found enough of both types
-      if (safeRecords.length < numEach || unsafeRecords.length < numEach) {
+      const selected = sampleBalancedSafetyRecords(safeRecords, unsafeRecords, limit);
+
+      if (selected.length < limit) {
         logger.warn(
-          `[aegis] Could not find enough prompts. Wanted ${numEach} of each, found ${safeRecords.length} safe and ${unsafeRecords.length} unsafe`,
-        );
-
-        // Use whatever we found, balanced by the minimum available
-        const actualNumEach = Math.min(safeRecords.length, unsafeRecords.length);
-        if (actualNumEach === 0) {
-          logger.error('[aegis] No balanced dataset possible - insufficient unsafe prompts');
-          return [];
-        }
-
-        const selected = [
-          ...safeRecords.sort(() => Math.random() - 0.5).slice(0, actualNumEach),
-          ...unsafeRecords.sort(() => Math.random() - 0.5).slice(0, actualNumEach),
-        ].sort(() => Math.random() - 0.5);
-
-        return selected.map(
-          (r): TestCase => ({
-            vars: {
-              text: r.vars!.text,
-              labels_0: r.vars!.labels_0 || '',
-            },
-          }),
+          `[aegis] Requested ${limit} balanced prompts but selected ${selected.length}. Found ${safeRecords.length} safe and ${unsafeRecords.length} unsafe prompts`,
         );
       }
 
-      // We have enough of both - select and balance
-      const selected = [
-        ...safeRecords.sort(() => Math.random() - 0.5).slice(0, numEach),
-        ...unsafeRecords.sort(() => Math.random() - 0.5).slice(0, numEach),
-      ].sort(() => Math.random() - 0.5);
+      if (selected.length === 0) {
+        logger.error('[aegis] No safe or unsafe prompts found');
+        return [];
+      }
 
-      return selected.slice(0, limit).map(
+      return selected.map(
         (r): TestCase => ({
           vars: {
             text: r.vars!.text,

@@ -63,11 +63,22 @@ vi.mock('path', async () => ({
 describe('poison command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFsReadFileSync.mockReset();
+    mockFsExistsSync.mockReset();
+    mockFsStatSync.mockReset();
+    mockFsMkdirSync.mockReset();
+    mockFsWriteFileSync.mockReset();
+    mockFsReaddirSync.mockReset();
+    mockPathJoin.mockReset();
+    mockPathRelative.mockReset();
+    mockPathResolve.mockReset();
+    mockPathDirname.mockReset();
     // Set default implementations for fs mocks
     mockFsMkdirSync.mockImplementation(() => '/mock/dir');
     mockFsWriteFileSync.mockReturnValue(undefined);
     mockFsReadFileSync.mockReturnValue('test content');
     mockFsExistsSync.mockReturnValue(true);
+    mockPathDirname.mockReturnValue('mock-dir');
   });
 
   describe('getAllFiles', () => {
@@ -119,18 +130,21 @@ describe('poison command', () => {
 
       const result = await generatePoisonedDocument('test doc', 'test goal');
 
-      expect(fetch).toHaveBeenCalledWith(getRemoteGenerationUrl(), {
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
+      expect(fetch).toHaveBeenCalledWith(
+        getRemoteGenerationUrl(),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
+          body: JSON.stringify({
+            task: 'poison-document',
+            document: 'test doc',
+            goal: 'test goal',
+            email: getUserEmail(),
+          }),
         }),
-        body: JSON.stringify({
-          task: 'poison-document',
-          document: 'test doc',
-          goal: 'test goal',
-          email: getUserEmail(),
-        }),
-      });
+      );
 
       expect(result).toEqual({
         poisonedDocument: 'poisoned content',

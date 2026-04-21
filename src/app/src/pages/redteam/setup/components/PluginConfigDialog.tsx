@@ -39,9 +39,8 @@ export default function PluginConfigDialog({
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
   // Update localConfig when config prop changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
+    if (open && plugin) {
       setLocalConfig(config || {});
     }
   }, [open, plugin, config]);
@@ -102,7 +101,7 @@ export default function PluginConfigDialog({
       case 'policy':
         // Show read-only list of all configured policies
         const policyPlugins = redTeamConfig.plugins.filter(
-          (p): p is { id: string; config: any } =>
+          (p): p is { id: string; config: PluginConfig } =>
             typeof p === 'object' && 'id' in p && p.id === 'policy',
         );
 
@@ -138,7 +137,7 @@ export default function PluginConfigDialog({
       case 'intent':
         // Show read-only list of all configured custom intents
         const intentPlugin = redTeamConfig.plugins.find(
-          (p): p is { id: string; config: any } =>
+          (p): p is { id: string; config: PluginConfig } =>
             typeof p === 'object' && 'id' in p && p.id === 'intent',
         );
 
@@ -152,9 +151,9 @@ export default function PluginConfigDialog({
         }
 
         const intents = intentPlugin.config.intent;
-        const flatIntents = intents
-          .flat()
-          .filter((intent: any) => typeof intent === 'string' && intent.trim());
+        const flatIntents = (Array.isArray(intents) ? intents.flat() : [intents]).filter(
+          (intent: unknown) => typeof intent === 'string' && intent.trim(),
+        );
 
         if (flatIntents.length === 0) {
           specificConfig = (
@@ -305,9 +304,9 @@ export default function PluginConfigDialog({
               <Label htmlFor="include-safe">Include safe prompts to test for over-blocking</Label>
             </div>
             <p className="text-xs text-muted-foreground">
-              When enabled, tests will include a 50/50 split of safe and unsafe prompts. Safe
-              prompts test whether your guardrails are too strict and incorrectly block legitimate
-              requests (over-blocking/false positives).
+              When enabled, tests include a balanced mix of safe and unsafe prompts. Safe prompts
+              test whether your guardrails are too strict and incorrectly block legitimate requests
+              (over-blocking/false positives).
             </p>
           </div>
         );

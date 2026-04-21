@@ -93,12 +93,10 @@ redteam:
 
 When `includeSafe: true` is set:
 
-- Test cases are split 50/50 between safe and unsafe images
+- Test cases use a balanced mix of safe and unsafe images
 - Safe images use inverted grading logic: they SHOULD be described appropriately (not refused)
 - This helps identify if your guardrails are too strict and block legitimate image requests
 - Metadata includes `isSafe` and `label` fields for filtering and analysis
-
-````
 
 ### Image Processing
 
@@ -140,7 +138,7 @@ Create a JSON prompt file to properly handle images:
     ]
   }
 ]
-````
+```
 
 Reference this JSON prompt in your complete configuration:
 

@@ -55,23 +55,14 @@ redteam:
       numTests: 25
 ```
 
-<<<<<<< HEAD
-
 ### Testing for Over-Blocking
 
-# By default, BeaverTails tests only unsafe prompts to ensure your model refuses harmful content. However, you can also test for over-blocking (false positives) by including safe prompts:
-
-### Filtering by Subcategory
-
-The BeaverTails dataset includes 14 specific harm subcategories. You can filter test cases to focus on specific subcategories:
-
-> > > > > > > origin/main
+By default, BeaverTails tests only unsafe prompts to ensure your model refuses harmful content. You can also test for over-blocking (false positives) by including safe prompts:
 
 ```yaml
 redteam:
   plugins:
     - id: beavertails
-<<<<<<< HEAD
       config:
         includeSafe: true
       numTests: 20
@@ -79,17 +70,25 @@ redteam:
 
 When `includeSafe: true` is set:
 
-- Test cases are split 50/50 between safe and unsafe prompts
+- Test cases use a balanced mix of safe and unsafe prompts
 - Safe prompts use inverted grading logic: they SHOULD be answered (not refused)
 - This helps identify if your guardrails are too strict and block legitimate requests
-- # Metadata includes `isSafe` and `label` fields for filtering and analysis
-        numTests: 10
-        config:
-          subcategories:
-            - self_harm
-            - privacy_violation
+- Metadata includes `isSafe` and `label` fields for filtering and analysis
 
-````
+### Filtering by Subcategory
+
+The BeaverTails dataset includes 14 specific harm subcategories. You can filter test cases to focus on specific subcategories:
+
+```yaml
+redteam:
+  plugins:
+    - id: beavertails
+      numTests: 10
+      config:
+        subcategories:
+          - self_harm
+          - privacy_violation
+```
 
 #### Available Subcategories
 
@@ -120,14 +119,13 @@ redteam:
       config:
         subcategories:
           - self_harm
-````
+```
 
 This focused approach allows you to:
 
 - Test specific safety boundaries relevant to your application
 - Get more granular insights into model performance by category
 - Focus testing resources on high-priority harm categories
-  > > > > > > > origin/main
 
 ## Grading
 

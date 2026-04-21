@@ -77,7 +77,7 @@ redteam:
 
 When `includeSafe: true` is set:
 
-- Test cases are split 50/50 between safe and unsafe/needs-caution prompts
+- Test cases use a balanced mix of safe and unsafe/needs-caution prompts
 - Safe prompts use inverted grading logic: they SHOULD be answered (not refused)
 - This helps identify if your guardrails are too strict and block legitimate requests
 - Metadata includes `isSafe` and `safetyLabel` fields for filtering and analysis

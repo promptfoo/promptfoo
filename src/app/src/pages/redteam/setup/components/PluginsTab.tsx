@@ -13,6 +13,7 @@ import { cn } from '@app/lib/utils';
 import {
   categoryAliases,
   DEFAULT_PLUGINS,
+  DOD_AI_ETHICS_MAPPING,
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
@@ -35,8 +36,17 @@ import {
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '@promptfoo/redteam/constants';
-import { AlertCircle, HelpCircle, Minus, Search, Settings } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronRight,
+  HelpCircle,
+  Minus,
+  Search,
+  Settings,
+} from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
+import { useSearchParams } from 'react-router-dom';
 import { requiresPluginConfig } from '../constants';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
@@ -58,6 +68,103 @@ const ErrorFallback = ({ error }: { error: unknown }) => (
     <pre>{error instanceof Error ? error.message : String(error)}</pre>
   </div>
 );
+
+type PluginPreset = {
+  name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
+  plugins: ReadonlySet<Plugin>;
+};
+
+const STANDARD_PRESETS: PluginPreset[] = [
+  {
+    name: 'Recommended',
+    plugins: DEFAULT_PLUGINS,
+  },
+  {
+    name: 'Minimal Test',
+    plugins: MINIMAL_TEST_PLUGINS,
+  },
+  {
+    name: 'RAG',
+    plugins: RAG_PLUGINS,
+  },
+  {
+    name: 'Foundation',
+    plugins: new Set(FOUNDATION_PLUGINS),
+  },
+  {
+    name: 'Guardrails Evaluation',
+    plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
+  },
+  {
+    name: 'MCP',
+    plugins: new Set(MCP_PLUGINS),
+  },
+  {
+    name: 'Harmful',
+    plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
+  },
+  {
+    name: 'NIST',
+    plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP LLM Top 10',
+    plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP Gen AI Red Team',
+    plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP API Top 10',
+    plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'OWASP Top 10 for Agentic Applications',
+    plugins: new Set(Object.values(OWASP_AGENTIC_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'MITRE',
+    plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'EU AI Act',
+    plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'ISO 42001',
+    plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'GDPR',
+    plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
+  },
+];
+
+const ENTERPRISE_PRESETS: PluginPreset[] = [
+  ...STANDARD_PRESETS,
+  {
+    name: 'DoD AI Ethical Principles',
+    plugins: new Set(Object.values(DOD_AI_ETHICS_MAPPING).flatMap((v) => v.plugins)),
+  },
+];
+
+const CATEGORY_FILTERS = Object.entries(riskCategories).map(([category, plugins]) => ({
+  key: category,
+  label: category,
+  count: plugins.filter((p) => p !== 'intent' && p !== 'policy').length,
+}));
+
+const DOMAIN_SPECIFIC_PLUGIN_SET = new Set<Plugin>(DOMAIN_SPECIFIC_PLUGINS);
+
+const PLUGIN_CATEGORY_BY_ID = new Map<Plugin, string>();
+for (const [category, plugins] of Object.entries(riskCategories)) {
+  for (const plugin of plugins) {
+    if (!PLUGIN_CATEGORY_BY_ID.has(plugin)) {
+      PLUGIN_CATEGORY_BY_ID.set(plugin, category);
+    }
+  }
+}
 
 export interface PluginsTabProps {
   selectedPlugins: Set<Plugin>;
@@ -99,6 +206,7 @@ export default function PluginsTab({
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
+  const [presetsExpanded, setPresetsExpanded] = useState(true);
 
   const {
     data: { status: apiHealthStatus },
@@ -107,6 +215,8 @@ export default function PluginsTab({
   // Check if user has enterprise access (cloud enabled)
   const { data: cloudConfig } = useCloudConfig();
   const hasEnterpriseAccess = cloudConfig?.isEnabled ?? false;
+  const [searchParams] = useSearchParams();
+  const showEnterpriseMappings = searchParams.get('showEnterpriseMappings') === '1';
 
   // Test case generation state - now from context
   const {
@@ -115,79 +225,7 @@ export default function PluginsTab({
     plugin: generatingPlugin,
   } = useTestCaseGeneration();
 
-  // Presets
-  const presets: {
-    name: keyof typeof PLUGIN_PRESET_DESCRIPTIONS;
-    plugins: Set<Plugin> | ReadonlySet<Plugin>;
-  }[] = useMemo(
-    () => [
-      {
-        name: 'Recommended',
-        plugins: DEFAULT_PLUGINS,
-      },
-      {
-        name: 'Minimal Test',
-        plugins: MINIMAL_TEST_PLUGINS,
-      },
-      {
-        name: 'RAG',
-        plugins: RAG_PLUGINS,
-      },
-      {
-        name: 'Foundation',
-        plugins: new Set(FOUNDATION_PLUGINS),
-      },
-      {
-        name: 'Guardrails Evaluation',
-        plugins: new Set(GUARDRAILS_EVALUATION_PLUGINS),
-      },
-      {
-        name: 'MCP',
-        plugins: new Set(MCP_PLUGINS),
-      },
-      {
-        name: 'Harmful',
-        plugins: new Set(Object.keys(HARM_PLUGINS) as Plugin[]),
-      },
-      {
-        name: 'NIST',
-        plugins: new Set(Object.values(NIST_AI_RMF_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP LLM Top 10',
-        plugins: new Set(Object.values(OWASP_LLM_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP Gen AI Red Team',
-        plugins: new Set(Object.values(OWASP_LLM_RED_TEAM_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP API Top 10',
-        plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'OWASP Top 10 for Agentic Applications',
-        plugins: new Set(Object.values(OWASP_AGENTIC_TOP_10_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'MITRE',
-        plugins: new Set(Object.values(MITRE_ATLAS_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'EU AI Act',
-        plugins: new Set(Object.values(EU_AI_ACT_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'ISO 42001',
-        plugins: new Set(Object.values(ISO_42001_MAPPING).flatMap((v) => v.plugins)),
-      },
-      {
-        name: 'GDPR',
-        plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
-      },
-    ],
-    [],
-  );
+  const presets = showEnterpriseMappings ? ENTERPRISE_PRESETS : STANDARD_PRESETS;
 
   // Helper functions
   const isPluginConfigured = useCallback(
@@ -214,51 +252,45 @@ export default function PluginsTab({
     [pluginConfig],
   );
 
-  // Category filters
-  const categoryFilters = useMemo(
-    () =>
-      Object.keys(riskCategories).map((category) => ({
-        key: category,
-        label: category,
-      })),
-    [],
-  );
+  // Category filters with plugin counts
+  const allCategoryFilters = useMemo(() => {
+    const recentlyUsedCount = new Set(recentlyUsedPlugins).size;
 
-  const allCategoryFilters = useMemo(
-    () => [
-      ...(recentlyUsedPlugins.length > 0 ? [{ key: 'Recently Used', label: 'Recently Used' }] : []),
-      ...(selectedPlugins.size > 0
-        ? [{ key: 'Selected', label: `Selected (${selectedPlugins.size})` }]
+    return [
+      ...(recentlyUsedCount > 0
+        ? [{ key: 'Recently Used', label: 'Recently Used', count: recentlyUsedCount }]
         : []),
-      ...categoryFilters,
-    ],
-    [recentlyUsedPlugins.length, selectedPlugins.size, categoryFilters],
-  );
+      ...(selectedPlugins.size > 0
+        ? [{ key: 'Selected', label: 'Selected', count: selectedPlugins.size }]
+        : []),
+      ...CATEGORY_FILTERS,
+    ];
+  }, [recentlyUsedPlugins, selectedPlugins.size]);
 
   // Check if we're showing domain-specific category
-  const showingDomainSpecific = useMemo(
-    () => selectedCategory === 'Domain-Specific Risks',
-    [selectedCategory],
-  );
+  const showingDomainSpecific = selectedCategory === 'Domain-Specific Risks';
 
   // Get all plugins with categories
   const allPluginsWithCategories = useMemo(() => {
     const pluginsWithCategories: Array<{ plugin: Plugin; category: string }> = [];
+    const seenPlugins = new Set<Plugin>();
+
+    const appendPlugin = (plugin: Plugin, category: string) => {
+      if (seenPlugins.has(plugin)) {
+        return;
+      }
+      seenPlugins.add(plugin);
+      pluginsWithCategories.push({ plugin, category });
+    };
 
     if (selectedCategory === 'Selected') {
       Array.from(selectedPlugins).forEach((plugin) => {
-        let originalCategory = 'Other';
-        if (recentlyUsedPlugins.includes(plugin)) {
-          originalCategory = 'Recently Used';
-        } else {
-          for (const [category, plugins] of Object.entries(riskCategories)) {
-            if (plugins.includes(plugin)) {
-              originalCategory = category;
-              break;
-            }
-          }
-        }
-        pluginsWithCategories.push({ plugin, category: originalCategory });
+        appendPlugin(
+          plugin,
+          recentlyUsedPlugins.includes(plugin)
+            ? 'Recently Used'
+            : PLUGIN_CATEGORY_BY_ID.get(plugin) || 'Other',
+        );
       });
       return pluginsWithCategories;
     }
@@ -268,7 +300,7 @@ export default function PluginsTab({
       (!selectedCategory || selectedCategory === 'Recently Used')
     ) {
       recentlyUsedPlugins.forEach((plugin) => {
-        pluginsWithCategories.push({ plugin, category: 'Recently Used' });
+        appendPlugin(plugin, 'Recently Used');
       });
     }
 
@@ -282,10 +314,8 @@ export default function PluginsTab({
             .filter((plugin) => plugin !== 'intent' && plugin !== 'policy')
             .forEach((plugin) => {
               // Skip domain-specific plugins when rendering flat list
-              if (!DOMAIN_SPECIFIC_PLUGINS.includes(plugin)) {
-                if (!pluginsWithCategories.some((p) => p.plugin === plugin)) {
-                  pluginsWithCategories.push({ plugin, category });
-                }
+              if (!DOMAIN_SPECIFIC_PLUGIN_SET.has(plugin)) {
+                appendPlugin(plugin, category);
               }
             });
         }
@@ -323,7 +353,7 @@ export default function PluginsTab({
       return (displayNameOverrides[plugin] || categoryAliases[plugin] || plugin).toLowerCase();
     };
 
-    return plugins.sort((a, b) => {
+    return [...plugins].sort((a, b) => {
       const displayNameA = getDisplayName(a.plugin);
       const displayNameB = getDisplayName(b.plugin);
 
@@ -363,7 +393,7 @@ export default function PluginsTab({
   }, []);
 
   const handlePresetSelect = useCallback(
-    (preset: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }) => {
+    (preset: PluginPreset) => {
       recordEvent('feature_used', {
         feature: 'redteam_config_plugins_preset_selected',
         preset: preset.name,
@@ -372,7 +402,7 @@ export default function PluginsTab({
         setIsCustomMode(true);
       } else {
         // Use setSelectedPlugins for efficient bulk update
-        setSelectedPlugins(new Set(preset.plugins as Set<Plugin>));
+        setSelectedPlugins(new Set(preset.plugins));
         setIsCustomMode(false);
       }
     },
@@ -404,35 +434,97 @@ export default function PluginsTab({
 
   return (
     <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <div className="flex items-start gap-6" data-testid="plugins-tab-container">
+      <div className="flex w-full items-start gap-6" data-testid="plugins-tab-container">
         {/* Main content */}
         <div className="min-w-0 flex-1">
-          {/* Presets section */}
+          {/* Presets section - collapsible */}
           <div className="mb-6">
-            <h3 className="mb-4 text-lg font-semibold">Presets</h3>
+            <button
+              type="button"
+              onClick={() => setPresetsExpanded((prev) => !prev)}
+              aria-expanded={presetsExpanded}
+              className="mb-3 flex w-full cursor-pointer items-center gap-2 text-left"
+            >
+              {presetsExpanded ? (
+                <ChevronDown className="size-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="size-4 text-muted-foreground" />
+              )}
+              <h3 className="text-lg font-semibold">Presets</h3>
+              {!presetsExpanded && currentlySelectedPreset && (
+                <Badge variant="secondary">
+                  {currentlySelectedPreset.name} ({currentlySelectedPreset.plugins.size} plugins)
+                </Badge>
+              )}
+            </button>
 
-            <div className="mb-6 grid auto-rows-fr grid-cols-[repeat(auto-fill,230px)] gap-3">
-              {presets.map((preset) => {
-                const isSelected =
-                  preset.name === 'Custom'
-                    ? isCustomMode
-                    : preset.name === currentlySelectedPreset?.name;
-                return (
-                  <PresetCard
-                    key={preset.name}
-                    name={preset.name}
-                    description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
-                    isSelected={isSelected}
-                    onClick={() => handlePresetSelect(preset)}
-                  />
-                );
-              })}
+            {presetsExpanded && (
+              <div className="grid auto-rows-fr grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-2">
+                {presets.map((preset) => {
+                  const isSelected =
+                    preset.name === 'Custom'
+                      ? isCustomMode
+                      : preset.name === currentlySelectedPreset?.name;
+                  return (
+                    <PresetCard
+                      key={preset.name}
+                      name={preset.name}
+                      description={PLUGIN_PRESET_DESCRIPTIONS[preset.name] || ''}
+                      isSelected={isSelected}
+                      onClick={() => handlePresetSelect(preset)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Filter by category */}
+          <div className="mb-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory(undefined)}
+                className={cn(
+                  'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                  selectedCategory === undefined
+                    ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                    : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
+                )}
+              >
+                All
+              </button>
+              {allCategoryFilters.map((filter) => (
+                <button
+                  key={filter.key}
+                  type="button"
+                  onClick={() => handleCategoryToggle(filter.key)}
+                  className={cn(
+                    'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
+                    selectedCategory === filter.key
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:bg-muted/50 hover:text-foreground',
+                  )}
+                >
+                  {filter.label}
+                  <span
+                    className={cn(
+                      'inline-flex size-5 items-center justify-center rounded-full text-xs',
+                      selectedCategory === filter.key
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-muted text-muted-foreground',
+                    )}
+                  >
+                    {filter.count}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Search and Filter section */}
+          {/* Search and bulk selection */}
           <div className="mb-6 flex items-center gap-4">
-            <div className="relative min-w-[300px] shrink-0">
+            <div className="relative max-w-sm flex-1">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 data-testid="plugin-search-input"
@@ -442,59 +534,35 @@ export default function PluginsTab({
                 className="pl-9"
               />
             </div>
-
-            <div className="flex flex-1 flex-wrap gap-2">
-              <Badge
-                variant={selectedCategory === undefined ? 'default' : 'outline'}
-                className="cursor-pointer"
-                onClick={() => setSelectedCategory(undefined)}
-              >
-                All Categories
-              </Badge>
-              {allCategoryFilters.map((filter) => (
-                <Badge
-                  key={filter.key}
-                  variant={selectedCategory === filter.key ? 'default' : 'outline'}
-                  className="cursor-pointer"
-                  onClick={() => handleCategoryToggle(filter.key)}
+            {!showingDomainSpecific && (
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  className="cursor-pointer text-sm text-primary hover:underline"
+                  onClick={() => {
+                    setSelectedPlugins(
+                      new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
+                    );
+                  }}
                 >
-                  {filter.label}
-                </Badge>
-              ))}
-            </div>
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  className="cursor-pointer text-sm text-primary hover:underline"
+                  onClick={() => {
+                    const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
+                    const newSelected = new Set(
+                      [...selectedPlugins].filter((p) => !filteredPluginIds.has(p)),
+                    );
+                    setSelectedPlugins(newSelected);
+                  }}
+                >
+                  Select none
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Bulk selection actions - hide for domain-specific view */}
-          {!showingDomainSpecific && (
-            <div className="mb-4 flex justify-end gap-4">
-              <button
-                type="button"
-                className="text-sm text-primary hover:underline"
-                onClick={() => {
-                  // Collect all filtered plugins and merge with existing selection
-                  setSelectedPlugins(
-                    new Set([...selectedPlugins, ...filteredPlugins.map(({ plugin }) => plugin)]),
-                  );
-                }}
-              >
-                Select all
-              </button>
-              <button
-                type="button"
-                className="text-sm text-primary hover:underline"
-                onClick={() => {
-                  // Remove only the filtered plugins from selection
-                  const filteredPluginIds = new Set(filteredPlugins.map((p) => p.plugin));
-                  const newSelected = new Set(
-                    [...selectedPlugins].filter((p) => !filteredPluginIds.has(p)),
-                  );
-                  setSelectedPlugins(newSelected);
-                }}
-              >
-                Select none
-              </button>
-            </div>
-          )}
 
           {/* Domain-Specific Vertical Suites */}
           {showingDomainSpecific && (
@@ -547,27 +615,54 @@ export default function PluginsTab({
                       handlePluginToggle(plugin);
                     }}
                     className={cn(
-                      'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-all',
-                      pluginDisabled && 'cursor-not-allowed opacity-50',
-                      isSelected && !hasConfigError && 'border-primary bg-primary/5 shadow-sm',
-                      hasConfigError && 'border-destructive bg-destructive/5 shadow-sm',
-                      !isSelected && !pluginDisabled && 'border-border hover:bg-muted/50',
+                      'flex w-full items-center rounded-lg border border-border p-4 transition-all',
+                      pluginDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                      isSelected &&
+                        !hasConfigError &&
+                        cn(
+                          'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+                          !pluginDisabled && 'hover:bg-primary/[0.08]',
+                        ),
+                      hasConfigError &&
+                        cn(
+                          'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+                          !pluginDisabled && 'hover:bg-destructive/[0.08]',
+                        ),
+                      !isSelected &&
+                        !pluginDisabled &&
+                        'border-border hover:border-primary/50 hover:bg-muted/50',
                     )}
                   >
-                    <div className="mr-4 flex shrink-0 items-center gap-2">
-                      <Checkbox
-                        checked={isSelected}
-                        disabled={pluginDisabled}
-                        onCheckedChange={() => {
-                          handlePluginToggle(plugin);
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        aria-label={
-                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
-                        }
-                      />
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-0.5 flex items-center gap-2">
+                        <span className="font-medium">
+                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                        </span>
+                        {category === 'Recently Used' && (
+                          <Badge variant="secondary">Recently Used</Badge>
+                        )}
+                        {pluginDisabled && isRemoteGenerationDisabled && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-xs font-medium text-destructive">
+                                Remote generation required
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              This plugin requires remote generation. Unset
+                              PROMPTFOO_DISABLE_REMOTE_GENERATION or
+                              PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                      {subCategoryDescriptions[plugin] && (
+                        <p className="line-clamp-2 break-words text-sm text-muted-foreground">
+                          {subCategoryDescriptions[plugin]}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
                       <TestCaseGenerateButton
                         onClick={() => handleGenerateTestCase(plugin)}
                         disabled={
@@ -584,7 +679,6 @@ export default function PluginsTab({
                               : 'Promptfoo Cloud connection is required for test generation'
                         }
                       />
-                      {/* Config button - available for all plugins (gradingGuidance is universal) */}
                       {isSelected && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -609,41 +703,6 @@ export default function PluginsTab({
                           </TooltipContent>
                         </Tooltip>
                       )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-0.5 flex items-center gap-2">
-                        <span className="font-medium">
-                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                        </span>
-
-                        {/* Badge for plugins requiring remote generation */}
-                        {pluginDisabled && isRemoteGenerationDisabled && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-xs font-medium text-destructive">
-                                Remote generation required
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              This plugin requires remote generation. Unset
-                              PROMPTFOO_DISABLE_REMOTE_GENERATION or
-                              PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </div>
-                      {subCategoryDescriptions[plugin] && (
-                        <p className="truncate text-sm text-muted-foreground">
-                          {subCategoryDescriptions[plugin]}
-                        </p>
-                      )}
-                    </div>
-                    <div className="shrink-0">
-                      {category === 'Recently Used' && (
-                        <Badge variant="secondary" className="mr-2">
-                          Recently Used
-                        </Badge>
-                      )}
                       {hasSpecificPluginDocumentation(plugin) && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -662,6 +721,19 @@ export default function PluginsTab({
                           <TooltipContent>View documentation</TooltipContent>
                         </Tooltip>
                       )}
+                      <Checkbox
+                        checked={isSelected}
+                        disabled={pluginDisabled}
+                        onCheckedChange={() => {
+                          handlePluginToggle(plugin);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        aria-label={
+                          displayNameOverrides[plugin] || categoryAliases[plugin] || plugin
+                        }
+                      />
                     </div>
                   </div>
                 );

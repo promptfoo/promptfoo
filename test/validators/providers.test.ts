@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ProviderOptionsSchema, ProviderSchema } from '../../src/validators/providers';
+import { createMockProvider } from '../factories/provider';
 
 describe('ProviderOptionsSchema', () => {
   it('should filter unknown keys without erroring', () => {
@@ -45,12 +46,10 @@ describe('ProviderOptionsSchema', () => {
 
 describe('ProviderSchema union', () => {
   it('should match ApiProviderSchema before ProviderOptionsSchema when callApi is present', () => {
-    const mockCallApi = vi.fn();
-    const input = {
-      id: () => 'custom-provider',
-      callApi: mockCallApi,
+    const input = createMockProvider({
+      id: 'custom-provider',
       label: 'Custom Provider',
-    };
+    });
 
     const result = ProviderSchema.safeParse(input);
 

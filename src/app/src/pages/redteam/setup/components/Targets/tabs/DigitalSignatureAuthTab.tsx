@@ -16,11 +16,12 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { Check, File, Key, KeyRound, Upload, X } from 'lucide-react';
 import { convertStringKeyToPem, validatePrivateKey } from '../../../utils/crypto';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface DigitalSignatureAuthTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
 
 const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
@@ -48,13 +49,13 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
       <div className="flex items-center gap-2">
         <Switch
           id="signature-auth-enabled"
-          checked={!!selectedTarget.config.signatureAuth?.enabled}
+          checked={!!selectedTarget.config?.signatureAuth?.enabled}
           onCheckedChange={(checked) => {
             if (checked) {
               updateCustomTarget('signatureAuth', {
                 enabled: true,
-                certificateType: selectedTarget.config.signatureAuth?.certificateType || 'pem',
-                keyInputType: selectedTarget.config.signatureAuth?.keyInputType || 'upload',
+                certificateType: selectedTarget.config?.signatureAuth?.certificateType || 'pem',
+                keyInputType: selectedTarget.config?.signatureAuth?.keyInputType || 'upload',
               });
             } else {
               updateCustomTarget('signatureAuth', undefined);
@@ -64,16 +65,16 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
         <Label htmlFor="signature-auth-enabled">Enable signature authentication</Label>
       </div>
 
-      {selectedTarget.config.signatureAuth?.enabled && (
+      {selectedTarget.config?.signatureAuth?.enabled && (
         <div className="mt-6 space-y-6">
           <div className="space-y-2">
             <Label>Certificate Type</Label>
             <Select
-              value={selectedTarget.config.signatureAuth?.certificateType || 'pem'}
+              value={selectedTarget.config?.signatureAuth?.certificateType || 'pem'}
               onValueChange={(value) => {
                 const certType = value;
                 updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
+                  ...selectedTarget.config?.signatureAuth,
                   certificateType: certType,
                   // Clear all type-specific fields when changing certificate type
                   keyInputType: certType === 'pem' ? 'upload' : undefined,
@@ -102,20 +103,20 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             </Select>
           </div>
 
-          {selectedTarget.config.signatureAuth?.certificateType === 'pem' && (
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' && (
             <div className="space-y-4">
               <Label>PEM Key Input Method</Label>
               <div className="grid grid-cols-3 gap-3">
                 <div
                   className={cn(
                     'flex flex-col items-center rounded-lg border p-4 cursor-pointer transition-colors',
-                    selectedTarget.config.signatureAuth?.keyInputType === 'upload'
+                    selectedTarget.config?.signatureAuth?.keyInputType === 'upload'
                       ? 'border-primary bg-primary/5'
                       : 'border-border hover:bg-muted/50',
                   )}
                   onClick={() =>
                     updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config.signatureAuth,
+                      ...selectedTarget.config?.signatureAuth,
                       keyInputType: 'upload',
                     })
                   }
@@ -123,7 +124,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                   <Upload
                     className={cn(
                       'size-6 mb-2',
-                      selectedTarget.config.signatureAuth?.keyInputType === 'upload'
+                      selectedTarget.config?.signatureAuth?.keyInputType === 'upload'
                         ? 'text-primary'
                         : 'text-muted-foreground',
                     )}
@@ -135,13 +136,13 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 <div
                   className={cn(
                     'flex flex-col items-center rounded-lg border p-4 cursor-pointer transition-colors',
-                    selectedTarget.config.signatureAuth?.keyInputType === 'path'
+                    selectedTarget.config?.signatureAuth?.keyInputType === 'path'
                       ? 'border-primary bg-primary/5'
                       : 'border-border hover:bg-muted/50',
                   )}
                   onClick={() =>
                     updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config.signatureAuth,
+                      ...selectedTarget.config?.signatureAuth,
                       keyInputType: 'path',
                     })
                   }
@@ -149,7 +150,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                   <File
                     className={cn(
                       'size-6 mb-2',
-                      selectedTarget.config.signatureAuth?.keyInputType === 'path'
+                      selectedTarget.config?.signatureAuth?.keyInputType === 'path'
                         ? 'text-primary'
                         : 'text-muted-foreground',
                     )}
@@ -163,13 +164,13 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 <div
                   className={cn(
                     'flex flex-col items-center rounded-lg border p-4 cursor-pointer transition-colors',
-                    selectedTarget.config.signatureAuth?.keyInputType === 'base64'
+                    selectedTarget.config?.signatureAuth?.keyInputType === 'base64'
                       ? 'border-primary bg-primary/5'
                       : 'border-border hover:bg-muted/50',
                   )}
                   onClick={() =>
                     updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config.signatureAuth,
+                      ...selectedTarget.config?.signatureAuth,
                       keyInputType: 'base64',
                     })
                   }
@@ -177,7 +178,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                   <Key
                     className={cn(
                       'size-6 mb-2',
-                      selectedTarget.config.signatureAuth?.keyInputType === 'base64'
+                      selectedTarget.config?.signatureAuth?.keyInputType === 'base64'
                         ? 'text-primary'
                         : 'text-muted-foreground',
                     )}
@@ -191,8 +192,8 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             </div>
           )}
 
-          {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
-            selectedTarget.config.signatureAuth?.keyInputType === 'upload' && (
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
+            selectedTarget.config?.signatureAuth?.keyInputType === 'upload' && (
               <div className="rounded-lg border border-border p-6">
                 <input
                   type="file"
@@ -210,7 +211,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                         try {
                           const content = event.target?.result as string;
                           updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
+                            ...selectedTarget.config?.signatureAuth,
                             type: 'pem',
                             privateKey: content,
                             privateKeyPath: undefined,
@@ -238,7 +239,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                   }}
                 />
                 <div className="text-center">
-                  {selectedTarget.config.signatureAuth?.privateKey ? (
+                  {selectedTarget.config?.signatureAuth?.privateKey ? (
                     <>
                       <p className="text-emerald-600 dark:text-emerald-400 mb-4">
                         Key file loaded successfully
@@ -248,7 +249,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                         className="text-destructive"
                         onClick={() =>
                           updateCustomTarget('signatureAuth', {
-                            ...selectedTarget.config.signatureAuth,
+                            ...selectedTarget.config?.signatureAuth,
                             privateKey: undefined,
                             privateKeyPath: undefined,
                           })
@@ -277,8 +278,8 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
               </div>
             )}
 
-          {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
-            selectedTarget.config.signatureAuth?.keyInputType === 'path' && (
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
+            selectedTarget.config?.signatureAuth?.keyInputType === 'path' && (
               <div className="rounded-lg border border-border p-6 space-y-4">
                 <p className="text-muted-foreground">
                   Specify the path on disk to your PEM format private key file
@@ -288,10 +289,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                   <Input
                     id="private-key-path"
                     placeholder="/path/to/private_key.pem"
-                    value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
+                    value={selectedTarget.config?.signatureAuth?.privateKeyPath || ''}
                     onChange={(e) => {
                       updateCustomTarget('signatureAuth', {
-                        ...selectedTarget.config.signatureAuth,
+                        ...selectedTarget.config?.signatureAuth,
                         type: 'pem',
                         privateKeyPath: e.target.value,
                         privateKey: undefined,
@@ -307,16 +308,16 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
               </div>
             )}
 
-          {selectedTarget.config.signatureAuth?.certificateType === 'pem' &&
-            selectedTarget.config.signatureAuth?.keyInputType === 'base64' && (
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pem' &&
+            selectedTarget.config?.signatureAuth?.keyInputType === 'base64' && (
               <div className="rounded-lg border border-border p-6 space-y-4">
                 <Textarea
                   rows={4}
                   placeholder="-----BEGIN PRIVATE KEY-----&#10;Base64 encoded key content in PEM format&#10;-----END PRIVATE KEY-----"
-                  value={selectedTarget.config.signatureAuth?.privateKey || ''}
+                  value={selectedTarget.config?.signatureAuth?.privateKey || ''}
                   onChange={(e) => {
                     updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config.signatureAuth,
+                      ...selectedTarget.config?.signatureAuth,
                       type: 'pem',
                       privateKey: e.target.value,
                       privateKeyPath: undefined,
@@ -333,10 +334,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                     variant="outline"
                     onClick={async () => {
                       try {
-                        const inputKey = selectedTarget.config.signatureAuth?.privateKey || '';
+                        const inputKey = selectedTarget.config?.signatureAuth?.privateKey || '';
                         const formattedKey = await convertStringKeyToPem(inputKey);
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
+                          ...selectedTarget.config?.signatureAuth,
                           type: 'pem',
                           privateKey: formattedKey,
                           privateKeyPath: undefined,
@@ -367,7 +368,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
               </div>
             )}
 
-          {selectedTarget.config.signatureAuth?.certificateType === 'jks' && (
+          {selectedTarget.config?.signatureAuth?.certificateType === 'jks' && (
             <div className="rounded-lg border border-border p-6 space-y-4">
               <p className="text-muted-foreground">
                 Configure Java KeyStore (JKS) settings for signature authentication
@@ -378,10 +379,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 <Input
                   id="keystore-path"
                   placeholder="/path/to/keystore.jks"
-                  value={selectedTarget.config.signatureAuth?.keystorePath || ''}
+                  value={selectedTarget.config?.signatureAuth?.keystorePath || ''}
                   onChange={(e) => {
                     updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config.signatureAuth,
+                      ...selectedTarget.config?.signatureAuth,
                       type: 'jks',
                       keystorePath: e.target.value,
                       privateKey: undefined,
@@ -402,10 +403,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                   id="keystore-password"
                   type="password"
                   placeholder="Enter keystore password"
-                  value={selectedTarget.config.signatureAuth?.keystorePassword || ''}
+                  value={selectedTarget.config?.signatureAuth?.keystorePassword || ''}
                   onChange={(e) => {
                     updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config.signatureAuth,
+                      ...selectedTarget.config?.signatureAuth,
                       keystorePassword: e.target.value,
                     });
                   }}
@@ -421,10 +422,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 <Input
                   id="jks-key-alias"
                   placeholder="client"
-                  value={selectedTarget.config.signatureAuth?.keyAlias || ''}
+                  value={selectedTarget.config?.signatureAuth?.keyAlias || ''}
                   onChange={(e) => {
                     updateCustomTarget('signatureAuth', {
-                      ...selectedTarget.config.signatureAuth,
+                      ...selectedTarget.config?.signatureAuth,
                       keyAlias: e.target.value,
                     });
                   }}
@@ -437,7 +438,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             </div>
           )}
 
-          {selectedTarget.config.signatureAuth?.certificateType === 'pfx' && (
+          {selectedTarget.config?.signatureAuth?.certificateType === 'pfx' && (
             <div className="rounded-lg border border-border p-6 space-y-4">
               <p className="text-muted-foreground">
                 Configure PFX (PKCS#12) certificate settings for signature authentication
@@ -452,12 +453,12 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                       name="pfxMode"
                       value="pfx"
                       checked={
-                        !selectedTarget.config.signatureAuth?.pfxMode ||
-                        selectedTarget.config.signatureAuth?.pfxMode === 'pfx'
+                        !selectedTarget.config?.signatureAuth?.pfxMode ||
+                        selectedTarget.config?.signatureAuth?.pfxMode === 'pfx'
                       }
                       onChange={() => {
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
+                          ...selectedTarget.config?.signatureAuth,
                           pfxMode: 'pfx',
                           certPath: undefined,
                           keyPath: undefined,
@@ -472,10 +473,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                       type="radio"
                       name="pfxMode"
                       value="separate"
-                      checked={selectedTarget.config.signatureAuth?.pfxMode === 'separate'}
+                      checked={selectedTarget.config?.signatureAuth?.pfxMode === 'separate'}
                       onChange={() => {
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
+                          ...selectedTarget.config?.signatureAuth,
                           pfxMode: 'separate',
                           pfxPath: undefined,
                           pfxPassword: undefined,
@@ -488,18 +489,18 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 </div>
               </div>
 
-              {(!selectedTarget.config.signatureAuth?.pfxMode ||
-                selectedTarget.config.signatureAuth?.pfxMode === 'pfx') && (
+              {(!selectedTarget.config?.signatureAuth?.pfxMode ||
+                selectedTarget.config?.signatureAuth?.pfxMode === 'pfx') && (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="pfx-path">PFX/P12 Certificate File</Label>
                     <Input
                       id="pfx-path"
                       placeholder="/path/to/certificate.pfx"
-                      value={selectedTarget.config.signatureAuth?.pfxPath || ''}
+                      value={selectedTarget.config?.signatureAuth?.pfxPath || ''}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
+                          ...selectedTarget.config?.signatureAuth,
                           type: 'pfx',
                           pfxPath: e.target.value,
                           privateKey: undefined,
@@ -523,10 +524,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                       id="pfx-password"
                       type="password"
                       placeholder="Enter PFX password"
-                      value={selectedTarget.config.signatureAuth?.pfxPassword || ''}
+                      value={selectedTarget.config?.signatureAuth?.pfxPassword || ''}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
+                          ...selectedTarget.config?.signatureAuth,
                           pfxPassword: e.target.value,
                         });
                       }}
@@ -539,17 +540,17 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 </>
               )}
 
-              {selectedTarget.config.signatureAuth?.pfxMode === 'separate' && (
+              {selectedTarget.config?.signatureAuth?.pfxMode === 'separate' && (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="cert-path">Certificate File (CRT)</Label>
                     <Input
                       id="cert-path"
                       placeholder="/path/to/certificate.crt"
-                      value={selectedTarget.config.signatureAuth?.certPath || ''}
+                      value={selectedTarget.config?.signatureAuth?.certPath || ''}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
+                          ...selectedTarget.config?.signatureAuth,
                           type: 'pfx',
                           certPath: e.target.value,
                           privateKey: undefined,
@@ -572,10 +573,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                     <Input
                       id="key-path"
                       placeholder="/path/to/private.key"
-                      value={selectedTarget.config.signatureAuth?.keyPath || ''}
+                      value={selectedTarget.config?.signatureAuth?.keyPath || ''}
                       onChange={(e) => {
                         updateCustomTarget('signatureAuth', {
-                          ...selectedTarget.config.signatureAuth,
+                          ...selectedTarget.config?.signatureAuth,
                           keyPath: e.target.value,
                         });
                       }}
@@ -594,12 +595,12 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             <Input
               id="signature-data-template"
               value={
-                selectedTarget.config.signatureAuth?.signatureDataTemplate ||
+                selectedTarget.config?.signatureAuth?.signatureDataTemplate ||
                 '{{signatureTimestamp}}'
               }
               onChange={(e) =>
                 updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
+                  ...selectedTarget.config?.signatureAuth,
                   signatureDataTemplate: e.target.value,
                 })
               }
@@ -615,21 +616,21 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             <Input
               id="signature-validity"
               type="number"
-              value={selectedTarget.config.signatureAuth?.signatureValidityMs || ''}
+              value={selectedTarget.config?.signatureAuth?.signatureValidityMs || ''}
               onChange={(e) => {
                 const value = e.target.value === '' ? undefined : Number(e.target.value);
                 updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
+                  ...selectedTarget.config?.signatureAuth,
                   signatureValidityMs: value,
                 });
               }}
               onBlur={() => {
                 if (
-                  selectedTarget.config.signatureAuth?.signatureValidityMs === undefined ||
-                  selectedTarget.config.signatureAuth?.signatureValidityMs === ''
+                  selectedTarget.config?.signatureAuth?.signatureValidityMs === undefined ||
+                  selectedTarget.config?.signatureAuth?.signatureValidityMs === ''
                 ) {
                   updateCustomTarget('signatureAuth', {
-                    ...selectedTarget.config.signatureAuth,
+                    ...selectedTarget.config?.signatureAuth,
                     signatureValidityMs: 300000,
                   });
                 }
@@ -643,11 +644,11 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             <Input
               id="signature-refresh-buffer"
               type="number"
-              value={selectedTarget.config.signatureAuth?.signatureRefreshBufferMs || ''}
+              value={selectedTarget.config?.signatureAuth?.signatureRefreshBufferMs || ''}
               onChange={(e) => {
                 const value = e.target.value === '' ? undefined : Number(e.target.value);
                 updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
+                  ...selectedTarget.config?.signatureAuth,
                   signatureRefreshBufferMs: value,
                 });
               }}
@@ -659,10 +660,10 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
             <Label htmlFor="signature-algorithm">Signature Algorithm</Label>
             <Input
               id="signature-algorithm"
-              value={selectedTarget.config.signatureAuth?.signatureAlgorithm || 'SHA256'}
+              value={selectedTarget.config?.signatureAuth?.signatureAlgorithm || 'SHA256'}
               onChange={(e) =>
                 updateCustomTarget('signatureAuth', {
-                  ...selectedTarget.config.signatureAuth,
+                  ...selectedTarget.config?.signatureAuth,
                   signatureAlgorithm: e.target.value,
                 })
               }

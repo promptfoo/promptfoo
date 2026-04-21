@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare OpenAI reasoning effort
+
+prompts:
+  - |
+    Answer concisely.
+
+    Task: {{task}}
+
+providers:
+  - id: openai:responses:gpt-5.4-mini
+    label: gpt-5.4-mini-no-reasoning
+    config:
+      reasoning:
+        effort: none
+      verbosity: low
+      max_output_tokens: 512
+  - id: openai:responses:gpt-5.4-mini
+    label: gpt-5.4-mini-medium-reasoning
+    config:
+      reasoning:
+        effort: medium
+      verbosity: low
+      max_output_tokens: 512
+
+tests:
+  - vars:
+      task: Return the capital of France in one sentence.
+    assert:
+      - type: contains
+        value: Paris
+  - vars:
+      task: A farmer has 17 sheep. All but 9 run away. How many sheep are left?
+    assert:
+      - type: regex
+        value: \b9\b
+  - vars:
+      task: A meeting starts at 9:40 AM and lasts 95 minutes. What time does it end?
+    assert:
+      - type: contains
+        value: '11:15'
+  - vars:
+      task: Write a one-sentence product tagline for a reusable water bottle.

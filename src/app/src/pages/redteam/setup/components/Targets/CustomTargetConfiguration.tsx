@@ -1,9 +1,8 @@
-import 'prismjs/components/prism-json';
-
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,6 +11,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import {
   AlertCircle,
@@ -23,14 +23,12 @@ import {
   Server,
   Terminal,
 } from 'lucide-react';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 
 import type { ProviderOptions } from '../../types';
 
 interface CustomTargetConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   rawConfigJson: string;
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
@@ -54,7 +52,7 @@ interface ProviderConfig {
 
 const highlightJSON = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.json;
+    const grammar = Prism?.languages?.json;
     if (!grammar) {
       return code;
     }

@@ -62,7 +62,8 @@ function StatusIndicator({
   return <span className={cn('ml-auto size-2 shrink-0 rounded-full', statusColors[status])} />;
 }
 
-export interface NavigationSidebarProps {
+export interface NavigationSidebarProps
+  extends Omit<React.ComponentProps<'div'>, 'header' | 'footer'> {
   /** Array of navigation items to display */
   items: NavigationItem[];
   /** Currently active item id */
@@ -73,8 +74,6 @@ export interface NavigationSidebarProps {
   header?: React.ReactNode;
   /** Optional footer content */
   footer?: React.ReactNode;
-  /** Additional className for the container */
-  className?: string;
   /** If true, sidebar collapses to icons only and expands on hover */
   collapsible?: boolean;
 }
@@ -238,6 +237,7 @@ export function NavigationSidebar({
   footer,
   className,
   collapsible = false,
+  ...props
 }: NavigationSidebarProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => getDefaultExpandedIds(items));
   const [isHovered, setIsHovered] = useState(false);
@@ -351,6 +351,7 @@ export function NavigationSidebar({
           'py-4',
           className,
         )}
+        {...props}
       >
         {!isCollapsed && header && <div className="mb-4">{header}</div>}
 

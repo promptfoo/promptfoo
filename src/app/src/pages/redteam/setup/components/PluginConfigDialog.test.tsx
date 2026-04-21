@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PluginConfigDialog from './PluginConfigDialog';
 import type { Plugin } from '@promptfoo/redteam/constants';
@@ -63,6 +64,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('saves graderGuidance when Save is clicked', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -74,12 +76,12 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
-      fireEvent.change(guidanceField, {
-        target: { value: 'Our brand names are not competitor mentions' },
-      });
+      await user.click(guidanceField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Our brand names are not competitor mentions');
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalledWith(
@@ -92,6 +94,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('removes empty graderGuidance when saving', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -103,7 +106,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         const savedConfig = mockOnSave.mock.calls[0][1];
@@ -112,6 +115,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('preserves other config fields when saving graderGuidance', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -123,12 +127,12 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
-      fireEvent.change(guidanceField, {
-        target: { value: 'BOLA guidance' },
-      });
+      await user.click(guidanceField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('BOLA guidance');
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalledWith(
@@ -268,7 +272,8 @@ describe('PluginConfigDialog - OSS', () => {
       'beavertails',
       'unsafebench',
       'aegis',
-    ])("should update localConfig.includeSafe when the 'Include safe prompts' checkbox is toggled for the %s plugin", (plugin) => {
+    ])("should update localConfig.includeSafe when the 'Include safe prompts' checkbox is toggled for the %s plugin", async (plugin) => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -286,10 +291,10 @@ describe('PluginConfigDialog - OSS', () => {
 
       expect(checkbox).not.toBeChecked();
 
-      fireEvent.click(checkbox);
+      await user.click(checkbox);
       expect(checkbox).toBeChecked();
 
-      fireEvent.click(checkbox);
+      await user.click(checkbox);
       expect(checkbox).not.toBeChecked();
     });
 
@@ -334,7 +339,8 @@ describe('PluginConfigDialog - OSS', () => {
       'beavertails',
       'unsafebench',
       'aegis',
-    ])("should call onSave with the updated config including the correct value of includeSafe when the 'Save' button is clicked for the %s plugin", (plugin) => {
+    ])("should call onSave with the updated config including the correct value of includeSafe when the 'Save' button is clicked for the %s plugin", async (plugin) => {
+      const user = userEvent.setup();
       const initialConfig = { includeSafe: false };
       render(
         <PluginConfigDialog
@@ -352,11 +358,11 @@ describe('PluginConfigDialog - OSS', () => {
       expect(checkbox).toBeInTheDocument();
       expect(checkbox).not.toBeChecked();
 
-      fireEvent.click(checkbox);
+      await user.click(checkbox);
       expect(checkbox).toBeChecked();
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledTimes(1);
       expect(mockOnSave).toHaveBeenCalledWith(plugin, { includeSafe: true });
@@ -389,7 +395,7 @@ describe('PluginConfigDialog - OSS', () => {
       expect(description).toBeInTheDocument();
 
       const explanatoryText = screen.getByText(
-        /When enabled, tests will include a 50\/50 split of safe and unsafe prompts/,
+        /When enabled, tests include a balanced mix of safe and unsafe prompts/,
       );
       expect(explanatoryText).toBeInTheDocument();
     });
@@ -438,7 +444,8 @@ describe('PluginConfigDialog - OSS', () => {
       expect(checkbox).not.toBeChecked();
     });
 
-    it("should discard changes when 'Cancel' is clicked after toggling the 'includeSafe' checkbox", () => {
+    it("should discard changes when 'Cancel' is clicked after toggling the 'includeSafe' checkbox", async () => {
+      const user = userEvent.setup();
       const initialConfig = { includeSafe: false };
       render(
         <PluginConfigDialog
@@ -456,11 +463,11 @@ describe('PluginConfigDialog - OSS', () => {
       expect(checkbox).toBeInTheDocument();
       expect(checkbox).not.toBeChecked();
 
-      fireEvent.click(checkbox);
+      await user.click(checkbox);
       expect(checkbox).toBeChecked();
 
       const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-      fireEvent.click(cancelButton);
+      await user.click(cancelButton);
 
       expect(mockOnSave).not.toHaveBeenCalled();
     });

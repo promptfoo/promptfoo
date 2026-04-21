@@ -26,7 +26,7 @@ export interface ExpandedMetadataState {
 }
 
 interface MetadataPanelProps {
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   expandedMetadata: ExpandedMetadataState;
   copiedFields: Record<string, boolean>;
   onMetadataClick: (key: string) => void;
@@ -73,14 +73,15 @@ export function MetadataPanel({
 
             // Is reusable custom policy name?
             if (key === 'policyName' && cloudConfig?.isEnabled && cloudConfig?.appUrl) {
+              const policyIdValue = metadataEntries.find(([k]) => k === 'policyId')?.[1];
               const policyId: string | null =
-                metadataEntries.find(([k]) => k === 'policyId')?.[1] ?? null;
+                typeof policyIdValue === 'string' ? policyIdValue : null;
 
               if (policyId) {
                 cell = (
                   <td className="p-2 whitespace-pre-wrap break-words">
                     <div className="flex items-center gap-2">
-                      <span>{value}</span>
+                      <span>{stringValue}</span>
                       {determinePolicyTypeFromId(policyId) === 'reusable' &&
                         cloudConfig?.appUrl && (
                           <a
@@ -98,7 +99,7 @@ export function MetadataPanel({
                   </td>
                 );
               } else {
-                cell = <td className="p-2 whitespace-pre-wrap break-words">{value}</td>;
+                cell = <td className="p-2 whitespace-pre-wrap break-words">{stringValue}</td>;
               }
             }
             // Is URL?

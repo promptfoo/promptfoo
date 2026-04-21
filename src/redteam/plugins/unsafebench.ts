@@ -2,7 +2,9 @@ import dedent from 'dedent';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { sampleBalancedSafetyRecords } from './safetyBalance';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
 
@@ -35,6 +37,16 @@ interface UnsafeBenchInput {
 interface UnsafeBenchPluginConfig extends PluginConfig {
   categories?: UnsafeBenchCategory[];
   longest_edge?: number; // Maximum size for longest edge in pixels (default: 8000)
+}
+
+function selectBalancedUnsafeBenchRecords(
+  records: UnsafeBenchInput[],
+  limit: number,
+): UnsafeBenchInput[] {
+  const safeRecords = records.filter((record) => record.safety_label.toLowerCase() === 'safe');
+  const unsafeRecords = records.filter((record) => record.safety_label.toLowerCase() === 'unsafe');
+
+  return sampleBalancedSafetyRecords(safeRecords, unsafeRecords, limit);
 }
 
 /**
@@ -212,6 +224,8 @@ class UnsafeBenchDatasetManager {
       throw new Error('Failed to load UnsafeBench dataset.');
     }
 
+    const includeSafe = config?.includeSafe ?? false;
+
     // Find all available categories for logging
     const availableCategories = Array.from(new Set(this.datasetCache.map((r) => r.category)));
     logger.debug(`[unsafebench] Available categories: ${availableCategories.join(', ')}`);
@@ -247,6 +261,14 @@ class UnsafeBenchDatasetManager {
         `[unsafebench] Filtered to ${filteredRecords.length} records after category filtering for: ${config.categories.join(', ')}`,
       );
 
+      if (includeSafe) {
+        const selectedRecords = selectBalancedUnsafeBenchRecords(filteredRecords, limit);
+        logger.debug(
+          `[unsafebench] Selected ${selectedRecords.length} balanced records after category filtering`,
+        );
+        return selectedRecords;
+      }
+
       // If we have categories, we need to ensure we have an equal distribution
       // Group records by category
       const recordsByCategory: Record<string, UnsafeBenchInput[]> = {};
@@ -267,12 +289,11 @@ class UnsafeBenchDatasetManager {
         const normalizedCategory = category.toLowerCase();
         const categoryRecords = recordsByCategory[normalizedCategory] || [];
 
-        // Shuffle and take up to perCategory records
-        const shuffled = categoryRecords.sort(() => Math.random() - 0.5);
-        result.push(...shuffled.slice(0, perCategory));
+        const selectedRecords = sampleArray(categoryRecords, perCategory);
+        result.push(...selectedRecords);
 
         logger.debug(
-          `[unsafebench] Selected ${Math.min(perCategory, shuffled.length)} records for category ${category}`,
+          `[unsafebench] Selected ${selectedRecords.length} records for category ${category}`,
         );
       }
 
@@ -280,8 +301,14 @@ class UnsafeBenchDatasetManager {
       return result.slice(0, limit);
     }
 
-    // If no categories specified, just shuffle and return the requested number
-    const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
+    if (includeSafe) {
+      const selectedRecords = selectBalancedUnsafeBenchRecords(filteredRecords, limit);
+      logger.debug(`[unsafebench] Selected ${selectedRecords.length} balanced safe/unsafe records`);
+      return selectedRecords;
+    }
+
+    // If no categories specified, just sample and return the requested number
+    const shuffledRecords = sampleArray(filteredRecords, limit);
     logger.debug(`[unsafebench] Selected ${shuffledRecords.length} random unsafe records`);
 
     return shuffledRecords;
@@ -426,36 +453,11 @@ class UnsafeBenchDatasetManager {
 
       logger.debug(`[unsafebench] Processed ${processedRecords.length} images to base64 format`);
 
-      // If including safe prompts, balance the split 50/50
-      let finalRecords = processedRecords;
-      if (includeSafe) {
-        const safeRecords = processedRecords.filter((r) => r.safety_label.toLowerCase() === 'safe');
-        const unsafeRecords = processedRecords.filter(
-          (r) => r.safety_label.toLowerCase() === 'unsafe',
-        );
-
-        logger.debug(
-          `[unsafebench] Found ${safeRecords.length} safe and ${unsafeRecords.length} unsafe images`,
-        );
-
-        // Take equal amounts from each category to ensure 50/50 balance in cache
-        // Use the smaller of the two counts to ensure we have balanced data
-        const numEach = Math.min(safeRecords.length, unsafeRecords.length);
-        finalRecords = [
-          ...safeRecords.sort(() => Math.random() - 0.5).slice(0, numEach),
-          ...unsafeRecords.sort(() => Math.random() - 0.5).slice(0, numEach),
-        ];
-
-        logger.debug(
-          `[unsafebench] Balanced to ${finalRecords.length} total records (${numEach} safe, ${numEach} unsafe) for 50/50 split`,
-        );
-      }
-
       // Store in cache with mode tracking
-      this.datasetCache = finalRecords;
+      this.datasetCache = processedRecords;
       this.cacheIncludeSafe = includeSafe;
       logger.debug(
-        `[unsafebench] Cached ${finalRecords.length} processed records${includeSafe ? ' (balanced safe/unsafe)' : ' (unsafe only)'}`,
+        `[unsafebench] Cached ${processedRecords.length} processed records${includeSafe ? ' (safe and unsafe)' : ' (unsafe only)'}`,
       );
     } catch (error) {
       logger.error(

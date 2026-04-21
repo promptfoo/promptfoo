@@ -1,3 +1,7 @@
+import { CODING_AGENT_COLLECTIONS, CODING_AGENT_PLUGINS } from './codingAgents';
+
+import type { CodingAgentPlugin } from './codingAgents';
+
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
 
 // Inject variable name used in multi-input mode to prevent namespace collisions
@@ -10,7 +14,7 @@ export const REDTEAM_DEFAULTS = {
   NUM_TESTS: 10,
 } as const;
 
-export const REDTEAM_MODEL = 'openai:chat:gpt-5-2025-08-07';
+export const REDTEAM_MODEL = 'openai:chat:gpt-5.4-2026-03-05';
 
 // LlamaGuard 4 is the default on Replicate (supports S14: Code Interpreter Abuse)
 export const LLAMA_GUARD_REPLICATE_PROVIDER = 'replicate:moderation:meta/llama-guard-4-12b';
@@ -169,7 +173,11 @@ export const COLLECTIONS = [
   'insurance',
   'financial',
   'ecommerce',
+  'telecom',
+  'teen-safety',
+  'realestate',
   'guardrails-eval',
+  ...CODING_AGENT_COLLECTIONS,
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
@@ -230,6 +238,9 @@ export const BIAS_PLUGINS = ['bias:age', 'bias:disability', 'bias:gender', 'bias
 
 export const MEDICAL_PLUGINS = [
   'medical:anchoring-bias',
+  'medical:fda:ai-disclosure',
+  'medical:fda:cyber-access-control',
+  'medical:fda:cyber-audit-tampering',
   'medical:hallucination',
   'medical:incorrect-knowledge',
   'medical:off-label-use',
@@ -246,7 +257,9 @@ export const FINANCIAL_PLUGINS = [
   'financial:defamation',
   'financial:hallucination',
   'financial:impartiality',
+  'financial:japan-fiea-suitability',
   'financial:misconduct',
+  'financial:sox-compliance',
   'financial:sycophancy',
 ] as const;
 
@@ -258,6 +271,7 @@ export const PHARMACY_PLUGINS = [
 
 export const INSURANCE_PLUGINS = [
   'insurance:coverage-discrimination',
+  'insurance:data-disclosure',
   'insurance:network-misinformation',
   'insurance:phi-disclosure',
 ] as const;
@@ -269,12 +283,48 @@ export const ECOMMERCE_PLUGINS = [
   'ecommerce:price-manipulation',
 ] as const;
 
+export const TELECOM_PLUGINS = [
+  'telecom:cpni-disclosure',
+  'telecom:location-disclosure',
+  'telecom:account-takeover',
+  'telecom:e911-misinformation',
+  'telecom:tcpa-violation',
+  'telecom:unauthorized-changes',
+  'telecom:fraud-enablement',
+  'telecom:porting-misinformation',
+  'telecom:billing-misinformation',
+  'telecom:coverage-misinformation',
+  'telecom:law-enforcement-request-handling',
+  'telecom:accessibility-violation',
+] as const;
+
+export const REALESTATE_PLUGINS = [
+  'realestate:fair-housing-discrimination',
+  'realestate:steering',
+  'realestate:discriminatory-listings',
+  'realestate:lending-discrimination',
+  'realestate:valuation-bias',
+  'realestate:accessibility-discrimination',
+  'realestate:advertising-discrimination',
+  'realestate:source-of-income',
+] as const;
+
+export const TEEN_SAFETY_PLUGINS = [
+  'teen-safety:harmful-body-ideals',
+  'teen-safety:dangerous-content',
+  'teen-safety:dangerous-roleplay',
+  'teen-safety:age-restricted-goods-and-services',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
 export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
+export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
+export type RealEstatePlugin = (typeof REALESTATE_PLUGINS)[number];
+export type TeenSafetyPlugin = (typeof TEEN_SAFETY_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -292,10 +342,12 @@ export const ADDITIONAL_PLUGINS = [
   'bfla',
   'bola',
   'cca',
+  ...CODING_AGENT_PLUGINS,
   'competitors',
   'coppa',
   'cross-session-leak',
   'cyberseceval',
+  'data-exfil',
   'debug-access',
   'divergent-repetition',
   'donotanswer',
@@ -305,7 +357,11 @@ export const ADDITIONAL_PLUGINS = [
   'imitation',
   'indirect-prompt-injection',
   'mcp',
+  'model-identification',
   'medical:anchoring-bias',
+  'medical:fda:ai-disclosure',
+  'medical:fda:cyber-access-control',
+  'medical:fda:cyber-audit-tampering',
   'medical:hallucination',
   'medical:incorrect-knowledge',
   'medical:off-label-use',
@@ -319,7 +375,9 @@ export const ADDITIONAL_PLUGINS = [
   'financial:defamation',
   'financial:hallucination',
   'financial:impartiality',
+  'financial:japan-fiea-suitability',
   'financial:misconduct',
+  'financial:sox-compliance',
   'financial:sycophancy',
   'ecommerce:compliance-bypass',
   'ecommerce:order-fraud',
@@ -327,6 +385,7 @@ export const ADDITIONAL_PLUGINS = [
   'ecommerce:price-manipulation',
   'goal-misalignment',
   'insurance:coverage-discrimination',
+  'insurance:data-disclosure',
   'insurance:network-misinformation',
   'insurance:phi-disclosure',
   'off-topic',
@@ -334,6 +393,30 @@ export const ADDITIONAL_PLUGINS = [
   'pharmacy:controlled-substance-compliance',
   'pharmacy:dosage-calculation',
   'pharmacy:drug-interaction',
+  'telecom:cpni-disclosure',
+  'telecom:location-disclosure',
+  'telecom:account-takeover',
+  'telecom:e911-misinformation',
+  'telecom:tcpa-violation',
+  'telecom:unauthorized-changes',
+  'telecom:fraud-enablement',
+  'telecom:porting-misinformation',
+  'telecom:billing-misinformation',
+  'telecom:coverage-misinformation',
+  'telecom:law-enforcement-request-handling',
+  'telecom:accessibility-violation',
+  'teen-safety:harmful-body-ideals',
+  'teen-safety:dangerous-content',
+  'teen-safety:dangerous-roleplay',
+  'teen-safety:age-restricted-goods-and-services',
+  'realestate:fair-housing-discrimination',
+  'realestate:steering',
+  'realestate:discriminatory-listings',
+  'realestate:lending-discrimination',
+  'realestate:valuation-bias',
+  'realestate:accessibility-discrimination',
+  'realestate:advertising-discrimination',
+  'realestate:source-of-income',
   'pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
@@ -351,6 +434,7 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'unverifiable-claims',
   'vlguard',
+  'vlsu',
   'wordplay',
   'xstest',
 ] as const;
@@ -366,17 +450,42 @@ export const AGENTIC_EXEMPT_PLUGINS = [
   'agentic:memory-poisoning',
 ] as const;
 
+// Encoding strategies that mangle prompt text and break deterministic canary/receipt matching.
+// Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goat, crescendo).
+export const CANARY_BREAKING_STRATEGY_IDS = [
+  'base64',
+  'hex',
+  'homoglyph',
+  'leetspeak',
+  'rot13',
+  'multilingual',
+  'math-prompt',
+  'jailbreak:composite',
+] as const;
+
 // Dataset plugins that don't use strategies (standalone dataset plugins)
 export const DATASET_EXEMPT_PLUGINS = [
+  'aegis',
   'beavertails',
   'cyberseceval',
+  'donotanswer',
+  'harmbench',
   'pliny',
+  'toxic-chat',
   'unsafebench',
   'vlguard',
+  'vlsu',
+  'xstest',
 ] as const;
 
 // Plugins excluded from multi-input mode (in addition to dataset plugins)
-export const MULTI_INPUT_EXCLUDED_PLUGINS = ['ascii-smuggling'] as const;
+export const MULTI_INPUT_EXCLUDED_PLUGINS = [
+  'cca',
+  'cross-session-leak',
+  'special-token-injection',
+  'system-prompt-override',
+  'ascii-smuggling',
+] as const;
 export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
@@ -394,7 +503,8 @@ export type Plugin =
   | HarmPlugin
   | PIIPlugin
   | BiasPlugin
-  | AgenticPlugin;
+  | AgenticPlugin
+  | CodingAgentPlugin;
 
 export const DEFAULT_PLUGINS: ReadonlySet<Plugin> = new Set([
   ...[
@@ -436,18 +546,24 @@ export const PLUGIN_CATEGORIES = {
   medical: MEDICAL_PLUGINS,
   pharmacy: PHARMACY_PLUGINS,
   insurance: INSURANCE_PLUGINS,
+  telecom: TELECOM_PLUGINS,
+  'teen-safety': TEEN_SAFETY_PLUGINS,
+  realestate: REALESTATE_PLUGINS,
 } as const;
 
 // Plugins registered via createRemotePlugin() in plugins/index.ts
 // These have no local implementation and always call the remote API
 export const REMOTE_ONLY_PLUGIN_IDS = [
   'agentic:memory-poisoning',
+  ...CODING_AGENT_COLLECTIONS,
+  ...CODING_AGENT_PLUGINS,
   'ascii-smuggling',
   'bfla',
   'bola',
   'cca',
   'competitors',
   'coppa',
+  'data-exfil',
   'ferpa',
   'goal-misalignment',
   'harmful:misinformation-disinformation',
@@ -455,6 +571,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   'hijacking',
   'indirect-prompt-injection',
   'mcp',
+  'model-identification',
   'off-topic',
   'rag-document-exfiltration',
   'rag-poisoning',
@@ -470,6 +587,8 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
   ...ECOMMERCE_PLUGINS,
+  ...TELECOM_PLUGINS,
+  ...REALESTATE_PLUGINS,
 ] as const;
 
 // Plugins that frontend should disable when remote generation is unavailable
