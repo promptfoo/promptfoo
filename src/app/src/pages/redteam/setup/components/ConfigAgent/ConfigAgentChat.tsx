@@ -217,7 +217,7 @@ export default function ConfigAgentChat({
             }}
           >
             <KeyIcon sx={{ fontSize: 14 }} />
-            <Typography variant="caption" fontWeight={600}>
+            <Typography variant="caption" sx={{ fontWeight: 600 }}>
               Secure Input Mode
             </Typography>
           </Box>
@@ -268,53 +268,55 @@ export default function ConfigAgentChat({
               borderColor: 'transparent',
             },
           }}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end" sx={{ gap: 0.5 }}>
-                {isApiKeyMode && (
-                  <Tooltip title={showApiKey ? 'Hide' : 'Show'}>
-                    <IconButton
-                      size="small"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      edge="end"
-                      sx={{ color: theme.palette.text.secondary }}
-                    >
-                      {showApiKey ? (
-                        <VisibilityOffIcon fontSize="small" />
-                      ) : (
-                        <VisibilityIcon fontSize="small" />
-                      )}
-                    </IconButton>
+          slotProps={{
+            input: {
+              endAdornment: (
+                <InputAdornment position="end" sx={{ gap: 0.5 }}>
+                  {isApiKeyMode && (
+                    <Tooltip title={showApiKey ? 'Hide' : 'Show'}>
+                      <IconButton
+                        size="small"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        edge="end"
+                        sx={{ color: theme.palette.text.secondary }}
+                      >
+                        {showApiKey ? (
+                          <VisibilityOffIcon fontSize="small" />
+                        ) : (
+                          <VisibilityIcon fontSize="small" />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="Send (Enter)">
+                    <span>
+                      <IconButton
+                        size="small"
+                        onClick={isApiKeyMode ? handleSubmitApiKey : handleSendMessage}
+                        disabled={
+                          isLoading || (isApiKeyMode ? !apiKeyValue.trim() : !inputValue.trim())
+                        }
+                        sx={{
+                          backgroundColor: theme.palette.primary.main,
+                          color: theme.palette.primary.contrastText,
+                          width: 32,
+                          height: 32,
+                          '&:hover': {
+                            backgroundColor: theme.palette.primary.dark,
+                          },
+                          '&.Mui-disabled': {
+                            backgroundColor: alpha(theme.palette.action.disabled, 0.12),
+                            color: theme.palette.action.disabled,
+                          },
+                        }}
+                      >
+                        <SendIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </span>
                   </Tooltip>
-                )}
-                <Tooltip title="Send (Enter)">
-                  <span>
-                    <IconButton
-                      size="small"
-                      onClick={isApiKeyMode ? handleSubmitApiKey : handleSendMessage}
-                      disabled={
-                        isLoading || (isApiKeyMode ? !apiKeyValue.trim() : !inputValue.trim())
-                      }
-                      sx={{
-                        backgroundColor: theme.palette.primary.main,
-                        color: theme.palette.primary.contrastText,
-                        width: 32,
-                        height: 32,
-                        '&:hover': {
-                          backgroundColor: theme.palette.primary.dark,
-                        },
-                        '&.Mui-disabled': {
-                          backgroundColor: alpha(theme.palette.action.disabled, 0.12),
-                          color: theme.palette.action.disabled,
-                        },
-                      }}
-                    >
-                      <SendIcon sx={{ fontSize: 16 }} />
-                    </IconButton>
-                  </span>
-                </Tooltip>
-              </InputAdornment>
-            ),
+                </InputAdornment>
+              ),
+            },
           }}
         />
       </Box>
@@ -692,82 +694,134 @@ function SyntaxHighlightedJson({ json, theme }: { json: string; theme: Theme }) 
     punctuation: isDark ? '#8b949e' : '#57606a',
   };
 
-  // Simple regex-based highlighting
-  const highlighted = json
-    .replace(/"([^"]+)":/g, `<span style="color: ${colors.key}">"$1"</span>:`)
-    .replace(/: "([^"]*)"([,\n])/g, `: <span style="color: ${colors.string}">"$1"</span>$2`)
-    .replace(/: (\d+)([,\n])/g, `: <span style="color: ${colors.number}">$1</span>$2`)
-    .replace(/: (true|false)([,\n])/g, `: <span style="color: ${colors.boolean}">$1</span>$2`)
-    .replace(/: (null)([,\n])/g, `: <span style="color: ${colors.null}">$1</span>$2`);
+  const tokenPattern =
+    /"(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:e[+-]?\d+)?|true|false|null|[{}[\],:]/gi;
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
 
-  return <code dangerouslySetInnerHTML={{ __html: highlighted }} />;
+  while ((match = tokenPattern.exec(json)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(json.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    let color = colors.punctuation;
+    if (token.startsWith('"')) {
+      color = /^\s*:/.test(json.slice(match.index + token.length)) ? colors.key : colors.string;
+    } else if (/^-?\d/.test(token)) {
+      color = colors.number;
+    } else if (token === 'true' || token === 'false') {
+      color = colors.boolean;
+    } else if (token === 'null') {
+      color = colors.null;
+    }
+
+    nodes.push(
+      <span key={`${match.index}-${token}`} style={{ color }}>
+        {token}
+      </span>,
+    );
+    lastIndex = tokenPattern.lastIndex;
+  }
+
+  if (lastIndex < json.length) {
+    nodes.push(json.slice(lastIndex));
+  }
+
+  return <code>{nodes}</code>;
 }
 
 /**
  * Safely render formatted text without dangerouslySetInnerHTML
  * Supports: **bold**, `code`, and newlines
  */
+interface MarkdownToken {
+  type: 'bold' | 'code';
+  index: number;
+  raw: string;
+  text: string;
+}
+
+function getNextMarkdownToken(text: string): MarkdownToken | null {
+  const boldMatch = text.match(/\*\*(.+?)\*\*/);
+  const codeMatch = text.match(/`(.+?)`/);
+  const boldIndex = boldMatch ? text.indexOf(boldMatch[0]) : -1;
+  const codeIndex = codeMatch ? text.indexOf(codeMatch[0]) : -1;
+
+  if (boldIndex === -1 && codeIndex === -1) {
+    return null;
+  }
+
+  const type = boldIndex !== -1 && (codeIndex === -1 || boldIndex < codeIndex) ? 'bold' : 'code';
+  const match = type === 'bold' ? boldMatch! : codeMatch!;
+
+  return {
+    type,
+    index: type === 'bold' ? boldIndex : codeIndex,
+    raw: match[0],
+    text: match[1],
+  };
+}
+
+function renderCodeToken(tokenText: string, key: string, theme: Theme): React.ReactNode {
+  return (
+    <code
+      key={key}
+      style={{
+        backgroundColor: alpha(theme.palette.primary.main, 0.1),
+        padding: '2px 6px',
+        borderRadius: 4,
+        fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+        fontSize: '0.8em',
+        fontWeight: 500,
+      }}
+    >
+      {tokenText}
+    </code>
+  );
+}
+
+function renderFormattedLine(line: string, lineIndex: number, theme: Theme): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let remaining = line;
+  let keyIndex = 0;
+
+  while (remaining.length > 0) {
+    const token = getNextMarkdownToken(remaining);
+    if (!token) {
+      parts.push(remaining);
+      break;
+    }
+
+    if (token.index > 0) {
+      parts.push(remaining.slice(0, token.index));
+    }
+
+    const key = `${token.type}-${lineIndex}-${keyIndex++}`;
+    parts.push(
+      token.type === 'bold' ? (
+        <strong key={key}>{token.text}</strong>
+      ) : (
+        renderCodeToken(token.text, key, theme)
+      ),
+    );
+    remaining = remaining.slice(token.index + token.raw.length);
+  }
+
+  return parts;
+}
+
 function renderFormattedText(text: string, theme: Theme): React.ReactNode {
   if (!text) {
     return null;
   }
 
   const lines = text.split('\n');
-
-  return lines.map((line, lineIndex) => {
-    const parts: React.ReactNode[] = [];
-    let remaining = line;
-    let keyIndex = 0;
-
-    while (remaining.length > 0) {
-      const boldMatch = remaining.match(/\*\*(.+?)\*\*/);
-      const codeMatch = remaining.match(/`(.+?)`/);
-
-      const boldIndex = boldMatch ? remaining.indexOf(boldMatch[0]) : -1;
-      const codeIndex = codeMatch ? remaining.indexOf(codeMatch[0]) : -1;
-
-      if (boldIndex === -1 && codeIndex === -1) {
-        if (remaining) {
-          parts.push(remaining);
-        }
-        break;
-      }
-
-      const usesBold = boldIndex !== -1 && (codeIndex === -1 || boldIndex < codeIndex);
-      const matchIndex = usesBold ? boldIndex : codeIndex;
-      const match = usesBold ? boldMatch! : codeMatch!;
-
-      if (matchIndex > 0) {
-        parts.push(remaining.slice(0, matchIndex));
-      }
-
-      if (usesBold) {
-        parts.push(<strong key={`b-${lineIndex}-${keyIndex++}`}>{match[1]}</strong>);
-      } else {
-        parts.push(
-          <code
-            key={`c-${lineIndex}-${keyIndex++}`}
-            style={{
-              backgroundColor: alpha(theme.palette.primary.main, 0.1),
-              padding: '2px 6px',
-              borderRadius: 4,
-              fontFamily: '"JetBrains Mono", "Fira Code", monospace',
-              fontSize: '0.8em',
-              fontWeight: 500,
-            }}
-          >
-            {match[1]}
-          </code>,
-        );
-      }
-
-      remaining = remaining.slice(matchIndex + match[0].length);
-    }
-
-    if (lineIndex < lines.length - 1) {
-      parts.push(<br key={`br-${lineIndex}`} />);
-    }
-
-    return <React.Fragment key={`line-${lineIndex}`}>{parts}</React.Fragment>;
-  });
+  return lines.map((line, lineIndex) => (
+    <React.Fragment key={`line-${lineIndex}`}>
+      {renderFormattedLine(line, lineIndex, theme)}
+      {lineIndex < lines.length - 1 && <br />}
+    </React.Fragment>
+  ));
 }

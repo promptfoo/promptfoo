@@ -37,6 +37,7 @@ export interface TruncatedTextProps {
 }
 
 function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
+  const textId = React.useId();
   // Normalize without destroying arrays/element structure
   const text: React.ReactNode =
     typeof rawText === 'string' ||
@@ -72,7 +73,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     if (Array.isArray(node)) {
       const nodes: React.ReactNode[] = [];
       let currentLength = length;
-      for (const child of node) {
+      for (const child of React.Children.toArray(node)) {
         const childLength = textLength(child);
         if (currentLength + childLength > maxLength) {
           nodes.push(truncateText(child, currentLength));
@@ -101,8 +102,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   return (
     <div style={{ position: 'relative' }}>
       <div
-        // TODO: Element IDs should be unique; these aren't.
-        id="eval-output-cell-text"
+        id={`eval-output-cell-text-${textId}`}
         style={{
           position: 'relative',
           marginBottom: '8px',

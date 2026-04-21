@@ -2,16 +2,13 @@ import { Router } from 'express';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
+import { ConfigurationAgent } from '../../redteam/configAgent';
 import {
-  ALL_PLUGINS,
-  ALL_STRATEGIES,
   DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
-  type Plugin,
   REDTEAM_MODEL,
-  type Strategy,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
@@ -19,13 +16,10 @@ import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import {
-  ConversationMessageSchema,
-  PluginConfigSchema,
-  StrategyConfigSchema,
-} from '../../redteam/types';
 import { TestCaseWithPlugin } from '../../types';
+import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { sanitizeObject } from '../../util/sanitizer';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
@@ -35,43 +29,23 @@ import {
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
-export const redteamRouter = Router();
+import type {
+  AgentMessage,
+  ConfigAgentSession,
+  DiscoveredConfig,
+  UserInput,
+} from '../../redteam/configAgent/types';
 
-const TestCaseGenerationSchema = z.object({
-  plugin: z.object({
-    id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
-      message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
-    }) as unknown as z.ZodType<Plugin>,
-    config: PluginConfigSchema.optional().prefault({}),
-  }),
-  strategy: z.object({
-    id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
-      message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
-    }) as unknown as z.ZodType<Strategy>,
-    config: StrategyConfigSchema.optional().prefault({}),
-  }),
-  config: z.object({
-    applicationDefinition: z.object({
-      purpose: z.string().nullable(),
-    }),
-  }),
-  turn: z.int().min(0).optional().prefault(0),
-  maxTurns: z.int().min(1).optional(),
-  history: z.array(ConversationMessageSchema).optional().prefault([]),
-  goal: z.string().optional(),
-  stateful: z.boolean().optional(),
-  // Batch generation: number of test cases to generate (1-10, default 1)
-  count: z.int().min(1).max(10).optional().prefault(1),
-});
+export const redteamRouter = Router();
 
 /**
  * Generates a test case for a given plugin/strategy combination.
  */
 redteamRouter.post('/generate-test', async (req: Request, res: Response): Promise<void> => {
   try {
-    const parsedBody = TestCaseGenerationSchema.safeParse(req.body);
+    const parsedBody = RedteamSchemas.GenerateTest.Request.safeParse(req.body);
     if (!parsedBody.success) {
-      res.status(400).json({ error: 'Invalid request body', details: parsedBody.error.message });
+      res.status(400).json({ error: z.prettifyError(parsedBody.error) });
       return;
     }
 
@@ -157,10 +131,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           finalTestCases = strategyTestCases;
         }
       } catch (error) {
-        logger.error(`Error applying strategy ${strategy.id}: ${error}`);
+        logger.error(`Error applying strategy ${strategy.id}`, { error });
         res.status(500).json({
           error: `Failed to apply strategy ${strategy.id}`,
-          details: error instanceof Error ? error.message : String(error),
         });
         return;
       }
@@ -213,7 +186,6 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         });
         res.status(500).json({
           error: 'Failed to generate multi-turn prompt',
-          details: error instanceof Error ? error.message : String(error),
         });
         return;
       }
@@ -247,10 +219,9 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       metadata: baseMetadata,
     });
   } catch (error) {
-    logger.error(`Error generating test case: ${error}`);
+    logger.error('Error generating test case', { error });
     res.status(500).json({
       error: 'Failed to generate test case',
-      details: error instanceof Error ? error.message : String(error),
     });
   }
 });
@@ -260,6 +231,12 @@ let currentJobId: string | null = null;
 let currentAbortController: AbortController | null = null;
 
 redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> => {
+  const bodyResult = RedteamSchemas.Run.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+    return;
+  }
+
   // If there's a current job running, abort it
   if (currentJobId) {
     if (currentAbortController) {
@@ -272,7 +249,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     }
   }
 
-  const { config, force, verbose, delay, maxConcurrency } = req.body;
+  const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
   const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
@@ -290,16 +267,13 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   // Set web UI mode
   cliState.webUI = true;
 
-  // Validate and normalize maxConcurrency
-  const normalizedMaxConcurrency = Math.max(1, Number(maxConcurrency || '1'));
-
   // Run redteam in background
   doRedteamRun({
     liveRedteamConfig: config,
     force,
     verbose,
-    delay: Number(delay || '0'),
-    maxConcurrency: normalizedMaxConcurrency,
+    ...(delay === undefined ? {} : { delay }),
+    ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
     logCallback: (message: string) => {
       if (currentJobId === id) {
         const job = evalJobs.get(id);
@@ -377,10 +351,6 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
 // Configuration Agent Endpoints
 // ============================================================================
 
-import { ConfigurationAgent } from '../../redteam/configAgent';
-
-import type { UserInput } from '../../redteam/configAgent/types';
-
 // Store active configuration agent sessions
 const configAgentSessions = new Map<string, ConfigurationAgent>();
 
@@ -390,27 +360,70 @@ const MAX_CONFIG_AGENT_SESSIONS = 100;
 /**
  * Sanitize session data to remove sensitive information before sending to client
  */
-function sanitizeSessionForClient(
-  session: ReturnType<ConfigurationAgent['getSession']>,
-): Record<string, unknown> {
-  // Create a sanitized copy without sensitive user inputs
-  const sanitizedSession = { ...session };
+function isSensitiveName(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return (
+    normalized === 'authorization' ||
+    normalized.includes('api-key') ||
+    normalized.includes('apikey') ||
+    normalized.includes('key') ||
+    normalized.includes('secret') ||
+    normalized.includes('password') ||
+    normalized.includes('token')
+  );
+}
+
+function maskSensitiveValue(value: unknown): string {
+  const strValue = String(value);
+  return strValue.length > 4 ? `••••${strValue.slice(-4)}` : '••••';
+}
+
+function maskHeaderValue(value: string): string {
+  const authMatch = value.match(/^([a-z]+)\s+(.+)$/i);
+  if (authMatch) {
+    return `${authMatch[1]} ${maskSensitiveValue(authMatch[2])}`;
+  }
+  return maskSensitiveValue(value);
+}
+
+function sanitizeDiscoveredConfig<T extends Partial<DiscoveredConfig>>(config: T): T {
+  const sanitizedConfig = { ...config };
+
+  if (sanitizedConfig.headers) {
+    sanitizedConfig.headers = Object.fromEntries(
+      Object.entries(sanitizedConfig.headers).map(([key, value]) => [
+        key,
+        isSensitiveName(key) ? maskHeaderValue(value) : value,
+      ]),
+    );
+  }
+
+  return sanitizedConfig;
+}
+
+function sanitizeMessagesForClient(messages: AgentMessage[]): AgentMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    metadata: message.metadata
+      ? {
+          ...message.metadata,
+          discoveredConfig: message.metadata.discoveredConfig
+            ? sanitizeDiscoveredConfig(message.metadata.discoveredConfig)
+            : undefined,
+        }
+      : undefined,
+  }));
+}
+
+function sanitizeSessionForClient(session: ConfigAgentSession): ConfigAgentSession {
+  const sanitizedSession = structuredClone(session);
 
   // Remove sensitive fields from userInputs
   if (sanitizedSession.userInputs) {
     const sanitizedInputs: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(sanitizedSession.userInputs)) {
-      // Mask API keys and other sensitive fields
-      if (
-        key === 'apiKey' ||
-        key.toLowerCase().includes('key') ||
-        key.toLowerCase().includes('secret') ||
-        key.toLowerCase().includes('password') ||
-        key.toLowerCase().includes('token')
-      ) {
-        // Show masked version (last 4 chars only)
-        const strValue = String(value);
-        sanitizedInputs[key] = strValue.length > 4 ? `••••${strValue.slice(-4)}` : '••••';
+      if (isSensitiveName(key)) {
+        sanitizedInputs[key] = maskSensitiveValue(value);
       } else {
         sanitizedInputs[key] = value;
       }
@@ -418,28 +431,17 @@ function sanitizeSessionForClient(
     sanitizedSession.userInputs = sanitizedInputs;
   }
 
-  // Also sanitize finalConfig headers that might contain auth
-  if (sanitizedSession.finalConfig?.headers) {
-    const sanitizedHeaders: Record<string, string> = {};
-    for (const [key, value] of Object.entries(sanitizedSession.finalConfig.headers)) {
-      if (
-        key.toLowerCase() === 'authorization' ||
-        key.toLowerCase().includes('api-key') ||
-        key.toLowerCase().includes('apikey') ||
-        key.toLowerCase() === 'x-api-key'
-      ) {
-        // Mask sensitive header values
-        sanitizedHeaders[key] =
-          value.length > 10 ? `${value.slice(0, 6)}••••${value.slice(-4)}` : '••••';
-      } else {
-        sanitizedHeaders[key] = value;
-      }
-    }
-    sanitizedSession.finalConfig = {
-      ...sanitizedSession.finalConfig,
-      headers: sanitizedHeaders,
-    };
+  if (sanitizedSession.finalConfig) {
+    sanitizedSession.finalConfig = sanitizeDiscoveredConfig(sanitizedSession.finalConfig);
   }
+
+  if (sanitizedSession.bestMatch) {
+    sanitizedSession.bestMatch.discoveredConfig = sanitizeDiscoveredConfig(
+      sanitizedSession.bestMatch.discoveredConfig,
+    );
+  }
+
+  sanitizedSession.messages = sanitizeMessagesForClient(sanitizedSession.messages);
 
   return sanitizedSession;
 }
@@ -500,7 +502,7 @@ redteamRouter.post('/config-agent/start', async (req: Request, res: Response): P
 
     res.json({
       sessionId: session.id,
-      messages: agent.getMessages(),
+      messages: sanitizeMessagesForClient(agent.getMessages()),
     });
   } catch (error) {
     logger.error('[ConfigAgent] Start error', { error });
@@ -540,7 +542,7 @@ redteamRouter.post('/config-agent/input', async (req: Request, res: Response): P
     const sanitizedSession = sanitizeSessionForClient(agent.getSession());
 
     res.json({
-      messages: agent.getMessages(),
+      messages: sanitizeMessagesForClient(agent.getMessages()),
       session: sanitizedSession,
     });
   } catch (error) {
@@ -568,9 +570,9 @@ redteamRouter.get(
       const sanitizedSession = sanitizeSessionForClient(agent.getSession());
 
       res.json({
-        messages: agent.getMessages(),
+        messages: sanitizeMessagesForClient(agent.getMessages()),
         session: sanitizedSession,
-        config: agent.getFinalConfig(),
+        config: sanitizedSession.finalConfig,
         isComplete: agent.isComplete(),
       });
     } catch (error) {
@@ -605,7 +607,7 @@ redteamRouter.delete(
 
 // Clean up old sessions periodically (sessions older than 1 hour)
 const CONFIG_AGENT_SESSION_TTL = 60 * 60 * 1000; // 1 hour
-setInterval(
+const configAgentCleanupInterval = setInterval(
   () => {
     const now = Date.now();
     for (const [sessionId, agent] of configAgentSessions) {
@@ -619,6 +621,7 @@ setInterval(
   },
   5 * 60 * 1000,
 ); // Check every 5 minutes
+configAgentCleanupInterval.unref?.();
 
 // ============================================================================
 // Cloud Task Proxy (catch-all - must be last)
@@ -635,15 +638,24 @@ setInterval(
  * Cloud's task registry (See server/src/routes/task.ts).
  */
 redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void> => {
-  const { taskId } = req.params;
+  const paramsResult = RedteamSchemas.Task.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ success: false, error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+  const bodyResult = RedteamSchemas.Task.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+    return;
+  }
+
+  const { taskId } = paramsResult.data;
   const cloudFunctionUrl = getRemoteGenerationUrl();
-  logger.debug(
-    `Received ${taskId} task request: ${JSON.stringify({
-      method: req.method,
-      url: req.url,
-      body: req.body,
-    })}`,
-  );
+  logger.debug(`Received ${taskId} task request`, {
+    method: req.method,
+    url: req.url,
+    body: sanitizeObject(bodyResult.data, { context: 'request body' }),
+  });
 
   try {
     logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);
@@ -653,8 +665,8 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        ...bodyResult.data,
         task: taskId,
-        ...req.body,
       }),
     });
 

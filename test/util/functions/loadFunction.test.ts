@@ -16,11 +16,11 @@ vi.mock('../../../src/python/pythonUtils', () => ({
 }));
 
 // Use hoisted mock values that work on all platforms
-const { TEST_JS_PATH, TEST_PY_PATH, mockResolve } = vi.hoisted(() => {
+const { TEST_JS_PATH, TEST_PY_PATH, TEST_TXT_PATH, mockResolve } = vi.hoisted(() => {
   const TEST_JS_PATH = '/test/resolved/function.js';
   const TEST_PY_PATH = '/test/resolved/function.py';
   const TEST_TXT_PATH = '/test/resolved/function.txt';
-  const mockResolve = vi.fn((...args: string[]) => {
+  const mockResolve = vi.fn((...args: string[]): string => {
     const lastArg = args[args.length - 1] || '';
     if (lastArg.endsWith('.py')) {
       return TEST_PY_PATH;
@@ -30,7 +30,7 @@ const { TEST_JS_PATH, TEST_PY_PATH, mockResolve } = vi.hoisted(() => {
     }
     return TEST_JS_PATH;
   });
-  return { TEST_JS_PATH, TEST_PY_PATH, mockResolve };
+  return { TEST_JS_PATH, TEST_PY_PATH, TEST_TXT_PATH, mockResolve };
 });
 
 vi.mock('path', async () => {
@@ -54,6 +54,17 @@ vi.mock('../../../src/cliState', () => ({
 describe('loadFunction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResolve.mockReset();
+    mockResolve.mockImplementation((...args: string[]) => {
+      const lastArg = args[args.length - 1] || '';
+      if (lastArg.endsWith('.py')) {
+        return TEST_PY_PATH;
+      }
+      if (lastArg.endsWith('.txt')) {
+        return TEST_TXT_PATH;
+      }
+      return TEST_JS_PATH;
+    });
     // Clear the function cache
     Object.keys(functionCache).forEach((key) => delete functionCache[key]);
   });

@@ -1,8 +1,6 @@
 import ConfigAgentChat from './ConfigAgentChat';
 import ConfigAgentDrawer from './ConfigAgentDrawer';
 
-export { ConfigAgentChat, ConfigAgentDrawer };
-
 export { useConfigAgent } from '../../hooks/useConfigAgent';
 
 export type {
@@ -12,3 +10,4 @@ export type {
   InputRequest,
   QuickOption,
 } from '../../hooks/useConfigAgent';
+export { ConfigAgentChat, ConfigAgentDrawer };

@@ -1,20 +1,32 @@
+import { createRequire } from 'node:module';
 import { readFileSync } from 'fs';
 
 import { defineConfig } from 'tsdown';
 
+const require = createRequire(import.meta.url);
+const semver = require('semver') as typeof import('semver');
+
 // Read package.json for version constants
 const packageJson = JSON.parse(readFileSync('./package.json', 'utf8'));
 
-// Extract minimum Node.js version from engines field (e.g., ">=20.0.0" → 20)
-// This is injected into entrypoint.ts for the version check
-// Note: Assumes engines.node is a simple semver constraint like ">=20.0.0"
-const enginesNode: string = packageJson.engines?.node ?? '';
-let minNodeVersion = parseInt(enginesNode.replace(/[^\d.]/g, ''), 10);
-if (Number.isNaN(minNodeVersion)) {
-  console.warn(
-    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to Node.js 20.`,
+// Normalize the package.json engines range into comparator sets that the zero-dependency
+// CLI entrypoint can evaluate before importing any other modules.
+const enginesNode: string = packageJson.engines?.node ?? '>=20.0.0';
+let nodeEngineComparatorSets: Array<
+  Array<{ operator: '' | '=' | '>' | '>=' | '<' | '<='; version: string }>
+>;
+try {
+  nodeEngineComparatorSets = new semver.Range(enginesNode).set.map((comparatorSet) =>
+    comparatorSet.map((comparator) => ({
+      operator: comparator.operator,
+      version: comparator.semver.version,
+    })),
   );
-  minNodeVersion = 20;
+} catch {
+  console.warn(
+    `[tsdown] Warning: Could not parse engines.node "${enginesNode}". Defaulting to >=20.0.0.`,
+  );
+  nodeEngineComparatorSets = [[{ operator: '>=', version: '20.0.0' }]];
 }
 
 // Build-time constants injected into all builds
@@ -23,7 +35,8 @@ if (Number.isNaN(minNodeVersion)) {
 const versionDefines = {
   __PROMPTFOO_VERSION__: JSON.stringify(packageJson.version),
   __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
-  __PROMPTFOO_MIN_NODE_VERSION__: String(minNodeVersion),
+  __PROMPTFOO_NODE_ENGINE_RANGE__: JSON.stringify(enginesNode),
+  __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: JSON.stringify(nodeEngineComparatorSets),
 };
 
 // All configs use clean: false. Use `npm run build:clean` for explicit cleaning.

@@ -1,12 +1,34 @@
-import { describe, expect, it, vi } from 'vitest';
+import { lookup } from 'node:dns/promises';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigurationAgent } from '../../../src/redteam/configAgent/agent';
+import { fetchWithProxy } from '../../../src/util/fetch';
 
 // Mock fetchWithProxy to avoid actual HTTP calls
 vi.mock('../../../src/util/fetch', () => ({
   fetchWithProxy: vi.fn(),
 }));
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(),
+}));
+
+const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
+const mockedLookup = vi.mocked(lookup);
+
+function jsonResponse(body: unknown, init?: ResponseInit): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    ...init,
+  });
+}
 
 describe('ConfigurationAgent', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }] as any);
+  });
+
   describe('URL Validation (SSRF Protection)', () => {
     it('should accept valid HTTPS URLs', () => {
       const agent = new ConfigurationAgent('https://api.example.com');
@@ -61,6 +83,18 @@ describe('ConfigurationAgent', () => {
 
       it('should block 0.0.0.0', () => {
         expect(() => new ConfigurationAgent('http://0.0.0.0')).toThrow();
+      });
+
+      it('should block IPv6 localhost and private ranges', () => {
+        expect(() => new ConfigurationAgent('http://[::1]')).toThrow(
+          'Access to localhost is not allowed',
+        );
+        expect(() => new ConfigurationAgent('http://[fd00::1]')).toThrow(
+          'Access to private IP addresses is not allowed',
+        );
+        expect(() => new ConfigurationAgent('http://[fe80::1]')).toThrow(
+          'Access to link-local addresses is not allowed',
+        );
       });
 
       it('should block .localhost subdomains', () => {
@@ -125,10 +159,43 @@ describe('ConfigurationAgent', () => {
         );
       });
 
-      // Note: Protocol restrictions (ftp://, file://, etc.) are not currently
-      // enforced due to the implementation prepending https:// to non-http URLs.
-      // The core SSRF protections (localhost, private IPs, cloud metadata) work correctly.
-      // TODO: Consider improving protocol handling in a future PR.
+      it('should block non-HTTP protocols', () => {
+        expect(() => new ConfigurationAgent('ftp://api.example.com')).toThrow(
+          'Only HTTP and HTTPS protocols are allowed',
+        );
+      });
+    });
+
+    it('should reject hostnames that resolve to private addresses', async () => {
+      mockedLookup.mockResolvedValue([{ address: '10.0.0.1', family: 4 }] as any);
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+      expect(agent.getSession().phase).toBe('error');
+      expect(agent.getMessages().some((message) => message.content.includes('private IP'))).toBe(
+        true,
+      );
+    });
+
+    it('should not follow redirects while probing', async () => {
+      mockedFetchWithProxy.mockImplementation(() =>
+        Promise.resolve(
+          new Response('', {
+            status: 302,
+            headers: { Location: 'http://127.0.0.1/admin' },
+          }),
+        ),
+      );
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+
+      expect(mockedFetchWithProxy).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ redirect: 'manual' }),
+      );
     });
   });
 
@@ -172,6 +239,38 @@ describe('ConfigurationAgent', () => {
       expect(messages.length).toBe(1);
       expect(messages[0].type).toBe('info');
       expect(messages[0].content).toBe('Discovery cancelled.');
+    });
+  });
+
+  describe('Authentication', () => {
+    it('keeps API key input out of messages and previous discovery metadata', async () => {
+      mockedFetchWithProxy.mockImplementation(async (_url, options) => {
+        const headers = options?.headers as Record<string, string> | undefined;
+        if (options?.method === 'HEAD') {
+          return new Response('', { status: 200 });
+        }
+        if (headers?.Authorization === 'Bearer sk-test-secret') {
+          return jsonResponse({
+            choices: [{ message: { content: 'hello' } }],
+          });
+        }
+        return jsonResponse({ error: { message: 'API key required' } }, { status: 401 });
+      });
+
+      const agent = new ConfigurationAgent('https://api.example.com');
+      await agent.startDiscovery();
+      await agent.handleUserInput({
+        sessionId: agent.getSession().id,
+        type: 'api_key',
+        value: 'sk-test-secret',
+        field: 'apiKey',
+      });
+
+      expect(JSON.stringify(agent.getMessages())).not.toContain('sk-test-secret');
+      expect(JSON.stringify(agent.getMessages())).toContain('••••••••cret');
+      expect(Object.values(agent.getFinalConfig()?.headers ?? {})).toContain(
+        'Bearer sk-test-secret',
+      );
     });
   });
 });

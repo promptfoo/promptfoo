@@ -77,7 +77,7 @@ interface UseConfigAgentReturn {
   finalConfig: DiscoveredConfig | null;
 
   // Actions
-  startSession: (baseUrl: string) => Promise<void>;
+  startSession: (baseUrl: string) => Promise<boolean>;
   sendMessage: (message: string) => Promise<void>;
   selectOption: (optionId: string) => Promise<void>;
   submitApiKey: (apiKey: string, field?: string) => Promise<void>;
@@ -100,6 +100,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
   const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollingActiveRef = useRef<boolean>(false);
   const mountedRef = useRef<boolean>(true);
+  const apiKeyRef = useRef<string | null>(null);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -124,6 +125,41 @@ export function useConfigAgent(): UseConfigAgentReturn {
       pollingTimeoutRef.current = null;
     }
   }, []);
+
+  const restoreSensitiveHeaders = useCallback((config: DiscoveredConfig): DiscoveredConfig => {
+    const apiKey = apiKeyRef.current;
+    const headerName = config.auth?.headerName;
+    if (!apiKey || !headerName) {
+      return config;
+    }
+
+    const currentValue = config.headers?.[headerName];
+    const headerValue =
+      typeof currentValue === 'string' && /^bearer\s+/i.test(currentValue)
+        ? `Bearer ${apiKey}`
+        : apiKey;
+
+    return {
+      ...config,
+      headers: {
+        ...config.headers,
+        [headerName]: headerValue,
+      },
+    };
+  }, []);
+
+  const restoreSessionSecrets = useCallback(
+    (nextSession: ConfigAgentSession | null): ConfigAgentSession | null => {
+      if (!nextSession?.finalConfig) {
+        return nextSession;
+      }
+      return {
+        ...nextSession,
+        finalConfig: restoreSensitiveHeaders(nextSession.finalConfig),
+      };
+    },
+    [restoreSensitiveHeaders],
+  );
 
   /**
    * Poll for session updates
@@ -154,7 +190,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
           }
 
           setMessages(data.messages || []);
-          setSession(data.session || null);
+          setSession(restoreSessionSecrets(data.session || null));
 
           // Continue polling if not complete
           if (data.session && !['complete', 'error'].includes(data.session.phase)) {
@@ -180,7 +216,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
 
       poll();
     },
-    [stopPolling],
+    [stopPolling, restoreSessionSecrets],
   );
 
   /**
@@ -209,8 +245,10 @@ export function useConfigAgent(): UseConfigAgentReturn {
 
         // Poll for updates since discovery runs async
         pollSession(data.sessionId);
+        return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to start session');
+        return false;
       } finally {
         setIsLoading(false);
       }
@@ -248,7 +286,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
 
         const data = await response.json();
         setMessages(data.messages || []);
-        setSession(data.session || null);
+        setSession(restoreSessionSecrets(data.session || null));
 
         // Continue polling if needed
         if (data.session && !['complete', 'error'].includes(data.session.phase)) {
@@ -266,7 +304,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
         setIsLoading(false);
       }
     },
-    [sessionId, pollSession],
+    [sessionId, pollSession, restoreSessionSecrets],
   );
 
   const sendMessage = useCallback(
@@ -285,6 +323,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
 
   const submitApiKey = useCallback(
     async (apiKey: string, field = 'apiKey') => {
+      apiKeyRef.current = apiKey;
       await sendInput('api_key', apiKey, field);
     },
     [sendInput],
@@ -320,6 +359,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
     setMessages([]);
     setSession(null);
     setError(null);
+    apiKeyRef.current = null;
   }, [sessionId, stopPolling]);
 
   /**
@@ -334,6 +374,7 @@ export function useConfigAgent(): UseConfigAgentReturn {
     setSession(null);
     setError(null);
     setIsLoading(false);
+    apiKeyRef.current = null;
   }, [stopPolling]);
 
   return {

@@ -108,8 +108,8 @@ export default function ConfigAgentDrawer({
     if (!urlInput.trim()) {
       return;
     }
-    setStarted(true);
-    await startSession(urlInput.trim());
+    const didStart = await startSession(urlInput.trim());
+    setStarted(didStart);
   }, [urlInput, startSession]);
 
   const handleClose = useCallback(() => {
@@ -152,18 +152,23 @@ export default function ConfigAgentDrawer({
   }, [urlInput]);
 
   // Get current phase index for progress indicator
-  const currentPhaseIndex = PHASES.findIndex((p) => p.key === session?.phase) || 0;
+  const currentPhaseIndex = Math.max(
+    0,
+    PHASES.findIndex((p) => p.key === session?.phase),
+  );
 
   return (
     <Drawer
       anchor="right"
       open={open}
       onClose={handleClose}
-      PaperProps={{
-        sx: {
-          width: DRAWER_WIDTH,
-          maxWidth: '100vw',
-          backgroundColor: theme.palette.background.default,
+      slotProps={{
+        paper: {
+          sx: {
+            width: DRAWER_WIDTH,
+            maxWidth: '100vw',
+            backgroundColor: theme.palette.background.default,
+          },
         },
       }}
     >

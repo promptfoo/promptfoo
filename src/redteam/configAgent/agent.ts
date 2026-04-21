@@ -5,7 +5,9 @@
  * and generating configuration suggestions.
  */
 
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch';
@@ -23,6 +25,121 @@ import type {
 
 const DEFAULT_TIMEOUT = 10000;
 const _MAX_RETRIES = 2;
+
+const CLOUD_METADATA_HOSTS = new Set([
+  'metadata.google.internal',
+  'metadata.goog',
+  'metadata',
+  'instance-data',
+]);
+
+function cloneValue<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function renderTemplateValue(value: unknown, replacements: Record<string, string>): unknown {
+  if (typeof value === 'string') {
+    return Object.entries(replacements).reduce(
+      (rendered, [key, replacement]) =>
+        rendered.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), replacement),
+      value,
+    );
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => renderTemplateValue(item, replacements));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, renderTemplateValue(item, replacements)]),
+    );
+  }
+
+  return value;
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname.toLowerCase().replace(/^\[|\]$/g, '');
+}
+
+function assertIpv4Allowed(hostname: string): void {
+  const octets = hostname.split('.').map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)
+  ) {
+    throw new Error('Invalid URL format');
+  }
+
+  const [a, b] = octets;
+
+  if (a === 127) {
+    throw new Error('Access to loopback addresses is not allowed');
+  }
+  if (a === 0) {
+    throw new Error('Access to reserved addresses is not allowed');
+  }
+  if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
+    throw new Error('Access to private IP addresses is not allowed');
+  }
+  if (a === 169 && b === 254) {
+    throw new Error('Access to link-local addresses is not allowed');
+  }
+  if (a === 100 && b >= 64 && b <= 127) {
+    throw new Error('Access to private IP addresses is not allowed');
+  }
+  if (a >= 224) {
+    throw new Error('Access to reserved addresses is not allowed');
+  }
+}
+
+function assertIpv6Allowed(hostname: string): void {
+  const normalized = hostname.toLowerCase();
+
+  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') {
+    throw new Error('Access to localhost is not allowed');
+  }
+  if (normalized === '::' || normalized === '0:0:0:0:0:0:0:0') {
+    throw new Error('Access to reserved addresses is not allowed');
+  }
+  if (/^f[cd]/.test(normalized)) {
+    throw new Error('Access to private IP addresses is not allowed');
+  }
+  if (/^fe[89ab]/.test(normalized)) {
+    throw new Error('Access to link-local addresses is not allowed');
+  }
+  if (/^fe[c-f]/.test(normalized)) {
+    throw new Error('Access to private IP addresses is not allowed');
+  }
+  if (normalized.startsWith('::ffff:')) {
+    throw new Error('Access to private IP addresses is not allowed');
+  }
+}
+
+function assertHostnameAllowed(hostname: string): void {
+  const normalized = normalizeHostname(hostname);
+
+  if (
+    normalized === 'localhost' ||
+    normalized === '127.0.0.1' ||
+    normalized === '0.0.0.0' ||
+    normalized.endsWith('.localhost')
+  ) {
+    throw new Error('Access to localhost is not allowed');
+  }
+
+  if (CLOUD_METADATA_HOSTS.has(normalized)) {
+    throw new Error('Access to cloud metadata endpoints is not allowed');
+  }
+
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) {
+    assertIpv4Allowed(normalized);
+  } else if (ipVersion === 6) {
+    assertIpv6Allowed(normalized);
+  }
+}
 
 /**
  * Configuration Agent for auto-discovering endpoint configuration
@@ -51,14 +168,14 @@ export class ConfigurationAgent {
    * Get current session state
    */
   getSession(): ConfigAgentSession {
-    return { ...this.session };
+    return cloneValue(this.session);
   }
 
   /**
    * Get conversation messages
    */
   getMessages(): AgentMessage[] {
-    return [...this.session.messages];
+    return cloneValue(this.session.messages);
   }
 
   /**
@@ -88,7 +205,12 @@ export class ConfigurationAgent {
     let normalized = url.trim();
 
     // Add https if no protocol
-    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    if (normalized.startsWith('//')) {
+      normalized = `https:${normalized}`;
+    } else if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+      if (/^[a-z][a-z0-9+.-]*:\/\//i.test(normalized)) {
+        throw new Error('Only HTTP and HTTPS protocols are allowed');
+      }
       normalized = `https://${normalized}`;
     }
 
@@ -103,71 +225,7 @@ export class ConfigurationAgent {
       throw new Error('Invalid URL format');
     }
 
-    // SSRF Protection: Block private/internal addresses
-    const hostname = parsedUrl.hostname.toLowerCase();
-
-    // Block localhost and loopback
-    if (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '::1' ||
-      hostname === '0.0.0.0' ||
-      hostname.endsWith('.localhost')
-    ) {
-      throw new Error('Access to localhost is not allowed');
-    }
-
-    // Block private IP ranges
-    const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (ipv4Match) {
-      const [, a, b, c] = ipv4Match.map(Number);
-
-      // 10.0.0.0/8
-      if (a === 10) {
-        throw new Error('Access to private IP addresses is not allowed');
-      }
-
-      // 172.16.0.0/12
-      if (a === 172 && b >= 16 && b <= 31) {
-        throw new Error('Access to private IP addresses is not allowed');
-      }
-
-      // 192.168.0.0/16
-      if (a === 192 && b === 168) {
-        throw new Error('Access to private IP addresses is not allowed');
-      }
-
-      // 169.254.0.0/16 (link-local)
-      if (a === 169 && b === 254) {
-        throw new Error('Access to link-local addresses is not allowed');
-      }
-
-      // 127.0.0.0/8 (loopback range)
-      if (a === 127) {
-        throw new Error('Access to loopback addresses is not allowed');
-      }
-
-      // 0.0.0.0/8
-      if (a === 0) {
-        throw new Error('Access to reserved addresses is not allowed');
-      }
-
-      // Block AWS metadata endpoint
-      if (a === 169 && b === 254 && c === 169 && Number(ipv4Match[4]) === 254) {
-        throw new Error('Access to cloud metadata endpoints is not allowed');
-      }
-    }
-
-    // Block common cloud metadata hostnames
-    const metadataHosts = [
-      'metadata.google.internal',
-      'metadata.goog',
-      'metadata',
-      'instance-data',
-    ];
-    if (metadataHosts.includes(hostname)) {
-      throw new Error('Access to cloud metadata endpoints is not allowed');
-    }
+    assertHostnameAllowed(parsedUrl.hostname);
 
     // Only allow http and https protocols
     if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
@@ -175,6 +233,35 @@ export class ConfigurationAgent {
     }
 
     return normalized;
+  }
+
+  /**
+   * Resolve hostnames before each server-side probe so DNS names cannot rebound
+   * to local, private, or metadata addresses after initial URL validation.
+   */
+  private async assertUrlAllowed(url: string): Promise<void> {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error('Invalid URL format');
+    }
+
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+      throw new Error('Only HTTP and HTTPS protocols are allowed');
+    }
+
+    const hostname = normalizeHostname(parsedUrl.hostname);
+    assertHostnameAllowed(hostname);
+
+    if (isIP(hostname)) {
+      return;
+    }
+
+    const addresses = await lookup(hostname, { all: true, verbatim: true });
+    for (const address of addresses) {
+      assertHostnameAllowed(address.address);
+    }
   }
 
   /**
@@ -319,7 +406,7 @@ export class ConfigurationAgent {
       `Found a match: **${this.getStrategyDisplayName(match.strategyId)}** (${confidence}% confidence)`,
       {
         strategyId: match.strategyId,
-        discoveredConfig: match.discoveredConfig,
+        discoveredConfig: cloneValue(match.discoveredConfig),
       },
     );
 
@@ -495,16 +582,22 @@ export class ConfigurationAgent {
       const verified = await this.verifyConfiguration(config, authHeader);
 
       if (verified) {
-        // Update config with auth header
-        config.headers = { ...config.headers, ...authHeader };
-        config.auth = {
-          type: config.auth?.type || 'api_key',
-          location: 'header',
-          headerName: Object.keys(authHeader)[0],
-        };
+        const verifiedConfig = {
+          ...config,
+          headers: { ...config.headers, ...authHeader },
+          auth: {
+            type: config.auth?.type || 'api_key',
+            location: 'header',
+            headerName: Object.keys(authHeader)[0],
+          },
+        } satisfies DiscoveredConfig;
 
         this.session.verified = true;
-        this.session.finalConfig = config;
+        this.session.finalConfig = verifiedConfig;
+        this.session.bestMatch = {
+          ...this.session.bestMatch,
+          discoveredConfig: verifiedConfig,
+        };
         this.session.phase = 'complete';
 
         this.addMessage('success', 'Authentication successful! Configuration verified.');
@@ -653,7 +746,7 @@ export class ConfigurationAgent {
           const verified = await this.verifyConfiguration(this.session.bestMatch.discoveredConfig);
           if (verified) {
             this.session.verified = true;
-            this.session.finalConfig = this.session.bestMatch.discoveredConfig;
+            this.session.finalConfig = cloneValue(this.session.bestMatch.discoveredConfig);
             this.session.phase = 'complete';
             this.addMessage('success', 'Configuration verified!');
             this.addMessage('info', 'Ready to apply?', {
@@ -670,7 +763,7 @@ export class ConfigurationAgent {
       case 'skip':
         // Use config anyway despite verification failure
         if (this.session.bestMatch) {
-          this.session.finalConfig = this.session.bestMatch.discoveredConfig;
+          this.session.finalConfig = cloneValue(this.session.bestMatch.discoveredConfig);
           this.session.phase = 'complete';
           this.addMessage(
             'info',
@@ -866,11 +959,10 @@ export class ConfigurationAgent {
     const body = config.body;
 
     if (typeof body === 'object' && body !== null) {
-      return JSON.parse(
-        JSON.stringify(body)
-          .replace(/\{\{prompt\}\}/g, prompt)
-          .replace(/\{\{model\}\}/g, config.defaultModel || 'gpt-4'),
-      );
+      return renderTemplateValue(body, {
+        prompt,
+        model: config.defaultModel || 'gpt-4',
+      });
     }
 
     return body;
@@ -987,13 +1079,19 @@ export class ConfigurationAgent {
     options: RequestInit,
     timeout = DEFAULT_TIMEOUT,
   ): Promise<Response> {
+    await this.assertUrlAllowed(url);
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, controller.signal])
+      : controller.signal;
 
     try {
       const response = await fetchWithProxy(url, {
         ...options,
-        signal: controller.signal,
+        redirect: 'manual',
+        signal,
       });
       return response;
     } finally {
@@ -1021,7 +1119,7 @@ export class ConfigurationAgent {
    * Get the final configuration (if verified)
    */
   getFinalConfig(): DiscoveredConfig | null {
-    return this.session.finalConfig;
+    return this.session.finalConfig ? cloneValue(this.session.finalConfig) : null;
   }
 
   /**

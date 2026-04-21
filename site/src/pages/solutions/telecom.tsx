@@ -2,6 +2,7 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import CellTowerIcon from '@mui/icons-material/CellTower';
 import GavelIcon from '@mui/icons-material/Gavel';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
@@ -55,6 +56,9 @@ function ComplianceCard({
 }
 
 export default function Telecom() {
+  const canonicalUrl = useBaseUrl('/solutions/telecom/', { absolute: true });
+  const ogImageUrl = useBaseUrl('/img/og/solutions-telecom-og.png', { absolute: true });
+
   return (
     <Layout
       title="AI Security for Telecommunications"
@@ -66,6 +70,19 @@ export default function Telecom() {
           property="og:description"
           content="Test voice and text AI agents at carrier scale. Audio-to-audio model support for IVR, voice assistants, and customer service AI."
         />
+        <meta property="og:image" content={ogImageUrl} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content={canonicalUrl} />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="AI Security for Telecommunications | Promptfoo" />
+        <meta
+          name="twitter:description"
+          content="Test voice and text AI agents at carrier scale. Audio-to-audio model support for IVR, voice assistants, and customer service AI."
+        />
+        <meta name="twitter:image" content={ogImageUrl} />
+        <link rel="canonical" href={canonicalUrl} />
       </Head>
 
       {/* Hero */}
@@ -159,7 +176,7 @@ export default function Telecom() {
         </section>
 
         {/* Voice AI Section - THE DIFFERENTIATOR */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <p className={styles.sectionEyebrow}>Voice AI Testing</p>
             <h2 className={styles.sectionTitle}>Test voice AI with the same rigor as text</h2>
@@ -268,7 +285,7 @@ export default function Telecom() {
         </section>
 
         {/* Account Security Showcase */}
-        <section className={styles.solutionSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.solutionSection}>
           <div className="container">
             <div className={clsx(styles.showcaseRow, styles.showcaseRowReverse)}>
               <div className={styles.showcaseText}>
@@ -369,7 +386,7 @@ export default function Telecom() {
         </section>
 
         {/* Enterprise Benefits */}
-        <section className={styles.benefitsSection} style={{ backgroundColor: '#f8f9fa' }}>
+        <section className={styles.benefitsSection}>
           <div className="container">
             <h2 className={styles.sectionTitle}>Built for carrier scale</h2>
 

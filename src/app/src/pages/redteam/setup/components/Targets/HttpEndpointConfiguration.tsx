@@ -1,10 +1,9 @@
 import './syntax-highlighting.css';
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
 
 import { useCallback, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Dialog,
   DialogContent,
@@ -29,6 +28,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Switch } from '@app/components/ui/switch';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
@@ -38,14 +38,11 @@ import {
   ChevronDown,
   Copy,
   Globe,
-  Maximize2,
   Play,
   Plus,
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 import { ConfigAgentDrawer } from '../ConfigAgent';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
@@ -156,8 +153,8 @@ Content-Type: application/json
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
 
-  // Request body expand state
-  const [requestBodyExpanded, setRequestBodyExpanded] = useState(false);
+  // Request body type (json or text)
+  const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -301,15 +298,12 @@ Content-Type: application/json
         newHeaders.splice(index, 1);
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;
@@ -325,15 +319,12 @@ Content-Type: application/json
         newHeaders[index] = { ...newHeaders[index], key: newKey };
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;
@@ -349,15 +340,12 @@ Content-Type: application/json
         newHeaders[index] = { ...newHeaders[index], value: newValue };
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;
@@ -366,20 +354,41 @@ Content-Type: application/json
     [updateCustomTarget],
   );
 
+  const formatJsonError = (error: unknown): string => {
+    if (!(error instanceof SyntaxError)) {
+      return 'Invalid JSON';
+    }
+    const message = error.message;
+    // Extract position info from various browser formats:
+    // Chrome: "Unexpected token x in JSON at position 123"
+    // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
+    // Safari: "JSON Parse error: Unexpected identifier"
+    const positionMatch = message.match(/position\s+(\d+)/i);
+    const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+
+    if (lineColMatch) {
+      return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
+    }
+    if (positionMatch) {
+      const position = parseInt(positionMatch[1], 10);
+      return `Invalid JSON at position ${position}`;
+    }
+    return 'Invalid JSON syntax';
+  };
+
   const handleRequestBodyChange = (content: string) => {
     setRequestBody(content);
 
-    // Validate JSON if content is not empty
-    if (content.trim()) {
+    // Only validate JSON if in JSON mode and content is not empty
+    if (requestBodyType === 'json' && content.trim()) {
       try {
         JSON.parse(content);
         setBodyError(null); // Clear error if JSON is valid
       } catch (e) {
-        const message = e instanceof SyntaxError ? e.message : 'Invalid JSON';
-        setBodyError(message);
+        setBodyError(formatJsonError(e));
       }
     } else {
-      setBodyError(null); // Clear error for empty content
+      setBodyError(null); // Clear error for empty content or text mode
     }
 
     updateCustomTarget('body', content);
@@ -394,8 +403,7 @@ Content-Type: application/json
         updateCustomTarget('body', formatted);
         setBodyError(null);
       } catch (e) {
-        const message = e instanceof SyntaxError ? e.message : 'Invalid JSON';
-        setBodyError(`Cannot format: ${message}`);
+        setBodyError(`Cannot format: ${formatJsonError(e)}`);
       }
     }
   };
@@ -565,7 +573,7 @@ ${exampleRequest}`;
   );
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Switch
@@ -691,8 +699,50 @@ ${exampleRequest}`;
             </Button>
 
             <div className="mb-2 mt-6 flex items-center justify-between">
-              <p className="font-medium">Request Body</p>
-              <div className="flex gap-1">
+              <div className="flex items-center gap-4">
+                <p className="font-medium">Request Body</p>
+                <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestBodyType('json');
+                      // Re-validate content as JSON
+                      if (requestBody.trim()) {
+                        try {
+                          JSON.parse(requestBody);
+                          setBodyError(null);
+                        } catch (e) {
+                          setBodyError(formatJsonError(e));
+                        }
+                      }
+                    }}
+                    className={cn(
+                      'rounded px-2 py-1 text-xs font-medium transition-colors',
+                      requestBodyType === 'json'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestBodyType('text');
+                      setBodyError(null); // Clear any JSON errors when switching to text
+                    }}
+                    className={cn(
+                      'rounded px-2 py-1 text-xs font-medium transition-colors',
+                      requestBodyType === 'text'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    Text
+                  </button>
+                </div>
+              </div>
+              {requestBodyType === 'json' && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -704,23 +754,14 @@ ${exampleRequest}`;
                 >
                   <AlignLeft className="size-4" />
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setRequestBodyExpanded(true)}
-                  title="Expand editor"
-                  aria-label="Expand editor"
-                  className="size-8"
-                >
-                  <Maximize2 className="size-4" />
-                </Button>
-              </div>
+              )}
             </div>
             <div
               className={cn(
-                'max-h-[400px] overflow-auto rounded-md border bg-white dark:bg-zinc-900',
+                'min-h-[100px] max-h-[400px] resize-y overflow-auto rounded-md border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900',
                 bodyError ? 'border-destructive' : 'border-border',
               )}
+              style={{ contain: 'inline-size' }}
             >
               <Editor
                 value={
@@ -735,7 +776,11 @@ ${exampleRequest}`;
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
                   minHeight: '100px',
+                  width: 'max-content',
+                  minWidth: '100%',
                 }}
+                preClassName="!whitespace-pre"
+                textareaClassName="!whitespace-pre"
               />
             </div>
             {bodyError && <HelperText error>{bodyError}</HelperText>}
@@ -775,7 +820,10 @@ ${exampleRequest}`;
             </ol>
           </details>
         </div>
-        <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
+        <div
+          className="relative min-h-[150px] max-h-[400px] resize-y overflow-auto rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900"
+          style={{ contain: 'inline-size' }}
+        >
           <Editor
             value={selectedTarget.config.transformResponse || ''}
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
@@ -786,7 +834,11 @@ ${exampleRequest}`;
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
               minHeight: '150px',
+              width: 'max-content',
+              minWidth: '100%',
             }}
+            preClassName="!whitespace-pre"
+            textareaClassName="!whitespace-pre"
           />
           <Button
             variant="outline"
@@ -945,55 +997,6 @@ ${exampleRequest}`;
         initialUrl={selectedTarget.config.url || ''}
         onConfigDiscovered={handleConfigAgentDiscovered}
       />
-
-      {/* Request Body Expanded Editor Dialog */}
-      <Dialog open={requestBodyExpanded} onOpenChange={setRequestBodyExpanded}>
-        <DialogContent className="flex h-[80vh] max-w-4xl flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <span>Request Body</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleFormatJson}
-                disabled={!requestBody.trim() || !!bodyError}
-                title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
-              >
-                <AlignLeft className="mr-1 size-4" />
-                Format
-              </Button>
-            </DialogTitle>
-          </DialogHeader>
-          <div
-            className={cn(
-              'flex-1 overflow-auto rounded-md border bg-white dark:bg-zinc-900',
-              bodyError ? 'border-destructive' : 'border-border',
-            )}
-          >
-            <Editor
-              value={
-                typeof requestBody === 'object'
-                  ? JSON.stringify(requestBody, null, 2)
-                  : requestBody || ''
-              }
-              onValueChange={handleRequestBodyChange}
-              highlight={(code) => code}
-              padding={10}
-              style={{
-                fontFamily: '"Fira code", "Fira Mono", monospace',
-                fontSize: 14,
-                minHeight: '100%',
-              }}
-            />
-          </div>
-          {bodyError && <HelperText error>{bodyError}</HelperText>}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRequestBodyExpanded(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
