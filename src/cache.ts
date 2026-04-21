@@ -221,12 +221,13 @@ const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
-  const headers = new Headers(url instanceof Request ? url.headers : undefined);
-  if (options.headers) {
-    for (const [name, value] of new Headers(options.headers).entries()) {
-      headers.set(name, value);
-    }
-  }
+  const headers = new Headers(
+    options.headers === undefined
+      ? url instanceof Request
+        ? url.headers
+        : undefined
+      : options.headers,
+  );
 
   return Array.from(headers.entries()).sort(([nameA, valueA], [nameB, valueB]) => {
     const nameComparison = nameA.localeCompare(nameB);

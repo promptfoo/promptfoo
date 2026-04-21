@@ -812,7 +812,7 @@ describe('fetchWithCache', () => {
       }
     });
 
-    it('should merge Request and init headers when isolating cached responses', async () => {
+    it('should preserve Request headers when isolating cached responses', async () => {
       const cache = getCache();
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'request token one' }))
@@ -824,10 +824,9 @@ describe('fetchWithCache', () => {
       const secondRequest = new Request(url, {
         headers: { Authorization: 'Bearer request-token-two' },
       });
-      const init = { headers: { Accept: 'application/json' } };
 
-      const firstResult = await fetchWithCache(firstRequest, init, 1000);
-      const secondResult = await fetchWithCache(secondRequest, init, 1000);
+      const firstResult = await fetchWithCache(firstRequest, {}, 1000);
+      const secondResult = await fetchWithCache(secondRequest, {}, 1000);
 
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
       expect(firstResult.data).toEqual({ data: 'request token one' });
@@ -838,6 +837,30 @@ describe('fetchWithCache', () => {
       for (const cacheKey of cacheKeys) {
         expect(cacheKey).not.toContain('request-token-one');
         expect(cacheKey).not.toContain('request-token-two');
+      }
+    });
+
+    it('should treat init headers as replacing Request headers in cache keys', async () => {
+      const cache = getCache();
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'request auth' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'init headers' }));
+
+      const request = new Request(url, {
+        headers: { Authorization: 'Bearer request-token' },
+      });
+
+      const requestHeaderResult = await fetchWithCache(request, {}, 1000);
+      const initHeaderResult = await fetchWithCache(request, { headers: {} }, 1000);
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(requestHeaderResult.data).toEqual({ data: 'request auth' });
+      expect(initHeaderResult.data).toEqual({ data: 'init headers' });
+
+      const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+      expect(cacheKeys).toHaveLength(2);
+      for (const cacheKey of cacheKeys) {
+        expect(cacheKey).not.toContain('request-token');
       }
     });
 

@@ -185,6 +185,42 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should preserve Request headers when init headers are absent', async () => {
+    const request = new Request('https://example.com/api', {
+      headers: { Authorization: 'Bearer request-token' },
+    });
+
+    await fetchWithProxy(request);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer request-token',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should replace Request headers when init headers are provided', async () => {
+    const request = new Request('https://example.com/api', {
+      headers: { Authorization: 'Bearer request-token' },
+    });
+
+    await fetchWithProxy(request, { headers: { Accept: 'application/json' } });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({
+        headers: {
+          Accept: 'application/json',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
   it('should handle URLs with basic auth credentials', async () => {
     const url = 'https://username:password@example.com/api';
     const options = { headers: { 'Content-Type': 'application/json' } };
