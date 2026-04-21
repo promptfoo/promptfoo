@@ -280,6 +280,9 @@ export function sanitizeObject(
       safeStringify(
         obj,
         (_key, val) => {
+          if (typeof val === 'bigint') {
+            return val.toString();
+          }
           if (val instanceof Error) {
             return {
               name: val.name,

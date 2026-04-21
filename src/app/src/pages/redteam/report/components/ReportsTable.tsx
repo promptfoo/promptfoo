@@ -199,7 +199,6 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
       emptyMessage="No red team reports found. Run a red team evaluation to get started."
       onRowClick={(row) => onReportSelected(row.evalId)}
       initialSorting={[{ id: 'createdAt', desc: true }]}
-      initialPageSize={50}
       showToolbar
       showColumnToggle
       showExport

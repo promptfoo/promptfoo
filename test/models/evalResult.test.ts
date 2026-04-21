@@ -85,6 +85,27 @@ describe('EvalResult', () => {
       });
     });
 
+    it('should redact provider configs that contain non-JSON primitives', () => {
+      const providerOptions = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: 'test-key',
+          retryAfterNanos: 1n,
+        },
+      } as unknown as ProviderOptions;
+
+      const result = sanitizeProvider(providerOptions);
+      expect(result).toEqual({
+        id: 'test-provider',
+        label: 'Test Provider',
+        config: {
+          apiKey: '[REDACTED]',
+          retryAfterNanos: '1',
+        },
+      });
+    });
+
     it('should handle generic objects with id function', () => {
       const provider = {
         id: () => 'test-provider',

@@ -5,7 +5,6 @@ import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
-import { ProviderConfig } from '../providers/shared';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -22,8 +21,18 @@ import { safeJsonStringify } from '../util/json';
 import { sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 
+import type { ProviderConfig } from '../providers/shared';
+
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
-  return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
+  let configToSanitize: ProviderConfig = config;
+  const serialized = safeJsonStringify(config);
+  if (serialized !== undefined) {
+    try {
+      configToSanitize = JSON.parse(serialized);
+    } catch {}
+  }
+
+  return sanitizeObject(configToSanitize, {
     context: 'provider config',
     maxDepth: Number.POSITIVE_INFINITY,
   }) as ProviderConfig;

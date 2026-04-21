@@ -6,6 +6,7 @@ import {
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
 import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderTypeMap } from '../../src/types/index';
 
@@ -361,12 +362,12 @@ describe('tryParse and renderLlmRubricPrompt', () => {
 describe('PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
   afterEach(() => {
     // Clean up environment variable after each test
-    delete process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY;
+    mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: undefined });
   });
 
   describe('Default behavior (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=false)', () => {
     beforeEach(() => {
-      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'false';
+      mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: 'false' });
     });
 
     it('should stringify objects to prevent [object Object] issues', async () => {
@@ -394,7 +395,7 @@ describe('PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
 
   describe('Object access enabled (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true)', () => {
     beforeEach(() => {
-      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'true';
+      mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: 'true' });
     });
 
     it('should allow direct object property access', async () => {

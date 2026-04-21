@@ -655,6 +655,59 @@ describe('ResultsView', () => {
 
     expect(screen.getByText('Results Table')).toBeInTheDocument();
   });
+
+  it('renders the results table in a flex column so the pagination footer can sit at the viewport bottom', () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [
+            {
+              label: 'Test Prompt 1',
+              provider: 'openai:gpt-4',
+              raw: 'Test prompt 1',
+            },
+          ],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: {
+        description: 'Test Evaluation',
+        sharing: true,
+        tags: { env: 'test' },
+      },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      highlightedResultsCount: 0,
+      userRatedResultsCount: 0,
+      filters: {
+        appliedCount: 0,
+        values: {},
+      },
+      removeFilter: vi.fn(),
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    expect(screen.getByTestId('results-table').parentElement).toHaveClass(
+      'flex',
+      'flex-col',
+      'flex-1',
+      'min-h-0',
+    );
+  });
 });
 describe('ResultsView Plugin Filter - Not Equals', () => {
   const mockOnRecentEvalSelected = vi.fn();
@@ -740,7 +793,7 @@ describe('ResultsView Plugin Filter - Not Equals', () => {
   });
 });
 
-describe('ResultsView', () => {
+describe('ResultsView Charts', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -1142,6 +1195,8 @@ describe('ResultsView Chart Rendering', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
 
@@ -1196,6 +1251,8 @@ describe('ResultsView Chart Rendering', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
 
@@ -1761,7 +1818,7 @@ describe('ResultsView - Size Warning in Copy Dialog', () => {
     expect(screen.getByText('Item Count: 15000')).toBeInTheDocument();
   });
 });
-describe('ResultsView', () => {
+describe('ResultsView Copy Eval handling', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -2100,7 +2157,7 @@ describe('ResultsView User-Rated Badge', () => {
   });
 });
 
-describe('ResultsView', () => {
+describe('ResultsView FilterModeSelector', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -2185,7 +2242,7 @@ describe('ResultsView', () => {
     expect(filterModeSelector).toHaveTextContent('Filter Mode Selector: user-rated');
   });
 });
-describe('ResultsView', () => {
+describe('ResultsView User-Rated Badge display', () => {
   const mockOnRecentEvalSelected = vi.fn();
 
   beforeEach(() => {
@@ -2715,6 +2772,8 @@ describe('ResultsView Browser History', () => {
         appliedCount: 0,
         values: {},
       },
+      filterMode: 'all',
+      setFilterMode: vi.fn(),
       removeFilter: vi.fn(),
     });
   });

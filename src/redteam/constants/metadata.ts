@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  CODING_AGENT_COLLECTIONS,
   CODING_AGENT_PLUGIN_ALIASES,
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
@@ -491,7 +492,9 @@ const codingAgentRiskCategorySeverityMap: Record<
   Severity
 > = {
   ...Object.fromEntries(CODING_AGENT_PLUGINS.map((pluginId) => [pluginId, Severity.High])),
-  'coding-agent:core': Severity.High,
+  ...Object.fromEntries(
+    CODING_AGENT_COLLECTIONS.map((collectionId) => [collectionId, Severity.High]),
+  ),
 } as Record<CodingAgentCollection | CodingAgentPlugin, Severity>;
 
 /*
@@ -841,14 +844,14 @@ export const categoryDescriptions = {
 
 export type TopLevelCategory = keyof typeof riskCategories;
 
-export const categoryMapReverse = Object.entries(riskCategories).reduce(
+export const categoryMapReverse = Object.entries(riskCategories).reduce<Record<string, string>>(
   (acc, [category, harms]) => {
     harms.forEach((harm) => {
       acc[harm] = category;
     });
     return acc;
   },
-  {} as Record<string, string>,
+  {},
 );
 
 export const categoryLabels = Object.keys(categoryMapReverse);
@@ -1015,13 +1018,12 @@ export const categoryAliases: Record<Plugin, string> = {
   ...CODING_AGENT_PLUGIN_ALIASES,
 };
 
-export const categoryAliasesReverse = Object.entries(categoryAliases).reduce(
-  (acc, [key, value]) => {
-    acc[value] = key;
-    return acc;
-  },
-  {} as Record<string, string>,
-);
+export const categoryAliasesReverse = Object.entries(categoryAliases).reduce<
+  Record<string, string>
+>((acc, [key, value]) => {
+  acc[value] = key;
+  return acc;
+}, {});
 
 export const pluginDescriptions: Record<Plugin, string> = {
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',

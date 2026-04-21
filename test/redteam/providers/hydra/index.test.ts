@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
-import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import {
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
   createProviderResponse,
@@ -59,6 +62,7 @@ vi.mock('../../../../src/redteam/graders', () => ({
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
     shouldGenerateRemote: vi.fn(),
   };
 });
@@ -142,6 +146,8 @@ describe('HydraProvider', () => {
     vi.mocked(shouldGenerateRemote).mockImplementation(function () {
       return true;
     });
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
     mockIsBasicRefusal.mockReturnValue(false);
@@ -195,15 +201,29 @@ describe('HydraProvider', () => {
       expect(provider['scanId']).toBe('test-scan-id');
     });
 
-    it('should throw error when remote generation is not available', () => {
+    it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       expect(() => {
         new HydraProvider({ injectVar: 'input' });
       }).toThrow(
-        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To fix, enable remote generation (for example by unsetting OPENAI_API_KEY), set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+      );
+    });
+
+    it('should throw the explicit-disabled error when a disable flag is set', () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      expect(() => {
+        new HydraProvider({ injectVar: 'input' });
+      }).toThrow(
+        /jailbreak:hydra strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
     });
 
