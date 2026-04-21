@@ -381,6 +381,8 @@ export function isTransientError(response: Response): boolean {
   }
 }
 
+export { isPromptfooCloudApiHost } from './monkeyPatchFetch';
+
 /**
  * Fetch with automatic retries and rate limit handling
  */

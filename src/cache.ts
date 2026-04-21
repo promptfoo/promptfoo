@@ -6,13 +6,17 @@ import { createCache } from 'cache-manager';
 import { Keyv } from 'keyv';
 import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
-import { CLOUD_API_HOST, cloudConfig } from './globalConfig/cloud';
+import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
-import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
+import {
+  fetchWithRetries,
+  getFetchWithProxyHeaders,
+  isPromptfooCloudApiHost,
+} from './util/fetch/index';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
@@ -221,17 +225,10 @@ const IGNORED_FETCH_CACHE_OPTION_KEYS = new Set(['method', 'signal']);
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
-function shouldApplyCloudAuthToFetchCacheKey(url: RequestInfo) {
-  return (
-    (typeof url === 'string' && url.startsWith(CLOUD_API_HOST)) ||
-    (url instanceof URL && url.host === CLOUD_API_HOST.replace(/^https?:\/\//, ''))
-  );
-}
-
 function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
-  if (shouldApplyCloudAuthToFetchCacheKey(url)) {
+  if (isPromptfooCloudApiHost(url)) {
     const token = cloudConfig.getApiKey();
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
