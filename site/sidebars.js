@@ -416,6 +416,7 @@ const sidebars = {
                 'guides/evaluate-json',
                 'guides/evaluate-coding-agents',
                 'guides/factuality-eval',
+                'guides/llm-as-a-judge',
                 'guides/testing-llm-chains',
                 'guides/evaluate-llm-temperature',
                 'guides/text-to-sql-evaluation',

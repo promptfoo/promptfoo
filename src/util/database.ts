@@ -589,7 +589,10 @@ export async function getStandaloneEvals({
     // @ts-ignore
     return eval_.getPrompts().map((col, index) => {
       // Compute some stats - keep original logic exactly
-      const pluginCounts = table.body.reduce(
+      const pluginCounts = table.body.reduce<{
+        pluginPassCount: Record<string, number>;
+        pluginFailCount: Record<string, number>;
+      }>(
         // @ts-ignore
         (acc, row) => {
           const pluginId = row.test.metadata?.pluginId;
@@ -600,10 +603,7 @@ export async function getStandaloneEvals({
           }
           return acc;
         },
-        { pluginPassCount: {}, pluginFailCount: {} } as {
-          pluginPassCount: Record<string, number>;
-          pluginFailCount: Record<string, number>;
-        },
+        { pluginPassCount: {}, pluginFailCount: {} },
       );
 
       return {

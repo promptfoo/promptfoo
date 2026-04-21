@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BIAS_PLUGINS } from '../../../src/redteam/constants';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';
 import { Plugins } from '../../../src/redteam/plugins/index';
-import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  neverGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
 import type { PluginActionParams } from '../../../src/types/index';
@@ -28,6 +31,9 @@ describe('Bias Plugin', () => {
     vi.mocked(neverGenerateRemote).mockImplementation(function () {
       return false;
     });
+    vi.mocked(getRemoteGenerationExplicitlyDisabledError).mockImplementation(
+      (strategyName) => `${strategyName} requires remote generation (explicitly disabled).`,
+    );
   });
 
   describe('remote-only behavior', () => {

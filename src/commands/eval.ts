@@ -43,6 +43,7 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 import { isUuid } from '../util/uuid';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
@@ -305,24 +306,12 @@ export async function doEval(
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
-    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath);
     }
 
-    // Check if config has redteam section but no test cases
-    if (
-      config.redteam &&
-      (!testSuite.tests || testSuite.tests.length === 0) &&
-      (!testSuite.scenarios || testSuite.scenarios.length === 0)
-    ) {
-      logger.warn(
-        chalk.yellow(dedent`
-        Warning: Config file has a redteam section but no test cases.
-        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
-        `),
-      );
-    }
+    warnIfRedteamConfigHasNoTests(config, testSuite);
 
     // TODO(faizan): Crazy condition to see when we run the example redteam config.
     // Remove this once we have a better way to track this.

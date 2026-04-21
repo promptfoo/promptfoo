@@ -167,16 +167,14 @@ export function resolveAudioSource(
     return null;
   }
 
-  const resolvedUrl = resolveBlobUri(data);
-  if (resolvedUrl) {
-    return {
-      src: resolvedUrl,
-      type: `audio/${audio?.format || 'mpeg'}`,
-    };
-  }
-
-  if (!isLikelyBase64Payload(data)) {
-    return null;
+  if (!data.startsWith('data:')) {
+    const resolvedUrl = resolveBlobUri(data);
+    if (resolvedUrl) {
+      return {
+        src: resolvedUrl,
+        type: `audio/${audio?.format || 'mpeg'}`,
+      };
+    }
   }
 
   const format = audio?.format || 'mp3';

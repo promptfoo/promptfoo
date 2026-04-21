@@ -4,6 +4,10 @@ on:
     branches: ['main']
     paths:
       - 'src/app/**' # Only trigger on changes to frontend code
+
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Deploy to Cloudflare Pages

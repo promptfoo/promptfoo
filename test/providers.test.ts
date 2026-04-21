@@ -16,6 +16,7 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 import * as fileUtil from '../src/util/file';
+import { mockProcessEnv } from './util/utils';
 
 import type { ProviderOptions } from '../src/types/index';
 
@@ -788,14 +789,14 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle provider with custom label template', async () => {
-    process.env.CUSTOM_LABEL = 'my-label';
+    mockProcessEnv({ CUSTOM_LABEL: 'my-label' });
     const provider = await loadApiProvider('echo', {
       options: {
         label: '{{ env.CUSTOM_LABEL }}',
       },
     });
     expect(provider.label).toBe('my-label');
-    delete process.env.CUSTOM_LABEL;
+    mockProcessEnv({ CUSTOM_LABEL: undefined });
   });
 
   it('should throw error when file provider array is loaded with loadApiProvider', async () => {
@@ -818,7 +819,7 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle file provider with environment variables', async () => {
-    process.env.OPENAI_API_KEY = 'test-key-from-env';
+    mockProcessEnv({ OPENAI_API_KEY: 'test-key-from-env' });
     const yamlContent: ProviderOptions = {
       id: 'openai:chat:gpt-4',
       config: {
@@ -848,7 +849,7 @@ describe('loadApiProvider', () => {
         }),
       }),
     );
-    delete process.env.OPENAI_API_KEY;
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
   });
 
   it('should load multiple providers from yaml file using loadApiProviders', async () => {

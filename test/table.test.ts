@@ -43,7 +43,7 @@ vi.mock('cli-table3', () => ({
 
 describe('table', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     mockTableInstances.length = 0;
     mockConstructorCalls.length = 0;
   });
