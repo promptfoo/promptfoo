@@ -10,7 +10,7 @@ import { ConfigurationError } from './errors';
 const SIMPLE_PROVIDER_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 const PROVIDER_MODEL_SEGMENT_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.\\/-]*$/;
 const PROVIDER_FILE_REFERENCE_PATTERN =
-  /^(?:file:\/\/)?(.+\.(?:js|ts|py|mjs))(?::[A-Za-z_$][\w$]*)?$/i;
+  /^(.+\.(?:cjs|cts|go|js|json|mjs|mts|py|rb|ts|ya?ml))(?::[A-Za-z_$][\w$]*(?:(?:::|\.)[A-Za-z_$][\w$]*)*)?$/i;
 
 /**
  * Validates that a file path is safe and within allowed boundaries.
@@ -90,6 +90,13 @@ export function validateMcpFilePath(filePath: string): void {
   }
 }
 
+function getProviderFilePath(providerId: string): string | undefined {
+  const providerPath = providerId.startsWith('file://')
+    ? providerId.slice('file://'.length)
+    : providerId;
+  return providerPath.match(PROVIDER_FILE_REFERENCE_PATTERN)?.[1];
+}
+
 /**
  * Validates provider ID format
  */
@@ -115,9 +122,9 @@ export function validateProviderId(providerId: string): void {
     }
   }
 
-  const providerFileMatch = providerId.match(PROVIDER_FILE_REFERENCE_PATTERN);
-  if (providerFileMatch) {
-    validateMcpFilePath(providerFileMatch[1]);
+  const providerFilePath = getProviderFilePath(providerId);
+  if (providerFilePath) {
+    validateMcpFilePath(providerFilePath);
     return;
   }
 

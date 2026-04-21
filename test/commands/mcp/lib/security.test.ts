@@ -185,9 +185,15 @@ describe('MCP Security', () => {
 
     it('should accept file path providers', () => {
       expect(() => validateProviderId('providers/custom.js')).not.toThrow();
+      expect(() => validateProviderId('my-provider.cjs')).not.toThrow();
       expect(() => validateProviderId('my-provider.ts')).not.toThrow();
       expect(() => validateProviderId('script.py')).not.toThrow();
       expect(() => validateProviderId('module.mjs')).not.toThrow();
+      expect(() => validateProviderId('file://evaluation/main.go:CallApi')).not.toThrow();
+      expect(() => validateProviderId('file://echo_provider.rb')).not.toThrow();
+      expect(() => validateProviderId('file://my_provider.rb:Providers::Chat.call')).not.toThrow();
+      expect(() => validateProviderId('file://providers.yaml')).not.toThrow();
+      expect(() => validateProviderId('file://providers.json')).not.toThrow();
       expect(() => validateProviderId('file://providers/custom.js')).not.toThrow();
       expect(() => validateProviderId('file://script.py:getProvider')).not.toThrow();
     });
@@ -207,6 +213,9 @@ describe('MCP Security', () => {
       expect(() => validateProviderId('openai:../../secret')).toThrow(ConfigurationError);
       expect(() =>
         validateProviderId(`file://${path.join(path.dirname(process.cwd()), 'evil.py')}`),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderId(`file://${path.join(path.dirname(process.cwd()), 'evil.yaml')}`),
       ).toThrow(ConfigurationError);
     });
   });
