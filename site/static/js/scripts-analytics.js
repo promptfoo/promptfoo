@@ -61,7 +61,7 @@ gtag('config', 'G-3YM29CN26E', { anonymize_ip: true });
         (r = t.getElementsByTagName('script')[0]).parentNode.insertBefore(p, r);
       var u = e;
       for (
-        void 0 !== a ? (u = e[a] = []) : (a = 'posthog'),
+        void 0 === a ? (a = 'posthog') : (u = e[a] = []),
           u.people = u.people || [],
           u.toString = function (t) {
             var e = 'posthog';

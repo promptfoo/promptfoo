@@ -1,5 +1,12 @@
 # amazon-bedrock/video (AWS Bedrock Video Generation)
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example amazon-bedrock/video
+cd amazon-bedrock/video
+```
+
 Video generation examples using AWS Bedrock's async invoke API.
 
 ## Available Models

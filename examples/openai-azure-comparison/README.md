@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-azure-comparison
+cd openai-azure-comparison
 ```
 
 This example compares OpenAI and Azure OpenAI using the same model (GPT-5-mini) to benchmark differences in speed, cost, and output between the two services.

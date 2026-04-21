@@ -1,5 +1,12 @@
 # provider-elevenlabs/tts (ElevenLabs Text-to-Speech)
 
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example provider-elevenlabs/tts
+cd provider-elevenlabs/tts
+```
+
 Test and compare ElevenLabs TTS models and voice settings.
 
 ## What this tests

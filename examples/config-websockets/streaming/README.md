@@ -1,4 +1,4 @@
-# Websocket Streaming
+# config-websockets/streaming (WebSocket Streaming)
 
 This example shows how to configure a websocket application that streams its responses. It includes a small Node.js server that exposes two WebSocket endpoints:
 
@@ -11,6 +11,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-websockets/streaming
+cd config-websockets/streaming
 ```
 
 ## What’s in this folder

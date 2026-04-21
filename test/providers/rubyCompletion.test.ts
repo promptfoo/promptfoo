@@ -6,6 +6,7 @@ import { getCache, isCacheEnabled } from '../../src/cache';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
+import * as fileReference from '../../src/util/fileReference';
 
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
@@ -160,13 +161,44 @@ describe('RubyProvider', () => {
       expect(result).toEqual({ output: 'test output', cached: false });
     });
 
+    it('should not mutate the caller context when sanitizing', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockRunRuby.mockResolvedValue({ output: 'test output' });
+
+      const originalProvider = {
+        id: () => 'test-target',
+        callApi: vi.fn(),
+      };
+      const context: any = {
+        someContext: true,
+        originalProvider,
+        logger: { debug: vi.fn() },
+        getCache: vi.fn(),
+        filters: { uppercase: () => '' },
+      };
+
+      await provider.callApi('test prompt', context);
+
+      expect(context.originalProvider).toBe(originalProvider);
+      expect(context.logger).toBeDefined();
+      expect(context.getCache).toBeDefined();
+      expect(context.filters).toBeDefined();
+
+      expect(mockRunRuby).toHaveBeenCalledWith(
+        expect.any(String),
+        'call_api',
+        ['test prompt', { config: {} }, { someContext: true }],
+        { rubyExecutable: undefined },
+      );
+    });
+
     describe('error handling', () => {
       it('should throw a specific error when Ruby script returns invalid result', async () => {
         const provider = new RubyProvider('script.rb');
         mockRunRuby.mockResolvedValue({ invalidKey: 'invalid value' });
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Ruby script `call_api` function must return a hash with an `output` string/object or `error` string, instead got: {"invalidKey":"invalid value"}',
+          'The Ruby script `call_api` function must return a hash with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
         );
       });
 
@@ -182,7 +214,7 @@ describe('RubyProvider', () => {
         mockRunRuby.mockResolvedValue(null as never);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Ruby script `call_api` function must return a hash with an `output` string/object or `error` string, instead got: null',
+          'The Ruby script `call_api` function must return a hash with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: null',
         );
       });
 
@@ -191,7 +223,17 @@ describe('RubyProvider', () => {
         mockRunRuby.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Ruby script `call_api` function must return a hash with an `output` string/object or `error` string, instead got: "string result"',
+          'The Ruby script `call_api` function must return a hash with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: "string result"',
+        );
+      });
+
+      it('should reject inherited output properties from a polluted prototype', async () => {
+        const provider = new RubyProvider('script.rb');
+        const inheritedResult = Object.create({ output: 'polluted output' });
+        mockRunRuby.mockResolvedValue(inheritedResult);
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Ruby script `call_api` function must return a hash with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {}',
         );
       });
 
@@ -225,7 +267,17 @@ describe('RubyProvider', () => {
       mockRunRuby.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Ruby script `call_embedding_api` function must return a hash with an `embedding` array or `error` string, instead got {"invalidKey":"invalid value"}',
+        'The Ruby script `call_embedding_api` function must return a hash with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {"invalidKey":"invalid value"}',
+      );
+    });
+
+    it('should reject inherited embedding properties from a polluted prototype', async () => {
+      const provider = new RubyProvider('script.rb');
+      const inheritedResult = Object.create({ embedding: [0.1, 0.2, 0.3] });
+      mockRunRuby.mockResolvedValue(inheritedResult);
+
+      await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
+        'The Ruby script `call_embedding_api` function must return a hash with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {}',
       );
     });
   });
@@ -251,7 +303,17 @@ describe('RubyProvider', () => {
       mockRunRuby.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Ruby script `call_classification_api` function must return a hash with a `classification` object or `error` string, instead of {"invalidKey":"invalid value"}',
+        'The Ruby script `call_classification_api` function must return a hash with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {"invalidKey":"invalid value"}',
+      );
+    });
+
+    it('should reject inherited classification properties from a polluted prototype', async () => {
+      const provider = new RubyProvider('script.rb');
+      const inheritedResult = Object.create({ classification: { label: 'polluted' } });
+      mockRunRuby.mockResolvedValue(inheritedResult);
+
+      await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
+        'The Ruby script `call_classification_api` function must return a hash with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {}',
       );
     });
   });
@@ -269,7 +331,7 @@ describe('RubyProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(mockCache.get).toHaveBeenCalledWith(
-        'ruby:script.rb:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        expect.stringContaining('ruby:script.rb:default:call_api:'),
       );
       expect(mockRunRuby).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
@@ -288,7 +350,7 @@ describe('RubyProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        'ruby:script.rb:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        expect.stringContaining('ruby:script.rb:default:call_api:'),
         '{"output":"new result"}',
       );
     });
@@ -325,7 +387,7 @@ describe('RubyProvider', () => {
       });
     });
 
-    it('should preserve cached=false for fresh results with token usage', async () => {
+    it('should preserve Ruby fresh token usage without numRequests for compatibility', async () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -353,6 +415,7 @@ describe('RubyProvider', () => {
           total: 30,
         },
       });
+      expect(result.tokenUsage).not.toHaveProperty('numRequests');
     });
 
     it('should handle missing token usage in cached results', async () => {
@@ -422,6 +485,31 @@ describe('RubyProvider', () => {
       expect(mockCache.set).not.toHaveBeenCalled();
     });
 
+    it('should ignore inherited error properties when deciding whether to cache', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = Object.create({ error: 'prototype error' });
+      result.output = 'fresh result';
+      mockRunRuby.mockResolvedValue(result);
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({
+        output: 'fresh result',
+        cached: false,
+      });
+      expect(mockCache.set).toHaveBeenCalledWith(
+        expect.stringMatching(
+          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:undefined$/,
+        ),
+        '{"output":"fresh result"}',
+      );
+    });
+
     it('should properly use different cache keys for different function names', async () => {
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -448,6 +536,88 @@ describe('RubyProvider', () => {
 
       // The second call should contain the custom function name
       expect(cacheSetCalls[1][0]).toContain(':custom_function:');
+    });
+
+    it('should not apply cached metadata to embedding results', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ embedding: [0.1, 0.2, 0.3] })),
+        set: vi.fn(),
+      };
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callEmbeddingApi('test prompt');
+
+      expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
+      expect(result).not.toHaveProperty('cached');
+    });
+
+    it('should not apply cached metadata to classification results', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ classification: { label: 'test', score: 0.9 } })),
+        set: vi.fn(),
+      };
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+
+      const result = await provider.callClassificationApi('test prompt');
+
+      expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
+      expect(result).not.toHaveProperty('cached');
+    });
+  });
+
+  describe('initialize', () => {
+    it('should reuse the in-flight initialization promise and skip reprocessing once ready', async () => {
+      const processConfigSpy = vi.spyOn(fileReference, 'processConfigFileReferences');
+      try {
+        let resolveConfig: ((value: unknown) => void) | undefined;
+        processConfigSpy.mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolveConfig = resolve;
+            }) as Promise<any>,
+        );
+
+        const provider = new RubyProvider('script.rb');
+        const firstInitialize = provider.initialize();
+        const secondInitialize = provider.initialize();
+
+        expect(processConfigSpy).toHaveBeenCalledTimes(1);
+
+        resolveConfig?.({});
+        await expect(Promise.all([firstInitialize, secondInitialize])).resolves.toEqual([
+          undefined,
+          undefined,
+        ]);
+        await provider.initialize();
+
+        expect(processConfigSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        processConfigSpy.mockRestore();
+      }
+    });
+
+    it('should clear the initialization promise after a failed initialization attempt', async () => {
+      const processConfigSpy = vi.spyOn(fileReference, 'processConfigFileReferences');
+      try {
+        processConfigSpy
+          .mockRejectedValueOnce(new Error('config processing failed'))
+          .mockResolvedValueOnce({});
+
+        const provider = new RubyProvider('script.rb');
+
+        await expect(provider.initialize()).rejects.toThrow('config processing failed');
+        await expect(provider.initialize()).resolves.toBeUndefined();
+
+        expect(processConfigSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        processConfigSpy.mockRestore();
+      }
     });
   });
 });

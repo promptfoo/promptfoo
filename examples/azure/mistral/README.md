@@ -1,4 +1,4 @@
-# mistral (Azure Mistral Models)
+# azure/mistral (Azure Mistral Models)
 
 This example demonstrates how to use Mistral models on Azure AI Foundry with promptfoo.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example azure/mistral
+cd azure/mistral
 ```
 
 ## Setup

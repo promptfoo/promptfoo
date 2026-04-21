@@ -1,5 +1,3 @@
-const promptfoo = require('../../dist/src/index.js').default;
-
 class CustomApiProvider {
   constructor(options) {
     // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
@@ -29,19 +27,16 @@ class CustomApiProvider {
       temperature: Number.parseFloat(this.config?.temperature) || 0,
     };
 
-    // Fetch the data from the API using promptfoo's cache. You can use your own fetch implementation if preferred.
-    const { data, cached } = await promptfoo.cache.fetchWithCache(
-      'https://api.openai.com/v1/chat/completions',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify(body),
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
       },
-      10_000 /* 10 second timeout */,
-    );
+      body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
 
     const ret = {
       output: data.choices[0].message.content,

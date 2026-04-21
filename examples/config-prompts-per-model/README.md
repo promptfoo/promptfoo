@@ -4,7 +4,10 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-prompts-per-model
+cd config-prompts-per-model
 ```
+
+## Usage
 
 This example shows how to set up a custom set of prompts for specific models.
 
@@ -14,7 +17,7 @@ Next, edit promptfooconfig.yaml.
 
 Then run:
 
-```
+```bash
 promptfoo eval
 ```
 

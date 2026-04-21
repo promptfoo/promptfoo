@@ -1,4 +1,4 @@
-# e2b Code Eval — step-by-step sandboxed code-eval example
+# integration-e2b (E2B Code Evaluation)
 
 ## What This Example Demonstrates
 
@@ -14,6 +14,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-e2b
+cd integration-e2b
 ```
 
 ## Environment Variables

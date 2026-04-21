@@ -158,5 +158,5 @@ function TabsContent({
   );
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent };
-export type { TabsProps, TabsListVariant, TabsListProps, TabsTriggerProps };
+export type { TabsListProps, TabsListVariant, TabsProps, TabsTriggerProps };
+export { Tabs, TabsContent, TabsList, TabsTrigger };

@@ -77,7 +77,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-In our example, you can see `v21.7.3` for Node and `10.5.0` for npm — that’s solid. Anything Node v18+ is usually fine.
+In our example, you can see `v22.22.0` for Node and `10.9.0` for npm — that’s solid. Promptfoo requires Node.js 20.20+ or 22.22+.
 
 **Why do we need these?**
 

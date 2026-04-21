@@ -61,7 +61,7 @@ providers:
       working_dir: examples/compare-agentic-sdks/test-codebase
 
   # Plain LLM for baseline (no file access)
-  - id: openai:gpt-5.1
+  - id: openai:chat:gpt-5.4
     label: plain-llm
     config:
       temperature: 0
@@ -76,17 +76,30 @@ tests:
       - type: javascript
         value: |
           // Codex SDK returns structured JSON, plain LLM returns text
-          if (typeof output === 'object' && output.vulnerabilities) {
+          let parsedOutput = output;
+          if (typeof output === 'string') {
+            try {
+              parsedOutput = JSON.parse(output);
+            } catch {
+              // Expected fallback for plain LLM text responses.
+              parsedOutput = output;
+            }
+          }
+
+          if (
+            parsedOutput &&
+            typeof parsedOutput === 'object' &&
+            Array.isArray(parsedOutput.vulnerabilities)
+          ) {
             // Validate JSON structure
-            const hasStructure = Array.isArray(output.vulnerabilities) &&
-                                typeof output.risk_score === 'number' &&
-                                typeof output.summary === 'string';
+            const hasStructure = typeof parsedOutput.risk_score === 'number' &&
+                                typeof parsedOutput.summary === 'string';
             if (!hasStructure) {
               return { pass: false, score: 0, reason: 'Invalid JSON structure' };
             }
 
             // Check for key vulnerabilities (MD5, CVV, passwords)
-            const vulns = output.vulnerabilities;
+            const vulns = parsedOutput.vulnerabilities;
             const hasCrypto = vulns.some(v => v.category === 'cryptography');
             const hasDataExposure = vulns.some(v => v.category === 'data-exposure');
 

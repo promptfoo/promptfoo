@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-http/streaming
+cd provider-http/streaming
 ```
 
 ⚠️ **Streaming is not recommended for evaluations**

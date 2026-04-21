@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-jest
+cd integration-jest
 ```
 
 This folder contains a small example of how to test LLM prompts using Jest, Vitest, and `promptfoo`.
