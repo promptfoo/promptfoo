@@ -21,9 +21,10 @@ import {
   readTestFiles,
   readTests,
 } from '../../src/util/testCaseReader';
+import { createMockProvider } from '../factories/provider';
 
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
-import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
+import type { ProviderOptions } from '../../src/types/providers';
 
 // Spy on logger.warn for tests that check warnings
 vi.spyOn(logger, 'warn').mockImplementation(() => logger);
@@ -795,7 +796,7 @@ describe('readTest', () => {
 
   describe('readTest with provider', () => {
     it('should load provider when provider is a string', async () => {
-      const mockProvider = { callApi: vi.fn(), id: vi.fn().mockReturnValue('mock-provider') };
+      const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const testCase: TestCase = {
@@ -811,10 +812,7 @@ describe('readTest', () => {
     });
 
     it('should load provider when provider is an object with id', async () => {
-      const mockProvider = {
-        callApi: vi.fn(),
-        id: vi.fn().mockReturnValue('mock-provider'),
-      } as ApiProvider;
+      const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const providerInput: ProviderOptions & { callApi: ReturnType<typeof vi.fn> } = {

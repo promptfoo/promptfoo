@@ -2,14 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
 import { POLICY_METRIC_PREFIX } from '../../../src/redteam/plugins/policy/constants';
 import { PolicyPlugin, PolicyViolationGrader } from '../../../src/redteam/plugins/policy/index';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type { AtomicTestCase } from '../../../src/types/index';
 
 describe('PolicyPlugin', () => {
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-  };
+  const mockProvider = createMockProvider({
+    response: createProviderResponse({ output: 'test output' }),
+  });
 
   const mockPurpose = 'Test purpose';
   const mockInjectVar = 'test-var';
@@ -175,10 +175,7 @@ describe('PolicyPlugin', () => {
 });
 
 describe('PolicyViolationGrader', () => {
-  const mockProvider = {
-    id: () => 'test-provider',
-    callApi: vi.fn(),
-  } as unknown as ApiProvider;
+  const mockProvider = createMockProvider();
 
   afterEach(() => {
     vi.resetAllMocks();

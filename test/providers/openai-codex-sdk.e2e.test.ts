@@ -1,3 +1,5 @@
+import { mockProcessEnv } from '../util/utils';
+
 /**
  * End-to-End tests for OpenAI Codex SDK Provider
  * These tests use the real @openai/codex-sdk package (must be installed)
@@ -40,21 +42,21 @@ const originalCodexApiKey = process.env.CODEX_API_KEY;
 // vitest.setup.ts installs a dummy OPENAI_API_KEY for unit tests. Ignore that value for E2E runs,
 // and only restore a real key when one is explicitly provided.
 if (e2eApiKey) {
-  process.env.OPENAI_API_KEY = e2eApiKey;
-  process.env.CODEX_API_KEY = e2eApiKey;
+  mockProcessEnv({ OPENAI_API_KEY: e2eApiKey });
+  mockProcessEnv({ CODEX_API_KEY: e2eApiKey });
 }
 
 afterAll(() => {
   if (originalOpenAiApiKey === undefined) {
-    delete process.env.OPENAI_API_KEY;
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
   } else {
-    process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey });
   }
 
   if (originalCodexApiKey === undefined) {
-    delete process.env.CODEX_API_KEY;
+    mockProcessEnv({ CODEX_API_KEY: undefined });
   } else {
-    process.env.CODEX_API_KEY = originalCodexApiKey;
+    mockProcessEnv({ CODEX_API_KEY: originalCodexApiKey });
   }
 });
 

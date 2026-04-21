@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from './util/utils';
 
 // Create mock for exec - using vi.hoisted to ensure it's available in vi.mock factory
 const { mockExecAsync } = vi.hoisted(() => {
@@ -72,17 +73,18 @@ describe('getLatestVersion', () => {
 
 describe('checkForUpdates', () => {
   let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     // Reset fetchWithTimeout to clear any queued mockResolvedValueOnce from other tests
     vi.mocked(fetchWithTimeout).mockReset();
-    // Clear env var that other tests may have set
-    delete process.env.PROMPTFOO_DISABLE_UPDATE;
+    restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
     loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
   });
 
   afterEach(() => {
     loggerInfoSpy.mockRestore();
+    restoreEnv();
   });
 
   it('should log an update message if a newer version is available - minor ver', async () => {
@@ -180,14 +182,16 @@ describe('getModelAuditCurrentVersion', () => {
 
 describe('checkModelAuditUpdates', () => {
   let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
-    delete process.env.PROMPTFOO_DISABLE_UPDATE;
+    restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
   });
 
   afterEach(() => {
     loggerInfoSpy.mockRestore();
+    restoreEnv();
   });
 
   it('should return true and log message when update is available', async () => {
@@ -236,13 +240,16 @@ describe('checkModelAuditUpdates', () => {
   });
 
   it('should return false when PROMPTFOO_DISABLE_UPDATE is set', async () => {
-    process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
+    const restoreDisableUpdate = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
+    try {
+      vi.mocked(fetchWithTimeout).mockReset();
 
-    vi.mocked(fetchWithTimeout).mockReset();
-
-    const result = await checkModelAuditUpdates();
-    expect(result).toBeFalsy();
-    expect(fetchWithTimeout).not.toHaveBeenCalled();
+      const result = await checkModelAuditUpdates();
+      expect(result).toBeFalsy();
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+    } finally {
+      restoreDisableUpdate();
+    }
   });
 
   it('should return false when current version cannot be determined', async () => {

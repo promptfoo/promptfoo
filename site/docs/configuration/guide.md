@@ -702,6 +702,10 @@ tests:
 Use `defaultTest` apply a transform option to every test case in your test suite.
 :::
 
+:::tip
+When using the [Node.js package](/docs/usage/node-package#transform-functions), you can pass functions directly as `transform`, `transformVars`, and `contextTransform` values instead of string expressions.
+:::
+
 ### Transforms from separate files
 
 Transform functions can be executed from external JavaScript or Python files. You can optionally specify a function name to use.
