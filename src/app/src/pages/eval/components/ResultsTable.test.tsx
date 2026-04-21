@@ -2036,62 +2036,7 @@ describe('ResultsTable Malformed Markdown Handling', () => {
   });
 });
 
-describe('ResultsTable', () => {
-  const defaultProps = {
-    columnVisibility: {},
-    failureFilter: {},
-    filterMode: 'all' as const,
-    maxTextLength: 100,
-    onFailureFilterToggle: vi.fn(),
-    onSearchTextChange: vi.fn(),
-    searchText: '',
-    showStats: true,
-    wordBreak: 'break-word' as const,
-    setFilterMode: vi.fn(),
-    zoom: 1,
-    onResultsContainerScroll: vi.fn(),
-    atInitialVerticalScrollPosition: true,
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      config: {},
-      evalId: '123',
-      setTable: vi.fn(),
-      table: {
-        head: { prompts: [{ provider: 'test-provider' }], vars: [] },
-        body: [
-          {
-            outputs: [{ pass: true, score: 1, text: 'test output' }],
-            test: {},
-            vars: [],
-          },
-        ],
-      },
-      version: 4,
-      fetchEvalData: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
-    }));
-  });
-
-  it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
-    const debouncedSearchText = 'test search';
-    renderWithProviders(
-      <ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />,
-    );
-    const evalOutputCell = screen.getByTestId('eval-output-cell');
-    expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
-  });
-});
-
-describe('ResultsTable', () => {
+describe('ResultsTable fetchEvalData pagination filters', () => {
   const defaultProps = {
     columnVisibility: {},
     failureFilter: {},

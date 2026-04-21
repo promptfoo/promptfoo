@@ -683,10 +683,23 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with openrouter', async () => {
-    const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     // OpenRouter provider now returns id with prefix
-    expect(provider.id()).toBe('openrouter:mistralai/mistral-medium');
+    expect(provider.id()).toBe('openrouter:anthropic/claude-opus-4.7');
+  });
+
+  it('loadApiProvider with openrouter preserves a custom apiBaseUrl override', async () => {
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7', {
+      options: {
+        config: {
+          apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+        },
+      },
+    });
+
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
   });
 
   it('loadApiProvider with github', async () => {
