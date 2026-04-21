@@ -1,3 +1,4 @@
+import { mockClipboard } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -60,12 +61,7 @@ describe('ConfigAgentDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     writeTextMock = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        writeText: writeTextMock,
-      },
-    });
+    mockClipboard({ writeText: writeTextMock as Clipboard['writeText'] });
     mockUseConfigAgent.mockReturnValue({ ...hookState });
   });
 

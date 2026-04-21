@@ -1,3 +1,4 @@
+import { mockClipboard } from '@app/tests/browserMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -63,12 +64,7 @@ describe('ConfigAgentChat', () => {
     vi.clearAllMocks();
     Element.prototype.scrollIntoView = vi.fn();
     writeTextMock = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: {
-        writeText: writeTextMock,
-      },
-    });
+    mockClipboard({ writeText: writeTextMock as Clipboard['writeText'] });
   });
 
   it('renders message variants, formatted text, typing state, and config preview', async () => {
