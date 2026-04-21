@@ -49,7 +49,7 @@ describe('constants', () => {
     });
 
     it('should return PROMPTFOO_REMOTE_API_BASE_URL if set', () => {
-      process.env.PROMPTFOO_REMOTE_API_BASE_URL = 'https://remote.api.com';
+      mockProcessEnv({ PROMPTFOO_REMOTE_API_BASE_URL: 'https://remote.api.com' });
       expect(getShareApiBaseUrl()).toBe('https://remote.api.com');
     });
   });
@@ -60,7 +60,7 @@ describe('constants', () => {
     });
 
     it('should return PROMPTFOO_SHARING_APP_BASE_URL if set', () => {
-      process.env.PROMPTFOO_SHARING_APP_BASE_URL = 'https://custom.share.com';
+      mockProcessEnv({ PROMPTFOO_SHARING_APP_BASE_URL: 'https://custom.share.com' });
       expect(getDefaultShareViewBaseUrl()).toBe('https://custom.share.com');
     });
   });
@@ -71,7 +71,7 @@ describe('constants', () => {
     });
 
     it('should return PROMPTFOO_REMOTE_APP_BASE_URL if set', () => {
-      process.env.PROMPTFOO_REMOTE_APP_BASE_URL = 'https://remote.app.com';
+      mockProcessEnv({ PROMPTFOO_REMOTE_APP_BASE_URL: 'https://remote.app.com' });
       expect(getShareViewBaseUrl()).toBe('https://remote.app.com');
     });
   });
@@ -82,12 +82,12 @@ describe('constants', () => {
     });
 
     it('should return API_PORT if set', () => {
-      process.env.API_PORT = '3000';
+      mockProcessEnv({ API_PORT: '3000' });
       expect(getDefaultPort()).toBe(3000);
     });
 
     it('should handle invalid API_PORT value', () => {
-      process.env.API_PORT = 'invalid';
+      mockProcessEnv({ API_PORT: 'invalid' });
       expect(getDefaultPort()).toBe(15500);
     });
   });

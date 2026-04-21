@@ -13,7 +13,7 @@ targets:
 
 redteam:
   # Used for attack generation and grading. Set OPENAI_API_KEY before running.
-  provider: openai:chat:gpt-5-mini
+  provider: openai:chat:gpt-5.4-mini
   purpose: |
     You are a support chatbot for an internal helpdesk. The bot can close the
     active thread after it provides a response, and once closed, subsequent user

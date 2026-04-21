@@ -1,13 +1,14 @@
 import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 
+import type { ListScansQuery } from '../../../../../types/api/modelAudit';
 import type { HistoricalScan } from '../ModelAudit.types';
 
 // Re-export types for convenience
 export type { HistoricalScan };
 
 interface SortModel {
-  field: string;
+  field: NonNullable<ListScansQuery['sort']>;
   sort: 'asc' | 'desc';
 }
 
@@ -26,6 +27,10 @@ interface ModelAuditHistoryState {
 
   // Actions
   fetchHistoricalScans: (signal?: AbortSignal) => Promise<void>;
+  fetchHistoricalScanRange: (
+    range: { startIndex: number; endIndex: number },
+    signal?: AbortSignal,
+  ) => Promise<{ scans: HistoricalScan[]; offset: number; total: number }>;
   fetchScanById: (id: string, signal?: AbortSignal) => Promise<HistoricalScan | null>;
   deleteHistoricalScan: (id: string) => Promise<void>;
   setPageSize: (size: number) => void;
@@ -93,6 +98,49 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     }
   },
 
+  fetchHistoricalScanRange: async ({ startIndex, endIndex }, signal?: AbortSignal) => {
+    try {
+      const { sortModel, searchQuery } = get();
+      const sort = sortModel[0]?.field || 'createdAt';
+      const order = sortModel[0]?.sort || 'desc';
+      const offset = Math.max(0, startIndex);
+      const limit = Math.max(1, endIndex - offset + 1);
+
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        offset: offset.toString(),
+        sort,
+        order,
+      });
+
+      if (searchQuery) {
+        params.append('search', searchQuery);
+      }
+
+      const response = await callApi(`/model-audit/scans?${params.toString()}`, { signal });
+      if (!response.ok) {
+        throw new Error('Failed to fetch historical scans');
+      }
+
+      const data = await response.json();
+      const scans = data.scans || [];
+      const total = data.total || scans.length || 0;
+      set({
+        totalCount: total,
+        historyError: null,
+      });
+
+      return { scans, offset, total };
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch history';
+      set({ historyError: errorMessage });
+      throw error;
+    }
+  },
+
   fetchScanById: async (id: string, signal?: AbortSignal) => {
     try {
       const response = await callApi(`/model-audit/scans/${id}`, { signal });
@@ -116,7 +164,6 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     // Optimistic delete: remove from UI immediately
     const previousScans = get().historicalScans;
     const previousCount = get().totalCount;
-    const scanToDelete = previousScans.find((scan) => scan.id === id);
 
     // Optimistically update UI
     set((state) => ({
@@ -135,12 +182,10 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       }
     } catch (error) {
       // Revert optimistic update on failure
-      if (scanToDelete) {
-        set({
-          historicalScans: previousScans,
-          totalCount: previousCount,
-        });
-      }
+      set({
+        historicalScans: previousScans,
+        totalCount: previousCount,
+      });
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete scan';
       set({ historyError: errorMessage });
       throw error;

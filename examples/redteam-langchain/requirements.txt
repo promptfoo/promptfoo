@@ -21,13 +21,13 @@ langchain==1.2.10
 langchain-classic==1.0.1
 langchain-community==0.4.1
 langchain-core==1.2.28
-langchain-openai==1.1.9
-langchain-text-splitters==1.1.0
+langchain-openai==1.1.14
+langchain-text-splitters==1.1.2
 langgraph==1.0.10rc1
 langgraph-checkpoint==4.0.0
 langgraph-prebuilt==1.0.9
 langgraph-sdk==0.3.5
-langsmith==0.7.1
+langsmith==0.7.31
 marshmallow==3.26.2
 multidict==6.7.1
 mypy_extensions==1.1.0

@@ -321,6 +321,37 @@ describe('init command', () => {
         expect(opencodeResult).toEqual('provider-opencode-sdk/basic');
       });
 
+      it('should preserve legacy GPT model comparison example names', async () => {
+        mockFetchWithProxy.mockRejectedValue(new Error('404 Not Found'));
+        vi.mocked(confirm).mockResolvedValue(false);
+
+        const legacyFolderResult = await init.handleExampleDownload(
+          '.',
+          'compare-gpt-4o-vs-4o-mini',
+        );
+        const legacyAliasResult = await init.handleExampleDownload('.', 'gpt-4o-vs-4o-mini');
+        const legacyMmluResult = await init.handleExampleDownload(
+          '.',
+          'compare-gpt-5-vs-gpt-5-mini-mmlu',
+        );
+        const agnosticMmluAliasResult = await init.handleExampleDownload(
+          '.',
+          'compare-gpt-mmlu-pro',
+        );
+        const shortMmluAliasResult = await init.handleExampleDownload('.', 'gpt-mmlu-pro');
+        const modelTiersMmluAliasResult = await init.handleExampleDownload(
+          '.',
+          'gpt-model-tiers-mmlu-pro',
+        );
+
+        expect(legacyFolderResult).toEqual('compare-gpt-model-tiers');
+        expect(legacyAliasResult).toEqual('compare-gpt-model-tiers');
+        expect(legacyMmluResult).toEqual('compare-gpt-model-tiers-mmlu-pro');
+        expect(agnosticMmluAliasResult).toEqual('compare-gpt-model-tiers-mmlu-pro');
+        expect(shortMmluAliasResult).toEqual('compare-gpt-model-tiers-mmlu-pro');
+        expect(modelTiersMmluAliasResult).toEqual('compare-gpt-model-tiers-mmlu-pro');
+      });
+
       it('should use legacy ref for removed examples', async () => {
         const mockFailure = createMockResponse({
           ok: false,

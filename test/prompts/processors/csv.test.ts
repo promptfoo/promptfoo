@@ -3,6 +3,7 @@ import fs from 'fs';
 import dedent from 'ts-dedent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processCsvPrompts } from '../../../src/prompts/processors/csv';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { Prompt } from '../../../src/types/index';
 
@@ -176,23 +177,24 @@ describe('processCsvPrompts', () => {
     `;
 
     vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
-    process.env.PROMPTFOO_CSV_DELIMITER = ';';
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_CSV_DELIMITER: ';' });
+    try {
+      const result = await processCsvPrompts('prompts.csv', {});
 
-    const result = await processCsvPrompts('prompts.csv', {});
-
-    expect(result).toHaveLength(2);
-    expect(result).toEqual([
-      {
-        raw: 'Tell me about {{topic}}',
-        label: 'Basic Query',
-      },
-      {
-        raw: 'Explain {{topic}} in simple terms',
-        label: 'Simple Explanation',
-      },
-    ]);
-
-    delete process.env.PROMPTFOO_CSV_DELIMITER;
+      expect(result).toHaveLength(2);
+      expect(result).toEqual([
+        {
+          raw: 'Tell me about {{topic}}',
+          label: 'Basic Query',
+        },
+        {
+          raw: 'Explain {{topic}} in simple terms',
+          label: 'Simple Explanation',
+        },
+      ]);
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('should handle empty files', async () => {

@@ -163,6 +163,8 @@ interface MistralChatCompletionOptions {
   random_seed?: number;
   response_format?: { type: 'json_object' };
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
 }
 
 const MISTRAL_CACHE_HASH_KEY = 'promptfoo:mistral:cache-key:v1';
