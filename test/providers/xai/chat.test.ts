@@ -184,6 +184,23 @@ describe('xAI Chat Provider', () => {
     });
   });
 
+  describe('Temperature zero handling', () => {
+    it('should correctly send temperature: 0 in the request body', async () => {
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = createXAIProvider('xai:grok-3-beta', {
+        config: {
+          temperature: 0,
+        } as any,
+      });
+
+      const result = await (provider as any).getOpenAiBody('test prompt');
+
+      // temperature: 0 should be present in the request body
+      expect(result.body.temperature).toBe(0);
+      expect('temperature' in result.body).toBe(true);
+    });
+  });
+
   describe('Model type detection and capabilities', () => {
     it('identifies reasoning models correctly', () => {
       expect(GROK_3_MINI_MODELS).toContain('grok-3-mini-beta');
@@ -482,9 +499,7 @@ describe('xAI Chat Provider', () => {
       // Unknown model
       expect(calculateXAICost('invalid-model', {}, 600, 400)).toBe(undefined);
       // Missing token counts
-      expect(calculateXAICost('grok-2-1212', {}, undefined as any, undefined as any)).toBe(
-        undefined,
-      );
+      expect(calculateXAICost('grok-2-1212', {})).toBe(undefined);
       expect(calculateXAICost('grok-2-1212', {}, 0, 0)).toBe(undefined);
     });
 
@@ -494,6 +509,26 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBeDefined();
       // Expected: (2.0/1e6 * 1000000) + (10.0/1e6 * 1000000) = 2.0 + 10.0 = 12.0
       expect(cost).toBeCloseTo(12.0, 2);
+    });
+
+    it('uses separate custom input and output costs from config', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
+
+    it('prefers separate custom costs over custom cost', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { cost: 0.02, inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
     });
 
     it('handles reasoning tokens correctly', () => {

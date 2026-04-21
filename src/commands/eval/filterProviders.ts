@@ -1,3 +1,5 @@
+import { normalizeProviderRef } from '../../util/providerRef';
+
 import type { ApiProvider, TestSuiteConfig } from '../../types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers';
 
@@ -5,43 +7,11 @@ import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers'
  * Extracts the id and label from a raw provider config without instantiating it.
  * Handles all provider config formats: string, function, ProviderOptions, ProviderOptionsMap.
  */
-function getProviderIdAndLabel(
+export function getProviderIdAndLabel(
   provider: string | ProviderOptions | ProviderOptionsMap | ((...args: unknown[]) => unknown),
   index: number,
 ): { id: string; label?: string } {
-  if (typeof provider === 'string') {
-    return { id: provider };
-  }
-
-  if (typeof provider === 'function') {
-    const label = (provider as { label?: string }).label;
-    return {
-      id: label ?? `custom-function-${index}`,
-      label,
-    };
-  }
-
-  // Check if it's a ProviderOptions object (has 'id' field)
-  if ('id' in provider && typeof (provider as ProviderOptions).id === 'string') {
-    const opts = provider as ProviderOptions;
-    return {
-      id: opts.id!,
-      label: opts.label,
-    };
-  }
-
-  // It's a ProviderOptionsMap: { "provider-id": { label: "..." } }
-  const keys = Object.keys(provider);
-  if (keys.length > 0) {
-    const id = keys[0];
-    const opts = (provider as ProviderOptionsMap)[id];
-    return {
-      id: opts.id || id,
-      label: opts.label,
-    };
-  }
-
-  return { id: `unknown-${index}` };
+  return normalizeProviderRef(provider, { index });
 }
 
 /**

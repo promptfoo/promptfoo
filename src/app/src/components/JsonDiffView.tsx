@@ -8,7 +8,12 @@ import {
 } from '@app/components/ui/collapsible';
 import { CopyButton } from '@app/components/ui/copy-button';
 import { cn } from '@app/lib/utils';
-import { computeJsonDiff, formatDiffValue, type JsonDiff } from '@app/utils/jsonDiff';
+import {
+  buildUnifiedJsonDiff,
+  computeJsonDiff,
+  formatDiffValue,
+  type JsonDiff,
+} from '@app/utils/jsonDiff';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface JsonDiffViewProps {
@@ -61,14 +66,14 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
     >
       {tooLarge ? (
         <div className="text-sm text-muted-foreground">
-          Objects too large for diff view. Use the copy buttons to compare manually.
+          Objects too large for diff view. Compare the expected and actual values manually.
         </div>
       ) : (
         <>
           {/* Summary header */}
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
-              {diffs.length} difference{diffs.length !== 1 ? 's' : ''} found
+              {diffs.length} difference{diffs.length === 1 ? '' : 's'} found
             </span>
             <div className="flex items-center gap-1">
               <span className="text-xs text-muted-foreground mr-1">Copy:</span>
@@ -99,7 +104,7 @@ export function JsonDiffView({ expected, actual, className }: JsonDiffViewProps)
                 onClick={() => setShowAllDiffs(true)}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                ...and {hiddenCount} more difference{hiddenCount !== 1 ? 's' : ''}
+                ...and {hiddenCount} more difference{hiddenCount === 1 ? '' : 's'}
               </button>
             )}
           </div>
@@ -170,35 +175,7 @@ function DiffRow({ diff }: { diff: JsonDiff }) {
  * Renders a unified diff view showing the full JSON with highlighted changes
  */
 function UnifiedDiff({ expected, actual }: { expected: unknown; actual: unknown }) {
-  // For the unified view, we'll show the actual JSON with annotations
-  const expectedStr = JSON.stringify(expected, null, 2);
-  const actualStr = JSON.stringify(actual, null, 2);
-
-  // Simple line-by-line diff visualization
-  const expectedLines = expectedStr.split('\n');
-  const actualLines = actualStr.split('\n');
-
-  // Build a simple unified view
-  const maxLines = Math.max(expectedLines.length, actualLines.length);
-  const unifiedLines: { type: 'same' | 'removed' | 'added'; content: string }[] = [];
-
-  for (let i = 0; i < maxLines; i++) {
-    const expLine = expectedLines[i];
-    const actLine = actualLines[i];
-
-    if (expLine === actLine) {
-      if (expLine !== undefined) {
-        unifiedLines.push({ type: 'same', content: expLine });
-      }
-    } else {
-      if (expLine !== undefined) {
-        unifiedLines.push({ type: 'removed', content: expLine });
-      }
-      if (actLine !== undefined) {
-        unifiedLines.push({ type: 'added', content: actLine });
-      }
-    }
-  }
+  const unifiedLines = buildUnifiedJsonDiff(expected, actual);
 
   return (
     <>

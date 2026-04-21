@@ -20,14 +20,48 @@ import {
 } from '../../src/types/codeScan';
 
 /**
- * Get GitHub context from the current workflow
+ * Get GitHub context from the current workflow.
+ * Supports both pull_request events and workflow_dispatch (with pr_number input).
+ * @param token GitHub token (required for workflow_dispatch to fetch PR details)
  * @returns GitHub PR context
  */
-export function getGitHubContext(): PullRequestContext {
+export async function getGitHubContext(token: string): Promise<PullRequestContext> {
   const context = github.context;
 
+  // For workflow_dispatch, read pr_number from event inputs
+  if (context.eventName === 'workflow_dispatch') {
+    const prNumberInput = (context.payload.inputs as Record<string, string> | undefined)?.pr_number;
+    if (!prNumberInput) {
+      throw new Error(
+        'workflow_dispatch requires a pr_number input. Add inputs: { pr_number: { required: true } } to your workflow.',
+      );
+    }
+
+    const prNumber = parseInt(prNumberInput, 10);
+    if (isNaN(prNumber)) {
+      throw new Error(`Invalid pr_number input: "${prNumberInput}"`);
+    }
+
+    const octokit = new Octokit({ auth: token });
+    const { data: pr } = await octokit.pulls.get({
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      pull_number: prNumber,
+    });
+
+    return {
+      owner: context.repo.owner,
+      repo: context.repo.repo,
+      number: pr.number,
+      sha: pr.head.sha,
+    };
+  }
+
+  // Otherwise, get context from pull_request event
   if (!context.payload.pull_request) {
-    throw new Error('This action can only be run on pull_request events');
+    throw new Error(
+      'This action requires a pull_request event or workflow_dispatch with pr_number input',
+    );
   }
 
   return {

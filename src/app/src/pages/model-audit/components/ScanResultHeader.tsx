@@ -54,7 +54,7 @@ export default function ScanResultHeader({
           <div className="flex items-start gap-4 flex-1 min-w-0">
             <div
               className={cn(
-                'shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center',
+                'shrink-0 size-14 rounded-2xl flex items-center justify-center',
                 isClean
                   ? 'bg-emerald-100 dark:bg-emerald-900/60'
                   : severityCounts.critical > 0
@@ -63,11 +63,11 @@ export default function ScanResultHeader({
               )}
             >
               {isClean ? (
-                <CheckCircleIcon className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+                <CheckCircleIcon className="size-7 text-emerald-600 dark:text-emerald-400" />
               ) : severityCounts.critical > 0 ? (
-                <ErrorIcon className="h-7 w-7 text-red-600 dark:text-red-400" />
+                <ErrorIcon className="size-7 text-red-600 dark:text-red-400" />
               ) : (
-                <WarningIcon className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+                <WarningIcon className="size-7 text-amber-600 dark:text-amber-400" />
               )}
             </div>
             <div className="min-w-0">
@@ -76,7 +76,7 @@ export default function ScanResultHeader({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="flex items-center gap-1.5 cursor-default">
-                      <FolderIcon className="h-3.5 w-3.5" />
+                      <FolderIcon className="size-3.5" />
                       <span className="font-mono truncate max-w-[200px]">{modelPath}</span>
                     </span>
                   </TooltipTrigger>

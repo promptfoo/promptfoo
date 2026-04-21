@@ -12,9 +12,26 @@ import { Plus, Trash2 } from 'lucide-react';
 
 import type { ProviderOptions } from '../../types';
 
+interface BrowserStep {
+  action: 'navigate' | 'click' | 'type' | 'extract' | 'screenshot' | 'wait' | 'waitForNewChildren';
+  args?: {
+    url?: string;
+    selector?: string;
+    text?: string;
+    path?: string;
+    ms?: number;
+    fullPage?: boolean;
+    parentSelector?: string;
+    delay?: number;
+    timeout?: number;
+    optional?: boolean;
+  };
+  name?: string;
+}
+
 interface BrowserAutomationConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
 
 const BrowserAutomationConfiguration = ({
@@ -75,7 +92,7 @@ const BrowserAutomationConfiguration = ({
         <div className="mt-6">
           <h4 className="mb-2 font-medium">Browser Steps</h4>
 
-          {selectedTarget.config.steps?.map((step: any, index: number) => (
+          {selectedTarget.config.steps?.map((step: BrowserStep, index: number) => (
             <div key={index} className="mb-4 rounded-lg border border-border p-4">
               <div className="flex items-center gap-4">
                 <div className="min-w-[200px]">
@@ -84,7 +101,10 @@ const BrowserAutomationConfiguration = ({
                     value={step.action || ''}
                     onValueChange={(value) => {
                       const newSteps = [...(selectedTarget.config.steps || [])];
-                      newSteps[index] = { ...step, action: value };
+                      newSteps[index] = {
+                        ...step,
+                        action: value as BrowserStep['action'],
+                      };
                       updateCustomTarget('steps', newSteps);
                     }}
                   >
@@ -107,13 +127,13 @@ const BrowserAutomationConfiguration = ({
                   size="icon"
                   onClick={() => {
                     const newSteps = selectedTarget.config.steps?.filter(
-                      (_: any, i: number) => i !== index,
+                      (_: BrowserStep, i: number) => i !== index,
                     );
                     updateCustomTarget('steps', newSteps);
                   }}
                   className="mt-6"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="size-4" />
                 </Button>
               </div>
 
@@ -302,7 +322,7 @@ const BrowserAutomationConfiguration = ({
             }}
             className="mt-2"
           >
-            <Plus className="mr-1 h-4 w-4" />
+            <Plus className="mr-1 size-4" />
             Add Step
           </Button>
         </div>

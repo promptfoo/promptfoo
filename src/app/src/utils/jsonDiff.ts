@@ -1,3 +1,4 @@
+import { diffLines } from 'diff';
 import type { GradingResult } from '@promptfoo/types';
 
 /**
@@ -10,84 +11,106 @@ export interface JsonDiff {
   type: 'changed' | 'added' | 'removed';
 }
 
-/**
- * Recursively compute differences between two JSON values
- * Returns an array of path-based differences
- */
-export function computeJsonDiff(expected: unknown, actual: unknown, path: string = ''): JsonDiff[] {
+export interface JsonDiffLine {
+  type: 'same' | 'removed' | 'added';
+  content: string;
+}
+
+function getDiffPath(path: string): string {
+  return path || '(root)';
+}
+
+function createDiff(
+  path: string,
+  expected: unknown,
+  actual: unknown,
+  type: JsonDiff['type'],
+): JsonDiff {
+  return { path: getDiffPath(path), expected, actual, type };
+}
+
+function computeArrayDiff(expected: unknown[], actual: unknown[], path: string): JsonDiff[] {
   const diffs: JsonDiff[] = [];
+  const maxLength = Math.max(expected.length, actual.length);
 
-  // Handle null/undefined
-  if (expected === null || expected === undefined) {
-    if (actual !== null && actual !== undefined) {
-      diffs.push({ path: path || '(root)', expected, actual, type: 'added' });
+  for (let index = 0; index < maxLength; index++) {
+    const itemPath = path ? `${path}[${index}]` : `[${index}]`;
+    if (index >= expected.length) {
+      diffs.push(createDiff(itemPath, undefined, actual[index], 'added'));
+    } else if (index >= actual.length) {
+      diffs.push(createDiff(itemPath, expected[index], undefined, 'removed'));
+    } else {
+      diffs.push(...computeJsonDiff(expected[index], actual[index], itemPath));
     }
-    return diffs;
-  }
-
-  if (actual === null || actual === undefined) {
-    diffs.push({ path: path || '(root)', expected, actual, type: 'removed' });
-    return diffs;
-  }
-
-  // Handle type mismatches
-  if (typeof expected !== typeof actual) {
-    diffs.push({ path: path || '(root)', expected, actual, type: 'changed' });
-    return diffs;
-  }
-
-  // Handle arrays
-  if (Array.isArray(expected) && Array.isArray(actual)) {
-    const maxLength = Math.max(expected.length, actual.length);
-    for (let i = 0; i < maxLength; i++) {
-      const itemPath = path ? `${path}[${i}]` : `[${i}]`;
-      if (i >= expected.length) {
-        diffs.push({ path: itemPath, expected: undefined, actual: actual[i], type: 'added' });
-      } else if (i >= actual.length) {
-        diffs.push({ path: itemPath, expected: expected[i], actual: undefined, type: 'removed' });
-      } else {
-        diffs.push(...computeJsonDiff(expected[i], actual[i], itemPath));
-      }
-    }
-    return diffs;
-  }
-
-  // Handle objects
-  if (typeof expected === 'object' && typeof actual === 'object') {
-    const expectedObj = expected as Record<string, unknown>;
-    const actualObj = actual as Record<string, unknown>;
-    const allKeys = new Set([...Object.keys(expectedObj), ...Object.keys(actualObj)]);
-
-    for (const key of allKeys) {
-      const keyPath = path ? `${path}.${key}` : key;
-      if (!(key in expectedObj)) {
-        diffs.push({ path: keyPath, expected: undefined, actual: actualObj[key], type: 'added' });
-      } else if (key in actualObj) {
-        diffs.push(...computeJsonDiff(expectedObj[key], actualObj[key], keyPath));
-      } else {
-        diffs.push({
-          path: keyPath,
-          expected: expectedObj[key],
-          actual: undefined,
-          type: 'removed',
-        });
-      }
-    }
-    return diffs;
-  }
-
-  // Handle primitives
-  if (expected !== actual) {
-    diffs.push({ path: path || '(root)', expected, actual, type: 'changed' });
   }
 
   return diffs;
 }
 
+function computeObjectDiff(
+  expected: Record<string, unknown>,
+  actual: Record<string, unknown>,
+  path: string,
+): JsonDiff[] {
+  const diffs: JsonDiff[] = [];
+  const allKeys = new Set([...Object.keys(expected), ...Object.keys(actual)]);
+
+  for (const key of allKeys) {
+    const keyPath = path ? `${path}.${key}` : key;
+    if (!(key in expected)) {
+      diffs.push(createDiff(keyPath, undefined, actual[key], 'added'));
+    } else if (key in actual) {
+      diffs.push(...computeJsonDiff(expected[key], actual[key], keyPath));
+    } else {
+      diffs.push(createDiff(keyPath, expected[key], undefined, 'removed'));
+    }
+  }
+
+  return diffs;
+}
+
+function isRecordValue(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Recursively compute differences between two JSON values
+ * Returns an array of path-based differences
+ */
+export function computeJsonDiff(expected: unknown, actual: unknown, path: string = ''): JsonDiff[] {
+  if (expected === null || expected === undefined) {
+    return actual === null || actual === undefined
+      ? []
+      : [createDiff(path, expected, actual, 'added')];
+  }
+
+  if (actual === null || actual === undefined) {
+    return [createDiff(path, expected, actual, 'removed')];
+  }
+
+  if (typeof expected !== typeof actual) {
+    return [createDiff(path, expected, actual, 'changed')];
+  }
+
+  if (Array.isArray(expected) && Array.isArray(actual)) {
+    return computeArrayDiff(expected, actual, path);
+  }
+
+  if (Array.isArray(expected) || Array.isArray(actual)) {
+    return [createDiff(path, expected, actual, 'changed')];
+  }
+
+  if (isRecordValue(expected) && isRecordValue(actual)) {
+    return computeObjectDiff(expected, actual, path);
+  }
+
+  return expected === actual ? [] : [createDiff(path, expected, actual, 'changed')];
+}
+
 /**
  * Check if a grading result is a JSON-related assertion that could benefit from diff view.
  *
- * Only `equals` assertions with object values are supported because:
+ * Only `equals` assertions with object or array values are supported because:
  * - `is-json` and `contains-json` typically use JSON Schema validation
  * - JSON Schema validation already provides path-based error messages via AJV
  *   (e.g., "data/age must be equal to constant")
@@ -97,7 +120,7 @@ export function isJsonAssertion(result: GradingResult): boolean {
   const type = result.assertion?.type;
   const value = result.assertion?.value;
 
-  // Only equals with object value benefits from JSON diff view
+  // Only equals with object or array values benefits from JSON diff view
   if (type === 'equals' && typeof value === 'object' && value !== null) {
     return true;
   }
@@ -151,4 +174,20 @@ export function formatDiffValue(value: unknown): string {
     return str;
   }
   return String(value);
+}
+
+function stringifyJson(value: unknown): string {
+  return JSON.stringify(value, null, 2) ?? String(value);
+}
+
+function splitDiffLines(value: string): string[] {
+  const withoutTrailingNewline = value.endsWith('\n') ? value.slice(0, -1) : value;
+  return withoutTrailingNewline.split('\n');
+}
+
+export function buildUnifiedJsonDiff(expected: unknown, actual: unknown): JsonDiffLine[] {
+  return diffLines(stringifyJson(expected), stringifyJson(actual)).flatMap((change) => {
+    const type = change.added ? 'added' : change.removed ? 'removed' : 'same';
+    return splitDiffLines(change.value).map((content) => ({ type, content }));
+  });
 }

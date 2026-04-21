@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing JSON chat format prompts
+description: 'Smoke test - JSON chat format prompt'
+
+providers:
+  - echo
+
+prompts:
+  - file://../prompts/chat.json
+
+tests:
+  - vars:
+      name: ChatTest
+    assert:
+      - type: contains
+        value: ChatTest

@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing YAML anchors/aliases
+description: 'Smoke test - YAML anchors'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+# Define anchor for reusable assertion
+defaultTest:
+  assert: &common_assert
+    - type: contains
+      value: 'Hello'
+
+tests:
+  - vars:
+      name: Alice
+    assert: *common_assert
+  - vars:
+      name: Bob
+    assert: *common_assert

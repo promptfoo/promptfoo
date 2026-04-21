@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { computeJsonDiff, formatDiffValue, isJsonAssertion, tryParseJson } from './jsonDiff';
+import {
+  buildUnifiedJsonDiff,
+  computeJsonDiff,
+  formatDiffValue,
+  isJsonAssertion,
+  tryParseJson,
+} from './jsonDiff';
 import type { GradingResult } from '@promptfoo/types';
 
 describe('computeJsonDiff', () => {
   it('returns empty array for identical objects', () => {
     const obj = { name: 'John', age: 30 };
     expect(computeJsonDiff(obj, obj)).toEqual([]);
+  });
+
+  it('returns empty array for identical empty containers', () => {
+    expect(computeJsonDiff({}, {})).toEqual([]);
+    expect(computeJsonDiff([], [])).toEqual([]);
   });
 
   it('detects changed primitive values', () => {
@@ -113,6 +124,44 @@ describe('computeJsonDiff', () => {
 
     expect(diffs).toHaveLength(1);
     expect(diffs[0].type).toBe('changed');
+  });
+
+  it('handles deeply nested structures', () => {
+    const expected = {
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              level5: {
+                value: 'expected',
+              },
+            },
+          },
+        },
+      },
+    };
+    const actual = {
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              level5: {
+                value: 'actual',
+              },
+            },
+          },
+        },
+      },
+    };
+
+    expect(computeJsonDiff(expected, actual)).toEqual([
+      {
+        path: 'level1.level2.level3.level4.level5.value',
+        expected: 'expected',
+        actual: 'actual',
+        type: 'changed',
+      },
+    ]);
   });
 });
 
@@ -283,5 +332,26 @@ describe('formatDiffValue', () => {
     const formatted = formatDiffValue(longObject);
     expect(formatted.length).toBe(50);
     expect(formatted.endsWith('...')).toBe(true);
+  });
+});
+
+describe('buildUnifiedJsonDiff', () => {
+  it('preserves unchanged lines after an insertion', () => {
+    const lines = buildUnifiedJsonDiff({ a: 1, c: 3 }, { a: 1, b: 2, c: 3 });
+
+    expect(lines).toContainEqual({ type: 'added', content: '  "b": 2,' });
+    expect(lines.filter((line) => line.content.includes('"c"'))).toEqual([
+      { type: 'same', content: '  "c": 3' },
+    ]);
+  });
+
+  it('marks only changed JSON lines as removed or added', () => {
+    const lines = buildUnifiedJsonDiff({ a: 1, b: 2 }, { a: 1, b: 3 });
+
+    expect(lines).toContainEqual({ type: 'removed', content: '  "b": 2' });
+    expect(lines).toContainEqual({ type: 'added', content: '  "b": 3' });
+    expect(lines.filter((line) => line.content.includes('"a"'))).toEqual([
+      { type: 'same', content: '  "a": 1,' },
+    ]);
   });
 });

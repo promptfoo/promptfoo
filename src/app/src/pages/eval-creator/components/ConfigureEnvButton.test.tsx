@@ -1,16 +1,8 @@
-import React from 'react';
-
 import { useStore } from '@app/stores/evalConfig';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import ConfigureEnvButton from './ConfigureEnvButton';
-
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
 
 const openProviderSettingsDialog = async () => {
   const apiKeysButton = screen.getByRole('button', { name: /api keys/i });
@@ -26,7 +18,7 @@ describe('ConfigureEnvButton', () => {
   });
 
   it('should open the provider settings dialog when the API keys button is clicked', async () => {
-    renderWithTheme(<ConfigureEnvButton />);
+    render(<ConfigureEnvButton />);
     await openProviderSettingsDialog();
   });
 
@@ -34,7 +26,7 @@ describe('ConfigureEnvButton', () => {
     const initialEnv = { ANTHROPIC_API_KEY: 'existing-anthropic-key' };
     useStore.getState().updateConfig({ env: initialEnv });
 
-    renderWithTheme(<ConfigureEnvButton />);
+    render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
 
@@ -61,7 +53,7 @@ describe('ConfigureEnvButton', () => {
     useStore.getState().updateConfig({ env: initialEnv });
     const initialConfig = useStore.getState().config;
 
-    renderWithTheme(<ConfigureEnvButton />);
+    render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
 
@@ -86,7 +78,7 @@ describe('ConfigureEnvButton', () => {
     };
     useStore.getState().updateConfig({ env: initialEnv });
 
-    renderWithTheme(<ConfigureEnvButton />);
+    render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
 
@@ -108,7 +100,7 @@ describe('ConfigureEnvButton', () => {
     };
     useStore.getState().updateConfig({ env: initialEnv });
 
-    renderWithTheme(<ConfigureEnvButton />);
+    render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
 
@@ -131,7 +123,7 @@ describe('ConfigureEnvButton', () => {
   });
 
   it('should save invalid API key format to the store', async () => {
-    renderWithTheme(<ConfigureEnvButton />);
+    render(<ConfigureEnvButton />);
 
     await openProviderSettingsDialog();
 

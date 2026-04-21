@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Veo image-to-video generation
+
+prompts:
+  - 'Animate this image: {{animation}}'
+
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      # Provide your own image path here
+      image: file://assets/start-frame.jpg
+      aspectRatio: '16:9'
+      duration: 5
+
+tests:
+  - vars:
+      animation: The camera slowly zooms in while the scene comes to life
+    assert:
+      - type: is-valid-video
+  - vars:
+      animation: Gentle motion with leaves rustling and clouds drifting
+    assert:
+      - type: is-valid-video
+
+# Note: You need to create an assets/ directory with your images
+# mkdir assets
+# cp /path/to/your/image.jpg assets/start-frame.jpg

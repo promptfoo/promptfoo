@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
@@ -19,7 +20,6 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
-import { parse } from 'csv-parse/browser/esm/sync';
 import { Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
@@ -434,7 +434,7 @@ export const CustomPoliciesSection = () => {
       setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
-      let errorMessage = 'Failed to generate policies';
+      let errorMessage: string;
 
       if (error instanceof Error) {
         // Handle network errors
@@ -513,6 +513,7 @@ export const CustomPoliciesSection = () => {
     [recordEvent, config.applicationDefinition],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleCsvUpload = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
@@ -526,7 +527,8 @@ export const CustomPoliciesSection = () => {
         const text = await file.text();
 
         // Parse CSV and take the first column regardless of header name
-        const records = parse(text, {
+        const { parse } = await import('csv-parse/browser/esm/sync');
+        const records = parse<Record<string, string>>(text, {
           skip_empty_lines: true,
           columns: true,
           trim: true,
@@ -534,7 +536,7 @@ export const CustomPoliciesSection = () => {
 
         // Extract policies from the first column
         const newPolicies = records
-          .map((record: any) => Object.values(record)[0] as string)
+          .map((record) => Object.values(record)[0] as string)
           .filter((policy: string) => policy && policy.trim() !== '');
 
         if (newPolicies.length > 0) {
@@ -638,10 +640,10 @@ export const CustomPoliciesSection = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="size-8"
                   onClick={() => handleEditPolicy(row.original)}
                 >
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="size-4" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Edit</TooltipContent>
@@ -666,6 +668,7 @@ export const CustomPoliciesSection = () => {
     [
       generatingTestCase,
       generatingPolicyId,
+      // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
       handleEditPolicy,
       handleGenerateTestCase,
       apiHealthStatus,
@@ -684,12 +687,12 @@ export const CustomPoliciesSection = () => {
   const toolbarActions = (
     <>
       <Button size="sm" onClick={handleAddPolicy}>
-        <Plus className="mr-2 h-4 w-4" />
+        <Plus className="mr-2 size-4" />
         Add Policy
       </Button>
       <Button variant="outline" size="sm" asChild disabled={isUploadingCsv}>
         <label className="cursor-pointer">
-          <Upload className="mr-2 h-4 w-4" />
+          <Upload className="mr-2 size-4" />
           {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
           <input
             type="file"
@@ -710,7 +713,7 @@ export const CustomPoliciesSection = () => {
           className="text-destructive"
           onClick={handleDeleteSelected}
         >
-          <Trash2 className="mr-2 h-4 w-4" />
+          <Trash2 className="mr-2 size-4" />
           Delete ({selectedCount})
         </Button>
       )}
@@ -738,7 +741,6 @@ export const CustomPoliciesSection = () => {
             getRowId={(row) => row.id}
             toolbarActions={toolbarActions}
             showToolbar
-            showPagination={false}
             emptyMessage="No custom policies configured. Add your first policy using the 'Add Policy' button above."
           />
         </div>
@@ -772,7 +774,7 @@ export const CustomPoliciesSection = () => {
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
-              <Trash2 className="mr-2 h-4 w-4" />
+              <Trash2 className="mr-2 size-4" />
               Delete
             </Button>
           </DialogFooter>
@@ -803,7 +805,7 @@ export const CustomPoliciesSection = () => {
                 placeholder="e.g., Data Privacy Policy"
               />
               {policyDialog.errors.name && (
-                <p className="text-sm text-destructive">{policyDialog.errors.name}</p>
+                <HelperText error>{policyDialog.errors.name}</HelperText>
               )}
             </div>
             <div className="space-y-2">
@@ -822,7 +824,7 @@ export const CustomPoliciesSection = () => {
                 placeholder="Enter the policy text that describes what should be checked..."
               />
               {policyDialog.errors.policyText && (
-                <p className="text-sm text-destructive">{policyDialog.errors.policyText}</p>
+                <HelperText error>{policyDialog.errors.policyText}</HelperText>
               )}
             </div>
           </div>

@@ -12,6 +12,7 @@ type DataRecord = {
 
 // Lazy load natural package to handle optional dependency
 let PorterStemmer: Stemmer | undefined;
+// biome-ignore lint/suspicious/noExplicitAny: FIXME
 let WordNet: (new () => any) | undefined;
 
 async function ensureNaturalPackage(): Promise<void> {
@@ -119,7 +120,7 @@ async function matchStemEnums(
 async function matchSynonymEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
-  wordnet?: any,
+  wordnet?: unknown,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
   await ensureNaturalPackage();
   invariant(WordNet, 'WordNet should be loaded');

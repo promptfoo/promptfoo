@@ -1,11 +1,20 @@
+import crypto from 'node:crypto';
+
 import express from 'express';
 import logger from '../logger';
 import {
   bytesToHex,
   type DecodedAttribute,
   type DecodedExportTraceServiceRequest,
+  type DecodedResourceSpans,
+  type DecodedScopeSpans,
+  type DecodedSpan,
   decodeExportTraceServiceRequest,
 } from './protobuf';
+import {
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
+} from './resourceAttributes';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
 interface OTLPAttribute {
@@ -54,6 +63,113 @@ interface OTLPTraceRequest {
   resourceSpans: OTLPResourceSpan[];
 }
 
+// Minimal OTLP logs JSON shapes. Full OTEL log signal includes severity,
+// observedTimeUnixNano, and more — we only use the fields needed to synthesize
+// point-in-time spans under the log's trace.
+interface OTLPLogRecord {
+  timeUnixNano?: string;
+  observedTimeUnixNano?: string;
+  traceId?: string;
+  spanId?: string;
+  severityNumber?: number;
+  severityText?: string;
+  body?: OTLPAttribute['value'];
+  attributes?: OTLPAttribute[];
+}
+
+interface OTLPScopeLogs {
+  scope?: {
+    name: string;
+    version?: string;
+  };
+  logRecords: OTLPLogRecord[];
+}
+
+interface OTLPResourceLogs {
+  resource?: {
+    attributes?: OTLPAttribute[];
+  };
+  scopeLogs: OTLPScopeLogs[];
+}
+
+interface OTLPLogsRequest {
+  resourceLogs: OTLPResourceLogs[];
+}
+
+// Log event names we don't want cluttering traces (internal, not actionable).
+const LOG_EVENT_NAME_DENYLIST: ReadonlySet<string> = new Set(['claude_code.tracing']);
+// Nominal span duration for a log-derived span so it renders as a thin bar
+// instead of a zero-width point in trace UIs.
+const LOG_SPAN_DURATION_MS = 1;
+// Max characters of a log body that we're willing to use as a span name when
+// no event.name attribute is present — longer bodies would clutter the UI.
+const MAX_BODY_AS_NAME_LENGTH = 128;
+// OTEL severityNumber >= 17 corresponds to ERROR and above.
+const SEVERITY_NUMBER_ERROR = 17;
+// Hard cap on the otel.log.body attribute so malicious or overly-chatty SDKs
+// can't bloat the trace DB with multi-megabyte log bodies.
+const MAX_LOG_BODY_ATTR_LENGTH = 8192;
+
+function truncateLogBody(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  if (value.length <= MAX_LOG_BODY_ATTR_LENGTH) {
+    return value;
+  }
+  return `${value.slice(0, MAX_LOG_BODY_ATTR_LENGTH - 15)}... [truncated]`;
+}
+
+// OTEL span_id is 16 hex chars / 8 bytes; base64 form is 11 chars + optional '='.
+// An all-zero 8-byte value encodes to "AAAAAAAAAAA=" (or "AAAAAAAAAAAA"), which
+// would otherwise pass a `[1-9a-f]` scan since 'A' is in the hex alphabet.
+const BASE64_ZERO_SPAN_ID = /^A{11,12}=?$/;
+function isZeroSpanId(id: string): boolean {
+  return /^0+$/.test(id) || BASE64_ZERO_SPAN_ID.test(id);
+}
+
+function randomSpanId(): string {
+  return crypto.randomBytes(8).toString('hex');
+}
+
+function getStringAttribute(attributes: Record<string, any>, key: string): string | undefined {
+  const value = attributes[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function resolveLogSpanName(attributes: Record<string, any>, bodyValue: unknown): string {
+  // Prefer the OTEL "event.name" semantic convention, which Claude Code sets
+  // to values like "claude_code.tool.execution".
+  const eventName = attributes['event.name'] ?? attributes['claude_code.event.name'];
+  if (typeof eventName === 'string' && eventName.length > 0) {
+    return eventName;
+  }
+  if (
+    typeof bodyValue === 'string' &&
+    bodyValue.length > 0 &&
+    bodyValue.length <= MAX_BODY_AS_NAME_LENGTH
+  ) {
+    return bodyValue;
+  }
+  return 'otel.log';
+}
+
+type OTLPFormat = 'json' | 'protobuf';
+
+interface OTLPReceiverOptions {
+  acceptFormats?: OTLPFormat[];
+}
+
+interface TraceInfo {
+  evaluationId?: string;
+  testCaseId?: string;
+}
+
+interface GroupedTraces {
+  spansByTrace: Map<string, SpanData[]>;
+  traceInfoById: Map<string, TraceInfo>;
+}
+
 const SPAN_KIND_MAP: Record<number, string> = {
   0: 'unspecified',
   1: 'internal',
@@ -63,14 +179,42 @@ const SPAN_KIND_MAP: Record<number, string> = {
   5: 'consumer',
 };
 
+const DEFAULT_ACCEPT_FORMATS: OTLPFormat[] = ['json', 'protobuf'];
+const OTLP_CONTENT_TYPES: Record<OTLPFormat, string> = {
+  json: 'application/json',
+  protobuf: 'application/x-protobuf',
+};
+
+function normalizeAcceptFormats(acceptFormats?: OTLPFormat[]): OTLPFormat[] {
+  const normalized = [...new Set(acceptFormats ?? DEFAULT_ACCEPT_FORMATS)];
+  return normalized.length > 0 ? normalized : [...DEFAULT_ACCEPT_FORMATS];
+}
+
+function getRequestFormat(contentType: string | string[] | undefined): OTLPFormat | null {
+  const rawContentType = Array.isArray(contentType) ? contentType[0] : contentType;
+  const mimeType = rawContentType?.split(';', 1)[0]?.trim().toLowerCase();
+
+  if (mimeType === OTLP_CONTENT_TYPES.json) {
+    return 'json';
+  }
+
+  if (mimeType === OTLP_CONTENT_TYPES.protobuf) {
+    return 'protobuf';
+  }
+
+  return null;
+}
+
 export class OTLPReceiver {
   private app: express.Application;
+  private acceptFormats: OTLPFormat[];
   private traceStore: TraceStore;
   private port?: number;
   private server?: any; // http.Server type
 
-  constructor() {
+  constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
+    this.acceptFormats = normalizeAcceptFormats(options.acceptFormats);
     this.traceStore = getTraceStore();
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
@@ -78,10 +222,68 @@ export class OTLPReceiver {
   }
 
   private setupMiddleware(): void {
-    // Support both JSON and protobuf (for now, we'll focus on JSON)
-    this.app.use(express.json({ limit: '10mb', type: 'application/json' }));
-    this.app.use(express.raw({ type: 'application/x-protobuf', limit: '10mb' }));
-    logger.debug('[OtlpReceiver] Middleware configured for JSON and protobuf');
+    // Reject disabled content types before any body parser runs.
+    this.app.use('/v1/traces', (req, res, next) => {
+      if (req.method !== 'POST') {
+        next();
+        return;
+      }
+
+      const format = getRequestFormat(req.headers['content-type']);
+      if (!format || !this.acceptFormats.includes(format)) {
+        res.status(415).json({ error: 'Unsupported content type' });
+        return;
+      }
+
+      next();
+    });
+
+    // Keep parser selection dynamic so setAcceptFormats() still works on the singleton receiver.
+    this.app.use(
+      '/v1/traces',
+      express.json({
+        limit: '10mb',
+        type: (req) =>
+          this.acceptFormats.includes('json') &&
+          getRequestFormat(req.headers['content-type']) === 'json',
+      }),
+    );
+    this.app.use(
+      '/v1/traces',
+      express.raw({
+        limit: '10mb',
+        type: (req) =>
+          this.acceptFormats.includes('protobuf') &&
+          getRequestFormat(req.headers['content-type']) === 'protobuf',
+      }),
+    );
+
+    // /v1/logs accepts JSON only. Claude Agent SDK emits most useful telemetry
+    // (tool executions, API requests, interactions) as OTEL logs, not spans;
+    // we materialize each log record as a zero-ish-duration span so the
+    // Traces tab can render them under the evaluation trace.
+    this.app.use('/v1/logs', (req, res, next) => {
+      if (req.method !== 'POST') {
+        next();
+        return;
+      }
+      const format = getRequestFormat(req.headers['content-type']);
+      if (format !== 'json') {
+        res.status(415).json({
+          error: 'Only application/json is supported for /v1/logs',
+        });
+        return;
+      }
+      next();
+    });
+    this.app.use(
+      '/v1/logs',
+      express.json({
+        limit: '10mb',
+        type: (req) => getRequestFormat(req.headers['content-type']) === 'json',
+      }),
+    );
+    logger.debug('[OtlpReceiver] Middleware configured for accepted OTLP formats');
   }
 
   private setupRoutes(): void {
@@ -94,98 +296,40 @@ export class OTLPReceiver {
       );
       logger.debug('[OtlpReceiver] Starting to process traces');
 
-      // Check content type first before processing
-      const isJson = contentType === 'application/json';
-      const isProtobuf = contentType === 'application/x-protobuf';
+      const format = getRequestFormat(contentType);
 
-      if (!isJson && !isProtobuf) {
+      if (!format || !this.acceptFormats.includes(format)) {
         res.status(415).json({ error: 'Unsupported content type' });
         return;
       }
 
       try {
-        let traces: ParsedTrace[] = [];
-
-        if (isJson) {
-          // Parse JSON request
-          logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
-          logger.debug(
-            `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
-          );
-          traces = this.parseOTLPJSONRequest(req.body);
-        } else if (isProtobuf) {
-          // Parse protobuf request
-          logger.debug('[OtlpReceiver] Parsing OTLP protobuf request');
-          logger.debug(`[OtlpReceiver] Request body size: ${req.body?.length || 0} bytes`);
-          traces = await this.parseOTLPProtobufRequest(req.body);
-        }
+        const traces = await this.parseIncomingRequest(format, req.body);
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
-
-        // Group spans by trace ID and extract metadata
-        const spansByTrace = new Map<string, SpanData[]>();
-        const traceInfoById = new Map<string, { evaluationId?: string; testCaseId?: string }>();
-
-        for (const trace of traces) {
-          if (!spansByTrace.has(trace.traceId)) {
-            spansByTrace.set(trace.traceId, []);
-
-            // Extract optional evaluation and test case IDs from span attributes
-            const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
-            const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
-
-            // Store info for this trace (even if IDs are missing)
-            const info = traceInfoById.get(trace.traceId) ?? {};
-            if (evaluationId) {
-              info.evaluationId = evaluationId;
-            }
-            if (testCaseId) {
-              info.testCaseId = testCaseId;
-            }
-            traceInfoById.set(trace.traceId, info);
-          }
-          spansByTrace.get(trace.traceId)!.push(trace.span);
-        }
-        logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
-
-        // Create trace records for all traces (required for foreign key constraints)
-        // Include optional metadata when available
-        for (const [traceId, info] of traceInfoById) {
-          try {
-            logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
-            await this.traceStore.createTrace({
-              traceId,
-              evaluationId: info.evaluationId || '',
-              testCaseId: info.testCaseId || '',
-            });
-          } catch (error) {
-            // Trace might already exist, which is fine
-            logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
-          }
-        }
-
-        // Store spans for each trace
-        for (const [traceId, spans] of spansByTrace) {
-          logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-          await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
-        }
+        await this.persistTraces(this.groupTraces(traces));
 
         // OTLP success response
         res.status(200).json({ partialSuccess: {} });
         logger.debug('[OtlpReceiver] Successfully processed traces');
       } catch (error) {
-        logger.error(`[OtlpReceiver] Failed to process OTLP traces: ${error}`);
-        logger.error(
-          `[OtlpReceiver] Error stack: ${error instanceof Error ? error.stack : 'No stack'}`,
-        );
+        this.handleProcessingError(error, res);
+      }
+    });
 
-        // Return 400 for invalid protobuf/parsing errors
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.toLowerCase().includes('invalid protobuf')) {
-          res.status(400).json({ error: errorMessage });
-          return;
+    // OTLP HTTP endpoint for logs (JSON only). Each log record becomes a span
+    // parented to the span it was emitted from, so SDK-internal events show up
+    // in the Traces tab alongside provider and tool spans.
+    this.app.post('/v1/logs', async (req, res) => {
+      logger.debug('[OtlpReceiver] Received logs request');
+      try {
+        const traces = this.parseOTLPLogsJSONRequest(req.body as OTLPLogsRequest);
+        logger.debug(`[OtlpReceiver] Parsed ${traces.length} logs into span records`);
+        if (traces.length > 0) {
+          await this.persistTraces(this.groupTraces(traces));
         }
-
-        res.status(500).json({ error: 'Internal server error' });
+        res.status(200).json({ partialSuccess: {} });
+      } catch (error) {
+        this.handleProcessingError(error, res);
       }
     });
 
@@ -200,7 +344,7 @@ export class OTLPReceiver {
       res.status(200).json({
         service: 'promptfoo-otlp-receiver',
         version: '1.0.0',
-        supported_formats: ['json', 'protobuf'],
+        supported_formats: this.acceptFormats,
       });
     });
 
@@ -227,6 +371,94 @@ export class OTLPReceiver {
 
       res.status(500).json({ error: 'Internal server error' });
     });
+  }
+
+  private async parseIncomingRequest(format: OTLPFormat, body: unknown): Promise<ParsedTrace[]> {
+    if (format === 'json') {
+      logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
+      logger.debug(`[OtlpReceiver] Request body: ${JSON.stringify(body).substring(0, 500)}...`);
+      return this.parseOTLPJSONRequest(body as OTLPTraceRequest);
+    }
+
+    logger.debug('[OtlpReceiver] Parsing OTLP protobuf request');
+    logger.debug(
+      `[OtlpReceiver] Request body size: ${(body as Buffer | undefined)?.length || 0} bytes`,
+    );
+    return this.parseOTLPProtobufRequest(body as Buffer);
+  }
+
+  private groupTraces(traces: ParsedTrace[]): GroupedTraces {
+    const spansByTrace = new Map<string, SpanData[]>();
+    const traceInfoById = new Map<string, TraceInfo>();
+
+    for (const trace of traces) {
+      const spans = spansByTrace.get(trace.traceId) ?? [];
+      spans.push(trace.span);
+      spansByTrace.set(trace.traceId, spans);
+      this.recordTraceInfo(traceInfoById, trace);
+    }
+
+    logger.debug(`[OtlpReceiver] Grouped spans into ${spansByTrace.size} traces`);
+
+    return { spansByTrace, traceInfoById };
+  }
+
+  private recordTraceInfo(traceInfoById: Map<string, TraceInfo>, trace: ParsedTrace): void {
+    const evaluationId = trace.span.attributes?.['evaluation.id'] as string | undefined;
+    const testCaseId = trace.span.attributes?.['test.case.id'] as string | undefined;
+    const info = traceInfoById.get(trace.traceId) ?? {};
+
+    if (evaluationId) {
+      info.evaluationId = evaluationId;
+    }
+    if (testCaseId) {
+      info.testCaseId = testCaseId;
+    }
+
+    traceInfoById.set(trace.traceId, info);
+  }
+
+  private async persistTraces({ spansByTrace, traceInfoById }: GroupedTraces): Promise<void> {
+    await this.createTraceRecords(traceInfoById);
+    await this.storeSpans(spansByTrace);
+  }
+
+  private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
+    for (const [traceId, info] of traceInfoById) {
+      try {
+        logger.debug(`[OtlpReceiver] Creating trace record for ${traceId}`);
+        await this.traceStore.createTrace({
+          traceId,
+          evaluationId: info.evaluationId || '',
+          testCaseId: info.testCaseId || '',
+        });
+      } catch (error) {
+        // Trace might already exist, which is fine
+        logger.debug(`[OtlpReceiver] Trace ${traceId} may already exist: ${error}`);
+      }
+    }
+  }
+
+  private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
+    for (const [traceId, spans] of spansByTrace) {
+      logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
+      await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+    }
+  }
+
+  private handleProcessingError(error: unknown, res: express.Response): void {
+    logger.error(`[OtlpReceiver] Failed to process OTLP traces: ${error}`);
+    logger.error(
+      `[OtlpReceiver] Error stack: ${error instanceof Error ? error.stack : 'No stack'}`,
+    );
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.toLowerCase().includes('invalid protobuf')) {
+      res.status(400).json({ error: errorMessage });
+      return;
+    }
+
+    res.status(500).json({ error: 'Internal server error' });
   }
 
   private parseOTLPJSONRequest(body: OTLPTraceRequest): ParsedTrace[] {
@@ -285,76 +517,176 @@ export class OTLPReceiver {
     return traces;
   }
 
-  private async parseOTLPProtobufRequest(body: Buffer): Promise<ParsedTrace[]> {
+  private parseOTLPLogsJSONRequest(body: OTLPLogsRequest): ParsedTrace[] {
     const traces: ParsedTrace[] = [];
+    const resourceLogs = body?.resourceLogs ?? [];
+    logger.debug(`[OtlpReceiver] Parsing logs request with ${resourceLogs.length} resource logs`);
 
-    // Decode protobuf message
+    for (const resourceLog of resourceLogs) {
+      const resourceAttributes = this.parseAttributes(resourceLog.resource?.attributes);
+      for (const scopeLog of resourceLog.scopeLogs ?? []) {
+        for (const log of scopeLog.logRecords ?? []) {
+          // Log-and-skip on a per-record basis so one malformed record can't
+          // drop the entire batch (the SDK often batches dozens per flush).
+          try {
+            const parsed = this.logRecordToParsedTrace(log, scopeLog, resourceAttributes);
+            if (parsed) {
+              traces.push(parsed);
+            }
+          } catch (err) {
+            logger.warn(
+              `[OtlpReceiver] Skipping malformed log record in scope ${scopeLog.scope?.name ?? '(unknown)'}: ${err}`,
+            );
+          }
+        }
+      }
+    }
+
+    return traces;
+  }
+
+  private logRecordToParsedTrace(
+    log: OTLPLogRecord,
+    scopeLog: OTLPScopeLogs,
+    resourceAttributes: Record<string, any>,
+  ): ParsedTrace | null {
+    // Prefer an inline traceId on the log record (set when the SDK propagated
+    // TRACEPARENT into its logs context). Fall back to the resource attribute
+    // promptfoo.trace_id — the claude-agent-sdk provider injects this via
+    // OTEL_RESOURCE_ATTRIBUTES because Claude Code's logs signal does not
+    // inherit TRACEPARENT. Without either, we can't link anywhere useful.
+    const rawTraceId =
+      log.traceId ?? getStringAttribute(resourceAttributes, PROMPTFOO_RESOURCE_ATTR_TRACE_ID);
+    if (!rawTraceId) {
+      logger.debug(
+        `[OtlpReceiver] Dropping log: no traceId and no ${PROMPTFOO_RESOURCE_ATTR_TRACE_ID} resource attribute (scope=${scopeLog.scope?.name ?? 'unknown'}). Ensure TRACEPARENT is propagated or OTEL_RESOURCE_ATTRIBUTES is set by the provider.`,
+      );
+      return null;
+    }
+    const traceId = this.convertId(rawTraceId, 32);
+    // convertId is lenient and returns garbage on shape mismatch; skip the
+    // record rather than orphaning a span under a nonexistent trace.
+    if (traceId.length !== 32 || !/^[0-9a-f]+$/.test(traceId)) {
+      logger.debug(`[OtlpReceiver] Dropping log: invalid trace_id shape '${rawTraceId}'`);
+      return null;
+    }
+
+    const attributes: Record<string, any> = {
+      ...resourceAttributes,
+      ...this.parseAttributes(log.attributes),
+      'otel.scope.name': scopeLog.scope?.name,
+      'otel.scope.version': scopeLog.scope?.version,
+      'otel.log.severity_number': log.severityNumber,
+      'otel.log.severity_text': log.severityText,
+    };
+
+    const bodyValue = log.body ? this.parseAttributeValue(log.body) : undefined;
+    const name = resolveLogSpanName(attributes, bodyValue);
+
+    if (LOG_EVENT_NAME_DENYLIST.has(name)) {
+      logger.debug(`[OtlpReceiver] Dropping log: event '${name}' is in the denylist`);
+      return null;
+    }
+
+    if (bodyValue !== undefined) {
+      attributes['otel.log.body'] = truncateLogBody(bodyValue);
+    }
+
+    const timeNano = log.timeUnixNano ?? log.observedTimeUnixNano;
+    const startTime = timeNano ? Number(timeNano) / 1_000_000 : Date.now();
+    const endTime = startTime + LOG_SPAN_DURATION_MS;
+
+    // Log's own span_id is the span the log was emitted from, so that span
+    // becomes our synthesized span's parent. Fall back to the resource-level
+    // promptfoo.parent_span_id the provider injected. We mint a fresh 16-hex
+    // span id so multiple logs within the same span don't collide on
+    // (trace_id, span_id).
+    const hasValidInlineSpanId = !!log.spanId && !isZeroSpanId(log.spanId);
+    const rawParentSpanId = hasValidInlineSpanId
+      ? log.spanId
+      : getStringAttribute(resourceAttributes, PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID);
+    const parentSpanId = rawParentSpanId ? this.convertId(rawParentSpanId, 16) : undefined;
+
+    const severityIsError =
+      typeof log.severityNumber === 'number' && log.severityNumber >= SEVERITY_NUMBER_ERROR;
+
+    return {
+      traceId,
+      span: {
+        spanId: randomSpanId(),
+        parentSpanId,
+        name,
+        startTime,
+        endTime,
+        attributes,
+        // OTEL logs don't carry a span status; treat as OK unless severity indicates error.
+        statusCode: 1,
+        statusMessage: severityIsError ? log.severityText : undefined,
+      },
+    };
+  }
+
+  private async parseOTLPProtobufRequest(body: Buffer): Promise<ParsedTrace[]> {
     const decoded: DecodedExportTraceServiceRequest = await decodeExportTraceServiceRequest(body);
 
     logger.debug(
       `[OtlpReceiver] Parsing protobuf request with ${decoded.resourceSpans?.length || 0} resource spans`,
     );
 
-    for (const resourceSpan of decoded.resourceSpans || []) {
-      // Extract resource attributes
-      const resourceAttributes = this.parseDecodedAttributes(resourceSpan.resource?.attributes);
-      logger.debug(
-        `[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes from protobuf`,
-      );
+    return (decoded.resourceSpans || []).flatMap((resourceSpan) =>
+      this.parseDecodedResourceSpan(resourceSpan),
+    );
+  }
 
-      for (const scopeSpan of resourceSpan.scopeSpans || []) {
-        for (const span of scopeSpan.spans || []) {
-          // Convert binary IDs to hex strings
-          const traceId = bytesToHex(span.traceId, 32);
-          const spanId = bytesToHex(span.spanId, 16);
-          const parentSpanId = span.parentSpanId?.length
-            ? bytesToHex(span.parentSpanId, 16)
-            : undefined;
+  private parseDecodedResourceSpan(resourceSpan: DecodedResourceSpans): ParsedTrace[] {
+    const resourceAttributes = this.parseDecodedAttributes(resourceSpan.resource?.attributes);
+    logger.debug(
+      `[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes from protobuf`,
+    );
 
-          logger.debug(
-            `[OtlpReceiver] Processing protobuf span: ${span.name} (${spanId}) in trace ${traceId}`,
-          );
+    return (resourceSpan.scopeSpans || []).flatMap((scopeSpan) =>
+      (scopeSpan.spans || []).map((span) =>
+        this.createDecodedParsedTrace(resourceAttributes, scopeSpan, span),
+      ),
+    );
+  }
 
-          // Parse attributes
-          const spanKindName = SPAN_KIND_MAP[span.kind ?? 0] ?? 'unspecified';
-          const attributes: Record<string, any> = {
-            ...resourceAttributes,
-            ...this.parseDecodedAttributes(span.attributes),
-            'otel.scope.name': scopeSpan.scope?.name,
-            'otel.scope.version': scopeSpan.scope?.version,
-            'otel.span.kind': spanKindName,
-            'otel.span.kind_code': span.kind ?? 0,
-          };
+  private createDecodedParsedTrace(
+    resourceAttributes: Record<string, any>,
+    scopeSpan: DecodedScopeSpans,
+    span: DecodedSpan,
+  ): ParsedTrace {
+    const traceId = bytesToHex(span.traceId, 32);
+    const spanId = bytesToHex(span.spanId, 16);
+    const parentSpanId = span.parentSpanId?.length ? bytesToHex(span.parentSpanId, 16) : undefined;
 
-          // Convert nanoseconds to milliseconds
-          const startTimeNano =
-            typeof span.startTimeUnixNano === 'number'
-              ? span.startTimeUnixNano
-              : Number(span.startTimeUnixNano);
-          const endTimeNano = span.endTimeUnixNano
-            ? typeof span.endTimeUnixNano === 'number'
-              ? span.endTimeUnixNano
-              : Number(span.endTimeUnixNano)
-            : undefined;
+    logger.debug(
+      `[OtlpReceiver] Processing protobuf span: ${span.name} (${spanId}) in trace ${traceId}`,
+    );
 
-          traces.push({
-            traceId,
-            span: {
-              spanId,
-              parentSpanId,
-              name: span.name,
-              startTime: startTimeNano / 1_000_000, // Convert nanoseconds to milliseconds
-              endTime: endTimeNano ? endTimeNano / 1_000_000 : undefined,
-              attributes,
-              statusCode: span.status?.code,
-              statusMessage: span.status?.message,
-            },
-          });
-        }
-      }
-    }
+    const spanKindCode = span.kind ?? 0;
+    const spanKindName = SPAN_KIND_MAP[spanKindCode] ?? 'unspecified';
 
-    return traces;
+    return {
+      traceId,
+      span: {
+        spanId,
+        parentSpanId,
+        name: span.name,
+        startTime: this.toMilliseconds(span.startTimeUnixNano) ?? 0,
+        endTime: this.toMilliseconds(span.endTimeUnixNano),
+        attributes: {
+          ...resourceAttributes,
+          ...this.parseDecodedAttributes(span.attributes),
+          'otel.scope.name': scopeSpan.scope?.name,
+          'otel.scope.version': scopeSpan.scope?.version,
+          'otel.span.kind': spanKindName,
+          'otel.span.kind_code': spanKindCode,
+        },
+        statusCode: span.status?.code,
+        statusMessage: span.status?.message,
+      },
+    };
   }
 
   private parseDecodedAttributes(attributes?: DecodedAttribute[]): Record<string, any> {
@@ -526,21 +858,41 @@ export class OTLPReceiver {
   getApp(): express.Application {
     return this.app;
   }
+
+  setAcceptFormats(acceptFormats?: OTLPFormat[]): void {
+    this.acceptFormats = normalizeAcceptFormats(acceptFormats);
+  }
+
+  private toMilliseconds(
+    value: DecodedSpan['startTimeUnixNano'] | DecodedSpan['endTimeUnixNano'],
+  ): number | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    return Number(value) / 1_000_000;
+  }
 }
 
 // Singleton instance
 let otlpReceiver: OTLPReceiver | null = null;
 
-function getOTLPReceiver(): OTLPReceiver {
-  if (!otlpReceiver) {
-    otlpReceiver = new OTLPReceiver();
+function getOTLPReceiver(options?: OTLPReceiverOptions): OTLPReceiver {
+  if (otlpReceiver) {
+    otlpReceiver.setAcceptFormats(options?.acceptFormats);
+    return otlpReceiver;
   }
+
+  otlpReceiver = new OTLPReceiver(options);
   return otlpReceiver;
 }
 
-export async function startOTLPReceiver(port?: number, host?: string): Promise<void> {
+export async function startOTLPReceiver(
+  port?: number,
+  host?: string,
+  acceptFormats?: OTLPFormat[],
+): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
-  const receiver = getOTLPReceiver();
+  const receiver = getOTLPReceiver({ acceptFormats });
   await receiver.listen(port, host);
 }
 

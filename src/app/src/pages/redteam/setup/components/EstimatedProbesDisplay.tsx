@@ -32,7 +32,7 @@ export default function EstimatedProbesDisplay({
       <span className="font-bold text-primary">{estimatedProbes.toLocaleString()}</span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Info className="h-4 w-4 cursor-help text-muted-foreground" />
+          <Info className="size-4 cursor-help text-muted-foreground" />
         </TooltipTrigger>
         <TooltipContent>{tooltipContent}</TooltipContent>
       </Tooltip>

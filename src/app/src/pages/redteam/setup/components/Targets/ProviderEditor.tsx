@@ -169,7 +169,7 @@ export default function ProviderEditor({
         <div className={`flex gap-4 ${validationErrors ? 'w-full justify-between' : ''}`}>
           {onBack && (
             <Button variant="outline" onClick={onBack} className="px-6 py-2">
-              <ChevronLeft className="mr-2 h-4 w-4" />
+              <ChevronLeft className="mr-2 size-4" />
               Back
             </Button>
           )}
@@ -190,7 +190,7 @@ export default function ProviderEditor({
               className="px-6 py-2"
             >
               {actionButtonText || 'Next'}
-              <ChevronRight className="ml-2 h-4 w-4" />
+              <ChevronRight className="ml-2 size-4" />
             </Button>
           )}
         </div>

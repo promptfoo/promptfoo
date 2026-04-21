@@ -46,6 +46,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (hasShownPopup.current) {
       return;
@@ -92,15 +93,21 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
       {
         accessorKey: 'count',
         header: 'Total Evals',
-        cell: ({ getValue }) => <span className="text-sm">{getValue<number>() || 0}</span>,
-        size: 100,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>() || 0}</span>
+        ),
+        size: 120,
+        meta: { align: 'right' },
       },
       {
         id: 'numPrompts',
         header: 'Total Prompts',
         accessorFn: (row) => row.prompts?.length || 0,
-        cell: ({ getValue }) => <span className="text-sm">{getValue<number>()}</span>,
-        size: 120,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
+        ),
+        size: 140,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'recentEvalDate',
@@ -147,7 +154,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   return (
     <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
-        <div className="container max-w-7xl mx-auto px-6 py-6">
+        <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-semibold">Datasets</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Manage test datasets and track their evaluation history
