@@ -1,0 +1,47 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: |
+  Run evals against Claude via a local Claude Code session (no Anthropic
+  Console API key needed). Requires `claude /login` to have been run on the
+  same machine.
+
+prompts:
+  - |
+    You are a careful technical writer. Rewrite the following sentence for
+    clarity without changing its meaning:
+
+    "{{sentence}}"
+
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      # Skip the API key preflight and authenticate via the local Claude Code
+      # OAuth credential (macOS keychain or ~/.claude/.credentials.json).
+      apiKeyRequired: false
+      max_tokens: 512
+
+# Use the same Claude Code session to run the llm-rubric grader. This lets
+# Claude Pro / Max subscribers use semantic model-graded evals without a
+# separate Anthropic Console API key.
+defaultTest:
+  options:
+    provider:
+      id: anthropic:messages:claude-sonnet-4-6
+      config:
+        apiKeyRequired: false
+
+tests:
+  - vars:
+      sentence: 'Utilizing these tools, we can facilitate the optimization of the process.'
+    assert:
+      - type: llm-rubric
+        value: |
+          The rewrite is concise, uses plain English, and preserves the
+          original meaning (improving a process using the tools). It should
+          not invent new details.
+  - vars:
+      sentence: 'The aforementioned refactor exhibits suboptimal efficiency characteristics.'
+    assert:
+      - type: llm-rubric
+        value: |
+          The rewrite is clearer and less jargon-heavy while still saying the
+          refactor is inefficient or slow. It must not add unrelated claims.

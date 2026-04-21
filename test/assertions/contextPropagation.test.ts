@@ -21,13 +21,9 @@ import {
   matchesContextRecall,
   matchesContextRelevance,
 } from '../../src/matchers/rag';
+import { createMockProvider } from '../factories/provider';
 
-import type {
-  ApiProvider,
-  AssertionParams,
-  CallApiContextParams,
-  ProviderResponse,
-} from '../../src/types/index';
+import type { AssertionParams, CallApiContextParams } from '../../src/types/index';
 
 vi.mock('../../src/matchers/comparison');
 vi.mock('../../src/matchers/llmGrading');
@@ -41,10 +37,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
     vi.resetAllMocks();
   });
 
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-  };
+  const mockProvider = createMockProvider({ response: {} });
 
   const mockCallApiContext: CallApiContextParams = {
     originalProvider: mockProvider,

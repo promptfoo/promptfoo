@@ -3,8 +3,8 @@ import fs from 'fs';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
-import { mockGlobal } from '../../util/utils';
-import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
+import { mockGlobal, mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -206,6 +206,16 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(result.cost).toBe(0.006); // 2 minutes * $0.003/min
     });
 
+    it('should calculate cost correctly for gpt-4o-mini-transcribe-2025-12-15', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe-2025-12-15', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      expect(result.cost).toBe(0.006); // 2 minutes * $0.003/min
+    });
+
     it('should calculate cost correctly for whisper-1', async () => {
       const provider = new OpenAiTranscriptionProvider('whisper-1', {
         config: { apiKey: 'test-key' },
@@ -233,9 +243,16 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(provider.id()).toBe('openai:transcription:gpt-4o-transcribe');
     });
 
+    it('should generate correct default ID for dated diarization snapshots', () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe-diarize-2025-10-15', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(provider.id()).toBe('openai:transcription:gpt-4o-transcribe-diarize-2025-10-15');
+    });
+
     it('should throw an error if API key is not set', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe');
@@ -244,15 +261,15 @@ describe('OpenAiTranscriptionProvider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+        restoreEnv();
       }
     });
 
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      const originalCustomEnv = process.env.CUSTOM_TRANSCRIPTION_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_TRANSCRIPTION_API_KEY;
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+      });
 
       try {
         const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
@@ -269,8 +286,7 @@ describe('OpenAiTranscriptionProvider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_TRANSCRIPTION_API_KEY'),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalEnv);
-        restoreEnvVar('CUSTOM_TRANSCRIPTION_API_KEY', originalCustomEnv);
+        restoreEnv();
       }
     });
   });
@@ -603,7 +619,9 @@ describe('OpenAiTranscriptionProvider', () => {
       const models = [
         'gpt-4o-transcribe',
         'gpt-4o-mini-transcribe',
+        'gpt-4o-mini-transcribe-2025-12-15',
         'gpt-4o-transcribe-diarize',
+        'gpt-4o-transcribe-diarize-2025-10-15',
         'whisper-1',
       ];
 

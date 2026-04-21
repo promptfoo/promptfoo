@@ -4,6 +4,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { OpenAICodexSDKProvider } from '../../../src/providers/openai/codex-sdk';
 
@@ -34,11 +35,11 @@ describe('Codex default providers', () => {
     originalCodexApiKey = process.env.CODEX_API_KEY;
     originalCodexHome = process.env.CODEX_HOME;
     originalOpenAiApiKey = process.env.OPENAI_API_KEY;
-    delete process.env.CODEX_API_KEY;
-    delete process.env.OPENAI_API_KEY;
+    mockProcessEnv({ CODEX_API_KEY: undefined });
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
 
     codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-defaults-'));
-    process.env.CODEX_HOME = codexHome;
+    mockProcessEnv({ CODEX_HOME: codexHome });
 
     const { clearCodexDefaultProvidersForTesting } = await import(
       '../../../src/providers/openai/codexDefaults'
@@ -57,26 +58,26 @@ describe('Codex default providers', () => {
     fs.rmSync(codexHome, { force: true, recursive: true });
 
     if (originalCodexApiKey === undefined) {
-      delete process.env.CODEX_API_KEY;
+      mockProcessEnv({ CODEX_API_KEY: undefined });
     } else {
-      process.env.CODEX_API_KEY = originalCodexApiKey;
+      mockProcessEnv({ CODEX_API_KEY: originalCodexApiKey });
     }
 
     if (originalCodexHome === undefined) {
-      delete process.env.CODEX_HOME;
+      mockProcessEnv({ CODEX_HOME: undefined });
     } else {
-      process.env.CODEX_HOME = originalCodexHome;
+      mockProcessEnv({ CODEX_HOME: originalCodexHome });
     }
 
     if (originalOpenAiApiKey === undefined) {
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
     } else {
-      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+      mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey });
     }
   });
 
   it('returns true when CODEX_API_KEY exists and the Codex SDK package can be resolved', async () => {
-    process.env.CODEX_API_KEY = 'test-codex-key';
+    mockProcessEnv({ CODEX_API_KEY: 'test-codex-key' });
 
     const { hasCodexDefaultCredentials } = await import(
       '../../../src/providers/openai/codexDefaults'
@@ -171,10 +172,10 @@ describe('Codex default providers', () => {
       '../../../src/providers/openai/codexDefaults'
     );
 
-    process.env.CODEX_API_KEY = 'first-codex-key';
+    mockProcessEnv({ CODEX_API_KEY: 'first-codex-key' });
     const firstProviders = getCodexDefaultProviders();
 
-    process.env.CODEX_API_KEY = 'second-codex-key';
+    mockProcessEnv({ CODEX_API_KEY: 'second-codex-key' });
     const secondProviders = getCodexDefaultProviders();
 
     expect(secondProviders).toBe(firstProviders);

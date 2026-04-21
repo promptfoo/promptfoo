@@ -97,6 +97,30 @@ export function getRemoteVersionUrl(): string | null {
   return buildRemoteUrl('/version', 'https://api.promptfoo.app/version');
 }
 
+export function getRemoteGenerationDisabledError(strategyName: string): string {
+  return (
+    `${strategyName} requires remote generation, which is currently disabled for this configuration. ` +
+    'To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ' +
+    'or log into Promptfoo Cloud with `promptfoo auth login`.'
+  );
+}
+
+export function getRemoteGenerationExplicitlyDisabledError(strategyName: string): string {
+  const activeFlags = [
+    'PROMPTFOO_DISABLE_REMOTE_GENERATION',
+    'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION',
+  ].filter((flag) => getEnvBool(flag));
+  const unsetInstruction =
+    activeFlags.length > 0
+      ? `unset ${activeFlags.join(' and ')}`
+      : 'unset PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION (whichever is set)';
+  return (
+    `${strategyName} requires remote generation, which has been explicitly disabled. ` +
+    `To enable it, ${unsetInstruction}. ` +
+    'Once re-enabled, you can point at a self-hosted endpoint with PROMPTFOO_REMOTE_GENERATION_URL or use Promptfoo Cloud via `promptfoo auth login`.'
+  );
+}
+
 /**
  * Determines if remote generation should be used based on configuration.
  * @returns true if remote generation should be used
@@ -105,6 +129,10 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
   // If remote generation is explicitly disabled, respect that even for cloud users
   if (neverGenerateRemote()) {
     return false;
+  }
+
+  if (getEnvString('PROMPTFOO_REMOTE_GENERATION_URL')) {
+    return true;
   }
 
   // If logged into cloud, prefer remote generation
