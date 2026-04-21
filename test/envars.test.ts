@@ -530,15 +530,15 @@ describe('envars', () => {
       expect(result).toBe(960_000);
     });
 
-    it('should cap at worst case when calculated time exceeds it', () => {
+    it('should cap at worst case plus buffer when calculated time exceeds it', () => {
       // 2 tests, concurrency 2, very short timeout (1 second)
       // batchCount = 1
       // expectedTime = 1 * 60,000 = 60,000
       // safeMaxTime = 60,000 * 3 + 60,000 = 240,000
-      // worstCase = 1 * 1,000 = 1,000
-      // min(240,000, 1,000) = 1,000
+      // worstCase = 1 * 1,000 + 60,000 buffer = 61,000
+      // min(240,000, 61,000) = 61,000
       const result = calculateDefaultMaxEvalTimeMs(2, 2, 1_000, false);
-      expect(result).toBe(1_000);
+      expect(result).toBe(61_000);
     });
 
     it('should not disable total eval timeout when per-test timeout is disabled', () => {

@@ -3231,6 +3231,7 @@ class Evaluator {
 
     let timeoutId: NodeJS.Timeout | undefined;
     let didTimeout = false;
+    let timeoutError: Error | undefined;
     const clearEvalStepTimeout = () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -3254,8 +3255,9 @@ class Evaluator {
         new Promise<void>((_, reject) => {
           timeoutId = setTimeout(() => {
             didTimeout = true;
-            abortController.abort();
-            reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            timeoutError = new Error(`Evaluation timed out after ${timeoutMs}ms`);
+            reject(timeoutError);
+            queueMicrotask(() => abortController.abort());
           }, timeoutMs);
         }),
       ]);
@@ -3263,7 +3265,13 @@ class Evaluator {
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      await this.addEvalStepTimeoutResult(
+        evalStep,
+        index,
+        timeoutMs,
+        timeoutError ?? error,
+        context,
+      );
     } finally {
       clearEvalStepTimeout();
     }
@@ -4352,7 +4360,9 @@ class Evaluator {
         concurrentRunEvalOptions.push(evalOption);
       }
     }
-    const hasEvalStepTimeout = testCaseTimeoutMs > 0;
+    const explicitTestCaseTimeoutMs = options.timeoutMs ?? getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS');
+    const hasEvalStepTimeout =
+      explicitTestCaseTimeoutMs !== undefined && explicitTestCaseTimeoutMs > 0;
     const shouldGroupGradingByProvider =
       concurrency === 1 && !hasEvalStepTimeout && !usesConversationVar;
 

@@ -648,8 +648,9 @@ export function calculateDefaultMaxEvalTimeMs(
     return safeMaxTime;
   }
 
-  // Cap at worst case (all tests timeout)
-  const worstCase = batchCount * testCaseTimeoutMs;
+  // Cap at worst case (all tests timeout), plus the same setup/teardown buffer used
+  // for expected runtime so max-duration does not race an individual per-test timeout.
+  const worstCase = batchCount * testCaseTimeoutMs + MAX_EVAL_TIME_BUFFER_MS;
 
   return Math.min(safeMaxTime, worstCase);
 }
