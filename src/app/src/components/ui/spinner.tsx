@@ -16,7 +16,13 @@ const sizeClasses = {
 
 function Spinner({ className, size = 'md', ref, ...props }: SpinnerProps) {
   return (
-    <div ref={ref} className={cn('flex items-center justify-center', className)} {...props}>
+    <div
+      ref={ref}
+      role="progressbar"
+      aria-label="Loading"
+      className={cn('flex items-center justify-center', className)}
+      {...props}
+    >
       <Loader2 className={cn('animate-spin text-muted-foreground', sizeClasses[size])} />
     </div>
   );

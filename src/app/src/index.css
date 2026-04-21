@@ -1,6 +1,21 @@
 /* Tailwind CSS v4 */
 @import 'tailwindcss';
 
+/* Restore default border color from Tailwind v3 behavior.
+   In v4, `border` defaults to `currentColor` instead of a theme color.
+   This sets the default to our theme's border color so that `border`
+   alone produces a subtle gray rather than harsh black. Utility classes
+   like `border-red-500` still override this via @layer utilities. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentColor);
+  }
+}
+
 /* Configure dark mode to use data-theme attribute */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
@@ -34,6 +49,7 @@
   --color-severity-high: hsl(var(--severity-high));
   --color-severity-medium: hsl(var(--severity-medium));
   --color-severity-low: hsl(var(--severity-low));
+  --color-severity-informational: hsl(var(--severity-informational));
 
   /* Animation keyframes */
   --animate-accordion-down: accordion-down 0.2s ease-out;
@@ -55,6 +71,135 @@
       height: 0;
     }
   }
+
+  /* Sheet/Dialog animation keyframes */
+  @keyframes enter {
+    from {
+      opacity: var(--tw-enter-opacity, 1);
+      transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0)
+        scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1))
+        rotate(var(--tw-enter-rotate, 0));
+    }
+  }
+
+  @keyframes exit {
+    to {
+      opacity: var(--tw-exit-opacity, 1);
+      transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0)
+        scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1))
+        rotate(var(--tw-exit-rotate, 0));
+    }
+  }
+}
+
+/* Sheet/Drawer animations */
+.sheet-overlay[data-state='open'] {
+  animation: fade-in 300ms ease-out forwards;
+}
+.sheet-overlay[data-state='closed'] {
+  animation: fade-out 200ms ease-in forwards;
+}
+
+.sheet-content[data-state='open'] {
+  animation: sheet-slide-in 300ms ease-out forwards;
+}
+.sheet-content[data-state='closed'] {
+  animation: sheet-slide-out 200ms ease-in forwards;
+}
+
+/* Sheet slide directions - define hidden position for each direction */
+.sheet-right {
+  --sheet-translate-x: 100%;
+  --sheet-translate-y: 0;
+}
+.sheet-left {
+  --sheet-translate-x: -100%;
+  --sheet-translate-y: 0;
+}
+.sheet-top {
+  --sheet-translate-x: 0;
+  --sheet-translate-y: -100%;
+}
+.sheet-bottom {
+  --sheet-translate-x: 0;
+  --sheet-translate-y: 100%;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--sheet-translate-x, 0)) translateY(var(--sheet-translate-y, 0));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+@keyframes sheet-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(var(--sheet-translate-x, 0)) translateY(var(--sheet-translate-y, 0));
+  }
+}
+
+/* Dialog animations */
+.dialog-overlay[data-state='open'] {
+  animation: fade-in 200ms ease-out forwards;
+}
+.dialog-overlay[data-state='closed'] {
+  animation: fade-out 150ms ease-in forwards;
+}
+
+.dialog-content[data-state='open'] {
+  animation: dialog-enter 200ms ease-out forwards;
+}
+.dialog-content[data-state='closed'] {
+  animation: dialog-exit 150ms ease-in forwards;
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
 }
 
 /* This CSS is common to all pages */
@@ -67,12 +212,20 @@
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 
   /* Z-index scale for layered components
-   * Modal < Dropdown ensures nested dropdowns appear above modals
-   * Values >= 1300 for MUI compatibility during migration */
+   * Banner < AppBar < Modal < Dropdown ensures proper stacking:
+   * - Banner (update notifications) stays below nav
+   * - AppBar (sticky header) contains dropdown menus
+   * - Dropdowns appear above modals when nested
+   * Values >= 1100 for MUI compatibility during migration */
+  --z-banner: 1100;
+  --z-appbar: 1200;
   --z-modal-backdrop: 1300;
   --z-modal: 1310;
   --z-dropdown: 1400;
   --z-tooltip: 1500;
+
+  /* Layout dimensions */
+  --nav-height: 3.5rem; /* Navigation bar height (h-14 = 56px) */
 
   /* Design tokens - Light mode (aligned with MUI theme) */
   --background: 210 40% 98%; /* #f8fafc - slate-50 */
@@ -83,8 +236,8 @@
   --popover-foreground: 222.2 47.4% 11.2%;
   --primary: 217.2 91.2% 52.9%; /* #2563eb - blue-600 */
   --primary-foreground: 0 0% 100%; /* #ffffff */
-  --secondary: 262.1 83.3% 57.8%; /* #8b5cf6 - violet-500 */
-  --secondary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
+  --secondary-foreground: 222.2 47.4% 11.2%; /* slate-900 */
   --muted: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
   --muted-foreground: 215.4 16.3% 34.9%; /* #475569 - slate-600 */
   --accent: 210 40% 96.1%;
@@ -101,6 +254,7 @@
   --severity-high: 0 72% 51%;
   --severity-medium: 25 95% 53%;
   --severity-low: 142 76% 36%;
+  --severity-informational: 217 91% 46%;
   font-style: normal;
   font-weight-normal: 400;
   font-weight-bold: 700;
@@ -146,8 +300,8 @@
   --popover-foreground: 210 40% 98%;
   --primary: 217.2 91.2% 59.8%; /* #3b82f6 - blue-500 */
   --primary-foreground: 0 0% 100%;
-  --secondary: 262.1 83.3% 57.8%; /* #8b5cf6 - violet-500 */
-  --secondary-foreground: 0 0% 100%;
+  --secondary: 217.2 20% 20%; /* slate-800 equivalent */
+  --secondary-foreground: 210 40% 98%; /* off-white */
   --muted: 217.2 20% 14%; /* Subtle blue-gray tint */
   --muted-foreground: 215 20% 55%; /* Lighter, more readable */
   --accent: 217.2 20% 14%;
@@ -157,6 +311,9 @@
   --border: 217.2 15% 22%; /* Softer, blue-tinted border - NOT pure black */
   --input: 217.2 15% 22%;
   --ring: 217.2 91.2% 59.8%;
+
+  /* Severity colors - Dark mode */
+  --severity-informational: 217 91% 60%;
 
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;
@@ -186,11 +343,13 @@ html {
   font-size: 16px;
   background-color: var(--background-color);
   color: var(--text-color);
+  overscroll-behavior: none;
 }
 
 body {
   margin: 0;
   overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 /* Only apply link color to plain anchors without Tailwind text classes */
@@ -222,6 +381,13 @@ textarea {
   box-sizing: border-box;
 }
 
+/* Hide native search cancel button (Chrome/Safari) - we render our own */
+input[type='search']::-webkit-search-cancel-button,
+input[type='search']::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 @media print {
   header,
   footer,
@@ -230,7 +396,11 @@ textarea {
   .MuiContainer-root nav,
   [role='navigation'],
   .MuiAppBar-positionStatic,
-  .print-hide {
+  .print-hide,
+  [data-radix-popper-content-wrapper],
+  [data-radix-menu-content],
+  [role='dialog'],
+  .sheet-overlay {
     display: none !important;
     visibility: hidden !important;
   }
@@ -241,10 +411,13 @@ textarea {
   }
 
   /* Body and container styles */
-  body {
+  html,
+  body,
+  #root {
     -webkit-print-color-adjust: exact;
     color-adjust: exact;
     background-color: white !important;
+    background: white !important;
   }
 
   .report-header {
@@ -262,5 +435,67 @@ textarea {
 
   .MuiContainer-root {
     max-width: 100% !important;
+  }
+
+  /* Force light mode when printing from dark mode.
+   * Resets all CSS custom properties to their light mode values so every
+   * Tailwind utility (bg-card, text-foreground, border-border, etc.)
+   * resolves to light mode colors in the PDF output.
+   * Must use :root[data-theme='dark'] to match the specificity of the
+   * dark mode declaration (0,1,1) so these values actually win. */
+  :root[data-theme='dark'],
+  [data-theme='dark'] {
+    --background: 210 40% 98%;
+    --foreground: 222.2 47.4% 11.2%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --primary: 217.2 91.2% 52.9%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 34.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 217.2 91.2% 52.9%;
+    --severity-informational: 217 91% 46%;
+
+    --background-color: #f5f5f5;
+    --text-color: #404040;
+    --link-color: #2e6585;
+    --border-color: lightgray;
+    --table-border-color: lightgray;
+    --pass-color: green;
+    --fail-color: #ad0000;
+    --success-background-color: #d1ffd7;
+    --fail-background-color: #ffd1d1;
+    --neutral-background-color: #eee;
+    --variable-background-color: #f7f7f7;
+    --header-background-color: #fffdf7;
+    --insert-highlight-color: #d4fcbc;
+    --delete-highlight-color: #fbb6c2;
+    --prompt-highlight-color: linen;
+    --textarea-background-color: #ffffff;
+    --textarea-color: #404040;
+    --search-highlight-color: #ffff00;
+    --search-text-color: inherit;
+    --cell-highlight-color: #ffffeb;
+    --cell-highlight-text-color: inherit;
+  }
+
+  /* Override dark mode backgrounds and text for print.
+   * Tailwind dark: variants generate explicit color values (not through
+   * CSS variables), so we need broad overrides for containers and text. */
+  [data-theme='dark'] html,
+  [data-theme='dark'] body,
+  [data-theme='dark'] #root {
+    background-color: #ffffff !important;
+    color: #000000 !important;
   }
 }

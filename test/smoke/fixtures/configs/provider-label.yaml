@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing provider label in output
+description: 'Smoke test - provider label'
+
+providers:
+  - id: echo
+    label: 'My Custom Echo Provider'
+
+prompts:
+  - 'Test prompt'
+
+tests:
+  - assert:
+      - type: contains
+        value: 'Test'

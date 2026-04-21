@@ -1,19 +1,43 @@
 import React, { useState } from 'react';
 
-import CheckIcon from '@mui/icons-material/Check';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import DescriptionIcon from '@mui/icons-material/Description';
-import LanguageIcon from '@mui/icons-material/Language';
-import LinkIcon from '@mui/icons-material/Link';
-import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Chip from '@mui/material/Chip';
-import IconButton from '@mui/material/IconButton';
-import Link from '@mui/material/Link';
-import { alpha } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Card, CardContent } from '@app/components/ui/card';
+import { cn } from '@app/lib/utils';
+import { Check, ClipboardCopy, File, Globe, Link } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
+
+// Citation type definitions to handle different provider formats
+interface BedrockReference {
+  location?: {
+    s3Location?: { uri?: string };
+    type?: string;
+  };
+  content?: { text?: string };
+}
+
+interface BedrockCitation {
+  retrievedReferences?: BedrockReference[];
+}
+
+interface GenericCitation {
+  source?: string | { title?: string; url?: string };
+  quote?: string;
+  text?: string;
+  url?: string;
+  uri?: string;
+  location?: string;
+  path?: string;
+  content?: string;
+  excerpt?: string;
+  snippet?: string;
+}
+
+export type Citation = string | BedrockCitation | GenericCitation;
+
+interface ExtractedCitation {
+  source: string;
+  content: string;
+}
 
 const isValidUrl = (str: string): boolean => {
   try {
@@ -26,12 +50,12 @@ const isValidUrl = (str: string): boolean => {
 
 const getSourceIcon = (source: string) => {
   if (isValidUrl(source)) {
-    return <LanguageIcon fontSize="small" />;
+    return <Globe className="size-4" />;
   }
   if (source.includes('file:') || source.includes('s3:')) {
-    return <DescriptionIcon fontSize="small" />;
+    return <File className="size-4" />;
   }
-  return <LinkIcon fontSize="small" />;
+  return <Link className="size-4" />;
 };
 
 const getSourceType = (source: string): string => {
@@ -56,8 +80,17 @@ const getSourceType = (source: string): string => {
   return 'DOCUMENT';
 };
 
-const extractCitationInfo = (citation: any): { source: string; content: string } => {
-  if (citation.retrievedReferences?.length > 0) {
+const extractCitationInfo = (citation: Citation): ExtractedCitation => {
+  // Handle string citations
+  if (typeof citation === 'string') {
+    return {
+      source: 'Unknown source',
+      content: citation,
+    };
+  }
+
+  // Handle Bedrock format with retrievedReferences
+  if ('retrievedReferences' in citation && citation.retrievedReferences?.length) {
     const reference = citation.retrievedReferences[0];
     return {
       source:
@@ -67,45 +100,55 @@ const extractCitationInfo = (citation: any): { source: string; content: string }
     };
   }
 
-  if (citation.source?.title || citation.source?.url) {
+  // Handle generic citations with source as string
+  if ('source' in citation && citation.source && typeof citation.source === 'string') {
+    return {
+      source: citation.source,
+      content:
+        ('content' in citation && citation.content) ||
+        ('quote' in citation && citation.quote) ||
+        ('text' in citation && citation.text) ||
+        JSON.stringify(citation, null, 2),
+    };
+  }
+
+  // Handle generic citations with source object
+  if ('source' in citation && citation.source && typeof citation.source === 'object') {
     return {
       source: citation.source.url || citation.source.title || 'Unknown source',
       content: citation.quote || citation.text || JSON.stringify(citation, null, 2),
     };
   }
 
-  if (typeof citation === 'object') {
-    const source =
-      citation.url ||
-      citation.source ||
-      citation.uri ||
-      citation.location ||
-      citation.path ||
-      'Unknown source';
+  // Handle generic citations with direct properties
+  const source =
+    ('url' in citation && citation.url) ||
+    ('uri' in citation && citation.uri) ||
+    ('location' in citation && citation.location) ||
+    ('path' in citation && citation.path) ||
+    'Unknown source';
 
-    const content =
-      citation.content ||
-      citation.text ||
-      citation.quote ||
-      citation.excerpt ||
-      citation.snippet ||
-      JSON.stringify(citation, null, 2);
+  const content =
+    ('content' in citation && citation.content) ||
+    ('text' in citation && citation.text) ||
+    ('quote' in citation && citation.quote) ||
+    ('excerpt' in citation && citation.excerpt) ||
+    ('snippet' in citation && citation.snippet) ||
+    JSON.stringify(citation, null, 2);
 
-    return { source, content };
-  }
-
-  return {
-    source: 'Unknown source',
-    content: typeof citation === 'string' ? citation : JSON.stringify(citation, null, 2),
-  };
+  return { source: String(source), content: String(content) };
 };
 
-const processCitations = (citations: any[]): Array<{ source: string; content: string }> => {
-  const results: Array<{ source: string; content: string }> = [];
+const processCitations = (citations: Citation[]): ExtractedCitation[] => {
+  const results: ExtractedCitation[] = [];
 
   if (Array.isArray(citations)) {
     for (const citation of citations) {
-      if (citation.retrievedReferences && Array.isArray(citation.retrievedReferences)) {
+      if (
+        typeof citation === 'object' &&
+        'retrievedReferences' in citation &&
+        Array.isArray(citation.retrievedReferences)
+      ) {
         for (const reference of citation.retrievedReferences) {
           results.push(extractCitationInfo({ retrievedReferences: [reference] }));
         }
@@ -122,7 +165,11 @@ const processCitations = (citations: any[]): Array<{ source: string; content: st
  * Component for displaying citations from various sources
  * Handles different citation formats from different providers
  */
-export default function Citations({ citations }: { citations: any }) {
+export default function Citations({
+  citations,
+}: {
+  citations: Citation | Citation[] | null | undefined;
+}) {
   const [copiedCitations, setCopiedCitations] = useState<{ [key: string]: boolean }>({});
 
   if (!citations || (Array.isArray(citations) && citations.length === 0)) {
@@ -148,17 +195,11 @@ export default function Citations({ citations }: { citations: any }) {
   };
 
   return (
-    <Box mt={3} mb={3}>
-      <Typography
-        variant="subtitle1"
-        gutterBottom
-        sx={{ display: 'flex', alignItems: 'center', mb: 2 }}
-      >
+    <div className="my-6">
+      <h3 className="text-base font-medium mb-4 flex items-center">
         Citations
-        <Typography component="span" variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>
-          ({processedCitations.length})
-        </Typography>
-      </Typography>
+        <span className="ml-2 text-sm text-muted-foreground">({processedCitations.length})</span>
+      </h3>
 
       {processedCitations.map((citation, i) => {
         const key = `citation-${i}`;
@@ -167,105 +208,53 @@ export default function Citations({ citations }: { citations: any }) {
         const sourceType = getSourceType(sourceLocation);
 
         return (
-          <Card
-            key={key}
-            variant="outlined"
-            sx={{
-              mb: 2,
-              border: '1px solid',
-              borderColor: alpha('#000', 0.12),
-            }}
-          >
-            <CardContent sx={{ position: 'relative', p: 2, pb: '16px !important' }}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  mb: 1.5,
-                  pb: 1,
-                  borderBottom: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                <Chip
-                  icon={getSourceIcon(sourceLocation)}
-                  label={sourceType}
-                  size="small"
-                  sx={{
-                    mr: 2,
-                    bgcolor: alpha('#000', 0.06),
-                    fontWeight: 500,
-                  }}
-                />
+          <Card key={key} className="mb-4">
+            <CardContent className="relative p-4">
+              <div className="flex items-center mb-3 pb-2 border-b border-border">
+                <Badge variant="secondary" className="mr-4 gap-1.5 font-medium">
+                  {getSourceIcon(sourceLocation)}
+                  {sourceType}
+                </Badge>
 
                 {isValidUrl(sourceLocation) ? (
-                  <Link
+                  <a
                     href={sourceLocation}
                     target="_blank"
                     rel="noopener noreferrer"
-                    underline="hover"
-                    variant="body2"
-                    sx={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      color: 'primary.main',
-                    }}
+                    className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-primary hover:underline"
                   >
                     {ellipsize(sourceLocation, 100)}
-                  </Link>
+                  </a>
                 ) : (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      color: 'text.secondary',
-                    }}
-                  >
+                  <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-muted-foreground">
                     {sourceLocation}
-                  </Typography>
+                  </span>
                 )}
 
-                <IconButton
-                  size="small"
+                <button
+                  type="button"
                   onClick={(e) => copyCitationToClipboard(key, content, e)}
-                  sx={{
-                    ml: 'auto',
-                    color: copiedCitations[key] ? 'success.main' : 'action.active',
-                  }}
+                  className={cn(
+                    'ml-auto p-1 rounded hover:bg-muted transition-colors',
+                    copiedCitations[key] ? 'text-emerald-600' : 'text-muted-foreground',
+                  )}
                   aria-label={`Copy citation content ${i + 1}`}
                 >
                   {copiedCitations[key] ? (
-                    <CheckIcon fontSize="small" />
+                    <Check className="size-4" data-testid="CheckIcon" />
                   ) : (
-                    <ContentCopyIcon fontSize="small" />
+                    <ClipboardCopy className="size-4" />
                   )}
-                </IconButton>
-              </Box>
+                </button>
+              </div>
 
-              <Typography
-                variant="body2"
-                sx={{
-                  p: 1.5,
-                  borderRadius: 1,
-                  bgcolor: alpha('#000', 0.02),
-                  whiteSpace: 'pre-wrap',
-                  fontFamily:
-                    'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-                  fontSize: '0.875rem',
-                  lineHeight: 1.6,
-                }}
-              >
+              <p className="p-3 rounded bg-muted/30 whitespace-pre-wrap text-sm leading-relaxed font-sans">
                 {content}
-              </Typography>
+              </p>
             </CardContent>
           </Card>
         );
       })}
-    </Box>
+    </div>
   );
 }

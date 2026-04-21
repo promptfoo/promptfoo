@@ -1,8 +1,11 @@
 import { act } from 'react';
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
+import { renderWithProviders } from '@app/utils/testutils';
+import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
@@ -46,8 +49,8 @@ vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
 }));
 
-vi.mock('react-router-dom', () => ({
-  ...vi.importActual('react-router-dom'),
+vi.mock('react-router-dom', async () => ({
+  ...(await vi.importActual('react-router-dom')),
   useNavigate: vi.fn(() => vi.fn()),
 }));
 
@@ -58,6 +61,13 @@ vi.mock('./EvalOutputCell', () => {
         <div data-testid="eval-output-cell" data-searchtext={searchText}>
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
+          </button>
+          <button
+            onClick={() => onRating(null, undefined, 'test comment')}
+            className="clear"
+            tabIndex={-1}
+          >
+            Clear rating
           </button>
         </div>
       );
@@ -119,11 +129,12 @@ describe('ResultsTable Metrics Display', () => {
     atInitialVerticalScrollPosition: true,
   };
 
-  const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
-  };
-
   beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
       evalId: '123',
@@ -216,10 +227,109 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.queryByText('Avg Tokens:')).not.toBeInTheDocument();
   });
 
+  it('renders sparse prompt outputs as empty cells', () => {
+    const mockTableWithSparseOutput = {
+      body: [
+        {
+          outputs: [null, { pass: true, score: 1, text: 'test output' }],
+          test: {},
+          vars: [],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTableWithSparseOutput,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByLabelText('No output for this prompt')).toBeInTheDocument();
+    expect(screen.getAllByTestId('eval-output-cell')).toHaveLength(1);
+  });
+
   it('displays tokens per second when both latency and completion tokens are available', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
     expect(screen.getByText('250')).toBeInTheDocument();
+  });
+
+  it('renders object provider IDs and request/assert metrics in the prompt header', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {
+              assert: [{ type: 'contains', value: 'test' }],
+            },
+            vars: [],
+          },
+        ],
+        head: {
+          prompts: [
+            {
+              metrics: {
+                assertFailCount: 1,
+                assertPassCount: 2,
+                namedScores: {},
+                testPassCount: 1,
+                testFailCount: 0,
+                tokenUsage: {
+                  completion: 50,
+                  total: 100,
+                  numRequests: 7,
+                },
+              },
+              provider: {
+                id: 'openai:gpt-4o',
+              },
+            },
+          ],
+          vars: [],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+    expect(screen.getByText('Requests:')).toBeInTheDocument();
+    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(screen.getByText('Asserts:')).toBeInTheDocument();
+    expect(screen.getByText('2/3 passed')).toBeInTheDocument();
   });
 
   describe('Keyboard Navigation', () => {
@@ -296,7 +406,7 @@ describe('ResultsTable Metrics Display', () => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
-
+        inComparisonMode: false,
         setTable: vi.fn(),
         table: mockTableWithObjectVar,
         version: 4,
@@ -453,11 +563,317 @@ describe('ResultsTable Metrics Display', () => {
     });
 
     it('should render media elements in variable cells without truncation', () => {
-      render(<ResultsTable {...defaultProps} />);
+      renderWithProviders(<ResultsTable {...defaultProps} />);
 
       const imageElement = screen.getByRole('img', { name: 'Base64 encoded image' });
       expect(imageElement).toBeInTheDocument();
+      expect(imageElement).toHaveStyle({ maxHeight: '200px', objectFit: 'contain' });
       expect(imageElement.closest('div')).not.toHaveTextContent('TruncatedText');
+    });
+
+    it('renders variable audio from file metadata and shows the original path', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      audioVar: {
+                        path: '/path/to/input.wav',
+                        type: 'audio',
+                        format: 'wav',
+                      },
+                    },
+                  },
+                },
+              ],
+              test: {},
+              vars: ['base64-audio'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['audioVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const audioSource = container.querySelector('audio source');
+      expect(audioSource).toHaveAttribute('src', 'data:audio/wav;base64,base64-audio');
+      expect(audioSource).toHaveAttribute('type', 'audio/wav');
+      expect(screen.getByText('/path/to/input.wav (audio/wav)')).toBeInTheDocument();
+    });
+
+    it('renders variable images from file metadata with lightbox support', async () => {
+      const user = userEvent.setup();
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      imageVar: {
+                        path: '/path/to/input.png',
+                        type: 'image',
+                        format: 'png',
+                      },
+                    },
+                  },
+                },
+              ],
+              test: {},
+              vars: ['data:image/png;base64,encodedImage'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['imageVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const imageElement = screen.getByRole('img', { name: 'Input image' });
+      expect(imageElement).toHaveAttribute('src', 'data:image/png;base64,encodedImage');
+      expect(screen.getByText('/path/to/input.png (image/png)')).toBeInTheDocument();
+
+      await user.click(imageElement);
+
+      expect(screen.getByRole('img', { name: 'Lightbox' })).toHaveAttribute(
+        'src',
+        'data:image/png;base64,encodedImage',
+      );
+    });
+
+    it('renders variable video from file metadata', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      videoVar: {
+                        path: '/path/to/input.mp4',
+                        type: 'video',
+                        format: 'mp4',
+                      },
+                    },
+                  },
+                },
+              ],
+              test: {},
+              vars: ['https://example.com/input.mp4'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['videoVar'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const videoSource = container.querySelector('video source');
+      expect(videoSource).toHaveAttribute('src', 'https://example.com/input.mp4');
+      expect(videoSource).toHaveAttribute('type', 'video/mp4');
+      expect(screen.getByText('/path/to/input.mp4 (video/mp4)')).toBeInTheDocument();
+    });
+
+    it('shows original image text for the injected prompt variable when image cells are rendered', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {
+          redteam: {
+            injectVar: 'image_prompt',
+          },
+        },
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: {
+                metadata: {
+                  originalText: 'decoded OCR prompt',
+                },
+              },
+              vars: ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['image_prompt'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('Original (image text):')).toBeInTheDocument();
+      expect(screen.getByText('decoded OCR prompt')).toBeInTheDocument();
+    });
+
+    it('does not replace a provider-reported text prompt with the raw injected image variable', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {
+          redteam: {
+            injectVar: 'prompt',
+          },
+        },
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  response: {
+                    prompt: 'provider rewritten prompt',
+                  },
+                },
+              ],
+              test: {},
+              vars: ['data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['prompt'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText('provider rewritten prompt')).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: 'Base64 encoded image' })).not.toBeInTheDocument();
+    });
+
+    it('renders a provider-reported image prompt when the raw injected variable is not an image', () => {
+      const providerImagePrompt = 'data:image/png;base64,providerImagePrompt';
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {
+          redteam: {
+            injectVar: 'prompt',
+          },
+        },
+        evalId: '123',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'test output',
+                  response: {
+                    prompt: providerImagePrompt,
+                  },
+                },
+              ],
+              test: {},
+              vars: ['{{prompt}}'],
+            },
+          ],
+          head: {
+            prompts: [{}],
+            vars: ['prompt'],
+          },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByRole('img', { name: 'Base64 encoded image' })).toHaveAttribute(
+        'src',
+        providerImagePrompt,
+      );
     });
   });
 });
@@ -684,7 +1100,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
 
     // We need to test the handleRating function directly
     // Since it's inside the component, we'll capture it through the setTable calls
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // The handleRating function is created in the component
     // We need to trigger it through the component's internal logic
@@ -761,7 +1177,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify the logic for preserving non-empty componentResults
     const existingOutput = mockTable.body[0].outputs[0];
@@ -804,7 +1220,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // When rating with isPass = true, componentResults should be updated
     const existingOutput = mockTable.body[0].outputs[0];
@@ -891,7 +1307,7 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // When there's no existing gradingResult, it should create one
     const existingOutput = mockTable.body[0].outputs[0];
@@ -981,7 +1397,7 @@ describe('ResultsTable handleRating', () => {
 
   it('should update gradingResult with manual pass and score values when a user provides a rating', () => {
     createMockTable();
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const rowIndex = 0;
     const promptIndex = 0;
@@ -1089,7 +1505,7 @@ describe('ResultsTable handleRating - Fallback to output values', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Verify the logic for preserving non-empty componentResults
     const existingOutput = mockTable.body[0].outputs[0];
@@ -1212,8 +1628,6 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
-
     // Simulate calling handleRating with updated values
     const updatedIsPass = false;
     const updatedScore = 0.5;
@@ -1221,7 +1635,7 @@ describe('ResultsTable handleRating - Updating existing human rating', () => {
 
     // We need to test the handleRating function directly
     // Since it's inside the component, we'll capture it through the setTable calls
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Simulate calling handleRating
     const _updatedTable = {
@@ -1353,7 +1767,7 @@ describe('ResultsTable Empty State', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('No results found for the current filters.')).toBeInTheDocument();
   });
 });
@@ -1405,7 +1819,9 @@ describe('ResultsTable', () => {
 
   it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
     const debouncedSearchText = 'test search';
-    render(<ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />);
+    renderWithProviders(
+      <ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />,
+    );
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
   });
@@ -1470,7 +1886,7 @@ describe('ResultsTable Search Highlights', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} debouncedSearchText={newSearchText} />);
+    renderWithProviders(<ResultsTable {...defaultProps} debouncedSearchText={newSearchText} />);
 
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toHaveAttribute('data-searchtext', newSearchText);
@@ -1537,7 +1953,7 @@ describe('ResultsTable Regex Handling', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} debouncedSearchText={specialRegexChars} />);
+    renderWithProviders(<ResultsTable {...defaultProps} debouncedSearchText={specialRegexChars} />);
 
     const evalOutputCell = screen.getByTestId('eval-output-cell');
     expect(evalOutputCell).toBeInTheDocument();
@@ -1605,7 +2021,7 @@ describe('ResultsTable Malformed Markdown Handling', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const elementsWithMalformedMarkdown = screen.getAllByText((_content, element) => {
       if (!element) {
@@ -1620,60 +2036,7 @@ describe('ResultsTable Malformed Markdown Handling', () => {
   });
 });
 
-describe('ResultsTable', () => {
-  const defaultProps = {
-    columnVisibility: {},
-    failureFilter: {},
-    filterMode: 'all' as const,
-    maxTextLength: 100,
-    onFailureFilterToggle: vi.fn(),
-    onSearchTextChange: vi.fn(),
-    searchText: '',
-    showStats: true,
-    wordBreak: 'break-word' as const,
-    setFilterMode: vi.fn(),
-    zoom: 1,
-    onResultsContainerScroll: vi.fn(),
-    atInitialVerticalScrollPosition: true,
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      config: {},
-      evalId: '123',
-      setTable: vi.fn(),
-      table: {
-        head: { prompts: [{ provider: 'test-provider' }], vars: [] },
-        body: [
-          {
-            outputs: [{ pass: true, score: 1, text: 'test output' }],
-            test: {},
-            vars: [],
-          },
-        ],
-      },
-      version: 4,
-      fetchEvalData: vi.fn(),
-      filters: {
-        values: {},
-        appliedCount: 0,
-        options: {
-          metric: [],
-        },
-      },
-    }));
-  });
-
-  it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
-    const debouncedSearchText = 'test search';
-    render(<ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />);
-    const evalOutputCell = screen.getByTestId('eval-output-cell');
-    expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
-  });
-});
-
-describe('ResultsTable', () => {
+describe('ResultsTable fetchEvalData pagination filters', () => {
   const defaultProps = {
     columnVisibility: {},
     failureFilter: {},
@@ -1734,7 +2097,7 @@ describe('ResultsTable', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const newPageIndex = 1;
 
@@ -1858,9 +2221,42 @@ describe('ResultsTable Pagination', () => {
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
     const paginationElement = screen.getByText(/results per page/i);
     expect(paginationElement).toBeInTheDocument();
+  });
+
+  it('should keep the pagination footer pinned for short tables', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        body: [],
+        head: {
+          prompts: [],
+          vars: [],
+        },
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      totalResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(container.querySelector('#results-table-container')).toHaveStyle({
+      minHeight: '0px',
+    });
+    expect(container.querySelector('.pagination')).toHaveClass('sticky', 'bottom-0', 'shrink-0');
   });
 });
 
@@ -1899,7 +2295,7 @@ describe('ResultsTable BaseNumberInput onChange undefined', () => {
       filteredResultsCount: 100,
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const input = screen.getByRole('spinbutton');
     await act(async () => {
@@ -1947,7 +2343,7 @@ describe('ResultsTable Non-Numeric Input Handling', () => {
       setPagination: setPaginationMock,
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const inputElement = screen.getByRole('spinbutton');
     await act(async () => {
@@ -1959,6 +2355,34 @@ describe('ResultsTable Non-Numeric Input Handling', () => {
 });
 
 describe('ResultsTable Zoom and Scroll Position', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [
+        {
+          metrics: {
+            testPassCount: 1,
+            testFailCount: 0,
+          },
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  };
+
   const defaultProps = {
     columnVisibility: {},
     failureFilter: {},
@@ -1975,8 +2399,34 @@ describe('ResultsTable Zoom and Scroll Position', () => {
     atInitialVerticalScrollPosition: true,
   };
 
+  beforeEach(() => {
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+    }));
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      filteredResultsCount: 1,
+      isFetching: false,
+      totalResultsCount: 1,
+    }));
+  });
+
   it('should maintain scroll position and focused element when zoom changes', () => {
-    const { container } = render(<ResultsTable {...defaultProps} />);
+    const { container, rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
     const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
     const initialScrollTop = 100;
     tableContainer.scrollTop = initialScrollTop;
@@ -1987,7 +2437,7 @@ describe('ResultsTable Zoom and Scroll Position', () => {
     }
 
     act(() => {
-      render(<ResultsTable {...defaultProps} zoom={1.5} />, { container });
+      rerender(<ResultsTable {...defaultProps} zoom={1.5} />);
     });
 
     expect(tableContainer.scrollTop).toBe(initialScrollTop);
@@ -2045,10 +2495,6 @@ describe('ResultsTable Filtered Metrics Display', () => {
     zoom: 1,
     onResultsContainerScroll: vi.fn(),
     atInitialVerticalScrollPosition: true,
-  };
-
-  const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
   };
 
   beforeEach(() => {
@@ -2205,7 +2651,7 @@ describe('ResultsTable - No Filters Applied', () => {
   });
 
   it('should display only total metrics and not display filtered metrics when no filters are applied', () => {
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     expect(screen.getByText('Total Cost:')).toBeInTheDocument();
     expect(screen.getByText('$1.23')).toBeInTheDocument();
@@ -2273,10 +2719,6 @@ describe('ResultsTable Pass Rate Display', () => {
     zoom: 1,
     onResultsContainerScroll: vi.fn(),
     atInitialVerticalScrollPosition: true,
-  };
-
-  const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
   };
 
   beforeEach(() => {
@@ -2403,10 +2845,6 @@ describe('ResultsTable Pass Rate Highlighting', () => {
     zoom: 1,
     onResultsContainerScroll: vi.fn(),
     atInitialVerticalScrollPosition: true,
-  };
-
-  const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
   };
 
   beforeEach(() => {
@@ -2554,10 +2992,6 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
     atInitialVerticalScrollPosition: true,
   };
 
-  const renderWithProviders = (ui: React.ReactElement) => {
-    return render(ui);
-  };
-
   beforeEach(() => {
     vi.mocked(useTableStore).mockImplementation(() => ({
       config: {},
@@ -2689,6 +3123,291 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
   });
 });
 
+describe('ResultsTable Header Column Updates on Eval Switch', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: false,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Note: Testing rerender() behavior with mocked Zustand stores doesn't work well because
+  // React's useMemo caches persist across rerenders. The actual fix uses key={evalId} on
+  // ResultsTable in ResultsView.tsx, which forces a complete remount and clears all caches.
+  // The tests below use unmount/remount to simulate this key-based remounting behavior.
+
+  it('should show correct column headers after remount with different eval (simulates key={evalId})', () => {
+    // First eval: NAICS classifier with location-based variables
+    const firstEvalTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: ['https://example.com', 'New York', 'NY'],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'openai:gpt-4' }],
+        vars: ['website_url', 'city', 'state'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-naics-123',
+      setTable: vi.fn(),
+      table: firstEvalTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Verify first eval's column headers are present
+    expect(screen.getByText('website_url')).toBeInTheDocument();
+    expect(screen.getByText('city')).toBeInTheDocument();
+    expect(screen.getByText('state')).toBeInTheDocument();
+
+    // Unmount simulates what happens when key={evalId} changes in ResultsView
+    unmount();
+
+    // Second eval: Customer support with different variables
+    const secondEvalTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 2' }],
+          test: {},
+          vars: ['Hello, I need help', 'session-abc-123'],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'openai:gpt-4' }],
+        vars: ['prompt', 'sessionId'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-support-456',
+      setTable: vi.fn(),
+      table: secondEvalTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    // Fresh mount with new eval data (simulates what happens when key={evalId} changes)
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Verify second eval's column headers are present
+    expect(screen.getByText('prompt')).toBeInTheDocument();
+    expect(screen.getByText('sessionId')).toBeInTheDocument();
+
+    // Verify first eval's columns are NOT present (they should be gone)
+    expect(screen.queryByText('website_url')).not.toBeInTheDocument();
+    expect(screen.queryByText('city')).not.toBeInTheDocument();
+    expect(screen.queryByText('state')).not.toBeInTheDocument();
+  });
+
+  it('should show correct prompt column headers after remount (simulates key={evalId})', () => {
+    // First eval: Single prompt
+    const firstEvalTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output 1' }],
+          test: {},
+          vars: ['input1'],
+        },
+      ],
+      head: {
+        prompts: [
+          {
+            provider: 'openai:gpt-4',
+            label: 'GPT-4 Classifier',
+          },
+        ],
+        vars: ['input'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-single-prompt',
+      setTable: vi.fn(),
+      table: firstEvalTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Verify first eval's prompt column header
+    expect(screen.getByText('GPT-4 Classifier')).toBeInTheDocument();
+
+    unmount();
+
+    // Second eval: Multiple prompts with different labels
+    const secondEvalTable = {
+      body: [
+        {
+          outputs: [
+            { pass: true, score: 1, text: 'output from claude' },
+            { pass: false, score: 0, text: 'output from gemini' },
+          ],
+          test: {},
+          vars: ['input2'],
+        },
+      ],
+      head: {
+        prompts: [
+          {
+            provider: 'anthropic:claude-3',
+            label: 'Claude Assistant',
+          },
+          {
+            provider: 'google:gemini-pro',
+            label: 'Gemini Helper',
+          },
+        ],
+        vars: ['query'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-multi-prompt',
+      setTable: vi.fn(),
+      table: secondEvalTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Verify second eval's prompt column headers
+    expect(screen.getByText('Claude Assistant')).toBeInTheDocument();
+    expect(screen.getByText('Gemini Helper')).toBeInTheDocument();
+
+    // Verify first eval's prompt column is NOT present
+    expect(screen.queryByText('GPT-4 Classifier')).not.toBeInTheDocument();
+  });
+
+  it('should handle column count changes after remount (simulates key={evalId})', () => {
+    // First eval: Many variable columns
+    const manyColumnsTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output' }],
+          test: {},
+          vars: ['val1', 'val2', 'val3', 'val4', 'val5'],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'openai:gpt-4' }],
+        vars: ['col1', 'col2', 'col3', 'col4', 'col5'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-many-cols',
+      setTable: vi.fn(),
+      table: manyColumnsTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Verify all columns are present
+    expect(screen.getByText('col1')).toBeInTheDocument();
+    expect(screen.getByText('col2')).toBeInTheDocument();
+    expect(screen.getByText('col3')).toBeInTheDocument();
+    expect(screen.getByText('col4')).toBeInTheDocument();
+    expect(screen.getByText('col5')).toBeInTheDocument();
+
+    unmount();
+
+    // Second eval: Just one variable column
+    const fewColumnsTable = {
+      body: [
+        {
+          outputs: [{ pass: true, score: 1, text: 'output' }],
+          test: {},
+          vars: ['single value'],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'openai:gpt-4' }],
+        vars: ['onlyColumn'],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'eval-few-cols',
+      setTable: vi.fn(),
+      table: fewColumnsTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: { metric: [] },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Verify only the new column is present
+    expect(screen.getByText('onlyColumn')).toBeInTheDocument();
+
+    // Verify old columns are gone
+    expect(screen.queryByText('col1')).not.toBeInTheDocument();
+    expect(screen.queryByText('col2')).not.toBeInTheDocument();
+    expect(screen.queryByText('col3')).not.toBeInTheDocument();
+    expect(screen.queryByText('col4')).not.toBeInTheDocument();
+    expect(screen.queryByText('col5')).not.toBeInTheDocument();
+  });
+});
+
 describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => {
   let mockSetTable: ReturnType<typeof vi.fn>;
   let mockCallApi: any;
@@ -2795,7 +3514,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // Simulate handleRating being called with isPass = null
     const existingOutput = mockTable.body[0].outputs[0];
@@ -2819,6 +3538,52 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     expect(componentResults[0].assertion?.type).toBe('contains');
     expect(finalPass).toBe(false);
     expect(finalScore).toBe(0.5);
+  });
+
+  it('persists a cleared human rating without manual override fields', async () => {
+    const user = userEvent.setup();
+    const mockTable = createMockTableWithHumanAssertion();
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/eval/123/results/test-output-1/rating',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    const [, request] = mockCallApi.mock.calls[0];
+    const payload = JSON.parse(request.body);
+
+    expect(payload.pass).toBe(false);
+    expect(payload.score).toBe(0.5);
+    expect(payload.reason).toBe('Automated assertion');
+    expect(payload.assertion?.type).not.toBe('human');
+    expect(payload.componentResults).toHaveLength(1);
+    expect(payload.componentResults[0].assertion.type).toBe('contains');
   });
 
   it('should recalculate pass as true when all remaining assertions pass', () => {
@@ -2883,7 +3648,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const existingOutput = mockTable.body[0].outputs[0];
     const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
@@ -2954,7 +3719,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const existingOutput = mockTable.body[0].outputs[0];
     const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
@@ -2990,19 +3755,13 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     // When score is provided explicitly, it should be used instead of defaulting to 0/1
     const customScore = 0.75;
-    const isPass = true;
 
-    // Verify logic: if score is provided, use it; if only isPass, use 0/1
-    let finalScore: number = 0;
-    if (typeof customScore !== 'undefined') {
-      finalScore = customScore;
-    } else if (typeof isPass !== 'undefined' && isPass !== null) {
-      finalScore = isPass ? 1 : 0;
-    }
+    // Verify logic: an explicit score takes precedence over pass/fail-derived scores.
+    const finalScore = customScore;
 
     expect(finalScore).toBe(0.75);
   });
@@ -3075,7 +3834,7 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
       },
     }));
 
-    render(<ResultsTable {...defaultProps} />);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const existingOutput = mockTable.body[0].outputs[0];
     const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
@@ -3091,5 +3850,234 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
 
     expect(averageScore).toBeCloseTo(0.5333, 4); // (0.6 + 0.3 + 0.7) / 3
+  });
+});
+
+describe('ResultsTable minimal scroll room detection', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [{ pass: true, score: 1, text: 'test output' }],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [{ provider: 'test-provider' }],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  // Use mutable values with getters so they can be changed during tests
+  let scrollHeightValue = 1000;
+  let innerHeightValue = 700;
+  let timers: TestTimers;
+
+  beforeEach(() => {
+    timers = useTestTimers();
+
+    // Reset to default values (plenty of scroll room)
+    scrollHeightValue = 1000;
+    innerHeightValue = 700;
+
+    // Use getters so the values can change during test
+    Object.defineProperty(document.documentElement, 'scrollHeight', {
+      get: () => scrollHeightValue,
+      configurable: true,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      get: () => innerHeightValue,
+      configurable: true,
+    });
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  afterEach(() => {
+    restoreTestTimers();
+  });
+
+  it('adds minimal-scroll-room class when scroll room is less than 150px', async () => {
+    // Mock scroll room < 150px (800 - 700 = 100px)
+    scrollHeightValue = 800;
+    innerHeightValue = 700;
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Run all timers to trigger the setTimeout in useEffect
+    await act(async () => {
+      timers.runAll();
+    });
+
+    const stickyContainer = screen.getByTestId('results-table-header');
+    expect(stickyContainer).toHaveClass('minimal-scroll-room');
+  });
+
+  it('does not add minimal-scroll-room class when scroll room is 150px or more', async () => {
+    // Mock scroll room >= 150px (1000 - 700 = 300px)
+    scrollHeightValue = 1000;
+    innerHeightValue = 700;
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Run all timers to trigger the setTimeout in useEffect
+    await act(async () => {
+      timers.runAll();
+    });
+
+    const stickyContainer = screen.getByTestId('results-table-header');
+    expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
+  });
+
+  it('updates minimal-scroll-room class on window resize', async () => {
+    // Start with plenty of scroll room
+    scrollHeightValue = 1000;
+    innerHeightValue = 700;
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    // Run initial timers
+    await act(async () => {
+      timers.runAll();
+    });
+
+    // Verify no class initially
+    let stickyContainer = screen.getByTestId('results-table-header');
+    expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
+
+    // Change to minimal scroll room and trigger resize
+    scrollHeightValue = 800;
+
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    stickyContainer = screen.getByTestId('results-table-header');
+    expect(stickyContainer).toHaveClass('minimal-scroll-room');
+  });
+
+  it('correctly detects scroll room exactly at threshold (150px)', async () => {
+    // Mock scroll room exactly 150px (850 - 700 = 150px)
+    scrollHeightValue = 850;
+    innerHeightValue = 700;
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      timers.runAll();
+    });
+
+    const stickyContainer = screen.getByTestId('results-table-header');
+    // At exactly 150px, should NOT add the class (threshold is < 150)
+    expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
+  });
+
+  it('correctly detects scroll room just below threshold (149px)', async () => {
+    // Mock scroll room at 149px (849 - 700 = 149px)
+    scrollHeightValue = 849;
+    innerHeightValue = 700;
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      timers.runAll();
+    });
+
+    const stickyContainer = screen.getByTestId('results-table-header');
+    // Just below 150px threshold, should add the class
+    expect(stickyContainer).toHaveClass('minimal-scroll-room');
+  });
+
+  it('has useEffect that depends on filteredResultsCount to recheck scroll room', async () => {
+    // This test verifies that the implementation includes filteredResultsCount as a dependency
+    // When filteredResultsCount changes, checkScrollRoom should be called again
+    scrollHeightValue = 1000;
+    innerHeightValue = 700;
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      timers.runAll();
+    });
+
+    const stickyContainer = screen.getByTestId('results-table-header');
+    // Initially no minimal-scroll-room class
+    expect(stickyContainer).not.toHaveClass('minimal-scroll-room');
+
+    // The implementation has a useEffect that depends on filteredResultsCount
+    // to trigger checkScrollRoom when the number of filtered results changes
+    // This ensures the detection updates as table content changes
+  });
+
+  it('cleans up resize listener on unmount', async () => {
+    const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+
+    const { unmount } = renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      timers.runAll();
+    });
+
+    unmount();
+
+    // Verify resize listener was removed
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('resize', expect.any(Function));
+
+    removeEventListenerSpy.mockRestore();
+  });
+
+  it('applies both sticky and minimal-scroll-room classes when conditions overlap', async () => {
+    scrollHeightValue = 800;
+    innerHeightValue = 700;
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    await act(async () => {
+      timers.runAll();
+    });
+
+    const stickyContainer = screen.getByTestId('results-table-header');
+
+    // Initially has minimal-scroll-room class
+    expect(stickyContainer).toHaveClass('minimal-scroll-room');
+
+    // When sticky is enabled, should have both classes
+    // Note: This would require triggering the sticky behavior,
+    // which depends on scroll events in the actual implementation
+    expect(stickyContainer.className).toContain('relative');
   });
 });

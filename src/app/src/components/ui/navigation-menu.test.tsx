@@ -124,4 +124,19 @@ describe('NavigationMenu', () => {
     expect(screen.getByRole('link', { name: 'About' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Contact' })).toBeInTheDocument();
   });
+
+  it('includes z-index class in root element', () => {
+    render(
+      <NavigationMenu>
+        <NavigationMenuList>
+          <NavigationMenuItem>
+            <NavigationMenuLink href="/">Home</NavigationMenuLink>
+          </NavigationMenuItem>
+        </NavigationMenuList>
+      </NavigationMenu>,
+    );
+
+    const nav = screen.getByRole('navigation');
+    expect(nav).toHaveClass('z-(--z-dropdown)');
+  });
 });
