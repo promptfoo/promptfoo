@@ -118,8 +118,12 @@ export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
   apiBaseUrl?: string;
-  /** Custom per-token cost override for cost calculation. */
+  /** Custom per-token cost override for both input and output tokens. */
   cost?: number;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;
@@ -167,16 +171,20 @@ export interface CompletionOptions {
   // Gemini native image generation options
   imageAspectRatio?:
     | '1:1'
+    | '1:4'
+    | '1:8'
     | '2:3'
     | '3:2'
     | '3:4'
+    | '4:1'
     | '4:3'
     | '4:5'
     | '5:4'
+    | '8:1'
     | '9:16'
     | '16:9'
     | '21:9';
-  imageSize?: '1K' | '2K' | '4K';
+  imageSize?: '512px' | '1K' | '2K' | '4K';
 
   // Live API websocket timeout
   timeoutMs?: number;
@@ -488,6 +496,10 @@ export interface GoogleVideoOptions {
   // Model selection
   model?: GoogleVideoModel;
 
+  // Authentication / transport mode
+  apiKey?: string;
+  vertexai?: boolean;
+
   // Video parameters
   aspectRatio?: GoogleVideoAspectRatio;
   resolution?: GoogleVideoResolution;
@@ -510,7 +522,7 @@ export interface GoogleVideoOptions {
 
   // Video extension (Veo 3.1 only)
   extendVideoId?: string; // Operation ID from previous Veo generation
-  sourceVideo?: string; // Alias for extendVideoId (must be Veo operation ID, not file path)
+  sourceVideo?: string; // Base64/file:// video for AI Studio, or Veo operation ID in Vertex flows
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;

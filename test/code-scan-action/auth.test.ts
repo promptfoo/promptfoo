@@ -5,10 +5,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGitHubOIDCToken } from '../../code-scan-action/src/auth';
 
-// Mock @actions/core
-vi.mock('@actions/core', () => ({
-  getIDToken: vi.fn(),
+const mocks = vi.hoisted(() => ({
+  core: {
+    getIDToken: vi.fn(),
+  },
 }));
+
+// Mock both the root specifier and the nested package entry resolved from code-scan-action.
+vi.mock('@actions/core', () => mocks.core);
+vi.mock('../../code-scan-action/node_modules/@actions/core/lib/core.js', () => mocks.core);
 
 describe('getGitHubOIDCToken', () => {
   beforeEach(() => {

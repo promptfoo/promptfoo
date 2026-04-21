@@ -5,11 +5,10 @@
  * This is extracted to avoid circular dependency issues.
  */
 
-import type { Agent } from 'http';
-
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
@@ -112,45 +111,7 @@ export abstract class AwsBedrockGenericProvider {
 
   async getBedrockInstance() {
     if (!this.bedrock) {
-      let handler;
-      const apiKey = this.getApiKey();
-
-      // Create request handler for proxy or API key scenarios
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY') || apiKey) {
-        try {
-          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
-          const { ProxyAgent } = await import('proxy-agent');
-
-          // Create handler with proxy support if needed
-          const proxyAgent =
-            getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')
-              ? new ProxyAgent()
-              : undefined;
-
-          handler = new NodeHttpHandler({
-            ...(proxyAgent ? { httpsAgent: proxyAgent as unknown as Agent } : {}),
-            requestTimeout: 300000, // 5 minutes
-          });
-
-          // Add Bearer token middleware for API key authentication
-          if (apiKey) {
-            const originalHandle = handler.handle.bind(handler);
-            handler.handle = async (request: any, options?: any) => {
-              // Add Authorization header with Bearer token
-              request.headers = {
-                ...request.headers,
-                Authorization: `Bearer ${apiKey}`,
-              };
-              return originalHandle(request, options);
-            };
-          }
-        } catch {
-          const reason = apiKey
-            ? 'API key authentication requires the @smithy/node-http-handler package'
-            : 'Proxy configuration requires the @smithy/node-http-handler package';
-          throw new Error(`${reason}. Please install it in your project or globally.`);
-        }
-      }
+      const handler = await createBedrockRequestHandler({ apiKey: this.getApiKey() });
 
       try {
         const { BedrockRuntime } = await import('@aws-sdk/client-bedrock-runtime');
@@ -160,8 +121,8 @@ export abstract class AwsBedrockGenericProvider {
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
+          requestHandler: handler,
           ...(credentials ? { credentials } : {}),
-          ...(handler ? { requestHandler: handler } : {}),
           ...(this.config.endpoint ? { endpoint: this.config.endpoint } : {}),
         });
 

@@ -38,10 +38,10 @@ The fastest way to get started with factuality evaluation is to use our pre-buil
 
 ```bash
 # Initialize the example - this command creates a new directory with all necessary files
-npx promptfoo@latest init --example huggingface-dataset-factuality
+npx promptfoo@latest init --example huggingface/dataset-factuality
 
 # Change into the newly created directory
-cd huggingface-dataset-factuality
+cd huggingface/dataset-factuality
 
 # Run the evaluation - this executes the factuality tests using the models specified in the config
 npx promptfoo eval
@@ -52,7 +52,7 @@ npx promptfoo view
 
 What these commands do:
 
-1. The first command initializes a new project using our huggingface-dataset-factuality example template
+1. The first command initializes a new project using our huggingface/dataset-factuality example template
 2. The second command navigates into the project directory
 3. The third command runs the factuality evaluation against the TruthfulQA dataset
 4. The final command opens the results in your browser for analysis
@@ -325,4 +325,4 @@ When setting up factuality evaluations:
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more evaluation options
 - [Factuality assertion reference](/docs/configuration/expected-outputs/model-graded/factuality)
-- [TruthfulQA example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-dataset-factuality) - Complete code for the TruthfulQA factuality evaluation example
+- [TruthfulQA example on GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface/dataset-factuality) - Complete code for the TruthfulQA factuality evaluation example
