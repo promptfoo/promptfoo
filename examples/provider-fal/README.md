@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-fal
+cd provider-fal
 ```
 
 Demonstrates how to evaluate and compare image generation models using promptfoo.

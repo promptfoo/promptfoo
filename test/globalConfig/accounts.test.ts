@@ -1,6 +1,6 @@
 import input from '@inquirer/input';
 import chalk from 'chalk';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString, isCI } from '../../src/envars';
 import {
   checkEmailStatus,
@@ -49,7 +49,13 @@ vi.mock('../../src/logger');
 
 describe('accounts', () => {
   beforeEach(() => {
+    vi.stubEnv('PROMPTFOO_API_KEY', undefined);
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('getUserId', () => {
@@ -196,12 +202,13 @@ describe('accounts', () => {
   });
 
   describe('getAuthor', () => {
-    it('should return env var if set', () => {
-      vi.mocked(getEnvString).mockReturnValue('author@env.com');
-      expect(getAuthor()).toBe('author@env.com');
+    it('should use override when not logged into cloud', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor('override@example.com')).toBe('override@example.com');
     });
 
-    it('should fall back to user email if no env var', () => {
+    it('should fall back to user email when no override and not logged into cloud', () => {
       vi.mocked(getEnvString).mockReturnValue('');
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
@@ -210,10 +217,61 @@ describe('accounts', () => {
       expect(getAuthor()).toBe('test@example.com');
     });
 
+    it('should fall back to env var when no override and no user email', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor()).toBe('author@env.com');
+    });
+
     it('should return null if no author found', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
+      expect(getAuthor()).toBeNull();
+    });
+
+    it('should prefer cloud identity over override when logged into cloud', () => {
       vi.mocked(getEnvString).mockReturnValue('');
       vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
+        account: { email: 'cloud@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor('override@example.com')).toBe('cloud@example.com');
+    });
+
+    it('should prefer cloud identity over env var when logged into cloud', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'cloud@example.com' },
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor()).toBe('cloud@example.com');
+    });
+
+    it('should fall back to override when logged into cloud but no stored email', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor('override@example.com')).toBe('override@example.com');
+    });
+
+    it('should fall back to env var when logged into cloud but no stored email', () => {
+      vi.mocked(getEnvString).mockReturnValue('author@env.com');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'test-api-key' },
+      });
+      expect(getAuthor()).toBe('author@env.com');
+    });
+
+    it('should return null when logged into cloud, no stored email, no override, no env', () => {
+      vi.mocked(getEnvString).mockReturnValue('');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'test-api-key' },
       });
       expect(getAuthor()).toBeNull();
     });
@@ -310,10 +368,11 @@ describe('accounts', () => {
   });
 
   describe('checkEmailStatusAndMaybeExit', () => {
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    let mockExit: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
       vi.clearAllMocks();
+      mockExit = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
     });
 
     it('should bypass email verification checks for the CI placeholder email', async () => {

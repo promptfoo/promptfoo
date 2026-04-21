@@ -1,4 +1,4 @@
-# provider-python
+# provider-python (Python Provider)
 
 This example demonstrates how to create a custom Python provider for promptfoo that integrates with the OpenAI API.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-python
+cd provider-python
 ```
 
 ## Overview

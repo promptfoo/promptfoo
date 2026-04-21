@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-tau
+cd integration-tau
 ```
 
 This example demonstrates testing conversational AI agents using **OpenAI's Responses API with function calling**. It simulates an airline booking system with 31 different customer personas to test how well agents handle realistic conversations.
@@ -27,7 +28,7 @@ The example uses **mocked airline functions** to simulate a booking system witho
 
 Realistic multi-turn conversations between different customer types and the booking agent:
 
-```
+```text
 User: I need a flight from New York to Seattle on May 20th
 Agent: I'd be happy to help! May I have your user ID?
 User: It's mia_li_3668

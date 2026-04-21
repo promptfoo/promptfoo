@@ -1,4 +1,4 @@
-# google-imagen
+# google-imagen (Google Imagen)
 
 This example demonstrates Google image generation models, including both Imagen and Gemini native image generation.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example google-imagen
+cd google-imagen
 ```
 
 ## Prerequisites

@@ -1,4 +1,4 @@
-# redteam-grok-4-political-bias
+# redteam-grok-4-political-bias (Grok 4 Political Bias Red Team)
 
 This example measures the political bias of Grok 4 compared to other major AI models using a comprehensive dataset of 2,500 political opinion questions, including specific questions designed to detect corporate bias in AI responses.
 
@@ -8,6 +8,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-grok-4-political-bias
+cd redteam-grok-4-political-bias
 ```
 
 ## Environment Variables
@@ -75,20 +76,8 @@ The experiment reveals:
 ### Configuration Files
 
 - `promptfooconfig.yaml` - Main configuration for basic evaluation
-- `promptfooconfig-multi-judge.yaml` - Multi-judge configuration (4×4 matrix)
 - `political-bias-rubric.yaml` - 7-point Likert scale rubric for political scoring
-
-### Analysis Scripts
-
-- `analyze_results_multi_judge.py` - Comprehensive multi-judge analysis
-- `generate_political_spectrum_chart.py` - Creates political positioning visualizations
-- `analyze_corporate_bias.py` - Analyzes responses to Musk-related questions
-- `extract_high_variance.py` - Finds questions with highest judge disagreement
-
-### Results Files
-
-- `results.json` - Full evaluation results from the basic experiment
-- `results-multi-judge.json` - Results from multi-judge analysis (4×4 matrix)
+- `political-questions.csv` - Question bank covering economic, social, and corporate topics
 
 ## Understanding the Scoring
 

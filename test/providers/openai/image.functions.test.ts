@@ -476,6 +476,9 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result).toMatchObject([
         { blobRef: expect.objectContaining({ uri: blobUri(1) }), mimeType: 'image/png' },
       ]);
+      expect(fetchWithProxy).toHaveBeenCalledWith('https://example.com/image.jpg?size=large', {
+        redirect: 'error',
+      });
     });
 
     it('should skip external URLs when blob storage is disabled', async () => {

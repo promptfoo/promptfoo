@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-assertions-generate
+cd eval-assertions-generate
 ```
 
 This example demonstrates valid configs for assertion generation in promptfoo.

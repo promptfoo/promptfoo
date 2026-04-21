@@ -1,12 +1,18 @@
 import dedent from 'dedent';
+import cliState from '../../cliState';
 import logger from '../../logger';
-import { matchesLlmRubric } from '../../matchers';
+import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
+import {
+  getGeneratedPromptOverLimit,
+  getMaxCharsPerMessageModifierValue,
+  MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
+} from '../shared/promptLength';
 import {
   extractInputVarsFromPrompt,
   getShortPluginId,
@@ -15,7 +21,6 @@ import {
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
-import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
   Assertion,
@@ -26,6 +31,7 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -117,6 +123,7 @@ export abstract class RedteamPluginBase {
      * In single-input mode, returns { __prompt: string }[]
      * In multi-input mode, returns Record<string, string>[]
      */
+    let retryInstructions: string | undefined;
     const generatePrompts = async (
       currentPrompts: { __prompt: string }[] | Record<string, string>[],
     ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
@@ -130,9 +137,15 @@ export abstract class RedteamPluginBase {
         n: currentBatchSize,
         examples: this.config.examples,
         outputFormat: RedteamPluginBase.getOutputFormatInstruction(this.config),
+        hasCustomOutputFormat: !!this.config.inputs && Object.keys(this.config.inputs).length > 0,
       });
 
-      const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
+      const finalTemplate = [
+        RedteamPluginBase.appendModifiers(renderedTemplate, this.config),
+        retryInstructions,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
       const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
@@ -182,7 +195,37 @@ export abstract class RedteamPluginBase {
 
       // Use formatter to parse output
       const formatter = getPromptOutputFormatter(this.config);
-      return formatter.parse(generatedPrompts, this.config);
+      const parsedPrompts = formatter.parse(generatedPrompts, this.config);
+      const acceptedPrompts: ({ __prompt: string } | Record<string, string>)[] = [];
+      const rejectedPromptLengths: number[] = [];
+      let rejectedPromptLimit: number | undefined;
+
+      for (const prompt of parsedPrompts) {
+        const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
+        // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
+        // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
+        const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
+        if (violation) {
+          rejectedPromptLengths.push(violation.length);
+          rejectedPromptLimit = violation.limit;
+        } else {
+          acceptedPrompts.push(prompt);
+        }
+      }
+
+      if (rejectedPromptLengths.length > 0) {
+        retryInstructions = dedent`
+          Your previous response included ${rejectedPromptLengths.length} generated prompt${
+            rejectedPromptLengths.length === 1 ? '' : 's'
+          } that exceeded the ${rejectedPromptLimit ?? 'configured'}-character limit.
+          The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
+          Generate replacement prompts only, and keep every user message within the character limit.
+        `.trim();
+      } else {
+        retryInstructions = undefined;
+      }
+
+      return acceptedPrompts as { __prompt: string }[] | Record<string, string>[];
     };
 
     const allPrompts = await retryWithDeduplication(
@@ -242,7 +285,9 @@ export abstract class RedteamPluginBase {
    */
   static appendModifiers(template: string, config: PluginConfig): string {
     // Take everything under "modifiers" config key
-    const modifiers: Record<string, string> = (config.modifiers as Record<string, string>) ?? {};
+    const modifiers: Record<string, string> = {
+      ...((config.modifiers as Record<string, string> | undefined) ?? {}),
+    };
 
     if (config.language) {
       invariant(typeof config.language === 'string', 'language must be a string');
@@ -255,13 +300,24 @@ export abstract class RedteamPluginBase {
       modifiers.__outputFormat = `multi-input-mode: ${inputKeys.join(', ')}`;
     }
 
+    const maxCharsPerMessageModifier = getMaxCharsPerMessageModifierValue(
+      config.maxCharsPerMessage,
+    );
+    if (maxCharsPerMessageModifier) {
+      modifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsPerMessageModifier;
+    }
+
     // Store the computed modifiers back into config so they get passed to strategies
     if (Object.keys(modifiers).length > 0) {
       config.modifiers = modifiers;
     }
 
     // Filter out __outputFormat from regular modifiers section (templates handle it directly)
-    const regularModifiers = Object.entries(modifiers)
+    const promptModifiers = {
+      ...modifiers,
+    };
+
+    const regularModifiers = Object.entries(promptModifiers)
       .filter(
         ([key, value]) => key !== '__outputFormat' && typeof value !== 'undefined' && value !== '',
       )
@@ -303,15 +359,6 @@ export abstract class RedteamPluginBase {
  *
  * But if you'd like, you can override the `getResult` method to use a different grading method.
  */
-export interface RedteamGradingContext {
-  traceContext?: TraceContextData | null;
-  traceSummary?: string;
-  // Data exfiltration tracking (for data-exfil grader)
-  wasExfiltrated?: boolean;
-  exfilCount?: number;
-  exfilRecords?: Array<{ queryParams: Record<string, string> }>;
-}
-
 export abstract class RedteamGraderBase {
   abstract id: string;
   abstract rubric: string;
@@ -320,7 +367,11 @@ export abstract class RedteamGraderBase {
     const nunjucks = getNunjucksEngine(undefined, true /* throwOnUndefined */);
 
     try {
-      return nunjucks.renderString(this.rubric, vars);
+      return nunjucks.renderString(this.rubric, {
+        conversationHistory: [],
+        conversationTranscript: '',
+        ...vars,
+      });
     } catch (error) {
       const extractedVars = extractVariablesFromTemplate(this.rubric);
       const missingVars = extractedVars.filter((v) => !(v in vars));
@@ -394,7 +445,7 @@ export abstract class RedteamGraderBase {
       ...(typeof renderedValue === 'object' && renderedValue !== null ? renderedValue : {}),
       value: renderedValue,
       // Extract specific trace properties for convenience (these override any conflicts)
-      traceSummary: gradingContext?.traceSummary,
+      traceSummary: gradingContext?.traceSummary ?? '',
       traceContext: gradingContext?.traceContext,
       traceInsights: gradingContext?.traceContext?.insights,
       timestamp: new Date().toISOString(),
@@ -449,10 +500,24 @@ export abstract class RedteamGraderBase {
       };
     }
 
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
+    const defaultTest =
+      typeof cliState.config?.defaultTest === 'object'
+        ? (cliState.config.defaultTest as TestCase)
+        : undefined;
+    const hasConfiguredGradingProvider = Boolean(
+      cliState.config?.redteam?.provider || defaultTest?.options?.provider,
+    );
+    const grading = {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
-    })) as GradingResult;
+    };
+    if (!hasConfiguredGradingProvider) {
+      Object.defineProperty(grading, '__promptfooPreferRemote', {
+        value: true,
+      });
+      logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
+    }
+    const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

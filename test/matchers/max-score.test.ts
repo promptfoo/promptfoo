@@ -1,55 +1,50 @@
 import { describe, expect, it } from 'vitest';
-import { selectMaxScore } from '../../src/matchers';
-import { ResultFailureReason } from '../../src/types/index';
+import { selectMaxScore } from '../../src/matchers/comparison';
+import { createEvaluateResult } from '../factories/eval';
+import { createGradingResult } from '../factories/gradingResult';
+import { createPrompt } from '../factories/testSuite';
 
 import type { Assertion, EvaluateResult } from '../../src/types/index';
 
 describe('selectMaxScore', () => {
-  const createMockResult = (score: number, testIdx: number): EvaluateResult => ({
-    promptIdx: 0,
-    testIdx,
-    testCase: {
-      assert: [
-        { type: 'contains', value: 'apple' },
-        { type: 'contains', value: 'orange' },
-        { type: 'max-score' },
-      ],
-    },
-    prompt: { raw: 'test prompt', label: 'test' },
-    promptId: 'prompt-test',
-    provider: { id: 'test-provider' },
-    vars: {},
-    response: { output: `Output ${testIdx}` },
-    error: null,
-    failureReason: ResultFailureReason.NONE,
-    success: true,
-    score,
-    latencyMs: 100,
-    gradingResult: {
-      pass: score > 0.5,
+  const createMockResult = (score: number, testIdx: number): EvaluateResult =>
+    createEvaluateResult({
+      testIdx,
+      testCase: {
+        assert: [
+          { type: 'contains', value: 'apple' },
+          { type: 'contains', value: 'orange' },
+          { type: 'max-score' },
+        ],
+      },
+      prompt: createPrompt('test prompt', { label: 'test' }),
+      promptId: 'prompt-test',
+      response: { output: `Output ${testIdx}` },
       score,
-      reason: 'Test result',
-      namedScores: {},
-      tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
-      componentResults: [
-        {
-          pass: true,
-          score: 1,
-          reason: 'Contains apple',
-          assertion: { type: 'contains', value: 'apple' } as Assertion,
-        },
-        {
-          pass: score === 1,
-          score: score === 1 ? 1 : 0,
-          reason: score === 1 ? 'Contains orange' : 'Does not contain orange',
-          assertion: { type: 'contains', value: 'orange' } as Assertion,
-        },
-      ],
-    },
-    namedScores: {},
-    cost: 0,
-    metadata: {},
-  });
+      latencyMs: 100,
+      gradingResult: createGradingResult({
+        pass: score > 0.5,
+        score,
+        reason: 'Test result',
+        namedScores: {},
+        tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Contains apple',
+            assertion: { type: 'contains', value: 'apple' } as Assertion,
+          },
+          {
+            pass: score === 1,
+            score: score === 1 ? 1 : 0,
+            reason: score === 1 ? 'Contains orange' : 'Does not contain orange',
+            assertion: { type: 'contains', value: 'orange' } as Assertion,
+          },
+        ],
+      }),
+      metadata: {},
+    });
 
   const mockAssertion: Assertion = {
     type: 'max-score',

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { mockMatchMedia } from '@app/tests/browserMocks';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -32,21 +33,6 @@ vi.mock('@app/utils/media', () => ({
 vi.mock('./AudioWaveform', () => ({
   AudioWaveform: () => <div data-testid="audio-waveform" />,
 }));
-
-// Mock matchMedia
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query: string) => ({
-    matches: query === '(prefers-reduced-motion: reduce)' ? false : query === '(hover: hover)',
-    media: query,
-    onchange: null,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-});
 
 // Wrapper with router context (required for Link components)
 const Wrapper = ({ children }: { children: ReactNode }) => <MemoryRouter>{children}</MemoryRouter>;
@@ -88,6 +74,10 @@ const createMockItems = (count: number): MediaItem[] =>
 describe('MediaModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockMatchMedia({
+      matches: (query) =>
+        query === '(prefers-reduced-motion: reduce)' ? false : query === '(hover: hover)',
+    });
   });
 
   describe('rendering', () => {

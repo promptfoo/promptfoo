@@ -59,7 +59,7 @@ export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
           type: 'object',
           properties,
           ...(required && required.length > 0 ? { required } : {}),
-          ...(additionalProperties !== undefined ? { additionalProperties } : {}),
+          ...(additionalProperties === undefined ? {} : { additionalProperties }),
         },
       },
     };
@@ -127,14 +127,11 @@ export async function transformMCPConfigToClaudeCode(
     serverConfigs.map((server) => transformMCPServerConfigToClaudeCode(server)),
   );
 
-  return servers.reduce(
-    (acc, transformed) => {
-      const [key, out] = transformed;
-      acc[key] = out;
-      return acc;
-    },
-    {} as Record<string, ClaudeCodeMcpServerConfig>,
-  );
+  return servers.reduce<Record<string, ClaudeCodeMcpServerConfig>>((acc, transformed) => {
+    const [key, out] = transformed;
+    acc[key] = out;
+    return acc;
+  }, {});
 }
 
 async function transformMCPServerConfigToClaudeCode(

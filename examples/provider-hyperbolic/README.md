@@ -1,4 +1,4 @@
-# provider-hyperbolic
+# provider-hyperbolic (Hyperbolic AI Provider)
 
 This directory contains examples for testing Hyperbolic AI models with promptfoo.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-hyperbolic
+cd provider-hyperbolic
 ```
 
 ## Examples
