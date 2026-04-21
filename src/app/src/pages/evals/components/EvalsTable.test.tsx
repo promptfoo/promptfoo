@@ -1,5 +1,5 @@
 import { callApi } from '@app/utils/api';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -183,6 +183,7 @@ describe('EvalsTable', () => {
   });
 
   it('should request the next server range when virtualized rows load', async () => {
+    const user = userEvent.setup();
     const mockResponse = {
       ok: true,
       json: vi.fn().mockResolvedValue({
@@ -202,7 +203,7 @@ describe('EvalsTable', () => {
       expect(screen.getByTestId('data-table')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByTestId('load-next-range'));
+    await user.click(screen.getByTestId('load-next-range'));
 
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(

@@ -177,6 +177,7 @@ export default function EvalsTable({
   const selectedEvalIds = useMemo(() => {
     return Object.keys(rowSelection).filter((key) => rowSelection[key]);
   }, [rowSelection]);
+  const enableClientSorting = !useServerPagination;
 
   // Handle delete confirmation
   const handleDeleteSelected = () => {
@@ -256,6 +257,7 @@ export default function EvalsTable({
       {
         accessorKey: 'evalId',
         header: 'ID',
+        enableSorting: enableClientSorting,
         cell: ({ getValue }) => {
           const evalId = getValue<string>();
           if (evalId === focusedEvalId) {
@@ -279,6 +281,7 @@ export default function EvalsTable({
       {
         accessorKey: 'createdAt',
         header: 'Created',
+        enableSorting: enableClientSorting,
         cell: ({ getValue }) => (
           <span className="text-sm">{formatDataGridDate(getValue<number>())}</span>
         ),
@@ -291,6 +294,7 @@ export default function EvalsTable({
               id: 'type',
               accessorFn: (row) => (row.isRedteam ? 'Red Team' : 'Eval'),
               header: 'Type',
+              enableSorting: enableClientSorting,
               cell: ({ row }) => {
                 const isRedteam = row.original.isRedteam;
                 return (
@@ -319,6 +323,7 @@ export default function EvalsTable({
       {
         accessorKey: 'description',
         header: 'Description',
+        enableSorting: enableClientSorting,
         cell: ({ row }) => {
           const text = row.original.description || row.original.label;
           return (
@@ -346,6 +351,7 @@ export default function EvalsTable({
       {
         accessorKey: 'passRate',
         header: 'Pass Rate',
+        enableSorting: enableClientSorting,
         cell: ({ getValue }) => {
           const rate = getValue<number>();
           const colorClass =
@@ -364,6 +370,7 @@ export default function EvalsTable({
       {
         accessorKey: 'numTests',
         header: '# Tests',
+        enableSorting: enableClientSorting,
         cell: ({ getValue }) => (
           <span className="font-mono tabular-nums">{getValue<number>()}</span>
         ),
@@ -371,7 +378,7 @@ export default function EvalsTable({
         meta: { align: 'right' },
       },
     ],
-    [focusedEvalId, onEvalSelected, hasRedteamEvals],
+    [enableClientSorting, focusedEvalId, onEvalSelected, hasRedteamEvals],
   );
 
   // Delete button for toolbar
