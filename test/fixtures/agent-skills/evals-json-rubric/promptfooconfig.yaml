@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evals JSON contract and rubric smoke
+
+prompts:
+  - 'Return invoice decision JSON for {{invoice_id}}.'
+
+providers:
+  - id: file://./provider.mjs
+    label: evals-json-rubric-provider
+
+defaultTest:
+  options:
+    provider: file://./grader.mjs
+
+tests:
+  - description: Invoice output is structured and semantically approved
+    vars:
+      invoice_id: inv-123
+    options:
+      transform: JSON.parse(output)
+    assert:
+      - type: is-json
+      - type: javascript
+        value: output.invoice_id === 'inv-123' && output.status === 'approved'
+      - type: contains-any
+        transform: output.reasons
+        value:
+          - policy-match
+          - manual-review
+      - type: llm-rubric
+        value: >-
+          The response must mention invoice inv-123, state that it is approved,
+          and indicate that risk is low.
+    metadata:
+      area: billing

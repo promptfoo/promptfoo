@@ -49,7 +49,7 @@ redteam:
 
 Improves: _Attack Success Rate_, _Coverage_
 
-If your target supports conversation state, add [`jailbreak:hydra`](/docs/red-team/strategies/hydra/) — a multi-turn branching agent that maintains memory across turns and shares learnings across the entire scan. Multi-turn strategies uncover failures that only emerge after context builds up.
+If your target supports conversation state, add [`jailbreak:hydra`](/docs/red-team/strategies/hydra/), a multi-turn branching agent that maintains memory across turns and shares learnings across the entire scan. Multi-turn strategies uncover failures that only emerge after context builds up.
 
 ```yaml
 redteam:

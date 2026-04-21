@@ -4,6 +4,7 @@ import {
   SageMakerCompletionProvider,
   SageMakerEmbeddingProvider,
 } from '../src/providers/sagemaker';
+import { mockProcessEnv } from './util/utils';
 
 import type { LoadApiProviderContext } from '../src/types/index';
 
@@ -146,6 +147,76 @@ vi.mock('../src/util/time', async (importOriginal) => {
   };
 });
 
+async function mockSageMakerSend(command: any) {
+  if (command.EndpointName === 'fail-endpoint') {
+    throw new Error('SageMaker endpoint failed');
+  }
+
+  // For embedding endpoints
+  if (command.EndpointName.includes('embedding')) {
+    return {
+      Body: new TextEncoder().encode(
+        JSON.stringify({
+          embedding: [0.1, 0.2, 0.3, 0.4, 0.5],
+        }),
+      ),
+    };
+  }
+
+  // Different response formats based on endpoint name
+  let responseBody;
+
+  if (command.EndpointName.includes('openai')) {
+    responseBody = {
+      choices: [
+        {
+          message: {
+            content: 'This is a response from OpenAI-compatible endpoint',
+          },
+        },
+      ],
+    };
+  } else if (command.EndpointName.includes('llama')) {
+    responseBody = {
+      generation: 'This is a response from Llama-compatible endpoint',
+    };
+  } else if (command.EndpointName.includes('huggingface')) {
+    responseBody = [
+      {
+        generated_text: 'This is a response from HuggingFace-compatible endpoint',
+      },
+    ];
+  } else if (command.EndpointName.includes('js-extract')) {
+    responseBody = {
+      custom: {
+        result: 'Extracted value',
+      },
+    };
+  } else if (command.EndpointName.includes('nested-data')) {
+    responseBody = {
+      data: {
+        nested: {
+          value: 'Nested data value',
+        },
+        array: [1, 2, 3],
+      },
+    };
+  } else {
+    // Custom format
+    responseBody = {
+      output: 'This is a response from custom endpoint',
+    };
+  }
+
+  return {
+    Body: new TextEncoder().encode(JSON.stringify(responseBody)),
+  };
+}
+
+beforeEach(() => {
+  mockSend.mockReset().mockImplementation(mockSageMakerSend);
+});
+
 describe('SageMakerCompletionProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -174,7 +245,7 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   it('should initialize with correct region from environment', () => {
-    process.env.AWS_REGION = 'us-east-2';
+    mockProcessEnv({ AWS_REGION: 'us-east-2' });
     const provider = new SageMakerCompletionProvider('test-endpoint', {
       id: 'sagemaker:test-endpoint',
       config: {
@@ -182,7 +253,7 @@ describe('SageMakerCompletionProvider', () => {
       },
     });
     expect(provider.getRegion()).toBe('us-east-2');
-    delete process.env.AWS_REGION;
+    mockProcessEnv({ AWS_REGION: undefined });
   });
 
   it('should use credential options from config', async () => {
@@ -849,7 +920,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
     it('should format JumpStart payload with do_sample false when temperature is 0', () => {
       // Ensure no environment variable overrides the temperature
       const originalTemp = process.env.AWS_SAGEMAKER_TEMPERATURE;
-      delete process.env.AWS_SAGEMAKER_TEMPERATURE;
+      mockProcessEnv({ AWS_SAGEMAKER_TEMPERATURE: undefined });
 
       const provider = new SageMakerCompletionProvider('jumpstart-endpoint', {
         id: 'sagemaker:jumpstart-endpoint',
@@ -870,7 +941,7 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
       // Restore environment variable
       if (originalTemp) {
-        process.env.AWS_SAGEMAKER_TEMPERATURE = originalTemp;
+        mockProcessEnv({ AWS_SAGEMAKER_TEMPERATURE: originalTemp });
       }
     });
 
@@ -944,9 +1015,9 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
 
     it('should use environment variables for default parameters', () => {
       // Set environment variables
-      process.env.AWS_SAGEMAKER_MAX_TOKENS = '2048';
-      process.env.AWS_SAGEMAKER_TEMPERATURE = '0.9';
-      process.env.AWS_SAGEMAKER_TOP_P = '0.95';
+      mockProcessEnv({ AWS_SAGEMAKER_MAX_TOKENS: '2048' });
+      mockProcessEnv({ AWS_SAGEMAKER_TEMPERATURE: '0.9' });
+      mockProcessEnv({ AWS_SAGEMAKER_TOP_P: '0.95' });
 
       const provider = new SageMakerCompletionProvider('test-endpoint', {
         id: 'sagemaker:test-endpoint',
@@ -963,9 +1034,9 @@ describe('SageMakerCompletionProvider - Payload Formatting', () => {
       expect(parsedPayload.top_p).toBe(0.95);
 
       // Clean up environment variables
-      delete process.env.AWS_SAGEMAKER_MAX_TOKENS;
-      delete process.env.AWS_SAGEMAKER_TEMPERATURE;
-      delete process.env.AWS_SAGEMAKER_TOP_P;
+      mockProcessEnv({ AWS_SAGEMAKER_MAX_TOKENS: undefined });
+      mockProcessEnv({ AWS_SAGEMAKER_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_SAGEMAKER_TOP_P: undefined });
     });
 
     it('should handle malformed JSON gracefully for message-based formats', () => {

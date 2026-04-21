@@ -15,14 +15,26 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
+import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
-import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
+import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
-import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
+import {
+  isSecretField,
+  looksLikeSecret,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrl,
+} from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  HttpMultipartConfigSchema,
+  type RenderedHttpMultipartBody,
+  renderHttpMultipartBody,
+} from './httpMultipart';
 import {
   createTransformRequest,
   createTransformResponse,
@@ -791,13 +803,29 @@ const ApiKeyAuthSchema = z.object({
   keyName: z.string(),
 });
 
+const FileAuthSchema = z.object({
+  type: z.literal('file'),
+  path: z.string().min(1),
+});
+
 const AuthSchema = z.union([
   OAuthClientCredentialsSchema,
   OAuthPasswordSchema,
   BasicAuthSchema,
   BearerAuthSchema,
   ApiKeyAuthSchema,
+  FileAuthSchema,
 ]);
+
+const FileAuthResultSchema = z.object({
+  token: z.string().min(1),
+  expiration: z.number().finite().nullable().optional(),
+});
+
+type FileAuthResult = {
+  token: string;
+  expiration?: number;
+};
 
 /**
  * Configuration for a separate session endpoint that must be called before the main API.
@@ -826,6 +854,7 @@ export const HttpProviderConfigSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
+  multipart: HttpMultipartConfigSchema.optional(),
   queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   /**
@@ -898,6 +927,43 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
   });
 }
 
+function removeMultipartContentType(headers: Record<string, string>): void {
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'content-type') {
+      delete headers[key];
+    }
+  }
+}
+
+function sanitizeMultipartFields(fields: RenderedHttpMultipartBody['fields']) {
+  return fields.map((field) => ({
+    ...field,
+    value: isSecretField(field.field) || looksLikeSecret(field.value) ? REDACTED : field.value,
+  }));
+}
+
+function sanitizeMultipartFiles(files: RenderedHttpMultipartBody['files']) {
+  return files.map((file) => ({
+    field: isSecretField(file.field) ? REDACTED : file.field,
+    filename: looksLikeSecret(file.filename) ? REDACTED : file.filename,
+    contentType: file.contentType,
+    sizeBytes: file.sizeBytes,
+    source: file.source,
+  }));
+}
+
+function validateMultipartConfig(config: HttpProviderConfig): void {
+  if (!config.multipart) {
+    return;
+  }
+  if (config.request) {
+    throw new Error('HTTP provider config cannot include both request and multipart');
+  }
+  if (config.body != null) {
+    throw new Error('HTTP provider config cannot include both body and multipart');
+  }
+}
+
 interface SessionParserData {
   headers?: Record<string, string> | null;
   body?: Record<string, any> | string | null;
@@ -941,6 +1007,14 @@ export async function loadTransformModule(
   }
   // For string expressions, return as-is
   return transform;
+}
+
+function hasOwnProperty(obj: Record<string, any>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function parseFileAuthReference(filePath: string): { filePath: string; functionName?: string } {
+  return filePath.startsWith('file://') ? parseFileUrl(filePath) : { filePath };
 }
 
 export async function createSessionParser(
@@ -1129,12 +1203,12 @@ function parseRawRequest(input: string) {
     return {
       method: requestModel.method,
       url: requestModel.target,
-      headers: requestModel.headers.reduce(
+      headers: requestModel.headers.reduce<Record<string, string>>(
         (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
           return acc;
         },
-        {} as Record<string, string>,
+        {},
       ),
       body: requestModel.body,
     };
@@ -1451,7 +1525,7 @@ export class HttpProvider implements ApiProvider {
   private lastSignature?: string;
   private lastToken?: string;
   private lastTokenExpiresAt?: number;
-  private tokenRefreshPromise?: Promise<void>;
+  private tokenRefreshLock?: TokenRefreshLock;
   private httpsAgent?: Agent;
   private httpsAgentPromise?: Promise<Agent>;
   /**
@@ -1466,6 +1540,7 @@ export class HttpProvider implements ApiProvider {
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
+    validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
@@ -1499,7 +1574,7 @@ export class HttpProvider implements ApiProvider {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
       invariant(
-        this.config.body || this.config.method === 'GET',
+        this.config.body || this.config.multipart || this.config.method === 'GET',
         `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
           this.config,
         )}`,
@@ -1585,67 +1660,24 @@ export class HttpProvider implements ApiProvider {
               : undefined,
           }
         : baseConfig;
-    const now = Date.now();
-
-    // Check if token exists and is still valid (with buffer before expiry)
-    if (
-      this.lastToken &&
-      this.lastTokenExpiresAt &&
-      now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt
-    ) {
+    if (this.hasValidCachedToken()) {
       logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
       return;
     }
 
-    // If a refresh is already in progress, wait for it instead of making a new request
-    if (this.tokenRefreshPromise != null) {
-      logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
-      try {
-        await this.tokenRefreshPromise;
-        // If we successfully waited for the refresh, verify token is still valid
-        // (it might have expired while we were waiting)
-        const stillValid =
-          this.lastToken &&
-          this.lastTokenExpiresAt &&
-          Date.now() + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
-        if (stillValid) {
-          return;
-        }
-        // Token expired while waiting, fall through to refresh again
-        logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
-      } catch {
-        // If the in-progress refresh failed, we'll try again below
-        logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
-      }
-    }
-
-    // Start a new token refresh and store the promise for deduplication
-    logger.debug('[HTTP Provider Auth]: Refreshing OAuth token');
-    const refreshPromise = this.performTokenRefresh(oauthConfig, now);
-    this.tokenRefreshPromise = refreshPromise;
-
-    try {
-      await refreshPromise;
-    } finally {
-      // Only clear the promise if it's still the one we created (prevents race conditions)
-      if (this.tokenRefreshPromise === refreshPromise) {
-        this.tokenRefreshPromise = undefined;
-      }
-    }
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for OAuth token refresh');
+    await this.refreshTokenWithLock(() => this.performTokenRefresh(oauthConfig));
   }
 
-  private async performTokenRefresh(
-    oauthConfig: {
-      grantType: string;
-      clientId?: string;
-      clientSecret?: string;
-      tokenUrl: string;
-      scopes?: string[];
-      username?: string;
-      password?: string;
-    },
-    now: number,
-  ): Promise<void> {
+  private async performTokenRefresh(oauthConfig: {
+    grantType: string;
+    clientId?: string;
+    clientSecret?: string;
+    tokenUrl: string;
+    scopes?: string[];
+    username?: string;
+    password?: string;
+  }): Promise<void> {
     try {
       // Prepare the token request body
       const tokenRequestBody = new URLSearchParams();
@@ -1710,7 +1742,7 @@ export class HttpProvider implements ApiProvider {
       // Calculate expiration time
       // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
       const expiresInSeconds = tokenData.expires_in || 3600;
-      this.lastTokenExpiresAt = now + expiresInSeconds * 1000;
+      this.lastTokenExpiresAt = Date.now() + expiresInSeconds * 1000;
 
       logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
     } catch (err) {
@@ -1719,6 +1751,113 @@ export class HttpProvider implements ApiProvider {
     }
 
     invariant(this.lastToken, 'OAuth token should be defined at this point');
+  }
+
+  private hasValidCachedToken(now = Date.now()): boolean {
+    if (!this.lastToken) {
+      return false;
+    }
+
+    if (this.lastTokenExpiresAt == null) {
+      return this.config.auth?.type === 'file';
+    }
+
+    return now + TOKEN_REFRESH_BUFFER_MS < this.lastTokenExpiresAt;
+  }
+
+  private async waitForInFlightTokenRefresh(): Promise<boolean> {
+    const refreshPromise = this.tokenRefreshLock?.promise;
+    if (refreshPromise == null) {
+      return false;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
+
+    try {
+      await refreshPromise;
+      if (this.hasValidCachedToken()) {
+        return true;
+      }
+      logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
+    } catch {
+      logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
+    }
+
+    return false;
+  }
+
+  private async refreshTokenWithLock(refreshToken: () => Promise<void>): Promise<void> {
+    while (this.tokenRefreshLock != null) {
+      if (await this.waitForInFlightTokenRefresh()) {
+        return;
+      }
+    }
+
+    const refreshLock = { promise: refreshToken() };
+    this.tokenRefreshLock = refreshLock;
+
+    try {
+      await refreshLock.promise;
+    } finally {
+      // Only clear the lock if it's still the one we created (prevents race conditions)
+      if (this.tokenRefreshLock === refreshLock) {
+        this.tokenRefreshLock = undefined;
+      }
+    }
+  }
+
+  private async refreshFileTokenIfNeeded(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    if (!this.config.auth || this.config.auth.type !== 'file') {
+      logger.debug('[HTTP Provider Auth]: No file auth configured');
+      return;
+    }
+
+    if (this.hasValidCachedToken()) {
+      logger.debug('[HTTP Provider Auth]: Using cached file auth token');
+      return;
+    }
+
+    logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
+    await this.refreshTokenWithLock(() => this.performFileTokenRefresh(prompt, vars, context));
+  }
+
+  private async performFileTokenRefresh(
+    prompt: string,
+    vars: Record<string, any>,
+    context?: CallApiContextParams,
+  ): Promise<void> {
+    invariant(this.config.auth?.type === 'file', 'File auth should be configured');
+
+    const { filePath, functionName } = parseFileAuthReference(this.config.auth.path);
+    const defaultFunctionName = filePath.endsWith('.py') ? 'get_auth' : 'default';
+    const authContext: CallApiContextParams = {
+      ...(context ?? {}),
+      prompt: context?.prompt ?? ({ raw: prompt, label: prompt } as CallApiContextParams['prompt']),
+      vars,
+    };
+
+    try {
+      const authFn = await loadFunction<
+        (authContext: CallApiContextParams) => Promise<FileAuthResult> | FileAuthResult
+      >({
+        filePath,
+        functionName,
+        defaultFunctionName,
+      });
+      const result = FileAuthResultSchema.parse(await authFn(authContext));
+      this.lastToken = result.token;
+      this.lastTokenExpiresAt = result.expiration ?? undefined;
+      logger.debug('[HTTP Provider Auth]: Successfully refreshed file auth token');
+    } catch (err) {
+      logger.error(`[HTTP Provider Auth]: Failed to refresh file auth token: ${String(err)}`);
+      throw new Error(`Failed to refresh file auth token: ${String(err)}`);
+    }
+
+    invariant(this.lastToken, 'File auth token should be defined at this point');
   }
 
   private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
@@ -1931,6 +2070,9 @@ export class HttpProvider implements ApiProvider {
     if (this.config.method === 'GET') {
       return {};
     }
+    if (this.config.multipart) {
+      return {};
+    }
     if (typeof body === 'object' && body !== null) {
       return { 'content-type': 'application/json' };
     } else if (typeof body === 'string') {
@@ -2080,16 +2222,42 @@ export class HttpProvider implements ApiProvider {
     const vars = {
       ...(context?.vars || {}),
       prompt,
+      ...(context?.evaluationId ? { evaluationId: context.evaluationId } : {}),
       // Only set tools/tool_choice if defined in config, to avoid overwriting user vars
-      ...(transformedTools !== undefined ? { tools: serializeForTemplate(transformedTools) } : {}),
-      ...(transformedToolChoice !== undefined
-        ? { tool_choice: serializeForTemplate(transformedToolChoice) }
-        : {}),
+      ...(transformedTools === undefined ? {} : { tools: serializeForTemplate(transformedTools) }),
+      ...(transformedToolChoice === undefined
+        ? {}
+        : { tool_choice: serializeForTemplate(transformedToolChoice) }),
     } as Record<string, any>;
 
     if (this.config.auth?.type === 'oauth') {
       await this.refreshOAuthTokenIfNeeded(vars);
       invariant(this.lastToken, 'OAuth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
+    } else if (this.config.auth?.type === 'file') {
+      await this.refreshFileTokenIfNeeded(prompt, vars, context);
+      invariant(this.lastToken, 'File auth token should be defined at this point');
+
+      if (hasOwnProperty(vars, 'token')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `token` is already defined in vars and will be overwritten',
+        );
+      }
+      if (hasOwnProperty(vars, 'expiration')) {
+        logger.warn(
+          '[HTTP Provider Auth]: `expiration` is already defined in vars and will be overwritten',
+        );
+      }
+
+      vars.token = this.lastToken;
+      vars.expiration = this.lastTokenExpiresAt;
     }
 
     // Add signature values to vars if signature auth is enabled
@@ -2137,7 +2305,11 @@ export class HttpProvider implements ApiProvider {
       headers.tracestate = context.tracestate;
     }
 
-    this.validateContentTypeAndBody(headers, this.config.body);
+    if (this.config.multipart) {
+      removeMultipartContentType(headers);
+    } else {
+      this.validateContentTypeAndBody(headers, this.config.body);
+    }
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
@@ -2147,14 +2319,19 @@ export class HttpProvider implements ApiProvider {
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
-      method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
-      headers,
-      body: determineRequestBody(
-        contentTypeIsJson(headers),
-        transformedPrompt,
-        this.config.body,
+      method: getNunjucksEngine().renderString(
+        this.config.method || (this.config.multipart ? 'POST' : 'GET'),
         vars,
       ),
+      headers,
+      body: this.config.multipart
+        ? undefined
+        : determineRequestBody(
+            contentTypeIsJson(headers),
+            transformedPrompt,
+            this.config.body,
+            vars,
+          ),
       queryParams: (() => {
         const baseQueryParams = this.config.queryParams
           ? Object.fromEntries(
@@ -2181,6 +2358,9 @@ export class HttpProvider implements ApiProvider {
 
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
+    if (this.config.multipart && ['GET', 'HEAD'].includes(method.toUpperCase())) {
+      throw new Error(`HTTP provider ${method} requests cannot use multipart`);
+    }
 
     // Template the base URL first, then construct URL with query parameters
     let url = renderedConfig.url as string;
@@ -2204,6 +2384,17 @@ export class HttpProvider implements ApiProvider {
       config: renderedConfig,
     });
 
+    const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
+      ? await renderHttpMultipartBody(
+          this.config.multipart,
+          {
+            ...vars,
+            prompt: transformedPrompt,
+          },
+          options?.abortSignal,
+        )
+      : undefined;
+
     // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
@@ -2211,6 +2402,11 @@ export class HttpProvider implements ApiProvider {
       headers: renderedConfig.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
+        multipartBody && {
+          body: multipartBody.body,
+        }),
+      ...(method !== 'GET' &&
+        !multipartBody &&
         renderedConfig.body != null && {
           body: contentTypeIsJson(headers)
             ? typeof renderedConfig.body === 'string'
@@ -2247,7 +2443,7 @@ export class HttpProvider implements ApiProvider {
         fetchOptions,
         REQUEST_TIMEOUT_MS,
         'text',
-        context?.bustCache ?? context?.debug,
+        multipartBody ? true : (context?.bustCache ?? context?.debug),
         this.config.maxRetries,
       ));
     } catch (err) {
@@ -2278,7 +2474,14 @@ export class HttpProvider implements ApiProvider {
     };
     if (context?.debug) {
       ret.metadata.transformedRequest = transformedPrompt;
-      ret.metadata.finalRequestBody = renderedConfig.body;
+      if (multipartBody) {
+        ret.metadata.multipart = {
+          fields: sanitizeMultipartFields(multipartBody.fields),
+          files: sanitizeMultipartFiles(multipartBody.files),
+        };
+      } else {
+        ret.metadata.finalRequestBody = renderedConfig.body;
+      }
     }
 
     const rawText = data as string;
@@ -2519,9 +2722,19 @@ export class HttpProvider implements ApiProvider {
       throw err;
     }
 
+    // Always include HTTP status for error detection (e.g., aborting on non-transient errors)
+    ret.metadata = {
+      ...ret.metadata,
+      http: {
+        status,
+        statusText,
+      },
+    };
+
     if (context?.debug) {
       ret.raw = data;
       ret.metadata = {
+        ...ret.metadata,
         headers: sanitizeObject(responseHeaders, { context: 'response headers' }),
         // If no transform was applied, show the final raw request body with nunjucks applied
         // Otherwise show the transformed prompt

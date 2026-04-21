@@ -190,11 +190,7 @@ describe('findProviderConfig', () => {
   it('handles negative fallbackIndex', () => {
     const providers = [{ id: 'openai:gpt-4o' }];
     const result = findProviderConfig('unknown', providers, -1);
-    // Note: The implementation has a bug - it checks fallbackIndex < length but doesn't check >= 0
-    // -1 < 1 is true, so it tries providers[-1] which returns undefined
-    // This should ideally return 'none', but currently returns 'index' with undefined config
-    expect(result.matchType).toBe('index');
-    // providers[-1] is undefined in JavaScript
+    expect(result.matchType).toBe('none');
     expect(result.config).toBeUndefined();
   });
 
@@ -444,6 +440,34 @@ describe('extractConfigBadges', () => {
       const badges = extractConfigBadges('anthropic:claude', config);
       expect(badges).toContainEqual(
         expect.objectContaining({ label: 'thinking', value: 'enabled' }),
+      );
+    });
+
+    it('extracts Anthropic effort badge', () => {
+      const config = { config: { effort: 'high' } };
+      const badges = extractConfigBadges('anthropic:claude-opus-4-6', config);
+      expect(badges).toContainEqual(expect.objectContaining({ label: 'effort', value: 'high' }));
+    });
+
+    it('extracts Anthropic effort badge for all levels', () => {
+      for (const effort of ['low', 'medium', 'high', 'xhigh', 'max']) {
+        const config = { config: { effort } };
+        const badges = extractConfigBadges('anthropic:claude-opus-4-6', config);
+        expect(badges).toContainEqual(expect.objectContaining({ label: 'effort', value: effort }));
+      }
+    });
+
+    it('handles Anthropic adaptive thinking', () => {
+      const config = {
+        config: {
+          thinking: {
+            type: 'adaptive',
+          },
+        },
+      };
+      const badges = extractConfigBadges('anthropic:claude', config);
+      expect(badges).toContainEqual(
+        expect.objectContaining({ label: 'thinking', value: 'adaptive' }),
       );
     });
 

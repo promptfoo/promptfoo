@@ -6,9 +6,14 @@ import {
   generateTraceparent,
   isOtlpReceiverStarted,
   isTracingEnabled,
+  resetTracingState,
+  startOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
+import { mockProcessEnv } from '../util/utils';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
+
+const mockStartOTLPReceiver = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({
@@ -27,11 +32,19 @@ vi.mock('../../src/tracing/store', () => ({
   })),
 }));
 
+vi.mock('../../src/tracing/otlpReceiver', () => ({
+  startOTLPReceiver: mockStartOTLPReceiver,
+  stopOTLPReceiver: vi.fn().mockResolvedValue(undefined),
+}));
+
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockStartOTLPReceiver.mockReset();
+    mockStartOTLPReceiver.mockResolvedValue(undefined);
+    resetTracingState();
     // Reset environment variables
-    delete process.env.PROMPTFOO_TRACING_ENABLED;
+    mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: undefined });
   });
 
   describe('generateTraceId', () => {
@@ -112,7 +125,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('should generate trace context when tracing is enabled via environment', async () => {
-      process.env.PROMPTFOO_TRACING_ENABLED = 'true';
+      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
       const test: TestCase = {
         vars: { foo: 'bar' },
       };
@@ -160,7 +173,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('should return true when environment variable is set', () => {
-      process.env.PROMPTFOO_TRACING_ENABLED = 'true';
+      mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
       const test: TestCase = { vars: {} };
       expect(isTracingEnabled(test)).toBe(true);
     });
@@ -203,6 +216,51 @@ describe('evaluatorTracing', () => {
   describe('isOtlpReceiverStarted', () => {
     it('should return false initially', () => {
       expect(isOtlpReceiverStarted()).toBe(false);
+    });
+  });
+
+  describe('startOtlpReceiverIfNeeded', () => {
+    it('should pass configured acceptFormats to the OTLP receiver', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '0.0.0.0',
+              acceptFormats: ['protobuf'],
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['protobuf']);
+    });
+
+    it('should default acceptFormats to both when omitted', async () => {
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              host: '0.0.0.0',
+            },
+          },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['json', 'protobuf']);
     });
   });
 });

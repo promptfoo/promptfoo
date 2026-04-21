@@ -50,15 +50,15 @@ When plugins request a specific number of tests but only generate a subset or no
 
 1. **Model refusals**: The configured redteam provider model is refusing to generate adversarial content. Some models have safety filters that block generation of harmful test cases.
 2. **Rate limiting**: The API you're using has rate limits that throttle or reject requests when exceeded.
-3. **Missing API keys**: Some plugins require external API keys (noted in the setup UI). If these are missing or invalid, generation will fail silently or return partial results.
+3. **Missing API keys**: Some plugins require external API keys (noted in the setup UI). If these are missing or invalid, generation can fail or return partial results.
 
 To diagnose, run with `--verbose` to see detailed logs of any generation failures or refusals.
 
 ## Is Test Generation Capped?
 
-There is no hard cap. Each test case is a seed that strategies evolve into many attack attempts—`jailbreak:hydra` branches across conversation paths, `jailbreak:meta` iterates through approaches—so a small number of seeds produces broad coverage.
+Promptfoo's red team config does not impose a fixed low cap on `numTests`; it accepts any positive integer. Each test case is a seed that strategies evolve into many attack attempts: `jailbreak:hydra` branches across conversation paths, and `jailbreak:meta` iterates through approaches. As a result, a small number of seeds can still produce broad coverage.
 
-The default is 10 per plugin and most use cases need fewer than 50. If you're experiencing generation failures, try lowering the count.
+The default is 5 tests per plugin, and most use cases need fewer than 50. If you're experiencing generation failures, try lowering the count.
 
 ## Alternative Options
 
