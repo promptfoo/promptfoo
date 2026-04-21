@@ -5,7 +5,11 @@ import { createMockResponse } from '../../util/utils';
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
 const mockFetchWithProxy = vi.hoisted(() => vi.fn());
+const mockGetRemoteGenerationUrl = vi.hoisted(() => vi.fn());
+const mockNeverGenerateRemote = vi.hoisted(() => vi.fn());
 const mockGetGraderById = vi.hoisted(() => vi.fn());
+const mockGetUserEmail = vi.hoisted(() => vi.fn());
+const mockGetLogLevel = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -14,8 +18,8 @@ vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
 
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
   ...(await importOriginal()),
-  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
-  neverGenerateRemote: vi.fn().mockReturnValue(false),
+  getRemoteGenerationUrl: mockGetRemoteGenerationUrl,
+  neverGenerateRemote: mockNeverGenerateRemote,
 }));
 
 vi.mock('../../../src/redteam/graders', async (importOriginal) => ({
@@ -25,7 +29,7 @@ vi.mock('../../../src/redteam/graders', async (importOriginal) => ({
 
 vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal()),
-  getUserEmail: vi.fn().mockReturnValue('tester@example.com'),
+  getUserEmail: mockGetUserEmail,
 }));
 
 vi.mock('../../../src/logger', () => ({
@@ -35,7 +39,7 @@ vi.mock('../../../src/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
-  getLogLevel: vi.fn().mockReturnValue('info'),
+  getLogLevel: mockGetLogLevel,
 }));
 
 describe('RedteamOdcvProvider', () => {
@@ -43,7 +47,12 @@ describe('RedteamOdcvProvider', () => {
   let context: CallApiContextParams;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockFetchWithProxy.mockReset();
+    mockGetRemoteGenerationUrl.mockReset().mockReturnValue('https://api.promptfoo.app/api/v1/task');
+    mockNeverGenerateRemote.mockReset().mockReturnValue(false);
+    mockGetGraderById.mockReset();
+    mockGetUserEmail.mockReset().mockReturnValue('tester@example.com');
+    mockGetLogLevel.mockReset().mockReturnValue('info');
     targetProvider = {
       id: () => 'target-provider',
       callApi: vi.fn().mockResolvedValue({
