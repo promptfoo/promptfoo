@@ -1,4 +1,4 @@
-# config-external-defaulttest
+# config-external-defaulttest (External Default Test Configuration)
 
 This example demonstrates how to use the `file://` syntax to load `defaultTest` configuration from an external file.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-external-defaulttest
+cd config-external-defaulttest
 ```
 
 ## Overview
@@ -19,7 +20,7 @@ Instead of defining `defaultTest` inline in your main configuration file, you ca
 
 ## Structure
 
-```
+```text
 external-defaulttest/
 ├── promptfooconfig.yaml      # Main configuration file
 ├── shared/

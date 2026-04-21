@@ -75,12 +75,14 @@ export function ProductGrid({ products, isLoading, error }: ProductGridProps) {
         display: 'grid',
         gridTemplateColumns: {
           xs: 'repeat(2, 1fr)',
-          sm: 'repeat(3, 1fr)',
-          md: 'repeat(4, 1fr)',
-          lg: 'repeat(5, 1fr)',
+          sm: 'repeat(2, 1fr)',
+          md: 'repeat(3, 1fr)',
+          lg: 'repeat(4, 1fr)',
         },
-        gap: { xs: 1, sm: 2 },
-        px: { xs: 1, sm: 2, md: 4 },
+        gap: { xs: 1.5, sm: 2.5 },
+        maxWidth: '1200px',
+        mx: 'auto',
+        px: { xs: 1.5, sm: 3, md: 4 },
         py: { xs: 2, sm: 3 },
       }}
     >

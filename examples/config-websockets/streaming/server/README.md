@@ -1,4 +1,4 @@
-# OpenAI WebSocket Server (Express)
+# config-websockets/streaming/server (OpenAI WebSocket Server)
 
 Simple Node.js server using Express and native WebSockets that exposes two real-time endpoints to interact with the OpenAI Responses API.
 

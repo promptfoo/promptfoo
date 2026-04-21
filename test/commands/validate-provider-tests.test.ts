@@ -5,11 +5,11 @@ import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
-import { getOrDownloadProviderFile } from '../../src/util/providerFileCache';
+import { resolveProviderFileProviderId } from '../../src/util/providerFileCache';
 import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
+import { createMockProvider, type MockApiProvider } from '../factories/provider';
 
 import type { UnifiedConfig } from '../../src/types/index';
-import type { ApiProvider } from '../../src/types/providers';
 
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/load');
@@ -36,42 +36,34 @@ describe('Validate Command Provider Tests', () => {
   const defaultConfig = {} as UnifiedConfig;
   const defaultConfigPath = 'config.yaml';
 
-  // Mock provider objects
-  const mockHttpProvider: ApiProvider = {
-    id: () => 'http://example.com',
-    callApi: vi.fn(),
-    constructor: { name: 'HttpProvider' },
-  } as any;
-
-  const mockEchoProvider: ApiProvider = {
-    id: () => 'echo',
-    callApi: vi.fn(),
-    constructor: { name: 'EchoProvider' },
-  } as any;
-
-  const mockOpenAIProvider: ApiProvider = {
-    id: 'openai:gpt-4',
-    callApi: vi.fn(),
-    constructor: { name: 'OpenAIProvider' },
-  } as any;
+  // Mock provider objects. isHttpProvider() only checks provider.id / config.url,
+  // so createMockProvider with the right id is sufficient. These must be rebuilt in
+  // beforeEach because this file's afterEach calls vi.resetAllMocks(), which wipes
+  // the id mock implementation.
+  let mockHttpProvider: MockApiProvider;
+  let mockEchoProvider: MockApiProvider;
+  let mockOpenAIProvider: MockApiProvider;
 
   beforeEach(() => {
     program = new Command();
     vi.clearAllMocks();
     process.exitCode = 0;
 
-    // Default mock for successful basic connectivity
-    (mockEchoProvider.callApi as Mock).mockResolvedValue({
-      output: 'Hello, world!',
+    mockHttpProvider = createMockProvider({
+      id: 'http://example.com',
+      response: { output: 'Test response' },
     });
-
-    (mockHttpProvider.callApi as Mock).mockResolvedValue({
-      output: 'Test response',
+    mockEchoProvider = createMockProvider({
+      id: 'echo',
+      response: { output: 'Hello, world!' },
     });
-
-    (mockOpenAIProvider.callApi as Mock).mockResolvedValue({
-      output: 'OpenAI response',
+    mockOpenAIProvider = createMockProvider({
+      id: 'openai:gpt-4',
+      response: { output: 'OpenAI response' },
     });
+    vi.mocked(resolveProviderFileProviderId).mockImplementation(
+      async (_providerId, originalProviderId) => originalProviderId,
+    );
   });
 
   afterEach(() => {
@@ -138,12 +130,10 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should skip session test when target is not stateful (stateful=false)', async () => {
-      const mockNonStatefulHttpProvider: ApiProvider = {
-        id: () => 'http://example.com',
-        callApi: vi.fn(),
+      const mockNonStatefulHttpProvider = createMockProvider({
+        id: 'http://example.com',
         config: { stateful: false },
-        constructor: { name: 'HttpProvider' },
-      } as any;
+      });
 
       vi.mocked(loadApiProvider).mockResolvedValue(mockNonStatefulHttpProvider);
       vi.mocked(testProviderConnectivity).mockResolvedValue({
@@ -212,26 +202,36 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
       const mockProviderFile = {
+        id: 'file-123',
         filename: 'custom_provider.py',
-        checksum: 'abc123',
+        checksumSha256: 'a'.repeat(64),
         language: 'python',
+        contentType: 'text/x-python',
+        sizeBytes: 1024,
+        description: null,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
       };
 
       vi.mocked(getProviderFromCloud).mockResolvedValue({
         provider: mockProviderOptions,
         providerFile: mockProviderFile,
       } as any);
-      vi.mocked(getOrDownloadProviderFile).mockResolvedValue(
-        '/home/user/.promptfoo/provider-files/abc123.py',
+      vi.mocked(resolveProviderFileProviderId).mockResolvedValue(
+        `file:///home/user/.promptfoo/provider-files/${'a'.repeat(64)}.py`,
       );
       vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
       expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
-      expect(getOrDownloadProviderFile).toHaveBeenCalledWith(cloudUUID, mockProviderFile);
+      expect(resolveProviderFileProviderId).toHaveBeenCalledWith(
+        cloudUUID,
+        'file://original-path.py',
+        mockProviderFile,
+      );
       expect(loadApiProvider).toHaveBeenCalledWith(
-        'file:///home/user/.promptfoo/provider-files/abc123.py',
+        `file:///home/user/.promptfoo/provider-files/${'a'.repeat(64)}.py`,
         expect.objectContaining({
           options: mockProviderOptions,
         }),
@@ -245,21 +245,31 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
       const mockProviderFile = {
+        id: 'file-123',
         filename: 'custom_provider.py',
-        checksum: 'abc123',
+        checksumSha256: 'b'.repeat(64),
         language: 'python',
+        contentType: 'text/x-python',
+        sizeBytes: 1024,
+        description: null,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
       };
 
       vi.mocked(getProviderFromCloud).mockResolvedValue({
         provider: mockProviderOptions,
         providerFile: mockProviderFile,
       } as any);
-      vi.mocked(getOrDownloadProviderFile).mockResolvedValue(null);
+      vi.mocked(resolveProviderFileProviderId).mockResolvedValue('file://original-path.py');
       vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
-      expect(getOrDownloadProviderFile).toHaveBeenCalledWith(cloudUUID, mockProviderFile);
+      expect(resolveProviderFileProviderId).toHaveBeenCalledWith(
+        cloudUUID,
+        'file://original-path.py',
+        mockProviderFile,
+      );
       // Falls back to original id when download returns null
       expect(loadApiProvider).toHaveBeenCalledWith(
         'file://original-path.py',
@@ -269,7 +279,7 @@ describe('Validate Command Provider Tests', () => {
       );
     });
 
-    it('should not call getOrDownloadProviderFile when providerFile is null', async () => {
+    it('should not resolve a provider file when providerFile is null', async () => {
       const cloudUUID = '12345678-1234-1234-1234-123456789abc';
       const mockProviderOptions = {
         id: 'openai:gpt-4',
@@ -284,7 +294,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
-      expect(getOrDownloadProviderFile).not.toHaveBeenCalled();
+      expect(resolveProviderFileProviderId).toHaveBeenCalledWith(cloudUUID, 'openai:gpt-4', null);
       expect(loadApiProvider).toHaveBeenCalledWith(
         'openai:gpt-4',
         expect.objectContaining({
@@ -304,8 +314,8 @@ describe('Validate Command Provider Tests', () => {
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
         providers: [
-          { id: () => 'echo', label: 'echo', callApi: () => Promise.resolve({}) },
-          { id: () => 'openai:gpt-4', label: 'openai', callApi: () => Promise.resolve({}) },
+          createMockProvider({ id: 'echo', label: 'echo', response: {} }),
+          createMockProvider({ id: 'openai:gpt-4', label: 'openai', response: {} }),
         ],
         tests: [],
       };
@@ -410,11 +420,10 @@ describe('Validate Command Provider Tests', () => {
 
   describe('HTTP provider detection with target flag', () => {
     it('should detect HTTP provider by url in id when using target', async () => {
-      const mockHttpProviderById: ApiProvider = {
-        id: () => 'http://custom-api.com',
-        callApi: vi.fn().mockResolvedValue({ output: 'HTTP response' }),
-        constructor: { name: 'HttpProvider' },
-      } as any;
+      const mockHttpProviderById = createMockProvider({
+        id: 'http://custom-api.com',
+        response: { output: 'HTTP response' },
+      });
 
       vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProviderById);
       vi.mocked(testProviderConnectivity).mockResolvedValue({

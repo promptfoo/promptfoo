@@ -9,6 +9,7 @@ import {
   getEvalConfigFromCloud,
   getPluginSeverityOverridesFromCloud,
   getPoliciesFromCloud,
+  getProviderFileFromCloud,
   getProviderFromCloud,
   makeRequest,
   validateLinkedTargetId,
@@ -270,6 +271,77 @@ describe('cloud utils', () => {
 
       await expect(getProviderFromCloud('test-provider')).rejects.toThrow(
         'Failed to fetch provider from cloud: test-provider.',
+      );
+    });
+  });
+
+  describe('getProviderFileFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch and parse provider file content successfully', async () => {
+      const mockProviderFile = {
+        id: 'file-123',
+        filename: 'provider.py',
+        language: 'python',
+        contentType: 'text/x-python',
+        sizeBytes: 42,
+        checksumSha256: 'a'.repeat(64),
+        description: null,
+        createdAt: '2024-01-01T00:00:00Z',
+        updatedAt: '2024-01-01T00:00:00Z',
+        content: 'def call_api(prompt, options, context):\n    return {"output": prompt}\n',
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () => Promise.resolve(mockProviderFile),
+        ok: true,
+        status: 200,
+      } as Response);
+
+      await expect(getProviderFileFromCloud('provider-123')).resolves.toEqual(mockProviderFile);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/providers/provider-123/file',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should return null when provider file is not found', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      } as Response);
+
+      await expect(getProviderFileFromCloud('provider-123')).resolves.toBeNull();
+    });
+
+    it('should reject invalid provider file responses', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: () =>
+          Promise.resolve({
+            id: 'file-123',
+            filename: 'provider.py',
+            language: 'python',
+            contentType: 'text/x-python',
+            sizeBytes: 42,
+            checksumSha256: 'abc123',
+            description: null,
+            createdAt: '2024-01-01T00:00:00Z',
+            updatedAt: '2024-01-01T00:00:00Z',
+            content: 'content',
+          }),
+        ok: true,
+        status: 200,
+      } as Response);
+
+      await expect(getProviderFileFromCloud('provider-123')).rejects.toThrow(
+        'Failed to fetch provider file from cloud for provider: provider-123.',
       );
     });
   });

@@ -23,7 +23,7 @@ export const ProviderFileMetadataSchema = z.object({
   language: z.enum(['javascript', 'python']),
   contentType: z.string(),
   sizeBytes: z.number(),
-  checksumSha256: z.string().regex(/^[0-9a-f]+$/i, 'Invalid SHA256 checksum format'),
+  checksumSha256: z.string().regex(/^[0-9a-f]{64}$/i, 'Invalid SHA256 checksum format'),
   description: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -34,9 +34,11 @@ export type ProviderFileMetadata = z.infer<typeof ProviderFileMetadataSchema>;
 /**
  * Provider file with content included.
  */
-export interface ProviderFileWithContent extends ProviderFileMetadata {
-  content: string;
-}
+const ProviderFileWithContentSchema = ProviderFileMetadataSchema.extend({
+  content: z.string(),
+});
+
+export type ProviderFileWithContent = z.infer<typeof ProviderFileWithContentSchema>;
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
 const PERMISSION_CHECK_SERVER_FEATURE_DATE = '2025-09-03T14:49:11Z';
@@ -228,9 +230,9 @@ function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
 
   const commandLineOptions = {
     ...(isRecord(config.commandLineOptions) ? config.commandLineOptions : {}),
-    ...(config.maxConcurrency != null ? { maxConcurrency: config.maxConcurrency } : {}),
-    ...(config.delay != null ? { delay: config.delay } : {}),
-    ...(config.verbose != null ? { verbose: config.verbose } : {}),
+    ...(config.maxConcurrency == null ? {} : { maxConcurrency: config.maxConcurrency }),
+    ...(config.delay == null ? {} : { delay: config.delay }),
+    ...(config.verbose == null ? {} : { verbose: config.verbose }),
   };
 
   const normalizedConfig: Record<string, unknown> = {
@@ -292,8 +294,9 @@ export async function getProviderFileFromCloud(
     }
 
     const body = await response.json();
-    logger.debug(`[Cloud] Provider file fetched for provider ${providerId}: ${body.filename}`);
-    return body as ProviderFileWithContent;
+    const parsed = ProviderFileWithContentSchema.parse(body);
+    logger.debug(`[Cloud] Provider file fetched for provider ${providerId}: ${parsed.filename}`);
+    return parsed;
   } catch (e) {
     if ((e as Error).message?.includes('404')) {
       return null;
@@ -450,7 +453,10 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
  * @returns Promise resolving to an array of team objects
  * @throws Error if the request fails
  */
-export async function getUserTeams(): Promise<
+export async function getUserTeams(
+  apiHost?: string,
+  apiKey?: string,
+): Promise<
   Array<{
     id: string;
     name: string;
@@ -460,7 +466,14 @@ export async function getUserTeams(): Promise<
     updatedAt: string;
   }>
 > {
-  const response = await makeRequest(`/users/me/teams`, 'GET');
+  const response =
+    apiHost && apiKey
+      ? await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        })
+      : await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
     throw new Error(`Failed to get user teams: ${response.statusText}`);
   }

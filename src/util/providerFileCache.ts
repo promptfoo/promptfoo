@@ -9,6 +9,7 @@
  */
 import { createHash } from 'crypto';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import { isCacheEnabled } from '../cache';
@@ -17,7 +18,8 @@ import { getProviderFileFromCloud, type ProviderFileMetadata } from './cloud';
 import { getConfigDirectoryPath } from './config/manage';
 
 const PROVIDER_FILES_CACHE_DIR = 'provider-files';
-const HEX_PATTERN = /^[0-9a-f]+$/i;
+const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/i;
+const EXTENSION_PATTERN = /^(?:js|py)$/;
 const ALLOWED_EXTENSIONS: Record<string, string> = {
   python: 'py',
   javascript: 'js',
@@ -50,10 +52,17 @@ function getFileExtension(language: string): string {
  * Validates a checksum string contains only hex characters.
  */
 function validateChecksum(checksum: string): string {
-  if (!checksum || !HEX_PATTERN.test(checksum)) {
-    throw new Error(`Invalid checksum format: expected hex string`);
+  if (!checksum || !SHA256_HEX_PATTERN.test(checksum)) {
+    throw new Error(`Invalid checksum format: expected SHA256 hex string`);
   }
   return checksum;
+}
+
+function validateExtension(extension: string): string {
+  if (!EXTENSION_PATTERN.test(extension)) {
+    throw new Error(`Invalid provider file extension: ${extension}`);
+  }
+  return extension;
 }
 
 /**
@@ -62,7 +71,8 @@ function validateChecksum(checksum: string): string {
  */
 function getCachedFilePath(checksum: string, extension: string): string {
   const safeChecksum = validateChecksum(checksum);
-  const filename = `${safeChecksum}.${extension}`;
+  const safeExtension = validateExtension(extension);
+  const filename = `${safeChecksum}.${safeExtension}`;
   return path.join(getProviderFilesCacheDir(), filename);
 }
 
@@ -96,6 +106,52 @@ export function cacheProviderFile(content: string, checksum: string, extension: 
   return cachedPath;
 }
 
+function writeTemporaryProviderFile(content: string, checksum: string, extension: string): string {
+  const safeChecksum = validateChecksum(checksum);
+  const safeExtension = validateExtension(extension);
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-provider-file-'));
+  const tempPath = path.join(tempDir, `${safeChecksum}.${safeExtension}`);
+  fs.writeFileSync(tempPath, content, 'utf-8');
+  logger.debug(`[ProviderFileCache] Wrote temporary provider file to ${tempPath}`);
+  return tempPath;
+}
+
+function getProviderFileFunctionSuffix(providerId: string): string {
+  const scriptPath =
+    providerId.startsWith('file://') || providerId.startsWith('python:')
+      ? providerId.slice(providerId.indexOf(':') + 1).replace(/^\/\//, '')
+      : providerId;
+  const lastColonIndex = scriptPath.lastIndexOf(':');
+  if (lastColonIndex <= 1) {
+    return '';
+  }
+
+  const pathWithoutFunction = scriptPath.slice(0, lastColonIndex);
+  if (!pathWithoutFunction.endsWith('.py')) {
+    return '';
+  }
+
+  const functionName = scriptPath.slice(lastColonIndex + 1);
+  return functionName ? `:${functionName}` : '';
+}
+
+export async function resolveProviderFileProviderId(
+  providerId: string,
+  originalProviderId: string,
+  fileMetadata?: ProviderFileMetadata | null,
+): Promise<string> {
+  if (!fileMetadata) {
+    return originalProviderId;
+  }
+
+  const providerFilePath = await getOrDownloadProviderFile(providerId, fileMetadata);
+  if (!providerFilePath) {
+    return originalProviderId;
+  }
+
+  return `file://${providerFilePath}${getProviderFileFunctionSuffix(originalProviderId)}`;
+}
+
 /**
  * Gets or downloads a provider file from cloud.
  * If the file is already cached (by checksum), returns the cached path.
@@ -109,8 +165,9 @@ export async function getOrDownloadProviderFile(
   providerId: string,
   fileMetadata?: ProviderFileMetadata | null,
 ): Promise<string | null> {
+  const cacheEnabled = isCacheEnabled();
   // If we have metadata and cache is enabled, check cache first
-  if (fileMetadata && isCacheEnabled()) {
+  if (fileMetadata && cacheEnabled) {
     const extension = getFileExtension(fileMetadata.language);
     const cachedPath = getCachedProviderFile(fileMetadata.checksumSha256, extension);
     if (cachedPath) {
@@ -137,26 +194,16 @@ export async function getOrDownloadProviderFile(
 
   // Cache the file
   const extension = getFileExtension(fileWithContent.language);
-  const cachedPath = cacheProviderFile(
-    fileWithContent.content,
-    fileWithContent.checksumSha256,
-    extension,
-  );
+  const cachedPath = cacheEnabled
+    ? cacheProviderFile(fileWithContent.content, fileWithContent.checksumSha256, extension)
+    : writeTemporaryProviderFile(
+        fileWithContent.content,
+        fileWithContent.checksumSha256,
+        extension,
+      );
 
   logger.info(
-    `[ProviderFileCache] Downloaded and cached ${fileWithContent.filename} for provider ${providerId}`,
+    `[ProviderFileCache] Downloaded ${fileWithContent.filename} for provider ${providerId}`,
   );
   return cachedPath;
-}
-
-/**
- * Clears the provider files cache.
- * This can be used to force re-download of all provider files.
- */
-export function clearProviderFilesCache(): void {
-  const cacheDir = path.join(getConfigDirectoryPath(), PROVIDER_FILES_CACHE_DIR);
-  if (fs.existsSync(cacheDir)) {
-    fs.rmSync(cacheDir, { recursive: true });
-    logger.info('[ProviderFileCache] Cleared provider files cache');
-  }
 }

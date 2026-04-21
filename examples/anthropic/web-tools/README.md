@@ -1,4 +1,4 @@
-# web-tools
+# anthropic/web-tools (Anthropic Web Tools)
 
 This example demonstrates Anthropic's web search and web fetch tools, showing both basic URL fetching and comprehensive research workflows.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example anthropic/web-tools
+cd anthropic/web-tools
 ```
 
 ## Features Demonstrated

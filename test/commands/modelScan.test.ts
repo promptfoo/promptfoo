@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import { checkModelAuditInstalled, modelScanCommand } from '../../src/commands/modelScan';
 import logger from '../../src/logger';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('child_process');
 vi.mock('../../src/logger');
@@ -17,6 +18,9 @@ vi.mock('../../src/globalConfig/cloud', () => ({
   cloudConfig: {
     isEnabled: vi.fn().mockReturnValue(false),
   },
+}));
+vi.mock('../../src/globalConfig/accounts', () => ({
+  getAuthor: vi.fn().mockReturnValue(null),
 }));
 vi.mock('../../src/models/modelAudit', () => ({
   __esModule: true,
@@ -50,6 +54,7 @@ describe('modelScanCommand', () => {
     mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
       return undefined as never;
     });
+    process.exitCode = 0;
     vi.clearAllMocks();
 
     // Reset mock implementations (clearAllMocks only clears call history, not implementations)
@@ -79,6 +84,7 @@ describe('modelScanCommand', () => {
 
   afterEach(() => {
     mockExit.mockRestore();
+    process.exitCode = 0;
   });
 
   it('should exit if no paths are provided', async () => {
@@ -91,6 +97,10 @@ describe('modelScanCommand', () => {
     modelScanCommand(program);
 
     const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    command?.configureOutput({
+      writeErr: vi.fn(),
+      writeOut: vi.fn(),
+    });
     // Parse without path argument - Commander requires paths but the action should handle this
     try {
       await command?.parseAsync(['node', 'scan-model']);
@@ -104,8 +114,6 @@ describe('modelScanCommand', () => {
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(1);
 
-    // Reset exitCode for other tests
-    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -146,8 +154,6 @@ describe('modelScanCommand', () => {
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(1);
 
-    // Reset exitCode for other tests
-    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -222,6 +228,118 @@ describe('modelScanCommand', () => {
     );
   });
 
+  it('should pass scanner selection options to modelaudit', async () => {
+    const mockChildProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    await command.parseAsync([
+      'node',
+      'scan-model',
+      'model.pkl',
+      '--scanners',
+      'pickle,tf_savedmodel',
+      '--scanners',
+      'PickleScanner',
+      '--exclude-scanner',
+      'weight_distribution',
+      '--no-write',
+    ]);
+
+    expect(spawn).toHaveBeenCalledWith(
+      'modelaudit',
+      [
+        'scan',
+        'model.pkl',
+        '--format',
+        'text',
+        '--timeout',
+        '300',
+        '--scanners',
+        'pickle,tf_savedmodel',
+        '--scanners',
+        'PickleScanner',
+        '--exclude-scanner',
+        'weight_distribution',
+      ],
+      expect.objectContaining({
+        stdio: 'inherit',
+      }),
+    );
+  });
+
+  it('should keep no-write JSON passthrough output free of promptfoo logs', async () => {
+    const mockChildProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    await command.parseAsync([
+      'node',
+      'scan-model',
+      'model.pkl',
+      '--scanners',
+      'pickle',
+      '--format',
+      'json',
+      '--no-write',
+    ]);
+
+    expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Running model scan on:'));
+  });
+
+  it('should list modelaudit scanners without requiring paths', async () => {
+    const mockChildProcess = {
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockChildProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockChildProcess);
+
+    modelScanCommand(program);
+
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model')!;
+    await command.parseAsync(['node', 'scan-model', '--list-scanners', '--format', 'json']);
+
+    expect(spawn).toHaveBeenCalledWith(
+      'modelaudit',
+      ['scan', '--format', 'json', '--list-scanners'],
+      expect.objectContaining({
+        stdio: 'inherit',
+      }),
+    );
+    expect(process.exitCode).toBe(0);
+  });
+
   it('should handle modelaudit process error', async () => {
     // Mock logger.error to capture the output
     const loggerErrorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
@@ -261,8 +379,6 @@ describe('modelScanCommand', () => {
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(1);
 
-    // Reset exitCode for other tests
-    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 
@@ -290,9 +406,6 @@ describe('modelScanCommand', () => {
 
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(1);
-
-    // Reset exitCode for other tests
-    process.exitCode = 0;
   });
 
   it('should handle exit code 2 (scan process error) in --no-write mode', async () => {
@@ -324,8 +437,6 @@ describe('modelScanCommand', () => {
     // Now uses process.exitCode instead of process.exit()
     expect(process.exitCode).toBe(2);
 
-    // Reset exitCode for other tests
-    process.exitCode = 0;
     loggerErrorSpy.mockRestore();
   });
 });
@@ -406,6 +517,153 @@ describe('Re-scan on version change behavior', () => {
     expect(mockExit).not.toHaveBeenCalled();
     // Should not call spawn for actual scan (version check uses getModelAuditCurrentVersion)
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('should not reuse a revision match when scanner selection is requested', async () => {
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
+      '../../src/util/huggingfaceMetadata'
+    );
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+
+    (isHuggingFaceModel as Mock).mockReturnValue(true);
+    (parseHuggingFaceModel as Mock).mockReturnValue({
+      owner: 'test-owner',
+      repo: 'test-model',
+    });
+    (getHuggingFaceMetadata as Mock).mockResolvedValue({
+      sha: 'abc123',
+      siblings: [],
+    });
+    const existingAudit = {
+      id: 'existing-scan-id',
+      scannerVersion: '0.2.16',
+      createdAt: Date.now(),
+      results: {},
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+    (ModelAudit.findByRevision as Mock).mockResolvedValue(existingAudit);
+
+    const mockScanOutput = JSON.stringify({
+      total_checks: 10,
+      passed_checks: 10,
+      failed_checks: 0,
+      files_scanned: 1,
+      bytes_scanned: 1024,
+      duration: 1000,
+      issues: [],
+      checks: [],
+    });
+
+    const mockScanProcess = {
+      stdout: {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
+          if (event === 'data') {
+            callback(Buffer.from(mockScanOutput));
+          }
+        }),
+      },
+      stderr: { on: vi.fn() },
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockScanProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockScanProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    await command?.parseAsync([
+      'node',
+      'scan-model',
+      'hf://test-owner/test-model',
+      '--scanners',
+      'pickle',
+    ]);
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const args = (spawn as Mock).mock.calls[0][1] as string[];
+    expect(args).toContain('--scanners');
+    expect(args).toContain('pickle');
+    expect(existingAudit.save).toHaveBeenCalledTimes(1);
+    expect(ModelAudit.create).not.toHaveBeenCalled();
+  });
+
+  it('should not reuse a revision match when the cached scan used scanner selection', async () => {
+    const { isHuggingFaceModel, getHuggingFaceMetadata, parseHuggingFaceModel } = await import(
+      '../../src/util/huggingfaceMetadata'
+    );
+    const ModelAudit = (await import('../../src/models/modelAudit')).default;
+
+    (isHuggingFaceModel as Mock).mockReturnValue(true);
+    (parseHuggingFaceModel as Mock).mockReturnValue({
+      owner: 'test-owner',
+      repo: 'test-model',
+    });
+    (getHuggingFaceMetadata as Mock).mockResolvedValue({
+      sha: 'abc123',
+      siblings: [],
+    });
+    const existingAudit = {
+      id: 'filtered-scan-id',
+      scannerVersion: '0.2.16',
+      createdAt: Date.now(),
+      results: {},
+      metadata: {
+        options: {
+          scanners: ['pickle'],
+        },
+      },
+      save: vi.fn().mockResolvedValue(undefined),
+    };
+    (ModelAudit.findByRevision as Mock).mockResolvedValue(existingAudit);
+
+    const mockScanOutput = JSON.stringify({
+      total_checks: 10,
+      passed_checks: 10,
+      failed_checks: 0,
+      files_scanned: 1,
+      bytes_scanned: 1024,
+      duration: 1000,
+      issues: [],
+      checks: [],
+    });
+
+    const mockScanProcess = {
+      stdout: {
+        on: vi.fn().mockImplementation(function (event: string, callback: any) {
+          if (event === 'data') {
+            callback(Buffer.from(mockScanOutput));
+          }
+        }),
+      },
+      stderr: { on: vi.fn() },
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn().mockImplementation(function (event: string, callback: any) {
+        if (event === 'close') {
+          callback(0);
+        }
+        return mockScanProcess;
+      }),
+    } as unknown as ChildProcess;
+
+    (spawn as unknown as Mock).mockReturnValue(mockScanProcess);
+
+    modelScanCommand(program);
+    const command = program.commands.find((cmd) => cmd.name() === 'scan-model');
+    await command?.parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
+
+    expect(spawn).toHaveBeenCalledTimes(1);
+    const args = (spawn as Mock).mock.calls[0][1] as string[];
+    expect(args).not.toContain('--scanners');
+    expect(args).not.toContain('--exclude-scanner');
+    expect(existingAudit.save).toHaveBeenCalledTimes(1);
+    expect(ModelAudit.create).not.toHaveBeenCalled();
   });
 
   it('should re-scan when scanner version has changed', async () => {
@@ -685,6 +943,9 @@ describe('Command Options Validation', () => {
       '--quiet',
       '--progress',
       '--stream',
+      '--scanners',
+      '--exclude-scanner',
+      '--list-scanners',
       '--verbose',
     ];
 
@@ -1062,7 +1323,7 @@ describe('Sharing behavior', () => {
   afterEach(() => {
     mockExit.mockRestore();
     process.exitCode = 0;
-    delete process.env.PROMPTFOO_DISABLE_SHARING;
+    mockProcessEnv({ PROMPTFOO_DISABLE_SHARING: undefined });
   });
 
   // Helper to create a mock scan process that returns valid JSON results
@@ -1099,7 +1360,7 @@ describe('Sharing behavior', () => {
   }
 
   it('should not share when PROMPTFOO_DISABLE_SHARING env var is set', async () => {
-    process.env.PROMPTFOO_DISABLE_SHARING = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_SHARING: 'true' });
     cloudConfigIsEnabledMock.mockReturnValue(true);
     isModelAuditSharingEnabledMock.mockReturnValue(true);
 

@@ -1,4 +1,11 @@
-# OpenTelemetry Tracing Example
+# integration-opentelemetry/built-in (OpenTelemetry Built-in Tracing)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example integration-opentelemetry/built-in
+cd integration-opentelemetry/built-in
+```
 
 This example demonstrates promptfoo's built-in OpenTelemetry tracing for LLM provider calls.
 

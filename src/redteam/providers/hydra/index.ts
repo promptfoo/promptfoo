@@ -13,7 +13,12 @@ import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
+import {
+  getRemoteGenerationDisabledError,
+  getRemoteGenerationExplicitlyDisabledError,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../remoteGeneration';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -31,10 +36,13 @@ import {
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
+  isConversationEndedResponse,
   isValidChatMessageArray,
   type Message,
   type TargetResponse,
+  type TurnBacktrackingStopReason,
 } from '../shared';
 import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
 import { resolveTracingOptions } from '../tracingOptions';
@@ -51,6 +59,7 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 
 const DEFAULT_MAX_TURNS = 10;
@@ -60,7 +69,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
   hydraRoundsCompleted: number;
   hydraBacktrackCount: number;
   hydraResult: boolean;
-  stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached';
+  stopReason: TurnBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     message: string;
@@ -161,7 +170,9 @@ export class HydraProvider implements ApiProvider {
     // Hydra strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:hydra strategy requires remote generation, which is currently disabled (commonly because OPENAI_API_KEY is set). To fix, unset OPENAI_API_KEY, set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
+        neverGenerateRemote()
+          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:hydra strategy')
+          : getRemoteGenerationDisabledError('jailbreak:hydra strategy'),
       );
     }
 
@@ -269,8 +280,7 @@ export class HydraProvider implements ApiProvider {
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
-    let stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached' =
-      'Max turns reached';
+    let stopReason: TurnBacktrackingStopReason = 'Max turns reached';
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
@@ -603,6 +613,15 @@ export class HydraProvider implements ApiProvider {
         hasTrace: !!traceContext,
       });
 
+      if (isConversationEndedResponse(targetResponse)) {
+        logger.info('[Hydra] Target ended conversation', {
+          turn,
+          reason: targetResponse.conversationEndReason,
+        });
+        stopReason = 'Target ended conversation';
+        break;
+      }
+
       if (targetResponse.error) {
         logger.info('[Hydra] Target error', { turn, error: targetResponse.error });
         continue;
@@ -735,21 +754,13 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with tracing and exfil tracking data
-          let gradingContext:
-            | {
-                traceContext?: TraceContextData | null;
-                traceSummary?: string;
-                wasExfiltrated?: boolean;
-                exfilCount?: number;
-                exfilRecords?: Array<{
-                  timestamp: string;
-                  ip: string;
-                  userAgent: string;
-                  queryParams: Record<string, string>;
-                }>;
-              }
-            | undefined;
+          // Build grading context with provider raw output, tracing, and exfil tracking data.
+          const gradingContext: RedteamGradingContext = {
+            providerResponse: targetResponse,
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: gradingTraceSummary }
+              : {}),
+          };
 
           // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
           // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
@@ -771,14 +782,11 @@ export class HydraProvider implements ApiProvider {
             try {
               const exfilData = await checkExfilTracking(webPageUuid, evalId);
               if (exfilData) {
-                gradingContext = {
-                  ...(tracingOptions.includeInGrading
-                    ? { traceContext, traceSummary: gradingTraceSummary }
-                    : {}),
+                Object.assign(gradingContext, {
                   wasExfiltrated: exfilData.wasExfiltrated,
                   exfilCount: exfilData.exfilCount,
                   exfilRecords: exfilData.exfilRecords,
-                };
+                });
               }
             } catch (error) {
               logger.warn('[Hydra] Failed to fetch exfil tracking from server', {
@@ -789,21 +797,16 @@ export class HydraProvider implements ApiProvider {
           }
 
           // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-          if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+          if (
+            gradingContext.wasExfiltrated === undefined &&
+            targetResponse.metadata?.wasExfiltrated !== undefined
+          ) {
             logger.debug('[Hydra] Using exfil data from provider response metadata (fallback)');
-            gradingContext = {
-              ...(tracingOptions.includeInGrading
-                ? { traceContext, traceSummary: gradingTraceSummary }
-                : {}),
+            Object.assign(gradingContext, {
               wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
               exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
               exfilRecords: [],
-            };
-          }
-
-          // Fallback to just tracing context if no exfil data found
-          if (!gradingContext && tracingOptions.includeInGrading) {
-            gradingContext = { traceContext, traceSummary: gradingTraceSummary };
+            });
           }
 
           const { grade, rubric } = await grader.getResult(
@@ -811,7 +814,7 @@ export class HydraProvider implements ApiProvider {
             targetResponse.output,
             test,
             targetProvider,
-            assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            getGraderAssertionValue(assertToUse),
             undefined, // additionalRubric
             undefined, // skipRefusalCheck
             gradingContext,

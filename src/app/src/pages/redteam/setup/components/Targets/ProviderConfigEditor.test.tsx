@@ -478,13 +478,8 @@ describe('ProviderConfigEditor', () => {
 
       // Test case 1: value is undefined -> should delete inputs field
       const updatedTarget: any = { id: 'test', config: {}, inputs: { old: 'value' } };
-      const value = undefined;
 
-      if (value === undefined) {
-        delete updatedTarget.inputs;
-      } else {
-        updatedTarget.inputs = value;
-      }
+      delete updatedTarget.inputs;
 
       expect(updatedTarget.inputs).toBeUndefined();
       expect('inputs' in updatedTarget).toBe(false);
@@ -495,11 +490,7 @@ describe('ProviderConfigEditor', () => {
       const updatedTarget = { id: 'test', config: {} } as any;
       const value = { user_id: 'A user ID', role: 'A role' };
 
-      if (value === undefined) {
-        delete updatedTarget.inputs;
-      } else {
-        updatedTarget.inputs = value;
-      }
+      updatedTarget.inputs = value;
 
       expect(updatedTarget.inputs).toEqual({ user_id: 'A user ID', role: 'A role' });
     });

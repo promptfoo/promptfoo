@@ -1,4 +1,4 @@
-# Langfuse Prompt Management with Labels
+# integration-langfuse (Langfuse Prompt Management)
 
 This example demonstrates how to use Langfuse prompt management with labels in promptfoo.
 
@@ -39,6 +39,7 @@ To get started with this example:
 
 ```bash
 npx promptfoo@latest init --example integration-langfuse
+cd integration-langfuse
 ```
 
 ## Running the example

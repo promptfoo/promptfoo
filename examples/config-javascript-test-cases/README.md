@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-javascript-test-cases
+cd config-javascript-test-cases
 ```
 
 This example demonstrates different ways to generate test cases using JavaScript/TypeScript functions. It shows both static and dynamic test case generation with optional type checking.

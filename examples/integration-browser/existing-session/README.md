@@ -1,4 +1,4 @@
-# integration-browser/existing-session
+# integration-browser/existing-session (Browser Existing Session)
 
 Test OAuth-authenticated applications by connecting to existing Chrome browser sessions.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example integration-browser/existing-session
+cd integration-browser/existing-session
 ```
 
 ## Overview
