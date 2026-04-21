@@ -652,6 +652,15 @@ function toolNameFromItem(item: Record<string, unknown>): string {
   return getString(item.tool) ?? getString(item.name) ?? getString(functionObject?.name) ?? 'tool';
 }
 
+function normalizedProviderRawItemType(item: Record<string, unknown>): string | undefined {
+  const type = getString(item.type);
+  if (!type) {
+    return undefined;
+  }
+
+  return type.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+}
+
 function isShellToolName(toolName: string): boolean {
   const normalized = toolName
     .trim()
@@ -700,6 +709,7 @@ function filePathFromReadToolInput(item: Record<string, unknown>): string | unde
   return [
     filePathFromReadInput(item.input),
     filePathFromReadInput(item.arguments),
+    filePathFromReadInput(item.args),
     filePathFromReadInput(functionObject?.arguments),
   ].find((path): path is string => Boolean(path));
 }
@@ -739,7 +749,7 @@ function shellCommandFromPayload(value: unknown): string | undefined {
     return nestedFunctionCommand;
   }
 
-  for (const key of ['arguments', 'input']) {
+  for (const key of ['arguments', 'args', 'input']) {
     const command = shellCommandFromPayload(object[key]);
     if (command) {
       return command;
@@ -760,6 +770,7 @@ function shellCommandFromToolInput(item: Record<string, unknown>): string | unde
   return [
     shellCommandFromPayload(item.input),
     shellCommandFromPayload(item.arguments),
+    shellCommandFromPayload(item.args),
     shellCommandFromPayload(functionObject?.arguments),
   ].find((command): command is string => Boolean(command));
 }
@@ -781,6 +792,7 @@ function toolInputPayload(itemObject: Record<string, unknown>): string | undefin
   return coerceFirstToolPayload(
     itemObject.input,
     itemObject.arguments,
+    itemObject.args,
     functionObject?.arguments,
     itemObject.content,
     itemObject.text,
@@ -791,6 +803,7 @@ function toolOutputPayload(itemObject: Record<string, unknown>): string | undefi
   return coerceFirstToolPayload(
     itemObject.output,
     itemObject.result,
+    itemObject.contentItems,
     itemObject.text,
     itemObject.content,
   );
@@ -947,7 +960,12 @@ function evidenceFromCommandExecutionRawItem(
 ): TargetEvidence[] {
   const evidence: TargetEvidence[] = [];
   const command = getString(itemObject.command);
-  const commandOutput = getString(itemObject.aggregated_output);
+  const commandOutput =
+    getString(itemObject.aggregated_output) ??
+    getString(itemObject.aggregatedOutput) ??
+    getString(itemObject.output) ??
+    getString(itemObject.stdout) ??
+    getString(itemObject.stderr);
   if (command) {
     evidence.push({
       evidenceSource: 'command',
@@ -1077,12 +1095,18 @@ function evidenceFromProviderRawItem(
   itemObject: Record<string, unknown>,
   index: number,
 ): TargetEvidence[] {
-  const type = getString(itemObject.type);
+  const type = normalizedProviderRawItemType(itemObject);
   if (type === 'agent_message') {
     return evidenceFromAgentMessageRawItem(itemObject, index);
   }
   if (type === 'command_execution') {
     return evidenceFromCommandExecutionRawItem(itemObject, index);
+  }
+  if (type === 'mcp_tool_call' || type === 'dynamic_tool_call') {
+    return [
+      ...evidenceFromToolUseRawItem(itemObject, index),
+      ...evidenceFromToolResultRawItem(itemObject, index),
+    ];
   }
   // `function_call` / `function_call_output` are the OpenAI Responses API
   // shapes; `custom_tool_call` / `custom_tool_call_output` are the Responses
