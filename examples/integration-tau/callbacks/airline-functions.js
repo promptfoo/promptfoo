@@ -197,8 +197,10 @@ function modifyReservation(args) {
     const { user_id, reservation_id, modification_type, new_details } = JSON.parse(args);
 
     const result = {
+      user_id,
       reservation_id,
       modification_type,
+      new_details,
       status: 'modified',
       additional_charges: modification_type === 'change_flights' ? 75 : 0,
       new_confirmation: 'CF' + Math.random().toString(36).substr(2, 8).toUpperCase(),
@@ -215,6 +217,7 @@ function cancelReservation(args) {
     const { user_id, reservation_id, reason } = JSON.parse(args);
 
     const result = {
+      user_id,
       reservation_id,
       cancellation_status: 'cancelled',
       refund_amount: reason === 'airline_cancelled' ? 325 : 250,
@@ -233,8 +236,11 @@ function offerCompensation(args) {
     const { user_id, reservation_id, issue_type, passenger_count } = JSON.parse(args);
 
     const compensation = {
+      user_id,
+      reservation_id,
       compensation_type: 'travel_certificate',
       amount: issue_type === 'cancelled_flight' ? 400 : 200,
+      passenger_count,
       certificate_id: generateCertificateId(),
       expiry_date: '2025-05-20',
       terms: 'Valid for future bookings, non-transferable',

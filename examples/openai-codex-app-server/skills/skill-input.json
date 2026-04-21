@@ -1,0 +1,11 @@
+[
+  {
+    "type": "text",
+    "text": "$skill-creator Draft a checklist for verifying a new promptfoo provider."
+  },
+  {
+    "type": "skill",
+    "name": "skill-creator",
+    "path": "{{env.CODEX_SKILL_CREATOR_PATH}}"
+  }
+]

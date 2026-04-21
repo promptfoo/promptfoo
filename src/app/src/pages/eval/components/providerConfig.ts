@@ -28,6 +28,34 @@ export interface ConfigBadge {
   tooltip?: string;
 }
 
+type ProviderMatchType = Exclude<ProviderConfigMatch['matchType'], 'none'>;
+
+interface BadgeSourceConfig {
+  reasoning_effort?: unknown;
+  model_reasoning_effort?: unknown;
+  effort?: unknown;
+  generationConfig?: {
+    thinkingConfig?: {
+      thinkingLevel?: string;
+      thinkingBudget?: number;
+    };
+  };
+  thinking?: {
+    type?: string;
+    budget_tokens?: number;
+  };
+  temperature?: unknown;
+  max_tokens?: number;
+  response_format?: {
+    type?: string;
+  };
+  stream?: unknown;
+  top_p?: unknown;
+  presence_penalty?: unknown;
+  frequency_penalty?: unknown;
+  seed?: unknown;
+}
+
 /**
  * Provider config fields that are considered "structural" rather than configuration.
  * Used to distinguish ProviderOptions objects from record-style definitions.
@@ -46,7 +74,7 @@ const PROVIDER_OPTIONS_FIELDS = new Set([
  * Normalize a provider definition to a consistent structure.
  * Handles the various formats providers can be specified in.
  */
-function normalizeProviderDef(provider: ProviderDef): ProviderOptions | null {
+function normalizeProviderDef(provider: ProviderDef | null | undefined): ProviderOptions | null {
   if (typeof provider === 'string') {
     return { id: provider };
   }
@@ -85,6 +113,82 @@ function normalizeProviderDef(provider: ProviderDef): ProviderOptions | null {
 }
 
 /**
+ * Reattach original provider fields after normalization.
+ *
+ * Normalization extracts comparable id/label/config data, but display code still
+ * needs the provider's full object shape when one was supplied.
+ */
+function mergeProviderConfig(
+  provider: ProviderDef | null | undefined,
+  normalized: ProviderOptions,
+): ProviderOptions {
+  if (typeof provider === 'object' && provider !== null) {
+    return { ...normalized, ...provider };
+  }
+  return normalized;
+}
+
+/**
+ * Build a match result using the original provider shape plus normalized fields.
+ */
+function createProviderMatch(
+  provider: ProviderDef | null | undefined,
+  normalized: ProviderOptions,
+  matchType: ProviderMatchType,
+): ProviderConfigMatch {
+  return {
+    config: mergeProviderConfig(provider, normalized),
+    matchType,
+  };
+}
+
+/**
+ * Prefer explicit provider identity matches before falling back to prompt order.
+ */
+function findIdOrLabelMatch(
+  providerString: string,
+  providersArray: ProviderDef[],
+): ProviderConfigMatch | undefined {
+  for (const provider of providersArray) {
+    const normalized = normalizeProviderDef(provider);
+    if (!normalized) {
+      continue;
+    }
+
+    if (normalized.id === providerString) {
+      return createProviderMatch(provider, normalized, 'id');
+    }
+
+    if (normalized.label === providerString) {
+      return createProviderMatch(provider, normalized, 'label');
+    }
+  }
+}
+
+/**
+ * Match by prompt/provider index for legacy configs that cannot be matched by id.
+ */
+function getFallbackProviderMatch(
+  providersArray: ProviderDef[],
+  fallbackIndex: number | undefined,
+): ProviderConfigMatch | undefined {
+  if (fallbackIndex === undefined || fallbackIndex < 0 || fallbackIndex >= providersArray.length) {
+    return undefined;
+  }
+
+  const provider = providersArray[fallbackIndex];
+  const normalized = normalizeProviderDef(provider);
+  return {
+    config: normalized
+      ? mergeProviderConfig(provider, normalized)
+      : typeof provider === 'string'
+        ? { id: provider }
+        : provider,
+    matchType: 'index',
+  };
+}
+
+/**
  * Find the provider config that matches a prompt's provider string.
  *
  * The providers array can contain:
@@ -105,71 +209,13 @@ export function findProviderConfig(
     return { config: undefined, matchType: 'none' };
   }
 
-  // First pass: try to match by id or label
-  for (const provider of providersArray) {
-    const normalized = normalizeProviderDef(provider);
-    if (!normalized) {
-      continue;
+  return (
+    findIdOrLabelMatch(providerString, providersArray) ??
+    getFallbackProviderMatch(providersArray, fallbackIndex) ?? {
+      config: undefined,
+      matchType: 'none',
     }
-
-    // Match by ID
-    if (normalized.id === providerString) {
-      return {
-        // Only spread provider if it's an object (strings would spread as indexed chars)
-        config:
-          typeof provider === 'object' && provider !== null
-            ? { ...normalized, ...provider }
-            : normalized,
-        matchType: 'id',
-      };
-    }
-
-    // Match by label
-    if (normalized.label === providerString) {
-      return {
-        config:
-          typeof provider === 'object' && provider !== null
-            ? { ...normalized, ...provider }
-            : normalized,
-        matchType: 'label',
-      };
-    }
-  }
-
-  // Second pass: check for record-style keys
-  for (const provider of providersArray) {
-    if (typeof provider === 'object' && provider !== null) {
-      const keys = Object.keys(provider);
-      if (keys.length === 1 && !PROVIDER_OPTIONS_FIELDS.has(keys[0])) {
-        if (keys[0] === providerString) {
-          const value = (provider as Record<string, unknown>)[keys[0]];
-          return {
-            config: {
-              id: keys[0],
-              ...(typeof value === 'object' && value !== null ? value : {}),
-            } as ProviderOptions,
-            matchType: 'record-key',
-          };
-        }
-      }
-    }
-  }
-
-  // Fallback to index-based matching (for backwards compatibility)
-  if (fallbackIndex !== undefined && fallbackIndex < providersArray.length) {
-    const provider = providersArray[fallbackIndex];
-    const normalized = normalizeProviderDef(provider);
-    return {
-      // Only spread provider if it's an object (strings would spread as indexed chars)
-      config:
-        normalized && typeof provider === 'object' && provider !== null
-          ? { ...normalized, ...provider }
-          : normalized || (typeof provider === 'string' ? { id: provider } : provider),
-      matchType: 'index',
-    };
-  }
-
-  return { config: undefined, matchType: 'none' };
+  );
 }
 
 /**
@@ -183,16 +229,34 @@ export function extractConfigBadges(
   _providerString: string,
   providerConfig: ProviderOptions | undefined,
 ): ConfigBadge[] {
-  const badges: ConfigBadge[] = [];
-
   if (!providerConfig) {
-    return badges;
+    return [];
   }
 
-  // Get the nested config object (could be at providerConfig.config or directly on providerConfig)
-  const config = providerConfig.config || providerConfig;
+  const config = getBadgeSourceConfig(providerConfig);
 
-  // OpenAI / Azure / xAI / Bedrock reasoning effort
+  return [
+    ...getReasoningBadges(config),
+    ...getGoogleThinkingBadges(config),
+    ...getAnthropicThinkingBadges(config),
+    ...getSamplingBadges(config),
+  ];
+}
+
+/**
+ * Provider badge fields usually live under config, but some call sites pass them
+ * directly on the provider object.
+ */
+function getBadgeSourceConfig(providerConfig: ProviderOptions): BadgeSourceConfig {
+  return (providerConfig.config || providerConfig) as BadgeSourceConfig;
+}
+
+/**
+ * Extract reasoning/effort controls across OpenAI-compatible and Anthropic configs.
+ */
+function getReasoningBadges(config: BadgeSourceConfig): ConfigBadge[] {
+  const badges: ConfigBadge[] = [];
+
   if (config.reasoning_effort) {
     badges.push({
       label: 'reasoning',
@@ -201,7 +265,6 @@ export function extractConfigBadges(
     });
   }
 
-  // OpenAI Codex SDK model_reasoning_effort
   if (config.model_reasoning_effort) {
     badges.push({
       label: 'reasoning',
@@ -210,7 +273,6 @@ export function extractConfigBadges(
     });
   }
 
-  // Anthropic effort level
   if (config.effort) {
     badges.push({
       label: 'effort',
@@ -219,42 +281,70 @@ export function extractConfigBadges(
     });
   }
 
-  // Google thinking config
+  return badges;
+}
+
+/**
+ * Extract Gemini thinking settings, preferring level over budget when both exist.
+ */
+function getGoogleThinkingBadges(config: BadgeSourceConfig): ConfigBadge[] {
   if (config.generationConfig?.thinkingConfig) {
     const thinkingConfig = config.generationConfig.thinkingConfig;
     if (thinkingConfig.thinkingLevel) {
-      badges.push({
-        label: 'thinking',
-        value: thinkingConfig.thinkingLevel.toLowerCase(),
-        tooltip: thinkingConfig.thinkingBudget
-          ? `Thinking level with budget: ${thinkingConfig.thinkingBudget} tokens`
-          : 'Thinking level for Gemini models',
-      });
-    } else if (thinkingConfig.thinkingBudget) {
-      badges.push({
-        label: 'thinking',
-        value: `${thinkingConfig.thinkingBudget} tokens`,
-        tooltip: 'Thinking budget for Gemini models',
-      });
+      return [
+        {
+          label: 'thinking',
+          value: thinkingConfig.thinkingLevel.toLowerCase(),
+          tooltip: thinkingConfig.thinkingBudget
+            ? `Thinking level with budget: ${thinkingConfig.thinkingBudget} tokens`
+            : 'Thinking level for Gemini models',
+        },
+      ];
+    }
+
+    if (thinkingConfig.thinkingBudget) {
+      return [
+        {
+          label: 'thinking',
+          value: `${thinkingConfig.thinkingBudget} tokens`,
+          tooltip: 'Thinking budget for Gemini models',
+        },
+      ];
     }
   }
 
-  // Anthropic extended thinking
+  return [];
+}
+
+/**
+ * Extract Claude extended-thinking settings when thinking is explicitly enabled.
+ */
+function getAnthropicThinkingBadges(config: BadgeSourceConfig): ConfigBadge[] {
   if (
-    config.thinking?.type === 'enabled' ||
-    config.thinking?.type === 'adaptive' ||
-    config.thinking?.budget_tokens
+    config.thinking?.type !== 'enabled' &&
+    config.thinking?.type !== 'adaptive' &&
+    !config.thinking?.budget_tokens
   ) {
-    badges.push({
+    return [];
+  }
+
+  return [
+    {
       label: 'thinking',
       value: config.thinking.budget_tokens
         ? `${formatNumber(config.thinking.budget_tokens)} tokens`
         : (config.thinking.type ?? 'enabled'),
       tooltip: 'Extended thinking for Claude models',
-    });
-  }
+    },
+  ];
+}
 
-  // Temperature (if not default 1.0)
+/**
+ * Extract sampling and reproducibility controls that are useful at a glance.
+ */
+function getSamplingBadges(config: BadgeSourceConfig): ConfigBadge[] {
+  const badges: ConfigBadge[] = [];
+
   if (config.temperature !== undefined && config.temperature !== 1) {
     badges.push({
       label: 'temp',
@@ -262,7 +352,6 @@ export function extractConfigBadges(
     });
   }
 
-  // Max tokens
   if (config.max_tokens) {
     badges.push({
       label: 'max',
@@ -271,7 +360,6 @@ export function extractConfigBadges(
     });
   }
 
-  // Response format (JSON mode, etc.)
   if (config.response_format?.type && config.response_format.type !== 'text') {
     badges.push({
       label: 'format',
@@ -279,7 +367,6 @@ export function extractConfigBadges(
     });
   }
 
-  // Streaming
   if (config.stream === true) {
     badges.push({
       label: 'stream',
@@ -287,7 +374,6 @@ export function extractConfigBadges(
     });
   }
 
-  // Top P (if not default)
   if (config.top_p !== undefined && config.top_p !== 1) {
     badges.push({
       label: 'top_p',
@@ -295,7 +381,6 @@ export function extractConfigBadges(
     });
   }
 
-  // Presence/frequency penalty (if set)
   if (config.presence_penalty && config.presence_penalty !== 0) {
     badges.push({
       label: 'pres',
@@ -310,7 +395,6 @@ export function extractConfigBadges(
     });
   }
 
-  // Seed (for reproducibility)
   if (config.seed !== undefined) {
     badges.push({
       label: 'seed',

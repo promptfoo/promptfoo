@@ -13,7 +13,13 @@ import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../../remoteGeneration';
+import { materializeInputVariablesWithMetadata } from '../../inputVariables';
+import {
+  getRemoteGenerationDisabledError,
+  getRemoteGenerationExplicitlyDisabledError,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../remoteGeneration';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -31,6 +37,7 @@ import {
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   isConversationEndedResponse,
   isValidChatMessageArray,
@@ -47,12 +54,14 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 
 const DEFAULT_MAX_TURNS = 10;
@@ -105,9 +114,10 @@ interface HydraConfig {
   _perTurnLayers?: LayerConfig[];
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
+   * Keys are variable names, values are Inputs definitions: plain descriptions
+   * or structured typed configs with fields like description, type, and config.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
 }
 
 function scrubOutputForHistory(output: string): string {
@@ -163,7 +173,9 @@ export class HydraProvider implements ApiProvider {
     // Hydra strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:hydra strategy requires remote generation, which is currently disabled (commonly because OPENAI_API_KEY is set). To fix, unset OPENAI_API_KEY, set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
+        neverGenerateRemote()
+          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:hydra strategy')
+          : getRemoteGenerationDisabledError('jailbreak:hydra strategy'),
       );
     }
 
@@ -172,7 +184,7 @@ export class HydraProvider implements ApiProvider {
       jsonOnly: true,
       preferSmallModel: false,
       // Pass inputs schema for multi-input mode
-      inputs: this.config.inputs as Record<string, string> | undefined,
+      inputs: this.config.inputs,
     });
 
     logger.debug('[Hydra] Provider initialized', {
@@ -403,6 +415,16 @@ export class HydraProvider implements ApiProvider {
 
       // Extract input vars from the processed message for multi-input mode
       const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+      const materializedInputVars =
+        currentInputVars && this.config.inputs
+          ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+              materializationIndex: turn,
+              pluginId: 'hydra',
+              provider: this.agentProvider,
+              purpose: test?.metadata?.purpose as string | undefined,
+            })
+          : undefined;
+      const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
       // Add message to conversation history (without <Prompt> tags)
       this.conversationHistory.push({
@@ -427,7 +449,7 @@ export class HydraProvider implements ApiProvider {
           [this.injectVar]: escapedMessage,
           ...(this.sessionId ? { sessionId: this.sessionId } : {}),
           // Add extracted input vars if available
-          ...(currentInputVars || {}),
+          ...(currentRenderInputVars || {}),
         };
 
         targetPrompt = await renderPrompt(
@@ -561,10 +583,21 @@ export class HydraProvider implements ApiProvider {
 
       // Get target response
       const iterationStart = Date.now();
+      const targetContext = context
+        ? {
+            ...context,
+            vars: {
+              ...vars,
+              ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+              ...(currentRenderInputVars || {}),
+              [this.injectVar]: finalTargetPrompt,
+            },
+          }
+        : context;
       let targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
-        context,
+        targetContext,
         options,
       );
       lastTargetResponse = targetResponse;
@@ -745,21 +778,13 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          // Build grading context with tracing and exfil tracking data
-          let gradingContext:
-            | {
-                traceContext?: TraceContextData | null;
-                traceSummary?: string;
-                wasExfiltrated?: boolean;
-                exfilCount?: number;
-                exfilRecords?: Array<{
-                  timestamp: string;
-                  ip: string;
-                  userAgent: string;
-                  queryParams: Record<string, string>;
-                }>;
-              }
-            | undefined;
+          // Build grading context with provider raw output, tracing, and exfil tracking data.
+          const gradingContext: RedteamGradingContext = {
+            providerResponse: targetResponse,
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: gradingTraceSummary }
+              : {}),
+          };
 
           // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
           // In layer mode (e.g., hydra → indirect-web-pwn), lastTransformResult.metadata is the
@@ -781,14 +806,11 @@ export class HydraProvider implements ApiProvider {
             try {
               const exfilData = await checkExfilTracking(webPageUuid, evalId);
               if (exfilData) {
-                gradingContext = {
-                  ...(tracingOptions.includeInGrading
-                    ? { traceContext, traceSummary: gradingTraceSummary }
-                    : {}),
+                Object.assign(gradingContext, {
                   wasExfiltrated: exfilData.wasExfiltrated,
                   exfilCount: exfilData.exfilCount,
                   exfilRecords: exfilData.exfilRecords,
-                };
+                });
               }
             } catch (error) {
               logger.warn('[Hydra] Failed to fetch exfil tracking from server', {
@@ -799,21 +821,16 @@ export class HydraProvider implements ApiProvider {
           }
 
           // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-          if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+          if (
+            gradingContext.wasExfiltrated === undefined &&
+            targetResponse.metadata?.wasExfiltrated !== undefined
+          ) {
             logger.debug('[Hydra] Using exfil data from provider response metadata (fallback)');
-            gradingContext = {
-              ...(tracingOptions.includeInGrading
-                ? { traceContext, traceSummary: gradingTraceSummary }
-                : {}),
+            Object.assign(gradingContext, {
               wasExfiltrated: Boolean(targetResponse.metadata.wasExfiltrated),
               exfilCount: Number(targetResponse.metadata.exfilCount) || 0,
               exfilRecords: [],
-            };
-          }
-
-          // Fallback to just tracing context if no exfil data found
-          if (!gradingContext && tracingOptions.includeInGrading) {
-            gradingContext = { traceContext, traceSummary: gradingTraceSummary };
+            });
           }
 
           const { grade, rubric } = await grader.getResult(
@@ -821,7 +838,7 @@ export class HydraProvider implements ApiProvider {
             targetResponse.output,
             test,
             targetProvider,
-            assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            getGraderAssertionValue(assertToUse),
             undefined, // additionalRubric
             undefined, // skipRefusalCheck
             gradingContext,
@@ -853,7 +870,7 @@ export class HydraProvider implements ApiProvider {
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
-        inputVars: currentInputVars,
+        inputVars: currentRenderInputVars,
       });
 
       // Check if vulnerability was achieved

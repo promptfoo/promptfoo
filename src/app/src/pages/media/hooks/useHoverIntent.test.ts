@@ -1,30 +1,16 @@
+import { mockMatchMedia } from '@app/tests/browserMocks';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useHoverIntent } from './useHoverIntent';
 
 describe('useHoverIntent', () => {
+  let timers: TestTimers;
+
   beforeEach(() => {
-    vi.useFakeTimers();
+    timers = useTestTimers();
 
-    // Mock matchMedia for hover capability detection
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(hover: hover)',
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      })),
-    });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.restoreAllMocks();
+    mockMatchMedia({ matches: (query) => query === '(hover: hover)' });
   });
 
   it('should return initial state', () => {
@@ -59,7 +45,7 @@ describe('useHoverIntent', () => {
     expect(result.current.isIntentional).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(300);
+      timers.advanceBy(300);
     });
 
     expect(result.current.isIntentional).toBe(true);
@@ -70,7 +56,7 @@ describe('useHoverIntent', () => {
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
-      vi.advanceTimersByTime(300);
+      timers.advanceBy(300);
     });
 
     expect(result.current.isHovering).toBe(true);
@@ -89,7 +75,7 @@ describe('useHoverIntent', () => {
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
-      vi.advanceTimersByTime(100); // Only 100ms, not full 300ms
+      timers.advanceBy(100); // Only 100ms, not full 300ms
       result.current.hoverProps.onMouseLeave();
     });
 
@@ -97,7 +83,7 @@ describe('useHoverIntent', () => {
 
     // Even after more time, should not become intentional
     act(() => {
-      vi.advanceTimersByTime(300);
+      timers.advanceBy(300);
     });
 
     expect(result.current.isIntentional).toBe(false);
@@ -108,13 +94,13 @@ describe('useHoverIntent', () => {
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
-      vi.advanceTimersByTime(300);
+      timers.advanceBy(300);
     });
 
     expect(result.current.isIntentional).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(200);
+      timers.advanceBy(200);
     });
 
     expect(result.current.isIntentional).toBe(true);
@@ -136,7 +122,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onFocus();
-        vi.advanceTimersByTime(150); // Half of 300ms
+        timers.advanceBy(150); // Half of 300ms
       });
 
       expect(result.current.isIntentional).toBe(true);
@@ -147,7 +133,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onFocus();
-        vi.advanceTimersByTime(150);
+        timers.advanceBy(150);
       });
 
       expect(result.current.isIntentional).toBe(true);
@@ -167,7 +153,7 @@ describe('useHoverIntent', () => {
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
-        vi.advanceTimersByTime(500);
+        timers.advanceBy(500);
       });
 
       expect(result.current.isHovering).toBe(false);
@@ -177,52 +163,32 @@ describe('useHoverIntent', () => {
 
   describe('prefers-reduced-motion', () => {
     it('should not activate when user prefers reduced motion and respectReducedMotion is true', () => {
-      // Mock reduced motion preference
-      Object.defineProperty(window, 'matchMedia', {
-        writable: true,
-        value: vi.fn().mockImplementation((query: string) => ({
-          matches: query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        })),
+      mockMatchMedia({
+        matches: (query) =>
+          query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
       });
 
       const { result } = renderHook(() => useHoverIntent({ respectReducedMotion: true }));
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
-        vi.advanceTimersByTime(500);
+        timers.advanceBy(500);
       });
 
       expect(result.current.isIntentional).toBe(false);
     });
 
     it('should activate when respectReducedMotion is false even with reduced motion preference', () => {
-      // Mock reduced motion preference
-      Object.defineProperty(window, 'matchMedia', {
-        writable: true,
-        value: vi.fn().mockImplementation((query: string) => ({
-          matches: query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        })),
+      mockMatchMedia({
+        matches: (query) =>
+          query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
       });
 
       const { result } = renderHook(() => useHoverIntent({ respectReducedMotion: false }));
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
-        vi.advanceTimersByTime(500);
+        timers.advanceBy(500);
       });
 
       expect(result.current.isIntentional).toBe(true);
@@ -231,26 +197,13 @@ describe('useHoverIntent', () => {
 
   describe('touch devices', () => {
     it('should not activate on touch-only devices', () => {
-      // Mock no hover capability (touch device)
-      Object.defineProperty(window, 'matchMedia', {
-        writable: true,
-        value: vi.fn().mockImplementation((query: string) => ({
-          matches: false, // No hover capability
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn(),
-        })),
-      });
+      mockMatchMedia();
 
       const { result } = renderHook(() => useHoverIntent());
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
-        vi.advanceTimersByTime(500);
+        timers.advanceBy(500);
       });
 
       expect(result.current.isIntentional).toBe(false);

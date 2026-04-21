@@ -12,6 +12,12 @@ npx promptfoo@latest eval
 npx promptfoo@latest view
 ```
 
+To run the trajectory assertion variant from this directory, use:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.trajectory.yaml --no-cache
+```
+
 ## Environment Variables
 
 This example requires no API keys - it uses a simulated provider that demonstrates tracing patterns.
@@ -54,6 +60,7 @@ tracing:
     http:
       enabled: true
       port: 4318
+      host: '0.0.0.0'
 ```
 
 ## Instrumenting Your Provider
@@ -148,6 +155,15 @@ assert:
     value:
       max_count: 0
 ```
+
+The trajectory-specific config at `promptfooconfig.trajectory.yaml` adds:
+
+- `trajectory:tool-used`
+- `trajectory:tool-args-match`
+- `trajectory:tool-sequence`
+- `trajectory:step-count`
+
+Promptfoo accepts generic tool span attributes such as `tool.name` and `tool.arguments`, and it also recognizes Vercel AI SDK telemetry attributes such as `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`.
 
 ## Viewing Traces
 

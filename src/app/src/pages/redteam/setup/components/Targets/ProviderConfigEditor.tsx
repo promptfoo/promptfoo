@@ -126,9 +126,9 @@ function ProviderConfigEditor({
       if (value === undefined) {
         delete updatedTarget.inputs;
       } else {
-        updatedTarget.inputs = value as Record<string, string>;
+        updatedTarget.inputs = value as NonNullable<ProviderOptions['inputs']>;
         // Clear body error if inputs are provided ({{prompt}} not required with multi-input)
-        if (Object.keys(value as Record<string, string>).length > 0) {
+        if (Object.keys(value as NonNullable<ProviderOptions['inputs']>).length > 0) {
           setBodyError(null);
         }
       }
@@ -165,15 +165,15 @@ function ProviderConfigEditor({
 
     if (providerType === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (provider.config.request !== undefined) {
-        // Raw mode: validate that request is not empty
-        if (!provider.config.request || provider.config.request.trim() === '') {
-          errors.push('HTTP request content is required');
-        }
-      } else {
+      if (provider.config.request === undefined) {
         // Structured mode: validate URL
         if (!provider.config.url || !validateUrl(provider.config.url)) {
           errors.push('Valid URL is required');
+        }
+      } else {
+        // Raw mode: validate that request is not empty
+        if (!provider.config.request || provider.config.request.trim() === '') {
+          errors.push('HTTP request content is required');
         }
       }
 

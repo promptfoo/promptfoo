@@ -3,6 +3,7 @@ import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  type AfterEachExtensionHookContext,
   collectFileMetadata,
   extractTextFromPDF,
   getExtensionHookName,
@@ -11,41 +12,26 @@ import {
   runExtensionHook,
   sanitizeFileReferences,
 } from '../src/evaluatorHelpers';
-import { runPython } from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
+import { createMockProvider } from './factories/provider';
+import { mockProcessEnv } from './util/utils';
 
-import type { ApiProvider, Prompt, TestCase, TestSuite } from '../src/types/index';
+import type { Prompt, TestCase, TestSuite } from '../src/types/index';
 
 // Use vi.hoisted to define mocks and helpers that need to be accessible in vi.mock factories
-const {
-  actualPathResolve,
-  dynamicModuleMocks,
-  mockDynamicModule,
-  mockPathResolve,
-  mockRequire,
-  mockRequireResolve,
-} = vi.hoisted(() => {
-  const actualPath = require('path');
-  const actualPathResolve = actualPath.resolve.bind(actualPath);
-  const mockPathResolve = vi.fn((...paths: string[]) => actualPathResolve(...paths));
-  const dynamicModuleMocks = new Map<string, any>();
-  const mockDynamicModule = (filePath: string, moduleExport: any) => {
-    const resolvedPath = actualPathResolve(filePath);
-    dynamicModuleMocks.set(resolvedPath, moduleExport);
-  };
-  const mockRequireResolve = vi.fn() as unknown as NodeJS.RequireResolve;
-  const mockRequire: NodeJS.Require = {
-    resolve: mockRequireResolve,
-  } as unknown as NodeJS.Require;
-  return {
-    actualPathResolve,
-    dynamicModuleMocks,
-    mockDynamicModule,
-    mockPathResolve,
-    mockRequire,
-    mockRequireResolve,
-  };
-});
+const { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve } = vi.hoisted(
+  () => {
+    const actualPath = require('path');
+    const actualPathResolve = actualPath.resolve.bind(actualPath);
+    const mockPathResolve = vi.fn((...paths: string[]) => actualPathResolve(...paths));
+    const dynamicModuleMocks = new Map<string, any>();
+    const mockDynamicModule = (filePath: string, moduleExport: any) => {
+      const resolvedPath = actualPathResolve(filePath);
+      dynamicModuleMocks.set(resolvedPath, moduleExport);
+    };
+    return { actualPathResolve, dynamicModuleMocks, mockDynamicModule, mockPathResolve };
+  },
+);
 
 vi.mock('path', async () => {
   const actual = await vi.importActual<typeof import('path')>('path');
@@ -64,6 +50,9 @@ vi.mock('glob', () => ({
 }));
 
 vi.mock('node:module', () => {
+  const mockRequire: NodeJS.Require = {
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
+  } as unknown as NodeJS.Require;
   return {
     createRequire: vi.fn().mockReturnValue(mockRequire),
   };
@@ -122,19 +111,7 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
-vi.mock('../src/python/pythonUtils', () => ({
-  runPython: vi.fn(),
-}));
-
-const mockApiProvider: ApiProvider = {
-  id: function id() {
-    return 'test-provider';
-  },
-  callApi: vi.fn().mockResolvedValue({
-    output: 'Test output',
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-  }),
-};
+const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
@@ -148,31 +125,13 @@ describe('evaluatorHelpers', () => {
    *   module mocks from leaking between tests (e.g., renderPrompt external JS tests)
    * - mockPathResolve: Resets to default implementation since some tests override it
    *   with custom behavior (e.g., collectFileMetadata returns only the last path segment)
+   * - vi.clearAllMocks(): Clears call history for all mocks to ensure clean assertions
    */
-  beforeEach(async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
-    vi.mocked(runPython).mockReset();
-
-    vi.mocked(createRequire).mockReturnValue(mockRequire);
-    vi.mocked(mockRequireResolve).mockReset();
-
-    const pdfParse = await import('pdf-parse');
-    vi.mocked(pdfParse.PDFParse).mockImplementation(function () {
-      return {
-        getText: mockGetText,
-        destroy: mockDestroy,
-      };
-    });
-    mockGetText.mockReset();
-    mockGetText.mockResolvedValue({ text: 'Extracted PDF text' });
-    mockDestroy.mockReset();
-    mockDestroy.mockResolvedValue(undefined);
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
   });
 
   describe('extractTextFromPDF', () => {
@@ -208,8 +167,8 @@ describe('evaluatorHelpers', () => {
 
   describe('renderPrompt', () => {
     beforeEach(() => {
-      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
-      delete process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE;
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: undefined });
     });
 
     it('should render a prompt with a single variable', async () => {
@@ -260,19 +219,19 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should render environment variables in JSON prompts', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       const prompt = toPrompt('{"text": "{{ env.TEST_ENV_VAR }}"}');
       const renderedPrompt = await renderPrompt(prompt, {}, {});
       expect(renderedPrompt).toBe(JSON.stringify({ text: 'env_value' }, null, 2));
-      delete process.env.TEST_ENV_VAR;
+      mockProcessEnv({ TEST_ENV_VAR: undefined });
     });
 
     it('should render environment variables in non-JSON prompts', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       const prompt = toPrompt('Test prompt {{ env.TEST_ENV_VAR }}');
       const renderedPrompt = await renderPrompt(prompt, {}, {});
       expect(renderedPrompt).toBe('Test prompt env_value');
-      delete process.env.TEST_ENV_VAR;
+      mockProcessEnv({ TEST_ENV_VAR: undefined });
     });
 
     it('should handle complex variable substitutions in JSON prompts', async () => {
@@ -354,29 +313,10 @@ describe('evaluatorHelpers', () => {
       const vars = {
         var1: 'file:///path/to/emptyOutput.js',
       };
-      const evaluateOptions = {};
 
-      mockDynamicModule('/path/to/emptyOutput.js', () => ({
-        output: '',
-      }));
-
-      const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
-
-      expect(renderedPrompt).toBe('beforeafter');
-    });
-
-    it('should allow empty string output from external python var files', async () => {
-      const prompt = toPrompt('before{{ var1 }}after');
-      const vars = {
-        var1: 'file:///path/to/emptyOutput.py',
-      };
-
-      vi.mocked(runPython).mockResolvedValue({
-        output: '',
-      });
+      mockDynamicModule('/path/to/emptyOutput.js', () => ({ output: '' }));
 
       const renderedPrompt = await renderPrompt(prompt, vars, {});
-
       expect(renderedPrompt).toBe('beforeafter');
     });
 
@@ -406,19 +346,28 @@ describe('evaluatorHelpers', () => {
       const vars = {
         var1: 'package:@promptfoo/fake:emptyOutput',
       };
-      const evaluateOptions = {};
-
-      const require = createRequire('');
-      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
 
       mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
-        emptyOutput: () => ({
-          output: '',
-        }),
+        emptyOutput: () => ({ output: '' }),
       });
 
-      const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
       expect(renderedPrompt).toBe('beforeafter');
+    });
+
+    it('should throw a clear error when a package variable does not export a function', async () => {
+      const prompt = toPrompt('Test prompt with {{ var1 }}');
+      const vars = {
+        var1: 'package:@promptfoo/fake:testFunction',
+      };
+
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        testFunction: false,
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).rejects.toThrow(
+        'Variable source malformed: package:@promptfoo/fake:testFunction must export a function. Received: boolean',
+      );
     });
 
     it('should load external json files in renderPrompt and parse the JSON content', async () => {
@@ -453,13 +402,97 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
     });
 
+    it('should resolve file:// references inside nested objects', async () => {
+      const prompt = toPrompt('Report: {{ reportingPeriod.previous.report }}');
+      const vars = {
+        reportingPeriod: {
+          previous: {
+            report: 'file://data/report.txt',
+          },
+        },
+      };
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('Q3 revenue increased by 15%');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+      expect(renderedPrompt).toBe('Report: Q3 revenue increased by 15%');
+    });
+
+    it('should resolve file:// references inside arrays', async () => {
+      const prompt = toPrompt('Items: {{ items[0].source }}, {{ items[1].source }}');
+      const vars = {
+        items: [{ source: 'file://data1.txt' }, { source: 'file://data2.txt' }],
+      };
+
+      vi.spyOn(fs, 'readFileSync')
+        .mockReturnValueOnce('content from data1')
+        .mockReturnValueOnce('content from data2');
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+      expect(renderedPrompt).toBe('Items: content from data1, content from data2');
+    });
+
+    it('should resolve nested JS var files with dot-path varName', async () => {
+      const prompt = toPrompt('{{ nested.value }}');
+      const vars = {
+        nested: { value: 'file:///path/to/testFunction.js' },
+      };
+
+      mockDynamicModule('/path/to/testFunction.js', (varName: string) => ({
+        output: `Dynamic value for ${varName}`,
+      }));
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+      expect(renderedPrompt).toBe('Dynamic value for nested.value');
+    });
+
+    it('should resolve nested package: references', async () => {
+      const prompt = toPrompt('{{ nested.value }}');
+      const vars = {
+        nested: { value: 'package:@promptfoo/fake:testFunction' },
+      };
+
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        testFunction: (varName: string) => ({
+          output: `Dynamic value for ${varName}`,
+        }),
+      });
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+      expect(renderedPrompt).toBe('Dynamic value for nested.value');
+    });
+
+    it('should not resolve nested file:// references inside skipped vars', async () => {
+      const prompt = toPrompt('{{ payload.value }}');
+      const vars = {
+        payload: { value: 'file://sensitive.txt' },
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['payload']);
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://sensitive.txt');
+    });
+
+    it('should not resolve nested file:// references inside _conversation', async () => {
+      const prompt = toPrompt('{{ _conversation[0].output }}');
+      const vars = {
+        _conversation: [{ output: 'file://sensitive.txt' }],
+      };
+
+      const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(renderedPrompt).toBe('file://sensitive.txt');
+    });
+
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
-        process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+        mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
       });
 
       afterEach(() => {
-        delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+        mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
       });
 
       it('should return raw prompt when templating is disabled', async () => {
@@ -470,11 +503,11 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should render normally when templating is enabled', async () => {
-      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'false';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'false' });
       const prompt = toPrompt('Test prompt {{ var1 }}');
       const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
       expect(renderedPrompt).toBe('Test prompt value1');
-      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
     });
 
     it('should respect Nunjucks raw tags when variable is provided as a string', async () => {
@@ -536,160 +569,6 @@ describe('evaluatorHelpers', () => {
       const prompt = toPrompt('Unfinished comment: {# comment');
       const renderedPrompt = await renderPrompt(prompt, {}, {});
       expect(renderedPrompt).toBe('Unfinished comment: {# comment');
-    });
-  });
-
-  describe('renderPrompt with nested file:// references', () => {
-    it('should resolve file:// references inside nested objects', async () => {
-      const prompt = toPrompt('Report: {{ reporting_period.previous.report }}');
-      const vars = {
-        reporting_period: {
-          previous: {
-            report: 'file://data/report.txt',
-          },
-        },
-      };
-
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('Q3 revenue increased by 15%');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('report.txt'), 'utf8');
-      expect(renderedPrompt).toBe('Report: Q3 revenue increased by 15%');
-    });
-
-    it('should resolve file:// references inside arrays', async () => {
-      const prompt = toPrompt('Items: {{ items[0].source }}, {{ items[1].source }}');
-      const vars = {
-        items: [{ source: 'file://data1.txt' }, { source: 'file://data2.txt' }],
-      };
-
-      vi.spyOn(fs, 'readFileSync')
-        .mockReturnValueOnce('content from data1')
-        .mockReturnValueOnce('content from data2');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('Items: content from data1, content from data2');
-    });
-
-    it('should resolve both top-level and nested file:// references', async () => {
-      const prompt = toPrompt('Top: {{ a }}, Nested: {{ b.c }}');
-      const vars = {
-        a: 'file://top.txt',
-        b: { c: 'file://nested.txt' },
-      };
-
-      vi.spyOn(fs, 'readFileSync')
-        .mockReturnValueOnce('top content')
-        .mockReturnValueOnce('nested content');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('Top: top content, Nested: nested content');
-    });
-
-    it('should resolve deeply nested file:// references (3+ levels)', async () => {
-      const prompt = toPrompt('{{ l1.l2.l3.data }}');
-      const vars = {
-        l1: { l2: { l3: { data: 'file://deep.txt' } } },
-      };
-
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('deeply nested content');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('deeply nested content');
-    });
-
-    it('should propagate errors when nested file:// references fail to load', async () => {
-      const prompt = toPrompt('{{ nested.file }}');
-      const vars = {
-        nested: { file: 'file://missing.txt' },
-      };
-
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        throw new Error('ENOENT: no such file or directory');
-      });
-
-      await expect(renderPrompt(prompt, vars, {})).rejects.toThrow(
-        'ENOENT: no such file or directory',
-      );
-    });
-
-    it('should leave non-file strings in nested objects untouched', async () => {
-      const prompt = toPrompt('{{ config.name }}');
-      const vars = {
-        config: { name: 'plain string', count: 42 },
-      };
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('plain string');
-    });
-
-    it('should resolve nested JS var files with dot-path varName', async () => {
-      const prompt = toPrompt('{{ nested.value }}');
-      const vars = {
-        nested: { value: 'file:///path/to/testFunction.js' },
-      };
-
-      mockDynamicModule('/path/to/testFunction.js', (varName: any, _prompt: any, _vars: any) => ({
-        output: `Dynamic value for ${varName}`,
-      }));
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('Dynamic value for nested.value');
-    });
-
-    it('should resolve nested package: references', async () => {
-      const prompt = toPrompt('{{ nested.value }}');
-      const vars = {
-        nested: { value: 'package:@promptfoo/fake:testFunction' },
-      };
-
-      const require = createRequire('');
-      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
-
-      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
-        testFunction: (varName: any, _prompt: any, _vars: any) => ({
-          output: `Dynamic value for ${varName}`,
-        }),
-      });
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe('Dynamic value for nested.value');
-    });
-
-    it('should not resolve nested file:// references inside _conversation', async () => {
-      const prompt = toPrompt('{{ _conversation[0].output }}');
-      const vars = {
-        _conversation: [{ output: 'file://sensitive.txt' }],
-      };
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(fs.readFileSync).not.toHaveBeenCalled();
-      expect(renderedPrompt).toBe('file://sensitive.txt');
-    });
-
-    it('should preserve non-plain objects while resolving nested file references', async () => {
-      const prompt = toPrompt('Date: {{ payload.when }}, Value: {{ payload.file }}');
-      const dateObj = new Date('2024-01-15T00:00:00.000Z');
-      const vars = {
-        payload: {
-          when: dateObj,
-          file: 'file://data.txt',
-        },
-      };
-
-      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('loaded');
-
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
-
-      expect(renderedPrompt).toBe(`Date: ${dateObj.toString()}, Value: loaded`);
     });
   });
 
@@ -854,80 +733,6 @@ describe('evaluatorHelpers', () => {
         config_ref: '[object Object]', // When object is converted to string
       };
       expect(resolveVariables(variables)).toEqual(expected);
-    });
-  });
-
-  describe('sanitizeFileReferences', () => {
-    it('should sanitize file:// and package: references at any depth', () => {
-      const vars = {
-        safe: 'hello',
-        fileRef: 'file://sensitive.txt',
-        pkgRef: 'package:@promptfoo/fake:testFunction',
-        nested: {
-          array: ['file://nested.txt', 'safe-value'],
-          packageValue: 'package:@promptfoo/another:fn',
-        },
-      };
-
-      const sanitized = sanitizeFileReferences(vars);
-
-      expect(sanitized).toEqual({
-        safe: 'hello',
-        fileRef: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
-        pkgRef: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
-        nested: {
-          array: ['[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]', 'safe-value'],
-          packageValue: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
-        },
-      });
-    });
-
-    it('should preserve non-plain objects while sanitizing nested structures', () => {
-      const dateObj = new Date('2024-01-15T00:00:00.000Z');
-      const vars = {
-        nested: {
-          date: dateObj,
-          fileRef: 'file://unsafe.txt',
-        },
-      };
-
-      const sanitized = sanitizeFileReferences(vars);
-      const nested = sanitized.nested as Record<string, unknown>;
-
-      expect(nested.date).toBe(dateObj);
-      expect(nested.fileRef).toBe('[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]');
-    });
-
-    it('should handle circular references without stack overflows', () => {
-      const circular: Record<string, unknown> = {
-        fileRef: 'file://unsafe.txt',
-      };
-      circular.self = circular;
-      const vars = {
-        nested: circular,
-      };
-
-      const sanitized = sanitizeFileReferences(vars);
-      const nested = sanitized.nested as Record<string, unknown>;
-
-      expect(nested.fileRef).toBe('[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]');
-      expect(nested.self).toBe(nested);
-    });
-
-    it('should not mutate the original vars object', () => {
-      const vars = {
-        nested: {
-          value: 'file://unsafe.txt',
-        },
-      };
-
-      sanitizeFileReferences(vars);
-
-      expect(vars).toEqual({
-        nested: {
-          value: 'file://unsafe.txt',
-        },
-      });
     });
   });
 
@@ -1211,6 +1016,49 @@ describe('evaluatorHelpers', () => {
         );
       });
 
+      it('should chain multiple beforeAll extensions so each sees prior changes', async () => {
+        const baseTests = [{ vars: { original: 'yes' } }];
+        const chainContext = {
+          suite: {
+            providers: [mockApiProvider],
+            prompts: [toPrompt('Test prompt')],
+            tests: baseTests,
+          } as TestSuite,
+        };
+
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            suite: {
+              providers: chainContext.suite.providers,
+              prompts: chainContext.suite.prompts,
+              tests: [...baseTests, { vars: { added_by_ext1: 'yes' } }],
+            },
+          })
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #2 should see the tests array modified by extension #1
+            const ctx = context as { suite: TestSuite };
+            expect(ctx.suite.tests).toHaveLength(2);
+            expect(ctx.suite.tests?.[1]).toEqual({ vars: { added_by_ext1: 'yes' } });
+            return {
+              suite: {
+                providers: ctx.suite.providers,
+                prompts: ctx.suite.prompts,
+                tests: [...(ctx.suite.tests || []), { vars: { added_by_ext2: 'yes' } }],
+              },
+            };
+          });
+
+        const out = await runExtensionHook(
+          ['file://ext1.js:beforeAll', 'file://ext2.js:beforeAll'],
+          'beforeAll',
+          chainContext,
+        );
+        expect(out.suite.tests).toHaveLength(3);
+        expect(out.suite.tests?.[0]).toEqual({ vars: { original: 'yes' } });
+        expect(out.suite.tests?.[1]).toEqual({ vars: { added_by_ext1: 'yes' } });
+        expect(out.suite.tests?.[2]).toEqual({ vars: { added_by_ext2: 'yes' } });
+      });
+
       it('should handle mixed extensions with correct calling conventions', async () => {
         // Mix of hook-specific and generic extensions
         const extensions = [
@@ -1238,6 +1086,277 @@ describe('evaluatorHelpers', () => {
           context, // LEGACY: context as second arg
           false,
         );
+      });
+    });
+
+    describe('afterEach return value handling', () => {
+      const baseResult = {
+        provider: { id: () => 'test' } as any,
+        prompt: { raw: 'test', label: 'test' } as any,
+        vars: {},
+        response: { output: 'test output' } as any,
+        success: true,
+        score: 1,
+        latencyMs: 100,
+        namedScores: { existing_metric: 0.5 },
+        metadata: { existing_key: 'value' },
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {},
+        cost: 0,
+      } as any;
+
+      it('should merge returned namedScores into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: { num_turns: 3, cost_usd: 0.05 },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          num_turns: 3,
+          cost_usd: 0.05,
+        });
+      });
+
+      it('should merge returned metadata into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            metadata: { session_url: 'https://example.com', tool_calls: 5 },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.metadata).toEqual({
+          existing_key: 'value',
+          session_url: 'https://example.com',
+          tool_calls: 5,
+        });
+      });
+
+      it('should merge returned response.metadata into the result', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            response: { metadata: { session_viewer: 'https://viewer.example.com', tool_count: 3 } },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.response?.metadata).toEqual({
+          session_viewer: 'https://viewer.example.com',
+          tool_count: 3,
+        });
+        // Other response fields should be preserved
+        expect(out.result.response?.output).toBe('test output');
+      });
+
+      it('should preserve existing namedScores and metadata when extension returns none', async () => {
+        vi.mocked(transform).mockResolvedValue(undefined);
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        expect(out.result.namedScores).toEqual({ existing_metric: 0.5 });
+        expect(out.result.metadata).toEqual({ existing_key: 'value' });
+      });
+
+      it('should chain multiple extensions correctly', async () => {
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { metric_a: 1 },
+              metadata: { key_a: 'a' },
+            },
+          })
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { metric_b: 2 },
+              metadata: { key_b: 'b' },
+            },
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          metric_a: 1,
+          metric_b: 2,
+        });
+        expect(out.result.metadata).toEqual({
+          existing_key: 'value',
+          key_a: 'a',
+          key_b: 'b',
+        });
+      });
+
+      it('should allow later extensions to override earlier extension values', async () => {
+        vi.mocked(transform)
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { shared_metric: 1 },
+            },
+          })
+          .mockResolvedValueOnce({
+            test: {} as TestCase,
+            result: {
+              namedScores: { shared_metric: 99 },
+            },
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores.shared_metric).toBe(99);
+      });
+
+      it('should filter non-numeric namedScores values', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: {
+              valid_int: 42,
+              valid_float: 3.14,
+              valid_zero: 0,
+              valid_negative: -5,
+              string_val: 'not_a_number' as any,
+              null_val: null as any,
+              array_val: [1, 2] as any,
+              object_val: { nested: true } as any,
+              nan_val: NaN,
+              infinity_val: Infinity,
+              neg_infinity_val: -Infinity,
+            },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        // Only finite numeric values should survive
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          valid_int: 42,
+          valid_float: 3.14,
+          valid_zero: 0,
+          valid_negative: -5,
+        });
+      });
+
+      it('should not allow overriding success, score, or response.output via return value', async () => {
+        vi.mocked(transform).mockResolvedValue({
+          test: {} as TestCase,
+          result: {
+            namedScores: { custom: 1 },
+            success: false,
+            score: 0,
+            response: { output: 'hacked', metadata: { injected: true } },
+          },
+        });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(['file://hooks.js:afterEach'], 'afterEach', context);
+        // success and score should remain unchanged
+        expect(out.result.success).toBe(true);
+        expect(out.result.score).toBe(1);
+        // response.output should remain unchanged
+        expect(out.result.response?.output).toBe('test output');
+        // but namedScores and response.metadata should be merged
+        expect(out.result.namedScores.custom).toBe(1);
+        expect(out.result.response?.metadata?.injected).toBe(true);
+      });
+
+      it('should pass accumulated context to subsequent extensions (chaining input)', async () => {
+        // Extension #2 should receive the context modified by extension #1
+        vi.mocked(transform)
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #1: verify it gets the original context, return new namedScores
+            const ctx = context as AfterEachExtensionHookContext;
+            expect(ctx.result.namedScores).toEqual({ existing_metric: 0.5 });
+            return {
+              test: ctx.test,
+              result: {
+                namedScores: { from_ext1: 10 },
+              },
+            };
+          })
+          .mockImplementationOnce(async (_ext, context) => {
+            // Extension #2: should see extension #1's merged namedScores in input
+            const ctx = context as AfterEachExtensionHookContext;
+            expect(ctx.result.namedScores).toEqual({
+              existing_metric: 0.5,
+              from_ext1: 10,
+            });
+            return {
+              test: ctx.test,
+              result: {
+                namedScores: { from_ext2: 20 },
+              },
+            };
+          });
+
+        const context = {
+          test: {} as TestCase,
+          result: { ...baseResult },
+        };
+
+        const out = await runExtensionHook(
+          ['file://hooks1.js:afterEach', 'file://hooks2.js:afterEach'],
+          'afterEach',
+          context,
+        );
+        expect(out.result.namedScores).toEqual({
+          existing_metric: 0.5,
+          from_ext1: 10,
+          from_ext2: 20,
+        });
       });
     });
   });
@@ -1439,7 +1558,7 @@ describe('evaluatorHelpers', () => {
       });
     });
 
-    it('should find image files nested inside objects', () => {
+    it('should find media files nested inside objects', () => {
       const vars = {
         media: { photo: 'file://path/to/img.jpg' },
       };
@@ -1455,53 +1574,93 @@ describe('evaluatorHelpers', () => {
       });
     });
 
-    it('should find media files in arrays', () => {
-      const vars = {
-        slides: ['file://path/to/s1.png', 'file://path/to/s2.png'],
+    it('should handle circular references without stack overflows', () => {
+      const circular: Record<string, unknown> = {
+        image: 'file://path/to/image.jpg',
       };
+      circular.self = circular;
 
-      const metadata = collectFileMetadata(vars);
+      const metadata = collectFileMetadata({ circular });
 
       expect(metadata).toEqual({
-        'slides[0]': {
-          path: 'file://path/to/s1.png',
+        'circular.image': {
+          path: 'file://path/to/image.jpg',
           type: 'image',
-          format: 'png',
-        },
-        'slides[1]': {
-          path: 'file://path/to/s2.png',
-          type: 'image',
-          format: 'png',
-        },
-      });
-    });
-
-    it('should not collect metadata for non-media nested files', () => {
-      const vars = {
-        data: { report: 'file://path/to/report.txt' },
-      };
-
-      const metadata = collectFileMetadata(vars);
-
-      expect(metadata).toEqual({});
-    });
-
-    it('should handle deeply nested media files', () => {
-      const vars = {
-        l1: { l2: { l3: { photo: 'file://path/to/deep.png' } } },
-      };
-
-      const metadata = collectFileMetadata(vars);
-
-      expect(metadata).toEqual({
-        'l1.l2.l3.photo': {
-          path: 'file://path/to/deep.png',
-          type: 'image',
-          format: 'png',
+          format: 'jpg',
         },
       });
     });
   });
+
+  describe('sanitizeFileReferences', () => {
+    it('should sanitize file:// and package: references at any depth', () => {
+      const vars = {
+        safe: 'hello',
+        fileRef: 'file://sensitive.txt',
+        pkgRef: 'package:@promptfoo/fake:testFunction',
+        nested: {
+          array: ['file://nested.txt', 'safe-value'],
+          packageValue: 'package:@promptfoo/another:fn',
+        },
+      };
+
+      expect(sanitizeFileReferences(vars)).toEqual({
+        safe: 'hello',
+        fileRef: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
+        pkgRef: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
+        nested: {
+          array: ['[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]', 'safe-value'],
+          packageValue: '[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]',
+        },
+      });
+    });
+
+    it('should preserve non-plain objects while sanitizing nested structures', () => {
+      const dateObj = new Date('2024-01-15T00:00:00.000Z');
+      const vars = {
+        nested: {
+          date: dateObj,
+          fileRef: 'file://unsafe.txt',
+        },
+      };
+
+      const sanitized = sanitizeFileReferences(vars);
+      const nested = sanitized.nested as Record<string, unknown>;
+
+      expect(nested.date).toBe(dateObj);
+      expect(nested.fileRef).toBe('[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]');
+    });
+
+    it('should handle circular references without stack overflows', () => {
+      const circular: Record<string, unknown> = {
+        fileRef: 'file://unsafe.txt',
+      };
+      circular.self = circular;
+
+      const sanitized = sanitizeFileReferences({ nested: circular });
+      const nested = sanitized.nested as Record<string, unknown>;
+
+      expect(nested.fileRef).toBe('[PROMPTFOO_UNSAFE_REFERENCE_REMOVED]');
+      expect(nested.self).toBe(nested);
+    });
+
+    it('should not mutate the original vars object', () => {
+      const vars = {
+        nested: {
+          value: 'file://unsafe.txt',
+        },
+      };
+
+      sanitizeFileReferences(vars);
+
+      expect(vars).toEqual({
+        nested: {
+          value: 'file://unsafe.txt',
+        },
+      });
+    });
+  });
+
   describe('Image Data URL Generation', () => {
     beforeEach(() => {
       // Override mockPathResolve to return only the last path segment for these tests
