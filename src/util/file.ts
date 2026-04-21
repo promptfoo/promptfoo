@@ -15,7 +15,7 @@ import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
 
-import type { NunjucksFilterMap, OutputFile } from '../types';
+import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -243,15 +243,13 @@ export function maybeLoadConfigFromExternalFile(
   if (Array.isArray(config)) {
     return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
-  if (config && typeof config === 'object' && config !== null) {
+  if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
       // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
       // and current key is 'value', switch to assertion context
       const isAssertionValue =
         key === 'value' &&
-        typeof config === 'object' &&
-        config &&
         'type' in config &&
         typeof config.type === 'string' &&
         (config.type === 'python' || config.type === 'javascript');
@@ -261,7 +259,18 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      result[key] = maybeLoadConfigFromExternalFile(config[key], childContext);
+      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
+
+      if (key === '__proto__') {
+        Object.defineProperty(result, key, {
+          value,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        result[key] = value;
+      }
     }
     return result;
   }
@@ -386,7 +395,7 @@ export async function readFilters(
  */
 export function maybeLoadFromExternalFileWithVars(
   config: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): any {
   const rendered = renderVarsInObject(config, vars);
   return maybeLoadFromExternalFile(rendered);
@@ -407,7 +416,7 @@ export function maybeLoadFromExternalFileWithVars(
  */
 export function maybeLoadResponseFormatFromExternalFile(
   responseFormat: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): any {
   if (responseFormat === undefined || responseFormat === null) {
     return responseFormat;
@@ -458,7 +467,7 @@ export function maybeLoadResponseFormatFromExternalFile(
  */
 export async function maybeLoadToolsFromExternalFile(
   tools: any,
-  vars?: Record<string, string | object>,
+  vars?: Record<string, VarValue>,
 ): Promise<any> {
   const rendered = renderVarsInObject(tools, vars);
 

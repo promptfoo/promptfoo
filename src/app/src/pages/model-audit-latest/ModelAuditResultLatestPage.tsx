@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { AddIcon, HistoryIcon, SecurityIcon } from '@app/components/ui/icons';
@@ -84,7 +84,9 @@ export default function ModelAuditResultLatestPage() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
         <div className="container max-w-2xl mx-auto px-4">
           <Alert variant="destructive" className="mb-6">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{error}</AlertDescription>
+            </AlertContent>
           </Alert>
           <div className="flex gap-3">
             <Button asChild>

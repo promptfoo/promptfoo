@@ -7,7 +7,7 @@ export async function addInjections(
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
-  const sampleSize = config.sample || 1;
+  const sampleSize = config.sample ?? 1;
   const harmfulOnly = config.harmfulOnly || false;
   const injections =
     sampleSize === 1
@@ -38,7 +38,7 @@ export async function addInjections(
         },
         metadata: {
           ...testCase.metadata,
-          strategyId: 'prompt-injection',
+          strategyId: 'jailbreak-templates',
           originalText,
         },
       };

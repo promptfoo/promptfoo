@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Persistent Codex thread memory'
+
+prompts:
+  - '{{request}}'
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.2-codex
+      sandbox_mode: read-only
+      skip_git_repo_check: true
+      persist_threads: true
+      thread_pool_size: 1
+
+defaultTest:
+  options:
+    runSerially: true
+
+tests:
+  - vars:
+      request: 'Remember this marker: BLUE-OTTER-19. Reply with exactly STORED.'
+    assert:
+      - type: contains
+        value: 'STORED'
+  - vars:
+      request: 'What marker did I ask you to remember? Reply with the marker only.'
+    assert:
+      - type: contains
+        value: 'BLUE-OTTER-19'

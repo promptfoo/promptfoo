@@ -13,6 +13,8 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -74,22 +76,22 @@ describe('OpenAI Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     disableCache();
-    process.env.OPENAI_API_KEY = 'test-api-key';
-    process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
+    mockProcessEnv({ OPENAI_API_KEY: 'test-api-key' });
+    mockProcessEnv({ DEEPSEEK_API_KEY: 'test-deepseek-key' });
   });
 
   afterEach(() => {
     vi.resetAllMocks();
     enableCache();
     if (originalOpenAiApiKey) {
-      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+      mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey });
     } else {
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
     }
     if (originalDeepseekApiKey) {
-      process.env.DEEPSEEK_API_KEY = originalDeepseekApiKey;
+      mockProcessEnv({ DEEPSEEK_API_KEY: originalDeepseekApiKey });
     } else {
-      delete process.env.DEEPSEEK_API_KEY;
+      mockProcessEnv({ DEEPSEEK_API_KEY: undefined });
     }
   });
 
@@ -119,6 +121,106 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
+    });
+
+    it('should include HTTP metadata in response', async () => {
+      const mockHeaders = {
+        'content-type': 'application/json',
+        'x-request-id': 'test-request-123',
+        'x-litellm-model-group': 'gpt-4o-mini',
+      };
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: mockHeaders,
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata?.http).toBeDefined();
+      expect(result.metadata?.http?.status).toBe(200);
+      expect(result.metadata?.http?.statusText).toBe('OK');
+      expect(result.metadata?.http?.headers).toEqual(mockHeaders);
+    });
+
+    it('should include all choices in metadata when n > 1', async () => {
+      const mockChoices = [
+        { message: { content: 'First response' }, index: 0 },
+        { message: { content: 'Second response' }, index: 1 },
+        { message: { content: 'Third response' }, index: 2 },
+      ];
+      const mockResponse = {
+        data: {
+          choices: mockChoices,
+          usage: { total_tokens: 30, prompt_tokens: 10, completion_tokens: 20 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.output).toBe('First response');
+      expect(result.metadata?.choices).toBeDefined();
+      expect(result.metadata?.choices).toHaveLength(3);
+      expect(result.metadata?.choices).toEqual(mockChoices);
+    });
+
+    it('should not include choices in metadata when n = 1', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Single response' }, index: 0 }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.output).toBe('Single response');
+      expect(result.metadata?.choices).toBeUndefined();
+    });
+
+    it('should include HTTP metadata in error response', async () => {
+      const mockResponse = {
+        data: { error: { message: 'Rate limit exceeded' } },
+        cached: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'retry-after': '60' },
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      expect(result.error).toBeDefined();
+      expect(result.metadata?.http?.status).toBe(429);
+      expect(result.metadata?.http?.statusText).toBe('Too Many Requests');
+      expect(result.metadata?.http?.headers).toEqual({ 'retry-after': '60' });
     });
 
     it('should handle caching correctly', async () => {
@@ -1519,6 +1621,62 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
+    it('should identify GPT-5 models correctly including prefixed names', async () => {
+      // Direct model names
+      const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
+      const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
+      const gpt54NanoProvider = new OpenAiChatCompletionProvider('gpt-5.4-nano');
+      const gpt5MiniProvider = new OpenAiChatCompletionProvider('gpt-5-mini');
+      const gpt5NanoProvider = new OpenAiChatCompletionProvider('gpt-5-nano');
+
+      // Prefixed model names (used by GitHub Models)
+      const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
+      const prefixedGpt54MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-mini');
+      const prefixedGpt54NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano');
+      const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
+      const prefixedGpt5NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5-nano');
+
+      // Non-GPT-5 models
+      const gpt4Provider = new OpenAiChatCompletionProvider('gpt-4');
+      const gpt4oProvider = new OpenAiChatCompletionProvider('openai/gpt-4o');
+
+      expect(gpt5Provider['isGPT5Model']()).toBe(true);
+      expect(gpt54MiniProvider['isGPT5Model']()).toBe(true);
+      expect(gpt54NanoProvider['isGPT5Model']()).toBe(true);
+      expect(gpt5MiniProvider['isGPT5Model']()).toBe(true);
+      expect(gpt5NanoProvider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt5Provider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt54MiniProvider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt54NanoProvider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt5MiniProvider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt5NanoProvider['isGPT5Model']()).toBe(true);
+      expect(gpt4Provider['isGPT5Model']()).toBe(false);
+      expect(gpt4oProvider['isGPT5Model']()).toBe(false);
+    });
+
+    it('should identify reasoning models with prefixed names (GitHub Models)', async () => {
+      // Prefixed reasoning models
+      const prefixedO1Provider = new OpenAiChatCompletionProvider('openai/o1-mini');
+      const prefixedO3Provider = new OpenAiChatCompletionProvider('openai/o3-mini');
+      const prefixedO4Provider = new OpenAiChatCompletionProvider('openai/o4-mini');
+      const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
+      const prefixedGpt54MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-mini');
+      const prefixedGpt54NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano');
+      const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
+
+      // Non-reasoning prefixed models
+      const prefixedGpt4oProvider = new OpenAiChatCompletionProvider('openai/gpt-4o');
+
+      expect(prefixedO1Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedO3Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedO4Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt5Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt54MiniProvider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt54NanoProvider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt5MiniProvider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt4oProvider['isReasoningModel']()).toBe(false);
+    });
+
     it('should handle temperature support correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
@@ -1526,6 +1684,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1PreviewProvider = new OpenAiChatCompletionProvider('o1-preview');
       const o4MiniProvider = new OpenAiChatCompletionProvider('o4-mini');
       const gpt41Provider = new OpenAiChatCompletionProvider('gpt-4.1');
+      const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
+      const gpt54NanoProvider = new OpenAiChatCompletionProvider('gpt-5.4-nano');
 
       expect(regularProvider['supportsTemperature']()).toBe(true);
       expect(o1Provider['supportsTemperature']()).toBe(false);
@@ -1533,6 +1693,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o1PreviewProvider['supportsTemperature']()).toBe(false);
       expect(o4MiniProvider['supportsTemperature']()).toBe(false);
       expect(gpt41Provider['supportsTemperature']()).toBe(true);
+      expect(gpt54MiniProvider['supportsTemperature']()).toBe(false);
+      expect(gpt54NanoProvider['supportsTemperature']()).toBe(false);
     });
 
     it('should respect temperature settings based on model type', async () => {
@@ -1565,6 +1727,57 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const o1Body = JSON.parse(o1Call[1].body);
       expect(o1Body.temperature).toBeUndefined();
+    });
+
+    it('should correctly send temperature: 0 in the request body', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { temperature: 0 },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      // temperature: 0 should be present in the request body
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should correctly send max_tokens: 0 in the request body when explicitly set', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      // Test that max_tokens: 0 is correctly sent (not filtered out by falsy check)
+      // Note: While max_tokens: 0 is impractical, it should still be sent if explicitly configured
+      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+        config: { max_tokens: 0 },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+
+      // max_tokens: 0 should be present in the request body
+      expect(body.max_tokens).toBe(0);
+      expect('max_tokens' in body).toBe(true);
     });
 
     it('should handle max tokens settings based on model type', async () => {
@@ -1610,6 +1823,115 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const gpt5Body = JSON.parse(gpt5Call[1].body);
       expect(gpt5Body.max_tokens).toBeUndefined();
       expect(gpt5Body.max_completion_tokens).toBeUndefined();
+
+      // Test prefixed GPT-5 model (GitHub Models) should not include max_tokens
+      mockFetchWithCache.mockClear();
+      const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5-mini', {
+        config: { max_tokens: 400 },
+      });
+      await prefixedGpt5Provider.callApi('Test prompt');
+      const prefixedGpt5Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const prefixedGpt5Body = JSON.parse(prefixedGpt5Call[1].body);
+      expect(prefixedGpt5Body.max_tokens).toBeUndefined();
+      expect(prefixedGpt5Body.max_completion_tokens).toBeUndefined();
+    });
+
+    it('should strip max_tokens from passthrough for GPT-5 models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
+        config: {
+          passthrough: { max_tokens: 16000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it('should strip max_tokens from passthrough for reasoning models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('o3', {
+        config: {
+          passthrough: { max_tokens: 8000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it('should preserve max_tokens in passthrough for regular models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          passthrough: { max_tokens: 2000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBe(2000);
+    });
+
+    it('should not share config between provider instances', () => {
+      const sharedConfig = {
+        max_tokens: 16000,
+        temperature: 0,
+        response_format: { type: 'json_object' as const },
+      };
+
+      const providerA = new OpenAiChatCompletionProvider('gpt-4.1-mini', {
+        config: sharedConfig,
+      });
+      const providerB = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
+        config: sharedConfig,
+      });
+
+      // Configs should be independent
+      expect(providerA.config).not.toBe(sharedConfig);
+      expect(providerB.config).not.toBe(sharedConfig);
+      expect(providerA.config).not.toBe(providerB.config);
+      expect(providerA.config.max_tokens).toBe(16000);
+      expect(providerB.config.max_tokens).toBe(16000);
+
+      // Mutating one should not affect the other
+      (providerA.config as any).max_tokens = 999;
+      expect(providerB.config.max_tokens).toBe(16000);
+
+      // Original object should not be mutated
+      expect(sharedConfig.max_tokens).toBe(16000);
     });
 
     it('should handle reasoning_effort for reasoning models', async () => {
@@ -2011,18 +2333,18 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     it('should use generic error message with fallback when apiKeyEnvar is undefined', async () => {
       // Clear any existing API key environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
 
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage(),
         );
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
       }
     });
@@ -2031,8 +2353,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Clear any existing API key environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
       const originalCustomEnv = process.env.CUSTOM_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -2040,15 +2362,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         });
 
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'API key is not set. Set the CUSTOM_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage('CUSTOM_API_KEY'),
         );
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
         if (originalCustomEnv) {
-          process.env.CUSTOM_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_API_KEY: originalCustomEnv });
         }
       }
     });
@@ -2073,15 +2395,15 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Clear environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
       const originalCustomEnv = process.env.CUSTOM_PROVIDER_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_PROVIDER_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_PROVIDER_API_KEY: undefined });
 
       try {
         const provider = new CustomProvider('custom-model');
 
         // Should show generic error message with custom API key variable
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
-          'API key is not set. Set the CUSTOM_PROVIDER_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage('CUSTOM_PROVIDER_API_KEY'),
         );
 
         // Should log generic message for unknown model
@@ -2089,10 +2411,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
         if (originalCustomEnv) {
-          process.env.CUSTOM_PROVIDER_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_PROVIDER_API_KEY: originalCustomEnv });
         }
       }
     });
@@ -2202,7 +2524,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should work with apiKeyRequired: false and API key from environment', () => {
       const originalEnv = process.env.CUSTOM_LOCAL_API_KEY;
-      process.env.CUSTOM_LOCAL_API_KEY = 'test-local-key';
+      mockProcessEnv({ CUSTOM_LOCAL_API_KEY: 'test-local-key' });
 
       try {
         const provider = new OpenAiChatCompletionProvider('local-model', {
@@ -2219,10 +2541,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         // Provider should not require API key
         expect(provider.requiresApiKey()).toBe(false);
       } finally {
-        if (originalEnv !== undefined) {
-          process.env.CUSTOM_LOCAL_API_KEY = originalEnv;
+        if (originalEnv === undefined) {
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: undefined });
         } else {
-          delete process.env.CUSTOM_LOCAL_API_KEY;
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: originalEnv });
         }
       }
     });
@@ -2231,8 +2553,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Ensure no API key is set in the environment
       const originalCustomEnv = process.env.CUSTOM_LOCAL_API_KEY;
       const originalOpenAIEnv = process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_LOCAL_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ CUSTOM_LOCAL_API_KEY: undefined });
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('local-model', {
@@ -2276,10 +2598,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(headers.Authorization).toBeUndefined();
       } finally {
         if (originalCustomEnv !== undefined) {
-          process.env.CUSTOM_LOCAL_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: originalCustomEnv });
         }
         if (originalOpenAIEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalOpenAIEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalOpenAIEnv });
         }
       }
     });
@@ -2502,6 +2824,33 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.output).toBe('Hello world');
     });
 
+    it('should handle CRLF, data without a space, and final buffered SSE line', async () => {
+      const sseChunks = [
+        'data:{"choices":[{"delta":{"content":"Hello"}}]}\r\n\r\n',
+        'data: {"choices":[{"delta":{"content":" stream"}}]}\r\n',
+        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":2,"total_tokens":6}}\r\n',
+        'data:[DONE]',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { stream: true },
+      });
+      const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      expect(result.output).toBe('Hello stream');
+      expect(result.tokenUsage).toEqual({
+        prompt: 4,
+        completion: 2,
+        total: 6,
+        cached: 0,
+      });
+    });
+
     it('should skip SSE comments and empty lines', async () => {
       const sseChunks = [
         ': this is a comment\n\n',
@@ -2547,6 +2896,35 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const requestBody = JSON.parse(callArgs[1]?.body as string);
       expect(requestBody.stream).toBe(true);
       expect(requestBody.stream_options).toEqual({ include_usage: true });
+    });
+
+    it('should preserve stream_options passthrough values while requesting usage', async () => {
+      const sseChunks = [
+        'data: {"choices":[{"delta":{"content":"Test"}}]}\n\n',
+        'data: [DONE]\n\n',
+      ];
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        body: createMockSSEStream(sseChunks),
+      } as unknown as Response);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          stream: true,
+          passthrough: {
+            stream_options: { include_obfuscation: true },
+          },
+        },
+      });
+      await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test' }]));
+
+      const callArgs = mockFetchWithProxy.mock.calls[0];
+      const requestBody = JSON.parse(callArgs[1]?.body as string);
+      expect(requestBody.stream_options).toEqual({
+        include_obfuscation: true,
+        include_usage: true,
+      });
     });
 
     it('should handle network errors during streaming', async () => {

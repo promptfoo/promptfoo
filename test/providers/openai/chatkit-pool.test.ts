@@ -42,9 +42,22 @@ vi.mock('http', () => ({
 const TEST_TEMPLATE_KEY = 'wf_test123:default:default';
 const TEST_HTML = '<html>test</html>';
 
+function resetPlaywrightMocks() {
+  mockPage.goto.mockReset().mockResolvedValue(undefined);
+  mockPage.waitForFunction.mockReset().mockResolvedValue(undefined);
+  mockPage.reload.mockReset().mockResolvedValue(undefined);
+  mockContext.newPage.mockReset().mockResolvedValue(mockPage);
+  mockContext.close.mockReset().mockResolvedValue(undefined);
+  mockContext.setDefaultTimeout.mockReset();
+  mockBrowser.newContext.mockReset().mockResolvedValue(mockContext);
+  mockBrowser.close.mockReset().mockResolvedValue(undefined);
+  mockChromium.launch.mockReset().mockResolvedValue(mockBrowser);
+}
+
 describe('ChatKitBrowserPool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPlaywrightMocks();
     // Reset the singleton between tests
     ChatKitBrowserPool.resetInstance();
   });

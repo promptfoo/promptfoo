@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import {
@@ -133,7 +133,9 @@ export default function ModelAuditResult() {
       <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 py-8">
         <div className="container max-w-2xl mx-auto px-4">
           <Alert variant="destructive" className="mb-6">
-            <AlertDescription>{error || 'Scan not found'}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{error || 'Scan not found'}</AlertDescription>
+            </AlertContent>
           </Alert>
           <div className="flex gap-3">
             <Button asChild>

@@ -8,10 +8,12 @@ import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
+  calculateGoogleCost,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  normalizeSafetySettings,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -25,6 +27,15 @@ import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
+const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'paligemma'];
+
+function usesGenerateContentApi(modelName: string): boolean {
+  return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
+}
+
+function shouldBustCache(context?: CallApiContextParams): boolean {
+  return context?.bustCache ?? context?.debug ?? false;
+}
 
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
@@ -232,7 +243,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
    */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Wait for MCP initialization if pending
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 
@@ -243,23 +254,27 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
     }
 
-    const isGemini = this.modelName.startsWith('gemini');
-    if (isGemini) {
+    if (usesGenerateContentApi(this.modelName)) {
       return this.callGemini(prompt, context);
     }
 
     // Legacy PaLM API path
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      topK: this.config.topK,
-      safetySettings: this.config.safetySettings,
-      stopSequences: this.config.stopSequences,
-      maxOutputTokens: this.config.maxOutputTokens,
+      temperature: config.temperature,
+      topP: config.topP,
+      topK: config.topK,
+      safetySettings: normalizeSafetySettings(config.safetySettings),
+      stopSequences: config.stopSequences,
+      maxOutputTokens: config.maxOutputTokens,
     };
 
     let data,
@@ -278,7 +293,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.bustCache ?? context?.debug,
+        shouldBustCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
@@ -321,9 +336,25 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      // Include thinking tokens in output cost - Google bills them as output tokens
+      const completionForCost =
+        data.usageMetadata?.candidatesTokenCount == null
+          ? undefined
+          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            completionForCost,
+          );
+
       return {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
       };
@@ -375,7 +406,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         }),
         ...config.generationConfig,
       },
-      safetySettings: config.safetySettings,
+      safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
@@ -412,7 +443,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        shouldBustCache(context),
       )) as {
         data: GeminiResponseData;
         cached: boolean;
@@ -477,9 +508,25 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      // Include thinking tokens in output cost - Google bills them as output tokens
+      const completionForCost =
+        data.usageMetadata?.candidatesTokenCount == null
+          ? undefined
+          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            completionForCost,
+          );
+
       return {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),

@@ -21,7 +21,12 @@ import {
 } from '../../util/index';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import {
+  parseChatPrompt,
+  REQUEST_TIMEOUT_MS,
+  transformToolChoice,
+  transformTools,
+} from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 import type OpenAI from 'openai';
@@ -33,6 +38,283 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+
+type OpenAiStreamingUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  audio_prompt_tokens?: number;
+  audio_completion_tokens?: number;
+};
+
+type OpenAiStreamingFunctionCall = { name: string; arguments: string };
+
+type OpenAiStreamingToolCall = {
+  id: string;
+  type: string;
+  function: OpenAiStreamingFunctionCall;
+};
+
+type OpenAiStreamingState = {
+  content: string;
+  finishReason: string | null;
+  usage?: OpenAiStreamingUsage;
+  functionCall: OpenAiStreamingFunctionCall | null;
+  toolCalls: OpenAiStreamingToolCall[];
+};
+
+function getStreamingPassthroughOptions(body: Record<string, any>): Record<string, unknown> {
+  if (
+    typeof body.stream_options !== 'object' ||
+    body.stream_options === null ||
+    Array.isArray(body.stream_options)
+  ) {
+    return {};
+  }
+  return body.stream_options;
+}
+
+function getSseData(line: string): string | undefined {
+  const trimmedLine = line.trim();
+  if (!trimmedLine || trimmedLine.startsWith(':') || !trimmedLine.startsWith('data:')) {
+    return undefined;
+  }
+  return trimmedLine.slice(5).trimStart();
+}
+
+function appendFunctionCall(
+  state: OpenAiStreamingState,
+  functionCallDelta: { name?: string; arguments?: string },
+) {
+  state.functionCall ??= { name: '', arguments: '' };
+  state.functionCall.name += functionCallDelta.name || '';
+  state.functionCall.arguments += functionCallDelta.arguments || '';
+}
+
+function appendToolCalls(
+  state: OpenAiStreamingState,
+  toolCallDeltas: Array<{
+    index: number;
+    id?: string;
+    function?: { name?: string; arguments?: string };
+  }>,
+) {
+  for (const toolCallDelta of toolCallDeltas) {
+    const index = toolCallDelta.index;
+    state.toolCalls[index] ??= {
+      id: '',
+      type: 'function',
+      function: { name: '', arguments: '' },
+    };
+    state.toolCalls[index].id = toolCallDelta.id || state.toolCalls[index].id;
+    state.toolCalls[index].function.name += toolCallDelta.function?.name || '';
+    state.toolCalls[index].function.arguments += toolCallDelta.function?.arguments || '';
+  }
+}
+
+function appendStreamingChoice(
+  state: OpenAiStreamingState,
+  choice?: {
+    delta?: {
+      content?: string;
+      function_call?: { name?: string; arguments?: string };
+      tool_calls?: Array<{
+        index: number;
+        id?: string;
+        function?: { name?: string; arguments?: string };
+      }>;
+    };
+    finish_reason?: string | null;
+  },
+) {
+  if (!choice) {
+    return;
+  }
+  state.content += choice.delta?.content || '';
+  if (choice.delta?.function_call) {
+    appendFunctionCall(state, choice.delta.function_call);
+  }
+  if (choice.delta?.tool_calls) {
+    appendToolCalls(state, choice.delta.tool_calls);
+  }
+  if (choice.finish_reason) {
+    state.finishReason = choice.finish_reason;
+  }
+}
+
+function processOpenAiStreamingChunk(state: OpenAiStreamingState, data: string): boolean {
+  if (data === '[DONE]') {
+    return true;
+  }
+
+  try {
+    const chunk = JSON.parse(data) as {
+      choices?: Array<Parameters<typeof appendStreamingChoice>[1]>;
+      usage?: OpenAiStreamingUsage;
+    };
+    appendStreamingChoice(state, chunk.choices?.[0]);
+    if (chunk.usage) {
+      state.usage = chunk.usage;
+    }
+  } catch {
+    logger.debug(`Failed to parse SSE chunk: ${data}`);
+  }
+
+  return false;
+}
+
+function processOpenAiSseLines(state: OpenAiStreamingState, lines: string[]): boolean {
+  for (const line of lines) {
+    const data = getSseData(line);
+    if (data && processOpenAiStreamingChunk(state, data)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function readOpenAiStreamingResponse(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+): Promise<OpenAiStreamingState> {
+  const decoder = new TextDecoder();
+  const state: OpenAiStreamingState = {
+    content: '',
+    finishReason: null,
+    functionCall: null,
+    toolCalls: [],
+  };
+  let buffer = '';
+  let streamDone = false;
+
+  try {
+    while (!streamDone) {
+      const { done, value } = await reader.read();
+      if (done) {
+        buffer += decoder.decode();
+        processOpenAiSseLines(state, buffer.split(/\r?\n/));
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      streamDone = processOpenAiSseLines(state, lines);
+    }
+  } finally {
+    if (streamDone) {
+      await reader.cancel().catch(() => undefined);
+    }
+  }
+
+  return state;
+}
+
+async function getCachedOpenAiStreamingResponse(
+  cache: Awaited<ReturnType<typeof getCache>>,
+  cacheKey: string,
+  modelName: string,
+): Promise<ProviderResponse | undefined> {
+  const cachedResponse = await cache.get<string | undefined>(cacheKey);
+  if (!cachedResponse) {
+    return undefined;
+  }
+
+  logger.debug(`Returning cached streaming response for ${modelName}`);
+  try {
+    const parsed = JSON.parse(cachedResponse) as ProviderResponse;
+    if (parsed.tokenUsage) {
+      parsed.tokenUsage.cached = parsed.tokenUsage.total || 0;
+    }
+    return { ...parsed, cached: true };
+  } catch {
+    logger.warn('Failed to parse cached streaming response');
+    return undefined;
+  }
+}
+
+function getOpenAiStreamingOutput(state: OpenAiStreamingState): any {
+  if (state.functionCall?.name) {
+    return state.functionCall;
+  }
+
+  const validToolCalls = state.toolCalls.filter((toolCall) => toolCall.function?.name);
+  if (validToolCalls.length > 0) {
+    return state.content ? { content: state.content, tool_calls: validToolCalls } : validToolCalls;
+  }
+
+  return state.content;
+}
+
+function parseStructuredStreamingOutput(output: any, config: OpenAiCompletionOptions): any {
+  if (config.response_format?.type !== 'json_schema' || typeof output !== 'string') {
+    return output;
+  }
+
+  try {
+    return JSON.parse(output);
+  } catch (error) {
+    logger.error(`Failed to parse JSON output: ${error}`);
+    return output;
+  }
+}
+
+function getOpenAiStreamingTokenUsage(
+  usage?: OpenAiStreamingUsage,
+): ProviderResponse['tokenUsage'] {
+  if (!usage) {
+    return undefined;
+  }
+  return {
+    prompt: usage.prompt_tokens || 0,
+    completion: usage.completion_tokens || 0,
+    total: usage.total_tokens || 0,
+    cached: 0,
+  };
+}
+
+function buildOpenAiStreamingResponse(
+  state: OpenAiStreamingState,
+  modelName: string,
+  config: OpenAiCompletionOptions,
+  latencyMs: number,
+): ProviderResponse {
+  const output = parseStructuredStreamingOutput(getOpenAiStreamingOutput(state), config);
+  const normalizedFinishReason = normalizeFinishReason(state.finishReason);
+  const contentFiltered = normalizedFinishReason === FINISH_REASON_MAP.content_filter;
+
+  return {
+    output,
+    tokenUsage: getOpenAiStreamingTokenUsage(state.usage),
+    cached: false,
+    latencyMs,
+    ...(normalizedFinishReason && { finishReason: normalizedFinishReason }),
+    cost: calculateOpenAICost(
+      modelName,
+      config,
+      state.usage?.prompt_tokens,
+      state.usage?.completion_tokens,
+      state.usage?.audio_prompt_tokens,
+      state.usage?.audio_completion_tokens,
+    ),
+    guardrails: { flagged: contentFiltered },
+  };
+}
+
+async function cacheOpenAiStreamingResponse(
+  cache: Awaited<ReturnType<typeof getCache>>,
+  cacheKey: string,
+  providerResponse: ProviderResponse,
+) {
+  if (providerResponse.guardrails?.flagged) {
+    return;
+  }
+
+  try {
+    await cache.set(cacheKey, JSON.stringify(providerResponse));
+  } catch (err) {
+    logger.error(`Failed to cache streaming response: ${String(err)}`);
+  }
+}
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
@@ -52,7 +334,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       logger.debug(`Using unknown chat model: ${modelName}`);
     }
     super(modelName, options);
-    this.config = options.config || {};
+    this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
@@ -181,12 +463,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     }
   }
 
+  protected isGPT5Model(): boolean {
+    // Handle both direct model names (gpt-5-mini) and prefixed names (openai/gpt-5-mini)
+    return this.modelName.startsWith('gpt-5') || this.modelName.includes('/gpt-5');
+  }
+
   protected isReasoningModel(): boolean {
     return (
       this.modelName.startsWith('o1') ||
       this.modelName.startsWith('o3') ||
       this.modelName.startsWith('o4') ||
-      this.modelName.startsWith('gpt-5')
+      this.modelName.includes('/o1') ||
+      this.modelName.includes('/o3') ||
+      this.modelName.includes('/o4') ||
+      this.isGPT5Model()
     );
   }
 
@@ -210,17 +500,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
     const isReasoningModel = this.isReasoningModel();
-    const isGPT5Model = this.modelName.startsWith('gpt-5');
+    const isGPT5Model = this.isGPT5Model();
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    const maxTokens =
-      isReasoningModel || isGPT5Model
+    const maxTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
-        : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxTokens =
+      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
 
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
+      ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
@@ -228,9 +526,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
+    const loadedTools = config.tools
       ? (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || []
       : [];
+    // Transform tools to OpenAI format if needed
+    const fileTools = transformTools(loadedTools, 'openai') as typeof loadedTools;
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
@@ -238,10 +538,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       messages,
       seed: config.seed,
-      ...(maxTokens ? { max_tokens: maxTokens } : {}),
-      ...(maxCompletionTokens ? { max_completion_tokens: maxCompletionTokens } : {}),
+      ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+      ...(maxCompletionTokens === undefined ? {} : { max_completion_tokens: maxCompletionTokens }),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-      ...(temperature ? { temperature } : {}),
+      ...(temperature === undefined ? {} : { temperature }),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
@@ -263,7 +563,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : {}),
       ...(config.function_call ? { function_call: config.function_call } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
+      ...(config.tool_choice
+        ? { tool_choice: transformToolChoice(config.tool_choice, 'openai') }
+        : {}),
       ...(config.tool_resources ? { tool_resources: config.tool_resources } : {}),
       ...(config.response_format
         ? {
@@ -283,20 +585,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
         : {}),
       // GPT-5 only: attach verbosity if provided
-      ...(this.modelName.startsWith('gpt-5') && config.verbosity
-        ? { verbosity: config.verbosity }
-        : {}),
+      ...(isGPT5Model && config.verbosity ? { verbosity: config.verbosity } : {}),
     };
 
     // Handle reasoning_effort and reasoning parameters for reasoning models
-    if (
-      config.reasoning_effort &&
-      (this.modelName.startsWith('o1') ||
-        this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4') ||
-        this.modelName.startsWith('gpt-5') ||
-        this.modelName.startsWith('gpt-oss'))
-    ) {
+    if (config.reasoning_effort && (isReasoningModel || this.modelName.includes('gpt-oss'))) {
       body.reasoning_effort = config.reasoning_effort;
     }
 
@@ -304,7 +597,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       config.reasoning &&
       (this.modelName.startsWith('o1') ||
         this.modelName.startsWith('o3') ||
-        this.modelName.startsWith('o4'))
+        this.modelName.startsWith('o4') ||
+        this.modelName.includes('/o1') ||
+        this.modelName.includes('/o3') ||
+        this.modelName.includes('/o4'))
     ) {
       body.reasoning = config.reasoning;
     }
@@ -323,6 +619,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.store = config.store;
     }
 
+    // Sanitize body for models that reject max_tokens (e.g. GPT-5, reasoning models).
+    // This catches max_tokens introduced via passthrough or YAML anchors that bypass
+    // the normal maxTokens variable logic above.
+    if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
+      delete body.max_tokens;
+    }
+
     return { body, config };
   }
 
@@ -331,13 +634,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     // Set up tracing context
@@ -456,25 +757,33 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     let cached = false;
     let latencyMs: number | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
+    let responseHeaders: Record<string, string> | undefined;
     try {
-      ({ data, cached, status, statusText, latencyMs, deleteFromCache } =
-        await fetchWithCache<OpenAIChatCompletionResponse>(
-          `${this.getApiUrl()}/chat/completions`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-              ...config.headers,
-            },
-            body: JSON.stringify(body),
+      ({
+        data,
+        cached,
+        status,
+        statusText,
+        latencyMs,
+        deleteFromCache,
+        headers: responseHeaders,
+      } = await fetchWithCache<OpenAIChatCompletionResponse>(
+        `${this.getApiUrl()}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+            ...config.headers,
           },
-          REQUEST_TIMEOUT_MS,
-          'json',
-          context?.bustCache ?? context?.debug,
-          this.config.maxRetries,
-        ));
+          body: JSON.stringify(body),
+        },
+        REQUEST_TIMEOUT_MS,
+        'json',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      ));
 
       if (status < 200 || status >= 300) {
         const errorMessage = `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`;
@@ -490,11 +799,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               flagged: true,
               flaggedInput: true, // This error specifically indicates input was rejected
             },
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
           };
         }
 
         return {
           error: errorMessage,
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
     } catch (err) {
@@ -502,6 +825,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
+        metadata: {
+          http: {
+            status: 0,
+            statusText: 'Error',
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
@@ -521,6 +851,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           isRefusal: true,
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
 
@@ -535,6 +872,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           finishReason: FINISH_REASON_MAP.content_filter,
           guardrails: {
             flagged: true,
+          },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
           },
         };
       }
@@ -683,6 +1027,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               data.usage?.audio_completion_tokens,
             ),
             guardrails: { flagged: contentFiltered },
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
           };
         }
       }
@@ -720,6 +1071,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             data.usage?.audio_completion_tokens,
           ),
           guardrails: { flagged: contentFiltered },
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
         };
       }
 
@@ -739,11 +1097,27 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           data.usage?.audio_completion_tokens,
         ),
         guardrails: { flagged: contentFiltered },
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+          // Include all choices for multi-response requests (n > 1)
+          ...(data.choices.length > 1 && { choices: data.choices }),
+        },
       };
     } catch (err) {
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
   }
@@ -767,19 +1141,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const cacheKey = `openai:stream:${this.id()}:${this.getApiUrl()}:${JSON.stringify(body)}`;
 
     if (isCacheEnabled() && !context?.bustCache && !context?.debug) {
-      const cachedResponse = await cache.get<string | undefined>(cacheKey);
+      const cachedResponse = await getCachedOpenAiStreamingResponse(
+        cache,
+        cacheKey,
+        this.modelName,
+      );
       if (cachedResponse) {
-        logger.debug(`Returning cached streaming response for ${this.modelName}`);
-        try {
-          const parsed = JSON.parse(cachedResponse);
-          // Update tokenUsage.cached to reflect that all tokens came from cache
-          if (parsed.tokenUsage) {
-            parsed.tokenUsage.cached = parsed.tokenUsage.total || 0;
-          }
-          return { ...parsed, cached: true };
-        } catch {
-          logger.warn('Failed to parse cached streaming response');
-        }
+        return cachedResponse;
       }
     }
 
@@ -789,7 +1157,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ...body,
         stream: true,
         // Request usage stats in the final chunk
-        stream_options: { include_usage: true },
+        stream_options: {
+          ...getStreamingPassthroughOptions(body),
+          include_usage: true,
+        },
       };
 
       const url = `${this.getApiUrl()}/chat/completions`;
@@ -819,181 +1190,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
 
       // Parse SSE stream
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      // Collect the streamed content
-      let content = '';
-      let finishReason: string | null = null;
-      let usage:
-        | {
-            prompt_tokens?: number;
-            completion_tokens?: number;
-            total_tokens?: number;
-            audio_prompt_tokens?: number;
-            audio_completion_tokens?: number;
-          }
-        | undefined;
-      let functionCall: { name: string; arguments: string } | null = null;
-      const toolCalls: Array<{
-        id: string;
-        type: string;
-        function: { name: string; arguments: string };
-      }> = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-
-        // Decode chunk and add to buffer
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete SSE lines from buffer
-        const lines = buffer.split('\n');
-        // Keep the last potentially incomplete line in the buffer
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmedLine = line.trim();
-          if (!trimmedLine || trimmedLine.startsWith(':')) {
-            // Empty line or comment, skip
-            continue;
-          }
-
-          if (trimmedLine.startsWith('data: ')) {
-            const data = trimmedLine.slice(6);
-            if (data === '[DONE]') {
-              continue;
-            }
-
-            try {
-              const chunk = JSON.parse(data);
-              const choice = chunk.choices?.[0];
-
-              if (choice?.delta?.content) {
-                content += choice.delta.content;
-              }
-
-              if (choice?.delta?.function_call) {
-                if (!functionCall) {
-                  functionCall = { name: '', arguments: '' };
-                }
-                if (choice.delta.function_call.name) {
-                  functionCall.name += choice.delta.function_call.name;
-                }
-                if (choice.delta.function_call.arguments) {
-                  functionCall.arguments += choice.delta.function_call.arguments;
-                }
-              }
-
-              if (choice?.delta?.tool_calls) {
-                for (const tc of choice.delta.tool_calls) {
-                  const idx = tc.index;
-                  if (!toolCalls[idx]) {
-                    toolCalls[idx] = {
-                      id: '',
-                      type: 'function',
-                      function: { name: '', arguments: '' },
-                    };
-                  }
-                  if (tc.id) {
-                    toolCalls[idx].id = tc.id;
-                  }
-                  if (tc.function?.name) {
-                    toolCalls[idx].function.name += tc.function.name;
-                  }
-                  if (tc.function?.arguments) {
-                    toolCalls[idx].function.arguments += tc.function.arguments;
-                  }
-                }
-              }
-
-              if (choice?.finish_reason) {
-                finishReason = choice.finish_reason;
-              }
-
-              // Usage comes in the final chunk when stream_options.include_usage is true
-              if (chunk.usage) {
-                usage = chunk.usage;
-              }
-            } catch {
-              // Skip invalid JSON chunks
-              logger.debug(`Failed to parse SSE chunk: ${data}`);
-            }
-          }
-        }
-      }
+      const streamingState = await readOpenAiStreamingResponse(response.body.getReader());
 
       const latencyMs = Date.now() - startTime;
       logger.debug(`Streaming request completed in ${latencyMs}ms`, {
         model: this.modelName,
-        contentLength: content.length,
-        finishReason,
+        contentLength: streamingState.content.length,
+        finishReason: streamingState.finishReason,
       });
 
-      // Determine output based on what was returned
-      let output: any = content;
-      if (functionCall && functionCall.name) {
-        output = functionCall;
-      } else if (toolCalls.length > 0) {
-        // Filter out any empty tool calls
-        const validToolCalls = toolCalls.filter((tc) => tc.function?.name);
-        if (validToolCalls.length > 0) {
-          output = content ? { content, tool_calls: validToolCalls } : validToolCalls;
-        }
-      }
-
-      // Handle structured output parsing
-      if (config.response_format?.type === 'json_schema' && typeof output === 'string') {
-        try {
-          output = JSON.parse(output);
-        } catch (error) {
-          logger.error(`Failed to parse JSON output: ${error}`);
-        }
-      }
-
-      const normalizedFinishReason = normalizeFinishReason(finishReason);
-      const contentFiltered = normalizedFinishReason === FINISH_REASON_MAP.content_filter;
-
-      const tokenUsage = usage
-        ? {
-            prompt: usage.prompt_tokens || 0,
-            completion: usage.completion_tokens || 0,
-            total: usage.total_tokens || 0,
-            cached: 0,
-          }
-        : undefined;
-
-      const providerResponse: ProviderResponse = {
-        output,
-        tokenUsage,
-        cached: false,
+      const providerResponse = buildOpenAiStreamingResponse(
+        streamingState,
+        this.modelName,
+        config,
         latencyMs,
-        ...(normalizedFinishReason && { finishReason: normalizedFinishReason }),
-        cost: calculateOpenAICost(
-          this.modelName,
-          config,
-          usage?.prompt_tokens,
-          usage?.completion_tokens,
-          usage?.audio_prompt_tokens,
-          usage?.audio_completion_tokens,
-        ),
-        guardrails: { flagged: contentFiltered },
-      };
+      );
 
       // Cache the successful response
       if (isCacheEnabled() && !context?.bustCache && !context?.debug) {
-        try {
-          // Don't cache error responses or content-filtered responses
-          if (!contentFiltered) {
-            await cache.set(cacheKey, JSON.stringify(providerResponse));
-          }
-        } catch (err) {
-          logger.error(`Failed to cache streaming response: ${String(err)}`);
-        }
+        await cacheOpenAiStreamingResponse(cache, cacheKey, providerResponse);
       }
 
       return providerResponse;
