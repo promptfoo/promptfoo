@@ -1,8 +1,10 @@
 {
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
+  "files.associations": {
+    "**/CODEOWNERS": "plaintext"
+  },
   "cSpell.words": [
-    "adaline",
     "agentic",
     "alicloud",
     "aliyun",
@@ -131,8 +133,5 @@
     "source.organizeImports.biome": "explicit",
     "source.fixAll.biome": "explicit"
 
-  },
-  "[python]": {
-    "editor.defaultFormatter": "charliermarsh.ruff"
   }
 }

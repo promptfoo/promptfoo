@@ -1,39 +1,103 @@
-import fs from 'fs';
-import path from 'path';
-
 import chalk from 'chalk';
 import dedent from 'dedent';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import logger from '../logger';
+import { isApiProvider } from '../types/providers';
 import {
   getCloudDatabaseId,
   getProviderFromCloud,
   isCloudProvider,
   validateLinkedTargetId,
 } from '../util/cloud';
-import { maybeLoadConfigFromExternalFile } from '../util/file';
-import { renderEnvOnlyInObject } from '../util/index';
 import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
-import { providerMap } from './registry';
+import { safeJsonStringify } from '../util/json';
+import {
+  isProviderConfigFileReference,
+  loadProviderConfigsFromFile,
+  normalizeProviderRef,
+  readProviderConfigFile,
+} from '../util/providerRef';
+import { renderEnvOnlyInObject } from '../util/render';
+import { sanitizeObject } from '../util/sanitizer';
+import { getProviderFactories } from './registry';
 
 import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
-import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
+import type {
+  ApiProvider,
+  ProviderConfig,
+  ProviderFunction,
+  ProviderOptions,
+  ProvidersConfig,
+} from '../types/providers';
 
-// FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
+type ProviderFunctionWithMetadata = ProviderFunction &
+  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
+
+const FORWARDED_PROVIDER_METADATA_KEYS = [
+  'label',
+  'transform',
+  'delay',
+  'inputs',
+  'config',
+] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
+
+function createProviderFromFunction(
+  provider: ProviderFunctionWithMetadata,
+  id: string,
+): ApiProvider {
+  const apiProvider: ApiProvider = {
+    id: () => provider.label ?? id,
+    callApi: provider,
+  };
+  // Only forward defined metadata so we don't overwrite downstream defaults
+  // (e.g. a `config ?? {}` merge) with an explicit `undefined` key.
+  const target = apiProvider as unknown as Record<string, unknown>;
+  for (const key of FORWARDED_PROVIDER_METADATA_KEYS) {
+    const value = provider[key];
+    if (value !== undefined) {
+      target[key] = value;
+    }
+  }
+  return apiProvider;
+}
+
+function describeInvalidProvider(provider: unknown): string {
+  try {
+    const sanitizedProvider = sanitizeObject(provider, {
+      context: 'invalid provider config',
+      throwOnError: true,
+    });
+    return (safeJsonStringify(sanitizedProvider) ?? Object.prototype.toString.call(provider)).slice(
+      0,
+      200,
+    );
+  } catch (err) {
+    logger.debug('Failed to sanitize invalid provider for error message', { error: err });
+    return Object.prototype.toString.call(provider);
+  }
+}
+
+// NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
+// (src/util/providerRef.ts) to classify provider shapes before calling this function.
 export async function loadApiProvider(
   providerPath: string,
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
+  // Merge environment overrides: context.env (test suite level) is base,
+  // options.env (provider-specific) takes precedence for per-provider customization
+  const mergedEnv: EnvOverrides | undefined =
+    env || options.env ? { ...env, ...options.env } : undefined;
+
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
-  const renderedConfig = options.config ? renderEnvOnlyInObject(options.config) : undefined;
-  const renderedId = options.id ? renderEnvOnlyInObject(options.id) : undefined;
+  const renderedConfig = options.config
+    ? renderEnvOnlyInObject(options.config, mergedEnv)
+    : undefined;
+  const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
 
   const providerOptions: ProviderOptions = {
     id: renderedId,
@@ -41,7 +105,7 @@ export async function loadApiProvider(
       ...renderedConfig,
       basePath,
     },
-    env,
+    env: mergedEnv,
   };
 
   // Validate linkedTargetId if present (Promptfoo Cloud feature)
@@ -49,7 +113,9 @@ export async function loadApiProvider(
     await validateLinkedTargetId(providerOptions.config.linkedTargetId);
   }
 
-  const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
+  // Render only env templates in provider path to avoid blanking unresolved placeholders.
+  // This keeps behavior consistent with provider id/config rendering and file:// provider refs.
+  const renderedProviderPath = renderEnvOnlyInObject(providerPath, mergedEnv);
 
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
@@ -74,6 +140,7 @@ export async function loadApiProvider(
       transform: options.transform ?? cloudProvider.transform,
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
+      inputs: options.inputs ?? cloudProvider.inputs,
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
       env: {
         ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
@@ -95,39 +162,48 @@ export async function loadApiProvider(
     return loadApiProvider(cloudProvider.id, mergedContext);
   }
 
-  if (
-    renderedProviderPath.startsWith('file://') &&
-    (renderedProviderPath.endsWith('.yaml') ||
-      renderedProviderPath.endsWith('.yml') ||
-      renderedProviderPath.endsWith('.json'))
-  ) {
-    const filePath = renderedProviderPath.slice('file://'.length);
-    const modulePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(basePath || process.cwd(), filePath);
-    const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
-    const fileContent = maybeLoadConfigFromExternalFile(rawContent) as ProviderOptions;
-    invariant(fileContent, `Provider config ${filePath} is undefined`);
+  if (isProviderConfigFileReference(renderedProviderPath)) {
+    const { configs, relativePath, wasArray } = readProviderConfigFile(
+      renderedProviderPath,
+      basePath,
+    );
+    const fileContent = configs[0];
+    invariant(fileContent, `Provider config file ${relativePath} contains no providers`);
 
-    // If fileContent is an array, it contains multiple providers
-    if (Array.isArray(fileContent)) {
-      // This is handled by loadApiProviders, so we'll throw an error here
+    // Multi-provider files must go through loadApiProviders
+    if (wasArray) {
       throw new Error(
-        `Multiple providers found in ${filePath}. Use loadApiProviders instead of loadApiProvider.`,
+        `Multiple providers found in ${relativePath}. Use loadApiProviders instead of loadApiProvider.`,
       );
     }
 
-    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
-    return loadApiProvider(fileContent.id, { ...context, options: fileContent });
+    invariant(fileContent.id, `Provider config ${relativePath} must have an id`);
+    logger.info('Loaded provider from config file', {
+      providerConfigPath: relativePath,
+      providerId: fileContent.id,
+    });
+
+    // Merge file's env with context.env - context.env takes precedence
+    // This allows callers to override file-defined defaults
+    const mergedFileEnv: EnvOverrides | undefined =
+      fileContent.env || mergedEnv ? { ...fileContent.env, ...mergedEnv } : undefined;
+
+    return loadApiProvider(fileContent.id, {
+      basePath,
+      options: {
+        ...fileContent,
+        env: mergedFileEnv,
+      },
+    });
   }
 
-  for (const factory of providerMap) {
+  for (const factory of await getProviderFactories(renderedProviderPath)) {
     if (factory.test(renderedProviderPath)) {
       const ret = await factory.create(renderedProviderPath, providerOptions, context);
       ret.transform = options.transform;
       ret.delay = options.delay;
-      ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
+      ret.inputs = options.inputs;
+      ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
       return ret;
     }
   }
@@ -150,16 +226,28 @@ export async function loadApiProvider(
 interface LoadApiProviderOptions {
   options?: ProviderOptions;
   env?: any;
+  basePath?: string;
+}
+
+function loadOptionsFromResolveContext(
+  context: { env?: any; basePath?: string },
+  options?: ProviderOptions,
+): LoadApiProviderOptions {
+  return {
+    ...(options && { options }),
+    ...(context.env && { env: context.env }),
+    ...(context.basePath && { basePath: context.basePath }),
+  };
 }
 
 /**
- * Helper function to resolve provider from various formats (string, object, function)
- * Uses providerMap for optimization and falls back to loadApiProvider with proper context
+ * Helper function to resolve provider from various formats (string, object, function).
+ * Checks the resolved provider cache first and falls back to loadApiProvider for uncached providers.
  */
 export async function resolveProvider(
   provider: any,
-  providerMap: Record<string, ApiProvider>,
-  context: { env?: any } = {},
+  resolvedProviders: Record<string, ApiProvider>,
+  context: { env?: any; basePath?: string } = {},
 ): Promise<ApiProvider> {
   // Guard clause for null or undefined provider values
   if (provider == null) {
@@ -167,33 +255,96 @@ export async function resolveProvider(
   }
 
   if (typeof provider === 'string') {
-    // Check providerMap first for optimization, then fall back to loadApiProvider with context
-    if (providerMap[provider]) {
-      return providerMap[provider];
+    if (resolvedProviders[provider]) {
+      return resolvedProviders[provider];
     }
-    return context.env
-      ? await loadApiProvider(provider, { env: context.env })
-      : await loadApiProvider(provider);
+    return await loadApiProvider(provider, loadOptionsFromResolveContext(context));
   } else if (typeof provider === 'object') {
-    const casted = provider as ProviderOptions;
-    invariant(casted.id, 'Provider object must have an id');
-    const loadOptions: LoadApiProviderOptions = { options: casted };
-    if (context.env) {
-      loadOptions.env = context.env;
-    }
-    return await loadApiProvider(casted.id, loadOptions);
+    const descriptor = normalizeProviderRef(provider);
+    invariant(
+      descriptor.kind === 'options' || descriptor.kind === 'map',
+      `Provider object must have an 'id' field or be a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
+    );
+    return await loadApiProvider(
+      descriptor.loadProviderPath,
+      loadOptionsFromResolveContext(context, descriptor.loadOptions),
+    );
   } else if (typeof provider === 'function') {
-    return context.env
-      ? await loadApiProvider(provider, { env: context.env })
-      : await loadApiProvider(provider);
+    const descriptor = normalizeProviderRef(provider);
+    return createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id);
   } else {
     throw new Error('Invalid provider type');
   }
 }
 
 /**
+ * Resolves raw provider configurations, loading file:// references.
+ * Preserves non-file providers (strings, functions) in their original form
+ * so they can be properly handled by loadApiProviders.
+ *
+ * This is used to:
+ * 1. Build the provider-prompt map (respecting `prompts` filters from external files)
+ * 2. Enable --filter-providers to match resolved provider ids/labels from files
+ * 3. Pass to loadApiProviders without re-reading files
+ */
+export function resolveProviderConfigs(
+  providerPaths: TestSuiteConfig['providers'],
+  options?: { basePath?: string },
+): TestSuiteConfig['providers'];
+export function resolveProviderConfigs(
+  providerPaths: ProvidersConfig,
+  options?: { basePath?: string },
+): ProvidersConfig;
+export function resolveProviderConfigs(
+  providerPaths: ProvidersConfig,
+  options: { basePath?: string } = {},
+): ProvidersConfig {
+  const { basePath } = options;
+
+  if (typeof providerPaths === 'string') {
+    if (isProviderConfigFileReference(providerPaths)) {
+      return loadProviderConfigsFromFile(providerPaths, basePath);
+    }
+    // Keep non-file strings as-is for loadApiProviders to handle
+    return providerPaths;
+  }
+
+  if (typeof providerPaths === 'function') {
+    // Keep functions as-is for loadApiProviders to handle
+    return providerPaths;
+  }
+
+  if (isApiProvider(providerPaths)) {
+    return providerPaths;
+  }
+
+  if (!Array.isArray(providerPaths)) {
+    return providerPaths;
+  }
+
+  const results: ProviderConfig[] = [];
+
+  for (const provider of providerPaths) {
+    const descriptor = normalizeProviderRef(provider);
+    if (descriptor.kind === 'file') {
+      // Resolve file:// references to ProviderOptions[]
+      results.push(...loadProviderConfigsFromFile(descriptor.loadProviderPath, basePath));
+    } else if (descriptor.kind === 'named') {
+      // Keep non-file strings as-is
+      results.push(descriptor.loadProviderPath);
+    } else {
+      // Keep functions, ProviderOptions, ProviderOptionsMap, and unrecognized objects as-is
+      // for downstream validation by loadApiProviders
+      results.push(provider);
+    }
+  }
+
+  return results;
+}
+
+/**
  * Helper function to load providers from a file path.
- * This can handle both single provider and multiple providers in a file.
+ * Uses loadProviderConfigsFromFile to read configs, then instantiates them.
  */
 async function loadProvidersFromFile(
   filePath: string,
@@ -203,18 +354,9 @@ async function loadProvidersFromFile(
   } = {},
 ): Promise<ApiProvider[]> {
   const { basePath, env } = options;
+  const configs = loadProviderConfigsFromFile(filePath, basePath);
   const relativePath = filePath.slice('file://'.length);
-  const modulePath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(basePath || process.cwd(), relativePath);
 
-  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
-  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
-    | ProviderOptions
-    | ProviderOptions[];
-  invariant(fileContent, `Provider config ${relativePath} is undefined`);
-
-  const configs = [fileContent].flat() as ProviderOptions[];
   return Promise.all(
     configs.map((config) => {
       invariant(config.id, `Provider config in ${relativePath} must have an id`);
@@ -224,7 +366,7 @@ async function loadProvidersFromFile(
 }
 
 export async function loadApiProviders(
-  providerPaths: TestSuiteConfig['providers'],
+  providerPaths: ProvidersConfig,
   options: {
     basePath?: string;
     env?: EnvOverrides;
@@ -239,57 +381,57 @@ export async function loadApiProviders(
 
   if (typeof providerPaths === 'string') {
     // Check if the string path points to a file
-    if (
-      providerPaths.startsWith('file://') &&
-      (providerPaths.endsWith('.yaml') ||
-        providerPaths.endsWith('.yml') ||
-        providerPaths.endsWith('.json'))
-    ) {
+    if (isProviderConfigFileReference(providerPaths)) {
       return loadProvidersFromFile(providerPaths, { basePath, env });
     }
     return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
+    // Reuse `normalizeProviderRef` so a function with `.label = 'foo'` gets a
+    // label-derived id here too, matching the array-element branch below.
+    const descriptor = normalizeProviderRef(providerPaths);
     return [
-      {
-        id: () => 'custom-function',
-        callApi: providerPaths,
-      },
+      createProviderFromFunction(providerPaths as ProviderFunctionWithMetadata, descriptor.id),
     ];
+  } else if (isApiProvider(providerPaths)) {
+    return [providerPaths];
   } else if (Array.isArray(providerPaths)) {
     const providersArrays = await Promise.all(
       providerPaths.map(async (provider, idx) => {
-        if (typeof provider === 'string') {
-          if (
-            provider.startsWith('file://') &&
-            (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
-          ) {
-            return loadProvidersFromFile(provider, { basePath, env });
+        if (isApiProvider(provider)) {
+          return [provider];
+        }
+        const descriptor = normalizeProviderRef(provider, { index: idx });
+        switch (descriptor.kind) {
+          case 'file':
+            return loadProvidersFromFile(descriptor.loadProviderPath, { basePath, env });
+          case 'named':
+            return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
+          case 'function':
+            // Use the descriptor-derived id (which honors `.label`) instead of a
+            // hardcoded `custom-function-${idx}` fallback so this branch stays
+            // symmetric with the single-function branch above and with the
+            // `getProviderIds` array branch below.
+            return [
+              createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id),
+            ];
+          case 'options':
+          case 'map':
+            return [
+              await loadApiProvider(descriptor.loadProviderPath, {
+                options: descriptor.loadOptions,
+                basePath,
+                env,
+              }),
+            ];
+          case 'unknown':
+            throw new Error(
+              `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
+            );
+          default: {
+            const _exhaustive: never = descriptor;
+            throw new Error(`Unhandled provider kind: ${(_exhaustive as any).kind}`);
           }
-          return [await loadApiProvider(provider, { basePath, env })];
         }
-        if (typeof provider === 'function') {
-          return [
-            {
-              id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
-              callApi: provider,
-            },
-          ];
-        }
-        if (provider.id) {
-          // List of ProviderConfig objects
-          return [
-            await loadApiProvider((provider as ProviderOptions).id!, {
-              options: provider,
-              basePath,
-              env,
-            }),
-          ];
-        }
-        // List of { id: string, config: ProviderConfig } objects
-        const id = Object.keys(provider)[0];
-        const providerObject = (provider as ProviderOptionsMap)[id];
-        const context = { ...providerObject, id: providerObject.id || id };
-        return [await loadApiProvider(id, { options: context, basePath, env })];
       }),
     );
     return providersArrays.flat();
@@ -298,32 +440,49 @@ export async function loadApiProviders(
 }
 
 /**
- * Given a `providerPaths` object, resolves a list of provider IDs. Mimics the waterfall behavior
- * of `loadApiProviders` to ensure consistent behavior given the shape of the `providerPaths`
- * object.
- *
- * @param providerPaths - The list of providers to get the IDs of.
- * @returns The IDs of the providers in the providerPaths list.
+ * Reads a provider config file and returns the IDs of all providers defined in it.
+ * Requires every provider entry to have an `id` field.
  */
-export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
+function getProviderIdsFromFile(providerPath: string): string[] {
+  const basePath = cliState.basePath || process.cwd();
+  const configs = loadProviderConfigsFromFile(providerPath, basePath);
+  const relativePath = providerPath.slice('file://'.length);
+  return configs.map((config) => {
+    invariant(config.id, `Provider config in ${relativePath} must have an id`);
+    return config.id;
+  });
+}
+
+/**
+ * Extracts provider IDs from a provider paths configuration without instantiating providers.
+ * Handles strings, functions, and arrays of mixed provider types.
+ * For file:// references, reads the config file to extract IDs.
+ */
+export function getProviderIds(providerPaths: ProvidersConfig): string[] {
   if (typeof providerPaths === 'string') {
+    if (isProviderConfigFileReference(providerPaths)) {
+      return getProviderIdsFromFile(providerPaths);
+    }
     return [providerPaths];
   } else if (typeof providerPaths === 'function') {
-    return ['custom-function'];
+    return [normalizeProviderRef(providerPaths).id];
+  } else if (isApiProvider(providerPaths)) {
+    return [providerPaths.id()];
   } else if (Array.isArray(providerPaths)) {
-    return providerPaths.map((provider, idx) => {
-      if (typeof provider === 'string') {
-        return provider;
+    return providerPaths.flatMap((provider, idx) => {
+      if (isApiProvider(provider)) {
+        return provider.id();
       }
-      if (typeof provider === 'function') {
-        return provider.label || `custom-function-${idx}`;
+      const descriptor = normalizeProviderRef(provider, { index: idx });
+      if (descriptor.kind === 'file') {
+        return getProviderIdsFromFile(descriptor.loadProviderPath);
       }
-      if ((provider as ProviderOptions).id) {
-        return (provider as ProviderOptions).id!;
+      if (descriptor.kind === 'unknown') {
+        throw new Error(
+          `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap. Got: ${describeInvalidProvider(provider)}`,
+        );
       }
-      const id = Object.keys(provider)[0];
-      const providerObject = (provider as ProviderOptionsMap)[id];
-      return providerObject.id || id;
+      return descriptor.id;
     });
   }
   throw new Error('Invalid providers list');

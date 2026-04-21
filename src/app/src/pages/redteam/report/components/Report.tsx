@@ -1,36 +1,34 @@
-import React from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Card, CardContent } from '@app/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import ClearIcon from '@mui/icons-material/Clear';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import ListAltIcon from '@mui/icons-material/ListAlt';
-import PrintIcon from '@mui/icons-material/Print';
-import WarningIcon from '@mui/icons-material/Warning';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Container from '@mui/material/Container';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
-import InputLabel from '@mui/material/InputLabel';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
-import MenuItem from '@mui/material/MenuItem';
-import Modal from '@mui/material/Modal';
-import OutlinedInput from '@mui/material/OutlinedInput';
-import Paper from '@mui/material/Paper';
-import Select, { type SelectChangeEvent } from '@mui/material/Select';
-import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import {
   type EvaluateResult,
   type EvaluateSummaryV2,
@@ -42,48 +40,53 @@ import {
   type SharedResults,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
+import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
+import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import Overview from './Overview';
-import './Report.css';
-
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
+import { useReportStore } from './store';
 import TestSuites from './TestSuites';
-import ToolsDialog from './ToolsDialog';
-import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
+import ToolsDialog, { Tool } from './ToolsDialog';
 
-const App = () => {
+interface ReportProps {
+  /** When provided, uses this evalId instead of reading from URL search params. */
+  evalId?: string;
+  /** When true, skips rendering the report's own header (persistent scroll header, header card, enterprise banner). Used when embedded inside EvalHeader. */
+  embedded?: boolean;
+  /** Called with dropdown menu items for the eval actions dropdown when embedded. */
+  onActionsReady?: (actions: React.ReactNode) => void;
+}
+
+const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {}) => {
   const navigate = useNavigate();
-  const [evalId, setEvalId] = React.useState<string | null>(null);
-  const [evalData, setEvalData] = React.useState<ResultsFile | null>(null);
-  const [selectedPromptIndex, setSelectedPromptIndex] = React.useState(0);
-  const [isPromptModalOpen, setIsPromptModalOpen] = React.useState(false);
-  const [isToolsDialogOpen, setIsToolsDialogOpen] = React.useState(false);
+  const [evalId, setEvalId] = useState<string | null>(evalIdProp ?? null);
+  const [evalData, setEvalData] = useState<ResultsFile | null>(null);
+  const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);
+  const [isToolsDialogOpen, setIsToolsDialogOpen] = useState(false);
   const { recordEvent } = useTelemetry();
 
-  const [isFiltersVisible, setIsFiltersVisible] = React.useState(false);
-  const [selectedCategories, setSelectedCategories] = React.useState<string[]>([]);
-  const [selectedStrategies, setSelectedStrategies] = React.useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = React.useState<'all' | 'pass' | 'fail'>('all');
-  const [searchQuery, setSearchQuery] = React.useState('');
+  const [isFiltersVisible, setIsFiltersVisible] = useState(false);
+  const [reportSettingsOpen, setReportSettingsOpen] = useState(false);
+  const { pluginPassRateThreshold, setPluginPassRateThreshold } = useReportStore();
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedStrategies, setSelectedStrategies] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pass' | 'fail'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   // Scroll tracking for persistent header
-  const [isScrolled, setIsScrolled] = React.useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
-  // Vulnerabilities DataGrid
-  const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
-  const [vulnerabilitiesDataGridFilterModel, setVulnerabilitiesDataGridFilterModel] =
-    React.useState<GridFilterModel>({
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    });
+  // Vulnerabilities table reference for scroll navigation
+  const vulnerabilitiesDataGridRef = useRef<HTMLDivElement>(null);
 
   const searchParams = new URLSearchParams(window.location.search);
-  React.useEffect(() => {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
     const fetchEvalById = async (id: string) => {
       const resp = await callApi(`/results/${id}`, {
         cache: 'no-store',
@@ -99,6 +102,13 @@ const App = () => {
         evalId: id,
       });
     };
+
+    // If evalId was provided as a prop, use it directly
+    if (evalIdProp) {
+      setEvalId(evalIdProp);
+      fetchEvalById(evalIdProp);
+      return;
+    }
 
     if (searchParams) {
       const evalId = searchParams.get('evalId');
@@ -130,10 +140,10 @@ const App = () => {
         fetchLatestEvalId();
       }
     }
-  }, []);
+  }, [evalIdProp, recordEvent]);
 
   // Track scroll position for persistent header visibility
-  React.useEffect(() => {
+  useEffect(() => {
     const handleScroll = () => {
       const scrollThreshold = 200;
       setIsScrolled(window.scrollY > scrollThreshold);
@@ -144,16 +154,27 @@ const App = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const failuresByPlugin = React.useMemo(() => {
+  const failuresByPlugin = useMemo(() => {
     if (!evalData) {
       return {};
     }
+
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
 
     const failures: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
     evalData?.results.results.forEach((result) => {
+      // Filter by selected target/provider if multiple targets exist
+      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
+        return;
+      }
+
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
         console.warn(`Could not get failures for plugin ${pluginId}`);
@@ -184,18 +205,29 @@ const App = () => {
       }
     });
     return failures;
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
-  const passesByPlugin = React.useMemo(() => {
+  const passesByPlugin = useMemo(() => {
     if (!evalData) {
       return {};
     }
+
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
 
     const passes: Record<
       string,
       { prompt: string; output: string; gradingResult?: GradingResult; result?: EvaluateResult }[]
     > = {};
     evalData?.results.results.forEach((result) => {
+      // Filter by selected target/provider if multiple targets exist
+      if (prompts.length > 1 && selectedPrompt && result.promptIdx !== selectedPromptIndex) {
+        return;
+      }
+
       const pluginId = getPluginIdFromResult(result);
       if (!pluginId) {
         console.warn(`Could not get passes for plugin ${pluginId}`);
@@ -221,15 +253,26 @@ const App = () => {
       }
     });
     return passes;
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
-  const categoryStats = React.useMemo(() => {
+  const categoryStats = useMemo(() => {
     if (!evalData) {
       return {};
     }
 
-    return evalData.results.results.reduce(
+    const prompts =
+      (evalData.version >= 4
+        ? evalData.prompts
+        : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
+    const selectedPrompt = prompts[selectedPromptIndex];
+
+    return evalData.results.results.reduce<Record<string, Required<TestResultStats>>>(
       (acc, row) => {
+        // Filter by selected target/provider if multiple targets exist
+        if (prompts.length > 1 && selectedPrompt && row.promptIdx !== selectedPromptIndex) {
+          return acc;
+        }
+
         const pluginId = getPluginIdFromResult(row);
         if (!pluginId) {
           return acc;
@@ -263,11 +306,11 @@ const App = () => {
 
         return acc;
       },
-      {} as Record<string, Required<TestResultStats>>,
+      {},
     );
-  }, [evalData]);
+  }, [evalData, selectedPromptIndex]);
 
-  const strategyStats = React.useMemo(() => {
+  const strategyStats = useMemo(() => {
     if (!failuresByPlugin || !passesByPlugin) {
       return {};
     }
@@ -303,15 +346,15 @@ const App = () => {
     return stats;
   }, [failuresByPlugin, passesByPlugin]);
 
-  const availableCategories = React.useMemo(() => {
+  const availableCategories = useMemo(() => {
     return Object.keys(categoryStats).sort();
   }, [categoryStats]);
 
-  const availableStrategies = React.useMemo(() => {
+  const availableStrategies = useMemo(() => {
     return Object.keys(strategyStats).sort();
   }, [strategyStats]);
 
-  const filteredFailuresByPlugin = React.useMemo(() => {
+  const filteredFailuresByPlugin = useMemo(() => {
     if (!failuresByPlugin) {
       return {} as typeof failuresByPlugin;
     }
@@ -356,7 +399,7 @@ const App = () => {
     return filtered;
   }, [failuresByPlugin, selectedCategories, selectedStrategies, statusFilter, searchQuery]);
 
-  const filteredPassesByPlugin = React.useMemo(() => {
+  const filteredPassesByPlugin = useMemo(() => {
     if (!passesByPlugin) {
       return {} as typeof passesByPlugin;
     }
@@ -404,7 +447,7 @@ const App = () => {
   /**
    * Recalculates category (plugin) stats given the filtered failures and passes.
    */
-  const filteredCategoryStats = React.useMemo(() => {
+  const filteredCategoryStats = useMemo(() => {
     const stats: Record<string, Required<TestResultStats>> = {};
 
     Object.entries(filteredFailuresByPlugin).forEach(([pluginId, tests]) => {
@@ -425,7 +468,7 @@ const App = () => {
     return stats;
   }, [filteredFailuresByPlugin, filteredPassesByPlugin]);
 
-  const filteredStrategyStats = React.useMemo(() => {
+  const filteredStrategyStats = useMemo(() => {
     const stats: CategoryStats = {};
 
     Object.values(filteredFailuresByPlugin).forEach((tests) => {
@@ -469,7 +512,7 @@ const App = () => {
    * Extracts custom policy IDs from the results in order to then
    * filter policies from the categories stats for the framework compliance section.
    */
-  const customPolicyIds = React.useMemo(() => {
+  const customPolicyIds = useMemo(() => {
     const ids = new Set();
     if (!evalData) {
       return ids;
@@ -490,7 +533,7 @@ const App = () => {
    * - Determines whether to use filtered or unfiltered category stats based on the presence of active filters.
    * - Removes custom policies; they do not belong to any framework.
    */
-  const categoryStatsForFrameworkCompliance = React.useMemo(() => {
+  const categoryStatsForFrameworkCompliance = useMemo(() => {
     const stats = { ...(hasActiveFilters ? filteredCategoryStats : categoryStats) };
     // Remove custom policies; they do not belong to any framework.
     Object.keys(stats).forEach((pluginId) => {
@@ -501,6 +544,99 @@ const App = () => {
     return stats;
   }, [hasActiveFilters, filteredCategoryStats, categoryStats, customPolicyIds]);
 
+  const actionButtons = useMemo(
+    () => (
+      <div className="flex items-center gap-1">
+        {evalId && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="view all logs"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={(event) => {
+                  const url = EVAL_ROUTES.DETAIL(evalId);
+                  if (event.ctrlKey || event.metaKey) {
+                    window.open(url, '_blank');
+                  } else if (evalId) {
+                    navigate(url);
+                  }
+                }}
+              >
+                <ListOrdered className="size-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View all logs</TooltipContent>
+          </Tooltip>
+        )}
+        {evalId && evalData && (
+          <ReportDownloadButton
+            evalDescription={evalData?.config.description || evalId}
+            evalData={evalData}
+          />
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="print page"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => window.print()}
+            >
+              <Printer className="size-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Print this page (Ctrl+P) and select &apos;Save as PDF&apos; for best results
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="filter results"
+              onClick={() => setIsFiltersVisible(!isFiltersVisible)}
+              className={
+                hasActiveFilters ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              }
+            >
+              <Filter className="size-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Filter results</TooltipContent>
+        </Tooltip>
+        <ReportSettingsDialogButton />
+      </div>
+    ),
+    [evalData, evalId, navigate, hasActiveFilters, isFiltersVisible],
+  );
+
+  // Expose action menu items to parent when embedded
+  useEffect(() => {
+    if (!embedded || !onActionsReady || !evalData || !evalId) {
+      return;
+    }
+    onActionsReady(
+      <>
+        <DropdownMenuItem onClick={() => setIsFiltersVisible((v) => !v)}>
+          <Filter className="size-4 mr-2" />
+          {isFiltersVisible ? 'Hide filters' : 'Show filters'}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => window.print()}>
+          <Printer className="size-4 mr-2" />
+          Print / Save as PDF
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setReportSettingsOpen(true)}>
+          <Settings className="size-4 mr-2" />
+          Report settings
+        </DropdownMenuItem>
+      </>,
+    );
+  }, [embedded, onActionsReady, evalData, evalId, isFiltersVisible]);
+
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
     description: 'Red team evaluation report',
@@ -508,46 +644,26 @@ const App = () => {
 
   if (!evalData || !evalId) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 1.5,
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '9rem',
-        }}
-      >
-        <CircularProgress size={22} />
-        <Box>Waiting for report data</Box>
-      </Box>
+      <div className="flex h-36 flex-col items-center justify-center gap-3">
+        <Spinner className="size-5" />
+        <span>Waiting for report data</span>
+      </div>
     );
   }
 
   if (!evalData.config.redteam) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          padding: 3,
-        }}
-      >
-        <Paper elevation={3} sx={{ padding: 4, maxWidth: 600, textAlign: 'center' }}>
-          <WarningIcon color="warning" sx={{ fontSize: 60, marginBottom: 2 }} />
-          <Typography variant="h4" mb={3}>
-            Report unavailable
-          </Typography>
-          <Typography variant="body1">
+      <div className="flex h-screen flex-col items-center justify-center p-6">
+        <Card className="max-w-xl p-8 text-center">
+          <AlertTriangle className="mx-auto mb-4 size-16 text-amber-500" />
+          <h1 className="mb-6 text-2xl font-bold">Report unavailable</h1>
+          <p className="text-muted-foreground">
             The {searchParams.get('evalId') ? 'selected' : 'latest'} evaluation results are not
             displayable in report format.
-          </Typography>
-          <Typography variant="body1">Please run a red team and try again.</Typography>
-        </Paper>
-      </Box>
+          </p>
+          <p className="text-muted-foreground">Please run a red team and try again.</p>
+        </Card>
+      </div>
     );
   }
 
@@ -561,22 +677,13 @@ const App = () => {
       ? convertResultsToTable(evalData).body
       : (evalData.results as EvaluateSummaryV2).table.body) || [];
 
-  let tools = [];
+  let tools: Tool[] = [];
   if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
     const providerTools = evalData.config.providers[0].config?.tools;
     // If providerTools exists, convert it to an array (if it's not already)
     // Otherwise, use an empty array
     tools = providerTools ? (Array.isArray(providerTools) ? providerTools : [providerTools]) : [];
   }
-
-  const handlePromptChipClick = () => {
-    setIsPromptModalOpen(true);
-  };
-
-  const handlePromptSelect = (index: number) => {
-    setSelectedPromptIndex(index);
-    setIsPromptModalOpen(false);
-  };
 
   const clearAllFilters = () => {
     setSelectedCategories([]);
@@ -585,284 +692,212 @@ const App = () => {
     setSearchQuery('');
   };
 
-  const ActionButtons = () => (
-    <>
-      <Tooltip title="View all logs" placement="top">
-        <IconButton
-          sx={{ position: 'relative' }}
-          aria-label="view all logs"
-          onClick={(event) => {
-            const url = `/eval/${evalId}`;
-            if (event.ctrlKey || event.metaKey) {
-              window.open(url, '_blank');
-            } else if (evalId) {
-              navigate(url);
-            }
-          }}
-        >
-          <ListAltIcon />
-        </IconButton>
-      </Tooltip>
-      <ReportDownloadButton
-        evalDescription={evalData.config.description || evalId}
-        evalData={evalData}
-      />
-      <Tooltip
-        title="Print this page (Ctrl+P) and select 'Save as PDF' for best results"
-        placement="top"
-      >
-        <IconButton
-          sx={{ position: 'relative' }}
-          aria-label="print page"
-          onClick={() => window.print()}
-        >
-          <PrintIcon />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Filter results" placement="top">
-        <IconButton
-          sx={{ position: 'relative' }}
-          aria-label="filter results"
-          onClick={() => setIsFiltersVisible(!isFiltersVisible)}
-          color={hasActiveFilters ? 'primary' : 'default'}
-        >
-          <FilterListIcon />
-        </IconButton>
-      </Tooltip>
-      <ReportSettingsDialogButton />
-    </>
-  );
-
   return (
     <>
-      <Box
-        sx={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 1000,
-          backgroundColor: 'background.paper',
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          transform: isScrolled ? 'translateY(0)' : 'translateY(-100%)',
-          transition: 'transform 0.15s ease-in-out',
-          boxShadow: isScrolled ? 2 : 0,
-        }}
-        className="print-hide"
-      >
-        <Container maxWidth="xl">
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              py: 2,
-              minHeight: 64,
-            }}
+      {!embedded && (
+        <>
+          {/* Persistent header on scroll */}
+          <div
+            className={cn(
+              'fixed inset-x-0 top-0 z-50 border-b border-border bg-card transition-transform duration-150 print:hidden',
+              isScrolled ? 'translate-y-0 shadow-md' : '-translate-y-full',
+            )}
           >
-            <Typography
-              variant="h6"
-              sx={{
-                fontWeight: 'bold',
-                flexGrow: 1,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                pr: 2,
-              }}
-            >
-              {evalData.config.description || 'Risk Assessment'}
-            </Typography>
-            <Box sx={{ display: 'flex', flexShrink: 0 }}>
-              <ActionButtons />
-            </Box>
-          </Box>
-        </Container>
-      </Box>
-      <Container maxWidth="xl">
-        <Stack spacing={4} pb={8} pt={2}>
-          {evalData.config.redteam && <EnterpriseBanner evalId={evalId || ''} />}
-          <Card className="report-header" sx={{ position: 'relative' }}>
-            <Box
-              sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}
-              className="print-hide"
-            >
-              <ActionButtons />
-            </Box>
-            <Typography variant="h4">
-              <strong>{evalData.config.description || 'Risk Assessment'}</strong>
-            </Typography>
-            <Typography variant="subtitle1" mb={2}>
-              {formatDataGridDate(evalData.createdAt)}
-            </Typography>
-            <Box className="report-details">
-              {selectedPrompt && (
-                <Chip
-                  size="small"
-                  label={
-                    <>
+            <div className="mx-auto max-w-7xl px-4">
+              <div className="flex min-h-16 items-center justify-between py-2">
+                <h1 className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap pr-4 font-bold">
+                  {evalData.config.description || 'Risk Assessment'}
+                </h1>
+                <div className="shrink-0">{actionButtons}</div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="mx-auto max-w-7xl px-4 pb-8 pt-4 print:max-w-none print:px-0 print:pt-0 print:pb-0">
+        <div className="flex flex-col gap-6">
+          {!embedded && <EnterpriseBanner evalId={evalId} />}
+
+          {!embedded && (
+            <>
+              {/* Report Header Card */}
+              <Card className="relative rounded-xl p-6 pr-48 shadow-md dark:shadow-none print:pr-4">
+                <div className="absolute right-4 top-4 flex print:hidden">{actionButtons}</div>
+                <h1 className="text-2xl font-bold">
+                  {evalData.config.description || 'Risk Assessment'}
+                </h1>
+                <p className="mb-4 text-muted-foreground">
+                  {formatDataGridDate(evalData.createdAt)}
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {selectedPrompt && prompts.length > 1 ? (
+                    <Select
+                      value={String(selectedPromptIndex)}
+                      onValueChange={(value) => setSelectedPromptIndex(Number(value))}
+                    >
+                      <SelectTrigger className="h-6 w-auto rounded-full border-none bg-muted px-3 text-xs">
+                        <SelectValue>
+                          <span className="text-xs">
+                            <strong>Target:</strong> {prompts[selectedPromptIndex].provider}
+                          </span>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {prompts.map((prompt, idx) => (
+                          <SelectItem key={idx} value={String(idx)}>
+                            {prompt.provider}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : selectedPrompt ? (
+                    <Badge variant="secondary">
                       <strong>Target:</strong> {selectedPrompt.provider}
-                    </>
-                  }
-                  onClick={handlePromptChipClick}
-                  style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
-                />
-              )}
-              <Tooltip
-                title={
-                  selectedPrompt?.metrics?.tokenUsage?.total
-                    ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
-                    : ''
-                }
-              >
-                <Chip
-                  size="small"
-                  label={
-                    <>
-                      <strong>Depth:</strong>{' '}
-                      {(
-                        selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
-                      ).toLocaleString()}{' '}
-                      probes
-                    </>
-                  }
-                />
-              </Tooltip>
-              {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
-                <Chip
-                  size="small"
-                  label={
-                    <>
+                    </Badge>
+                  ) : null}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Badge variant="secondary">
+                          <strong>Depth:</strong>{' '}
+                          {(
+                            selectedPrompt?.metrics?.tokenUsage?.numRequests || tableData.length
+                          ).toLocaleString()}{' '}
+                          probes
+                        </Badge>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {selectedPrompt?.metrics?.tokenUsage?.total
+                        ? `${selectedPrompt.metrics.tokenUsage.total.toLocaleString()} tokens`
+                        : ''}
+                    </TooltipContent>
+                  </Tooltip>
+                  {selectedPrompt && selectedPrompt.raw !== '{{prompt}}' && (
+                    <Badge variant="secondary">
                       <strong>Prompt:</strong> &quot;
                       {selectedPrompt.raw.length > 40
                         ? `${selectedPrompt.raw.substring(0, 40)}...`
                         : selectedPrompt.raw}
                       &quot;
-                    </>
-                  }
-                  onClick={handlePromptChipClick}
-                  style={{ cursor: prompts.length > 1 ? 'pointer' : 'default' }}
-                />
-              )}
-              {tools.length > 0 && (
-                <Chip
-                  size="small"
-                  label={
-                    <>
+                    </Badge>
+                  )}
+                  {tools.length > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="cursor-pointer"
+                      onClick={() => setIsToolsDialogOpen(true)}
+                    >
                       <strong>Tools:</strong> {tools.length} available
-                    </>
-                  }
-                  onClick={() => setIsToolsDialogOpen(true)}
-                  style={{ cursor: 'pointer' }}
-                />
-              )}
-            </Box>
-          </Card>
+                    </Badge>
+                  )}
+                </div>
+              </Card>
+            </>
+          )}
+
+          {/* Filters Card */}
           {isFiltersVisible && (
-            <Card className="print-hide">
-              <Box sx={{ p: 3 }}>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                  }}
-                >
-                  <Typography variant="h6">Filters</Typography>
+            <Card className="print:hidden">
+              <CardContent className="p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Filters</h2>
                   {hasActiveFilters && (
-                    <Button startIcon={<ClearIcon />} onClick={clearAllFilters} size="small">
+                    <Button variant="ghost" size="sm" onClick={clearAllFilters}>
+                      <X className="mr-1 size-4" />
                       Clear All
                     </Button>
                   )}
-                </Box>
+                </div>
 
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                  <TextField
-                    label="Search prompts & outputs"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    variant="outlined"
-                    size="small"
-                    sx={{ minWidth: 200 }}
-                  />
+                <div className="flex flex-col gap-4 md:flex-row">
+                  <div className="min-w-[200px]">
+                    <Label htmlFor="search" className="sr-only">
+                      Search prompts & outputs
+                    </Label>
+                    <Input
+                      id="search"
+                      placeholder="Search prompts & outputs"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
 
-                  <FormControl size="small" sx={{ minWidth: 120 }}>
-                    <InputLabel>Status</InputLabel>
+                  <div className="min-w-[120px]">
                     <Select
                       value={statusFilter}
-                      label="Status"
-                      onChange={(event: SelectChangeEvent<'all' | 'pass' | 'fail'>) =>
-                        setStatusFilter(event.target.value as 'all' | 'pass' | 'fail')
+                      onValueChange={(value) => setStatusFilter(value as 'all' | 'pass' | 'fail')}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="pass">Pass Only</SelectItem>
+                        <SelectItem value="fail">Fail Only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[200px]">
+                    <Select
+                      value={selectedCategories.length === 1 ? selectedCategories[0] : 'all'}
+                      onValueChange={(value) =>
+                        setSelectedCategories(value === 'all' ? [] : [value])
                       }
                     >
-                      <MenuItem value="all">All</MenuItem>
-                      <MenuItem value="pass">Pass Only</MenuItem>
-                      <MenuItem value="fail">Fail Only</MenuItem>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Risk Categories">
+                          {selectedCategories.length > 0
+                            ? `${selectedCategories.length} selected`
+                            : 'Risk Categories'}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        {availableCategories.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
-                  </FormControl>
+                  </div>
 
-                  <FormControl size="small" sx={{ minWidth: 200 }}>
-                    <InputLabel>Risk Categories</InputLabel>
+                  <div className="min-w-[200px]">
                     <Select
-                      multiple
-                      value={selectedCategories}
-                      onChange={(event: SelectChangeEvent<string[]>) => {
-                        const value = event.target.value;
-                        setSelectedCategories(typeof value === 'string' ? [value] : value);
-                      }}
-                      input={<OutlinedInput label="Risk Categories" />}
-                      renderValue={(selected: string[]) => (
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                          {selected.map((value: string) => (
-                            <Chip key={value} label={value} size="small" />
-                          ))}
-                        </Box>
-                      )}
+                      value={selectedStrategies.length === 1 ? selectedStrategies[0] : 'all'}
+                      onValueChange={(value) =>
+                        setSelectedStrategies(value === 'all' ? [] : [value])
+                      }
                     >
-                      {availableCategories.map((category) => (
-                        <MenuItem key={category} value={category}>
-                          {category}
-                        </MenuItem>
-                      ))}
+                      <SelectTrigger>
+                        <SelectValue placeholder="Strategies">
+                          {selectedStrategies.length > 0
+                            ? `${selectedStrategies.length} selected`
+                            : 'Strategies'}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Strategies</SelectItem>
+                        {availableStrategies.map((strategy) => (
+                          <SelectItem key={strategy} value={strategy}>
+                            {strategy}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
-                  </FormControl>
-
-                  <FormControl size="small" sx={{ minWidth: 200 }}>
-                    <InputLabel>Strategies</InputLabel>
-                    <Select
-                      multiple
-                      value={selectedStrategies}
-                      onChange={(event: SelectChangeEvent<string[]>) => {
-                        const value = event.target.value;
-                        setSelectedStrategies(typeof value === 'string' ? [value] : value);
-                      }}
-                      input={<OutlinedInput label="Strategies" />}
-                      renderValue={(selected: string[]) => (
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                          {selected.map((value: string) => (
-                            <Chip key={value} label={value} size="small" />
-                          ))}
-                        </Box>
-                      )}
-                    >
-                      {availableStrategies.map((strategy) => (
-                        <MenuItem key={strategy} value={strategy}>
-                          {strategy}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Stack>
-              </Box>
+                  </div>
+                </div>
+              </CardContent>
             </Card>
           )}
+
           <Overview
             categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
             plugins={evalData.config.redteam.plugins || []}
             vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-            setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
           />
           <StrategyStats
             strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
@@ -883,77 +918,68 @@ const App = () => {
             failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
             passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
             vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-            vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
-            setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
           />
           <FrameworkCompliance
             evalId={evalId}
             categoryStats={categoryStatsForFrameworkCompliance}
+            config={evalData.config}
           />
-        </Stack>
-        <Modal
-          open={isPromptModalOpen}
-          onClose={() => setIsPromptModalOpen(false)}
-          aria-labelledby="prompt-modal-title"
-          sx={{
-            '& .MuiModal-root': {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            },
-            '& .MuiBox-root': {
-              width: '80%',
-              maxWidth: 800,
-              maxHeight: '90vh',
-              overflowY: 'auto',
-            },
-          }}
-        >
-          <Box
-            sx={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: 400,
-              bgcolor: 'background.paper',
-              boxShadow: 24,
-              p: 4,
-            }}
-          >
-            <Typography id="prompt-modal-title" variant="h6" component="h6" gutterBottom>
-              View results for...
-            </Typography>
-            <List>
-              {prompts.map((prompt, index) => (
-                // @ts-ignore
-                <ListItem
-                  key={index}
-                  button
-                  onClick={() => handlePromptSelect(index)}
-                  selected={index === selectedPromptIndex}
-                >
-                  <ListItemText
-                    primary={`${prompt.provider}`}
-                    secondary={
-                      <pre>
-                        {prompt.raw.length > 100 && prompts.length > 1
-                          ? `${prompt.raw.substring(0, 100)}...`
-                          : prompt.raw}
-                      </pre>
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </Box>
-        </Modal>
+        </div>
         <ToolsDialog
           open={isToolsDialogOpen}
           onClose={() => setIsToolsDialogOpen(false)}
           tools={tools}
         />
-      </Container>
+      </div>
+      {embedded && (
+        <Dialog
+          open={reportSettingsOpen}
+          onOpenChange={(isOpen) => !isOpen && setReportSettingsOpen(false)}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Report Settings</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-6 py-4">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="plugin-pass-rate-embedded">Plugin Pass Rate Threshold</Label>
+                  <span className="text-sm font-medium text-muted-foreground">
+                    {Number.isNaN(pluginPassRateThreshold)
+                      ? 'NaN'
+                      : `${(Math.min(1, Math.max(0, pluginPassRateThreshold || 0)) * 100).toFixed(0)}%`}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Sets the threshold for considering a plugin as passed on the risk cards.
+                </p>
+                <input
+                  id="plugin-pass-rate-embedded"
+                  type="range"
+                  value={
+                    Number.isNaN(pluginPassRateThreshold)
+                      ? 0
+                      : Math.min(1, Math.max(0, pluginPassRateThreshold || 0))
+                  }
+                  onChange={(e) => setPluginPassRateThreshold(Number.parseFloat(e.target.value))}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>0%</span>
+                  <span>50%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button onClick={() => setReportSettingsOpen(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 };

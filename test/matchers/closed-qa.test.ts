@@ -1,22 +1,25 @@
-import { matchesClosedQa } from '../../src/matchers';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesClosedQa } from '../../src/matchers/llmGrading';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesClosedQa', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'foo \n \n bar\n Y Y \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when the closed QA check passes', async () => {
@@ -25,7 +28,7 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: 'foo \n \n bar\n Y Y \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
@@ -51,7 +54,7 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: 'foo bar N \n',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
@@ -77,7 +80,7 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
       throw new Error('An error occurred');
     });
 
@@ -93,7 +96,7 @@ describe('matchesClosedQa', () => {
     const grading = {};
 
     let isJson = false;
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation((prompt) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation((prompt) => {
       try {
         JSON.parse(prompt);
         isJson = true;
@@ -122,35 +125,37 @@ describe('matchesClosedQa', () => {
   });
 
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
-    const input = 'Input {{ var }}';
-    const expected = 'Expected {{ var }}';
-    const output = 'Output {{ var }}';
-    const grading: GradingConfig = {
-      provider: DefaultGradingProvider,
-    };
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    try {
+      const input = 'Input {{ var }}';
+      const expected = 'Expected {{ var }}';
+      const output = 'Output {{ var }}';
+      const grading: GradingConfig = {
+        provider: DefaultGradingProvider,
+      };
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-      output: 'Y',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+        output: 'Y',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
 
-    await matchesClosedQa(input, expected, output, grading);
+      await matchesClosedQa(input, expected, output, grading);
 
-    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Input {{ var }}'),
-      expect.any(Object),
-    );
-    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Expected {{ var }}'),
-      expect.any(Object),
-    );
-    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.stringContaining('Output {{ var }}'),
-      expect.any(Object),
-    );
-
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+      expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Input {{ var }}'),
+        expect.any(Object),
+      );
+      expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Expected {{ var }}'),
+        expect.any(Object),
+      );
+      expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Output {{ var }}'),
+        expect.any(Object),
+      );
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('should correctly substitute variables in custom rubricPrompt', async () => {
@@ -165,17 +170,14 @@ Answer: {{completion}}
 
 Does the answer meet the criteria? Answer Y or N.`;
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output: 'Y',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: mockCallApi,
-      },
+      provider: createMockProvider({ callApi: mockCallApi }),
     };
 
     const result = await matchesClosedQa(input, expected, output, grading);

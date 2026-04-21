@@ -36,10 +36,12 @@ type TrueFoundryProviderOptions = ProviderOptions & {
 };
 
 /**
- * TrueFoundry LLM Gateway Provider
+ * TrueFoundry AI Gateway Provider
  *
- * Provides access to 1000+ LLMs through TrueFoundry's unified gateway with
- * enterprise-grade security, observability, and governance.
+ * Connects promptfoo to TrueFoundry's enterprise-grade AI Gateway, which
+ * encompasses an LLM Gateway, MCP Gateway, and Agent Gateway for connecting,
+ * observing, and governing agentic AI applications across providers from a
+ * single control plane.
  */
 export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
@@ -71,12 +73,12 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   /**
    * Override getOpenAiBody to add TrueFoundry-specific headers and body parameters
    */
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ) {
-    const { body, config } = super.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
 
     // Add TrueFoundry-specific headers
     const headers: Record<string, string> = {

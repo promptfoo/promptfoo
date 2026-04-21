@@ -3,9 +3,9 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsIndexPage from './page';
 
-vi.mock('./components/EvalsDataGrid', () => ({
+vi.mock('./components/EvalsTable', () => ({
   default: ({ onEvalSelected }: { onEvalSelected: (evalId: string) => void }) => (
-    <div data-testid="evals-data-grid-mock">
+    <div data-testid="evals-table-mock">
       <button onClick={() => onEvalSelected('test-eval-id')}>Select Eval</button>
     </div>
   ),
@@ -37,7 +37,7 @@ describe('EvalsIndexPage', () => {
     document.title = originalTitle;
   });
 
-  it('should navigate to the correct evaluation page when an evaluation is selected in the EvalsDataGrid', () => {
+  it('should navigate to the correct evaluation page when an evaluation is selected in the EvalsTable', () => {
     const navigate = vi.fn();
     vi.mocked(useNavigate).mockReturnValue(navigate);
 

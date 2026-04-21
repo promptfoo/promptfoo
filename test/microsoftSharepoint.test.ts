@@ -1,27 +1,32 @@
-import { fetchCsvFromSharepoint } from '../src/microsoftSharepoint';
-import { fetchWithProxy } from '../src/util/fetch/index';
-import { getEnvString } from '../src/envars';
-import { createMockResponse } from './util/utils';
 import fs from 'fs';
 
-jest.mock('../src/util/fetch/index.ts', () => ({
-  fetchWithProxy: jest.fn(),
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getEnvString } from '../src/envars';
+import { fetchCsvFromSharepoint } from '../src/microsoftSharepoint';
+import { fetchWithProxy } from '../src/util/fetch/index';
+import { createMockResponse } from './util/utils';
+
+vi.mock('../src/util/fetch/index.ts', () => ({
+  fetchWithProxy: vi.fn(),
 }));
 
-jest.mock('../src/envars', () => ({
-  getEnvString: jest.fn(),
+vi.mock('../src/envars', () => ({
+  getEnvString: vi.fn(),
 }));
 
-jest.mock('fs');
+vi.mock('fs');
 
 // Mock the MSAL node module
 const mockMsalClient = {
-  acquireTokenByClientCredential: jest.fn(),
+  acquireTokenByClientCredential: vi.fn(),
 };
 
-jest.mock('@azure/msal-node', () => ({
-  ConfidentialClientApplication: jest.fn(() => mockMsalClient),
-}));
+vi.mock('@azure/msal-node', () => {
+  const ConfidentialClientApplication = vi.fn(function ConfidentialClientApplication() {
+    return mockMsalClient;
+  });
+  return { ConfidentialClientApplication };
+});
 
 describe('SharePoint Integration', () => {
   const TEST_SHAREPOINT_URL =
@@ -30,10 +35,10 @@ describe('SharePoint Integration', () => {
   const TEST_ACCESS_TOKEN = 'test-access-token-123';
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Setup default environment variables
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       const values: Record<string, string> = {
         SHAREPOINT_BASE_URL: TEST_BASE_URL,
         SHAREPOINT_CLIENT_ID: 'test-client-id',
@@ -51,7 +56,7 @@ MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC
 MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
 -----END CERTIFICATE-----`;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(mockPemContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(mockPemContent);
 
     // Mock successful token acquisition
     mockMsalClient.acquireTokenByClientCredential.mockResolvedValue({
@@ -60,14 +65,14 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('fetchCsvFromSharepoint', () => {
     it('should fetch and parse CSV data successfully', async () => {
       const mockCsvData = 'language,input,__expected\nFrench,Hello world,icontains: bonjour';
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: true,
           status: 200,
@@ -99,7 +104,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     it('should handle path encoding correctly', async () => {
       const mockCsvData = 'header1,header2\nvalue1,value2';
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: true,
           status: 200,
@@ -110,13 +115,13 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
       await fetchCsvFromSharepoint(TEST_SHAREPOINT_URL);
 
       // Verify the API URL contains the file path (encodeURI may double-encode %20 as %2520)
-      const call = jest.mocked(fetchWithProxy).mock.calls[0][0] as string;
+      const call = vi.mocked(fetchWithProxy).mock.calls[0][0] as string;
       expect(call).toContain('/_api/web/GetFileByServerRelativeUrl');
       expect(call).toContain('test-cases.csv');
     });
 
     it('should throw error when SHAREPOINT_BASE_URL is missing', async () => {
-      jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
         if (key === 'SHAREPOINT_BASE_URL') {
           return defaultValue;
         }
@@ -129,7 +134,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     });
 
     it('should throw error on non-200 response', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: false,
           status: 403,
@@ -143,7 +148,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     });
 
     it('should throw error on 404 not found', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: false,
           status: 404,
@@ -159,7 +164,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     it('should handle CSV parsing errors gracefully', async () => {
       const invalidCsvData = 'header1,header2\n"unclosed quote';
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: true,
           status: 200,
@@ -175,7 +180,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     it('should handle empty CSV correctly', async () => {
       const mockCsvData = 'header1,header2\n';
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: true,
           status: 200,
@@ -190,7 +195,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     it('should handle CSV with special characters', async () => {
       const mockCsvData = 'input,output\n"Hello, World!","Bonjour, Monde!"';
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: true,
           status: 200,
@@ -208,7 +213,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
     });
 
     it('should normalize trailing slashes in base URL', async () => {
-      jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+      vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
         const values: Record<string, string> = {
           SHAREPOINT_BASE_URL: 'https://yourcompany.sharepoint.com/', // Trailing slash
           SHAREPOINT_CLIENT_ID: 'test-client-id',
@@ -220,7 +225,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
 
       const mockCsvData = 'header1,header2\nvalue1,value2';
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: true,
           status: 200,
@@ -231,7 +236,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
       await fetchCsvFromSharepoint(TEST_SHAREPOINT_URL);
 
       // Verify the URL doesn't have protocol://domain// pattern (but :// is ok)
-      const call = jest.mocked(fetchWithProxy).mock.calls[0][0] as string;
+      const call = vi.mocked(fetchWithProxy).mock.calls[0][0] as string;
       expect(call).not.toMatch(/com\/\//);
       expect(call).toContain('/_api/web/');
     });
@@ -266,7 +271,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
         'https://yourcompany.sharepoint.com/sites/yoursite/Shared Documents/test.csv';
       const mockCsvData = 'header1,header2\nvalue1,value2';
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: true,
           status: 200,
@@ -288,7 +293,7 @@ MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkSdMA0GCSqGSIb3DQEBCwUA
         'https://yourcompany.sharepoint.com/sites/yoursite/Files/test-data_v1.0.csv';
       const mockCsvData = 'header1,header2\nvalue1,value2';
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           ok: true,
           status: 200,

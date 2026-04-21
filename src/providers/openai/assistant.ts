@@ -4,20 +4,20 @@ import OpenAI from 'openai';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sleep } from '../../util/time';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { failApiCall, getTokenUsage } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { AssistantFunctionCallback, CallbackContext, OpenAiSharedOptions } from './types';
 
 type OpenAiAssistantOptions = OpenAiSharedOptions & {
@@ -59,7 +59,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
 
     // Preload function callbacks if available
     if (this.assistantConfig.functionToolCallbacks) {
-      this.preloadFunctionCallbacks();
+      void this.preloadFunctionCallbacks();
     }
   }
 
@@ -226,9 +226,7 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const openai = new OpenAI({
@@ -253,9 +251,11 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
       assistant_id: this.assistantId,
       model: this.assistantConfig.modelName || undefined,
       instructions: this.assistantConfig.instructions || undefined,
-      tools: maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars) || undefined,
+      tools:
+        (await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars)) ||
+        undefined,
       metadata: this.assistantConfig.metadata || undefined,
-      temperature: this.assistantConfig.temperature || undefined,
+      temperature: this.assistantConfig.temperature ?? undefined,
       tool_choice: this.assistantConfig.toolChoice || undefined,
       tool_resources: this.assistantConfig.tool_resources || undefined,
       thread: {

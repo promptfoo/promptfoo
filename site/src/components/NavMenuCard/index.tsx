@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+
 import Link from '@docusaurus/Link';
 import styles from './styles.module.css';
 
@@ -22,7 +23,7 @@ export default function NavMenuCard({
   label,
   items,
   position = 'left',
-}: NavMenuCardProps): JSX.Element {
+}: NavMenuCardProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 

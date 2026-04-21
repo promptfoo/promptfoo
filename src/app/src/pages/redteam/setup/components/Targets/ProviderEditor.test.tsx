@@ -1,7 +1,8 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderEditor, { defaultHttpTarget } from './ProviderEditor';
 
@@ -9,30 +10,28 @@ import type { ProviderOptions } from '../../types';
 
 vi.mock('./ProviderConfigEditor', () => {
   return {
-    default: React.forwardRef(
-      (
-        props: {
-          providerType?: string;
-          validateAll?: boolean;
-          setError?: (error: string | null) => void;
-        },
-        ref,
-      ) => {
-        const validate = vi.fn(() => true);
-        React.useImperativeHandle(ref, () => ({
-          validate,
-        }));
+    default: (props: {
+      providerType?: string;
+      validateAll?: boolean;
+      setError?: (error: string | null) => void;
+      onValidationRequest?: (validator: () => boolean) => void;
+    }) => {
+      const validate = vi.fn(() => true);
 
-        React.useEffect(() => {
-          if (props.validateAll) {
-            validate();
-            props.setError?.('Validation triggered');
-          }
-        }, [props.validateAll, props.setError, validate]);
+      // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+      React.useEffect(() => {
+        props.onValidationRequest?.(validate);
+      }, [props.onValidationRequest]);
 
-        return <div data-testid="provider-config-editor" data-providertype={props.providerType} />;
-      },
-    ),
+      React.useEffect(() => {
+        if (props.validateAll) {
+          validate();
+          props.setError?.('Validation triggered');
+        }
+      }, [props.validateAll, props.setError, validate]);
+
+      return <div data-testid="provider-config-editor" data-providertype={props.providerType} />;
+    },
   };
 });
 
@@ -65,36 +64,27 @@ vi.mock('./providerOptions', () => ({
   ],
 }));
 
-vi.mock('@mui/icons-material/Search', () => ({
-  default: () => <div data-testid="search-icon" />,
-}));
-vi.mock('@mui/icons-material/CheckCircle', () => ({
-  default: () => <div data-testid="check-circle-icon" />,
-}));
-
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
-
 describe('ProviderEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('should render the provider name TextField and update provider label via setProvider when disableNameField is false or not set in opts', () => {
+  it('should render the provider name TextField and update provider label via setProvider when disableNameField is false or not set in opts', async () => {
+    const user = userEvent.setup();
     const initialProvider: ProviderOptions = {
       ...defaultHttpTarget(),
       label: 'Initial Provider Name',
     };
     const setProvider = vi.fn();
 
-    renderWithTheme(<ProviderEditor provider={initialProvider} setProvider={setProvider} />);
+    renderWithProviders(<ProviderEditor provider={initialProvider} setProvider={setProvider} />);
 
     const textField = screen.getByRole('textbox', { name: /Provider Name/i });
     expect(textField).toBeInTheDocument();
 
-    fireEvent.change(textField, { target: { value: 'New Provider Name' } });
+    await user.click(textField);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('New Provider Name');
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     expect(setProvider).toHaveBeenCalledWith({
@@ -103,32 +93,29 @@ describe('ProviderEditor', () => {
     });
   });
 
-  it('should update provider and providerType when a new provider type is selected in ProviderTypeSelector', () => {
+  it('should update provider and providerType when a new provider type is selected in ProviderTypeSelector', async () => {
+    const user = userEvent.setup();
     const initialProvider: ProviderOptions = {
       ...defaultHttpTarget(),
       label: 'My Test Provider',
     };
     const setProvider = vi.fn();
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = renderWithProviders(
       <ProviderEditor provider={initialProvider} setProvider={setProvider} />,
     );
 
     const configEditor = screen.getByTestId('provider-config-editor');
     expect(configEditor).toHaveAttribute('data-providertype', 'http');
 
-    // Component starts in collapsed view showing the selected provider, click Change to expand
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
-    // Now we can find the OpenAI provider in the expanded view
-    const openAiProviderCard = screen.getByText('OpenAI').closest('div.MuiPaper-root');
+    // Provider list is always expanded - find and click OpenAI
+    const openAiProviderCard = screen.getByText('OpenAI').closest('[role="button"]');
     expect(openAiProviderCard).toBeInTheDocument();
-    fireEvent.click(openAiProviderCard!);
+    await user.click(openAiProviderCard!);
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     const expectedNewProvider: ProviderOptions = {
-      id: 'openai:gpt-4.1',
+      id: 'openai:gpt-5.4',
       config: {},
       label: 'My Test Provider',
     };
@@ -141,11 +128,12 @@ describe('ProviderEditor', () => {
     );
   });
 
-  it('should call onActionButtonClick when the action button is clicked and validation passes', () => {
+  it('should call onActionButtonClick when the action button is clicked and validation passes', async () => {
+    const user = userEvent.setup();
     const onActionButtonClick = vi.fn();
     const initialProvider: ProviderOptions = defaultHttpTarget();
 
-    renderWithTheme(
+    renderWithProviders(
       <ProviderEditor
         provider={initialProvider}
         setProvider={vi.fn()}
@@ -154,7 +142,7 @@ describe('ProviderEditor', () => {
     );
 
     const nextButton = screen.getByText('Next');
-    fireEvent.click(nextButton);
+    await user.click(nextButton);
 
     expect(onActionButtonClick).toHaveBeenCalledTimes(1);
   });
@@ -167,7 +155,7 @@ describe('ProviderEditor', () => {
     const setProvider = vi.fn();
     const setError = vi.fn();
 
-    const { rerender } = renderWithTheme(
+    const { rerender } = renderWithProviders(
       <ProviderEditor
         provider={initialProvider}
         setProvider={setProvider}

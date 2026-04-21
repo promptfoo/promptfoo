@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
@@ -52,31 +53,6 @@ function GuardrailsHeader() {
       </div>
       <HeroSection />
     </header>
-  );
-}
-
-function FeaturesSection() {
-  return (
-    <section className={styles.featuresSection}>
-      <div className="container">
-        <div className={styles.features}>
-          <div className={styles.featureItem}>
-            <h3>Self-Improving Security</h3>
-            <p>Guardrails that continuously learn from red team findings.</p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Third-Party Validation</h3>
-            <p>Test and verify any guardrail system, including existing third-party solutions.</p>
-          </div>
-          <div className={styles.featureItem}>
-            <h3>Comprehensive Content Protection</h3>
-            <p>
-              Advanced filtering against harmful content, PII exposure, and inappropriate outputs.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
   );
 }
 
@@ -202,7 +178,7 @@ function CallToActionSection() {
   );
 }
 
-export default function Guardrails(): JSX.Element {
+export default function Guardrails(): React.ReactElement {
   return (
     <Layout
       title="AI Guardrails"
@@ -215,7 +191,6 @@ export default function Guardrails(): JSX.Element {
       <div className={styles.pageContainer}>
         <GuardrailsHeader />
         <main className={styles.mainContent}>
-          {/*<FeaturesSection />*/}
           <ActionOrientedSection />
           <ContinuousMonitoringSection />
           <BenefitsSection />

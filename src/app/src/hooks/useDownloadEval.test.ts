@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mockBrowserProperty } from '@app/tests/browserMocks';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { downloadBlob } from './useDownloadEval';
 
 describe('downloadBlob', () => {
@@ -7,8 +8,12 @@ describe('downloadBlob', () => {
   const clickMock = vi.fn();
 
   beforeEach(() => {
-    global.URL.createObjectURL = createObjectURLMock;
-    global.URL.revokeObjectURL = revokeObjectURLMock;
+    createObjectURLMock.mockClear();
+    revokeObjectURLMock.mockClear();
+    clickMock.mockClear();
+
+    mockBrowserProperty(URL, 'createObjectURL', createObjectURLMock as typeof URL.createObjectURL);
+    mockBrowserProperty(URL, 'revokeObjectURL', revokeObjectURLMock as typeof URL.revokeObjectURL);
 
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(clickMock);
 

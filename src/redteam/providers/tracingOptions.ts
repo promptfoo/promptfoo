@@ -1,5 +1,6 @@
 import cliState from '../../cliState';
-import type { AtomicTestCase } from '../../types';
+
+import type { AtomicTestCase } from '../../types/index';
 
 export interface RedteamTracingOptions {
   enabled: boolean;

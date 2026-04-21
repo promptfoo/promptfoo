@@ -1,15 +1,18 @@
-import { matchesFactuality } from '../../src/matchers';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesFactuality } from '../../src/matchers/llmGrading';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
 describe('matchesFactuality', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output:
         '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
@@ -17,7 +20,7 @@ describe('matchesFactuality', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when the factuality check passes with legacy format', async () => {
@@ -26,13 +29,13 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output:
         '(A) The submitted answer is a subset of the expert answer and is fully consistent with it.',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: true,
@@ -53,13 +56,13 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output:
         '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: true,
@@ -80,12 +83,12 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output: '(A) This is a custom reason for category A.',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: true,
@@ -105,12 +108,12 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output: '(D) There is a disagreement between the submitted answer and the expert answer.',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: false,
@@ -130,13 +133,13 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output:
         '{"category": "D", "reason": "There is a disagreement between the submitted answer and the expert answer."}',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: false,
@@ -164,13 +167,13 @@ describe('matchesFactuality', () => {
       },
     };
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output:
         '{"category": "A", "reason": "The submitted answer is a subset of the expert answer and is fully consistent with it."}',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: true,
@@ -191,12 +194,12 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output: '{"category": "A"}',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: true,
@@ -217,12 +220,12 @@ describe('matchesFactuality', () => {
     const output = 'Sample output';
     const grading = {};
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output: '{"category": "Z", "reason": "Invalid category"}',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: false,
@@ -265,17 +268,14 @@ The submitted answer may either be a subset or superset of the expert answer, or
       },
     ]);
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output: '(B) The submitted answer is a superset of the expert answer.',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: mockCallApi,
-      },
+      provider: createMockProvider({ callApi: mockCallApi }),
     };
 
     const result = await matchesFactuality(input, expected, output, grading);
@@ -306,7 +306,7 @@ The submitted answer may either be a subset or superset of the expert answer, or
     const output = 'Sample output';
     const grading = {};
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
       throw new Error('An error occurred');
     });
 
@@ -316,33 +316,35 @@ The submitted answer may either be a subset or superset of the expert answer, or
   });
 
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
-    const input = 'Input {{ var }}';
-    const expected = 'Expected {{ var }}';
-    const output = 'Output {{ var }}';
-    const grading: GradingConfig = {
-      provider: DefaultGradingProvider,
-    };
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+    try {
+      const input = 'Input {{ var }}';
+      const expected = 'Expected {{ var }}';
+      const output = 'Output {{ var }}';
+      const grading: GradingConfig = {
+        provider: DefaultGradingProvider,
+      };
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-      output: '{"category": "A", "reason": "The submitted answer is correct."}',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+        output: '{"category": "A", "reason": "The submitted answer is correct."}',
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
 
-    await matchesFactuality(input, expected, output, grading);
+      await matchesFactuality(input, expected, output, grading);
 
-    expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        vars: expect.objectContaining({
-          input: 'Input {{ var }}',
-          ideal: 'Expected {{ var }}',
-          completion: 'Output {{ var }}',
+      expect(DefaultGradingProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          vars: expect.objectContaining({
+            input: 'Input {{ var }}',
+            ideal: 'Expected {{ var }}',
+            completion: 'Output {{ var }}',
+          }),
         }),
-      }),
-    );
-
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = undefined;
+      );
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('should correctly substitute variables in custom rubricPrompt', async () => {
@@ -358,17 +360,14 @@ Submitted: {{completion}}
 Determine if submitted answer is factually correct.
 Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual`;
 
-    const mockCallApi = jest.fn().mockResolvedValue({
+    const mockCallApi = vi.fn().mockResolvedValue({
       output: '(A) The submitted answer is correct.',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
     const grading = {
       rubricPrompt: customPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: mockCallApi,
-      },
+      provider: createMockProvider({ callApi: mockCallApi }),
     };
 
     const result = await matchesFactuality(input, expected, output, grading);

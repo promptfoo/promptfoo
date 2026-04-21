@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LoginPage from './login';
@@ -15,6 +16,19 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// Mock useActionState
+let mockActionState: any = { success: false };
+let mockFormAction: any = vi.fn();
+let mockIsPending = false;
+
+vi.mock('react', async () => {
+  const actual = await vi.importActual('react');
+  return {
+    ...actual,
+    useActionState: vi.fn(() => [mockActionState, mockFormAction, mockIsPending]),
+  };
+});
+
 const useUserStoreMock = vi.fn();
 vi.mock('@app/stores/userStore', () => ({
   useUserStore: (...args: any[]) => useUserStoreMock(...args),
@@ -25,15 +39,73 @@ vi.mock('@app/utils/api', () => ({
   callApi: (...args: any[]) => callApiMock(...args),
 }));
 
-const usePageMetaMock = vi.fn();
-vi.mock('@app/hooks/usePageMeta', () => ({
-  usePageMeta: (...args: any[]) => usePageMetaMock(...args),
-}));
-
 describe('LoginPage', () => {
+  const createUserStoreState = (overrides = {}) => ({
+    email: null,
+    isLoading: false,
+    fetchEmail: vi.fn(),
+    setEmail: vi.fn(),
+    ...overrides,
+  });
+
+  const submitApiKey = async (apiKey: string) => {
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('API Key'), apiKey);
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+    await waitFor(() => expect(mockFormAction).toHaveBeenCalledTimes(1));
+    await mockFormAction.mock.results[mockFormAction.mock.results.length - 1]?.value;
+  };
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockNavigate.mockReset();
+    useUserStoreMock.mockReset();
+    callApiMock.mockReset();
     mockLocationSearch = '';
+    mockActionState = { success: false };
+    mockIsPending = false;
+    mockFormAction = vi.fn(async (formData: FormData) => {
+      // Simulate the actual loginAction behavior
+      const apiKey = formData.get('apiKey') as string;
+      const customUrl = formData.get('customUrl') as string;
+
+      if (!apiKey?.trim()) {
+        mockActionState = { success: false, error: 'Please enter your API key' };
+        return mockActionState;
+      }
+
+      try {
+        const response = await callApiMock('/user/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            apiKey: apiKey.trim(),
+            apiHost: customUrl || undefined,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          mockActionState = { success: true, email: data.user.email };
+          return mockActionState;
+        }
+
+        const errorData = await response.json().catch(() => ({}));
+        mockActionState = {
+          success: false,
+          error: errorData.error || 'Authentication failed. Please check your API key.',
+        };
+        return mockActionState;
+      } catch {
+        mockActionState = {
+          success: false,
+          error: 'Network error. Please check your connection and try again.',
+        };
+        return mockActionState;
+      }
+    });
+    useUserStoreMock.mockReturnValue(createUserStoreState());
   });
 
   it('should call fetchEmail from useUserStore when component is mounted', () => {
@@ -52,26 +124,6 @@ describe('LoginPage', () => {
     );
 
     expect(fetchEmailMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('should call usePageMeta with correct parameters', () => {
-    useUserStoreMock.mockReturnValue({
-      email: null,
-      isLoading: false,
-      fetchEmail: vi.fn(),
-      setEmail: vi.fn(),
-    });
-
-    render(
-      <MemoryRouter>
-        <LoginPage />
-      </MemoryRouter>,
-    );
-
-    expect(usePageMetaMock).toHaveBeenCalledWith({
-      title: 'Login to Promptfoo',
-      description: 'Sign in to access your Promptfoo workspace',
-    });
   });
 
   it('shows loading spinner when loading', () => {
@@ -107,22 +159,27 @@ describe('LoginPage', () => {
       }),
     });
 
-    render(
+    const { rerender } = render(
       <MemoryRouter>
         <LoginPage />
       </MemoryRouter>,
     );
 
-    const apiKeyField = document.getElementById('apiKey')!;
-    fireEvent.change(apiKeyField, {
-      target: { value: 'test-api-key' },
-    });
-    fireEvent.click(screen.getByText('Sign In'));
+    await submitApiKey('test-api-key');
 
-    await waitFor(() => expect(callApiMock).toHaveBeenCalledTimes(1));
+    expect(callApiMock).toHaveBeenCalledTimes(1);
 
     expect(callApiMock).toHaveBeenCalledWith('/user/login', expect.any(Object));
-    expect(setEmail).toHaveBeenCalledWith('test@example.com');
+
+    // Simulate the state update from useActionState
+    mockActionState = { success: true, email: 'test@example.com' };
+    rerender(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(setEmail).toHaveBeenCalledWith('test@example.com'));
     expect(mockNavigate).toHaveBeenCalledWith('/');
   });
 
@@ -146,13 +203,9 @@ describe('LoginPage', () => {
       </MemoryRouter>,
     );
 
-    const apiKeyField = document.getElementById('apiKey')!;
-    fireEvent.change(apiKeyField, {
-      target: { value: 'test-api-key' },
-    });
-    fireEvent.click(screen.getByText('Sign In'));
+    await submitApiKey('test-api-key');
 
-    await waitFor(() => expect(callApiMock).toHaveBeenCalledTimes(1));
+    expect(callApiMock).toHaveBeenCalledTimes(1);
 
     expect(callApiMock).toHaveBeenCalledWith('/user/login', expect.any(Object));
     expect(setEmail).not.toHaveBeenCalled();
@@ -235,7 +288,8 @@ describe('LoginPage', () => {
     expect(screen.getByText('View Report')).toBeInTheDocument();
   });
 
-  it('shows and hides API key using visibility toggle', () => {
+  it('shows and hides API key using visibility toggle', async () => {
+    const user = userEvent.setup();
     useUserStoreMock.mockReturnValue({
       email: null,
       isLoading: false,
@@ -255,12 +309,10 @@ describe('LoginPage', () => {
     // Initially should be password type
     expect(apiKeyField).toHaveAttribute('type', 'password');
 
-    // Click to show
-    fireEvent.click(toggleButton);
+    await user.click(toggleButton);
     expect(apiKeyField).toHaveAttribute('type', 'text');
 
-    // Click to hide
-    fireEvent.click(toggleButton);
+    await user.click(toggleButton);
     expect(apiKeyField).toHaveAttribute('type', 'password');
   });
 
@@ -279,14 +331,10 @@ describe('LoginPage', () => {
     );
 
     const longApiKey = 'a'.repeat(600); // Over 512 char limit
-    const apiKeyField = document.getElementById('apiKey')!;
-    fireEvent.change(apiKeyField, {
-      target: { value: longApiKey },
-    });
-    fireEvent.click(screen.getByText('Sign In'));
+    await submitApiKey(longApiKey);
 
     // Should still attempt the call (validation happens on backend)
-    await waitFor(() => expect(callApiMock).toHaveBeenCalledTimes(1));
+    expect(callApiMock).toHaveBeenCalledTimes(1);
   });
 
   it('handles authentication error with sanitized message', async () => {
@@ -304,19 +352,23 @@ describe('LoginPage', () => {
       json: vi.fn().mockResolvedValue({ error: 'Invalid API key or authentication failed' }),
     });
 
-    render(
+    const { rerender } = render(
       <MemoryRouter>
         <LoginPage />
       </MemoryRouter>,
     );
 
-    const apiKeyField = document.getElementById('apiKey')!;
-    fireEvent.change(apiKeyField, {
-      target: { value: 'invalid-key' },
-    });
-    fireEvent.click(screen.getByText('Sign In'));
+    await submitApiKey('invalid-key');
 
-    await waitFor(() => expect(callApiMock).toHaveBeenCalledTimes(1));
+    expect(callApiMock).toHaveBeenCalledTimes(1);
+
+    // Simulate the state update from useActionState
+    mockActionState = { success: false, error: 'Invalid API key or authentication failed' };
+    rerender(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
 
     // Check that error is displayed in UI instead of console
     await waitFor(() => {
@@ -342,28 +394,36 @@ describe('LoginPage', () => {
 
     mockLocationSearch = '?redirect=/initial-redirect';
 
-    render(
+    const { rerender } = render(
       <MemoryRouter>
         <LoginPage />
       </MemoryRouter>,
     );
 
-    const apiKeyField = document.getElementById('apiKey')!;
-    fireEvent.change(apiKeyField, {
-      target: { value: 'test-api-key' },
-    });
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('API Key'), 'test-api-key');
 
     mockLocationSearch = '?redirect=/updated-redirect';
 
-    fireEvent.click(screen.getByText('Sign In'));
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+    await waitFor(() => expect(mockFormAction).toHaveBeenCalledTimes(1));
+    await mockFormAction.mock.results[mockFormAction.mock.results.length - 1]?.value;
 
-    await waitFor(() => expect(callApiMock).toHaveBeenCalledTimes(1));
+    expect(callApiMock).toHaveBeenCalledTimes(1);
 
     expect(callApiMock).toHaveBeenCalledWith('/user/login', expect.any(Object));
-    expect(setEmail).toHaveBeenCalledWith('test@example.com');
+
+    // Simulate the state update from useActionState
+    mockActionState = { success: true, email: 'test@example.com' };
+    rerender(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(setEmail).toHaveBeenCalledWith('test@example.com'));
     // The current implementation correctly reads the search params fresh each time
-    // but the mock doesn't update the location object, so it still reads the initial value
-    expect(mockNavigate).toHaveBeenCalledWith('/initial-redirect');
+    expect(mockNavigate).toHaveBeenCalledWith('/updated-redirect');
   });
 
   it('should navigate to default route when redirect URL is malformed', () => {

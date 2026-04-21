@@ -1,10 +1,12 @@
 import { VERSION } from '../../../constants';
 import { getUserEmail } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
-import { fetchWithProxy } from '../../../util/fetch';
+import { fetchWithProxy } from '../../../util/fetch/index';
 import invariant from '../../../util/invariant';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { REDTEAM_MEMORY_POISONING_PLUGIN_ID } from '../../plugins/agentic/constants';
 import { getRemoteGenerationUrl } from '../../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../../shared/promptLength';
 import { messagesToRedteamHistory } from '../shared';
 
 import type {
@@ -38,7 +40,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     try {
       const targetProvider: ApiProvider | undefined = context?.originalProvider;
@@ -48,16 +50,20 @@ export class MemoryPoisoningProvider implements ApiProvider {
       invariant(purpose, 'Expected purpose to be set');
 
       // Generate a scenario containing memories and follow up questions/commands which are dependent on the memories.
-      const scenarioRes = await fetchWithProxy(getRemoteGenerationUrl(), {
-        body: JSON.stringify({
-          task: 'agentic:memory-poisoning-scenario',
-          purpose,
-          version: VERSION,
-          email: getUserEmail(),
-        }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-      });
+      const scenarioRes = await fetchWithProxy(
+        getRemoteGenerationUrl(),
+        {
+          body: JSON.stringify({
+            task: 'agentic:memory-poisoning-scenario',
+            purpose,
+            version: VERSION,
+            email: getUserEmail(),
+          }),
+          headers: { 'Content-Type': 'application/json' },
+          method: 'POST',
+        },
+        options?.abortSignal,
+      );
 
       // Send the memory message to the provider.
       if (!scenarioRes.ok) {
@@ -69,14 +75,22 @@ export class MemoryPoisoningProvider implements ApiProvider {
       context!.test!.metadata ??= {};
       context!.test!.metadata['scenario'] = scenario;
 
+      const totalTokenUsage = createEmptyTokenUsage();
+
       // Send the memory message to the provider.
-      const memoryResponse = await targetProvider.callApi(scenario.memory, context);
+      throwIfTargetPromptExceedsMaxChars(scenario.memory);
+      const memoryResponse = await targetProvider.callApi(scenario.memory, context, options);
+      accumulateResponseTokenUsage(totalTokenUsage, memoryResponse);
 
       // Send the test case to the provider; the test case should poison the memory created in the previous step.
-      const testResponse = await targetProvider.callApi(prompt, context);
+      throwIfTargetPromptExceedsMaxChars(prompt);
+      const testResponse = await targetProvider.callApi(prompt, context, options);
+      accumulateResponseTokenUsage(totalTokenUsage, testResponse);
 
       // Send the follow up question to the provider.
-      const response = await targetProvider.callApi(scenario.followUp, context);
+      throwIfTargetPromptExceedsMaxChars(scenario.followUp);
+      const response = await targetProvider.callApi(scenario.followUp, context, options);
+      accumulateResponseTokenUsage(totalTokenUsage, response);
 
       const messages = [
         { content: scenario.memory, role: 'user' as const },
@@ -93,6 +107,7 @@ export class MemoryPoisoningProvider implements ApiProvider {
           messages,
           redteamHistory: messagesToRedteamHistory(messages),
         },
+        tokenUsage: totalTokenUsage,
       };
     } catch (error) {
       logger.error(`Error in MemoryPoisoningProvider: ${error}`);

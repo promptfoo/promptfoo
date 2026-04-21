@@ -1,28 +1,28 @@
 import { Command } from 'commander';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { getProviderFromCloud } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
-import {
-  testHTTPProviderConnectivity,
-  testProviderSession,
-} from '../../src/validators/testProvider';
+import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
+import { createMockProvider, type MockApiProvider } from '../factories/provider';
 
 import type { UnifiedConfig } from '../../src/types/index';
-import type { ApiProvider } from '../../src/types/providers';
 
-jest.mock('../../src/logger');
-jest.mock('../../src/util/config/load');
-jest.mock('../../src/providers/index');
-jest.mock('../../src/validators/testProvider');
-jest.mock('../../src/util/cloud');
-jest.mock('../../src/telemetry', () => ({
-  record: jest.fn(),
-  send: jest.fn(),
+vi.mock('../../src/logger');
+vi.mock('../../src/util/config/load');
+vi.mock('../../src/providers/index');
+vi.mock('../../src/validators/testProvider');
+vi.mock('../../src/util/cloud');
+vi.mock('../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+    send: vi.fn(),
+  },
 }));
-jest.mock('uuid', () => ({
-  validate: jest.fn((str: string) => {
+vi.mock('../../src/util/uuid', () => ({
+  isUuid: vi.fn((str: string) => {
     // Check if the string looks like a UUID
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(str);
@@ -34,81 +34,79 @@ describe('Validate Command Provider Tests', () => {
   const defaultConfig = {} as UnifiedConfig;
   const defaultConfigPath = 'config.yaml';
 
-  // Mock provider objects
-  const mockHttpProvider: ApiProvider = {
-    id: () => 'http://example.com',
-    callApi: jest.fn(),
-    constructor: { name: 'HttpProvider' },
-  } as any;
-
-  const mockEchoProvider: ApiProvider = {
-    id: () => 'echo',
-    callApi: jest.fn(),
-    constructor: { name: 'EchoProvider' },
-  } as any;
-
-  const mockOpenAIProvider: ApiProvider = {
-    id: 'openai:gpt-4',
-    callApi: jest.fn(),
-    constructor: { name: 'OpenAIProvider' },
-  } as any;
+  // Mock provider objects. isHttpProvider() only checks provider.id / config.url,
+  // so createMockProvider with the right id is sufficient. These must be rebuilt in
+  // beforeEach because this file's afterEach calls vi.resetAllMocks(), which wipes
+  // the id mock implementation.
+  let mockHttpProvider: MockApiProvider;
+  let mockEchoProvider: MockApiProvider;
+  let mockOpenAIProvider: MockApiProvider;
 
   beforeEach(() => {
     program = new Command();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.exitCode = 0;
 
-    // Default mock for successful basic connectivity
-    (mockEchoProvider.callApi as jest.Mock).mockResolvedValue({
-      output: 'Hello, world!',
+    mockHttpProvider = createMockProvider({
+      id: 'http://example.com',
+      response: { output: 'Test response' },
     });
+    mockEchoProvider = createMockProvider({
+      id: 'echo',
+      response: { output: 'Hello, world!' },
+    });
+    mockOpenAIProvider = createMockProvider({
+      id: 'openai:gpt-4',
+      response: { output: 'OpenAI response' },
+    });
+  });
 
-    (mockHttpProvider.callApi as jest.Mock).mockResolvedValue({
-      output: 'Test response',
-    });
-
-    (mockOpenAIProvider.callApi as jest.Mock).mockResolvedValue({
-      output: 'OpenAI response',
-    });
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('Provider testing with -t flag (specific target)', () => {
     it('should test HTTP provider with comprehensive tests when -t flag is provided and connectivity passes', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
-      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Connectivity test passed',
         providerResponse: { output: 'test' },
         transformedRequest: {},
       });
-      jest.mocked(testProviderSession).mockResolvedValue({
+      vi.mocked(testProviderSession).mockResolvedValue({
         success: true,
         message: 'Session test passed',
       });
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('http://example.com', {
-        options: {
-          config: {
-            maxRetries: 1,
-            headers: {
-              'x-promptfoo-silent': 'true',
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'http://example.com',
+        expect.objectContaining({
+          options: {
+            config: {
+              maxRetries: 1,
+              headers: {
+                'x-promptfoo-silent': 'true',
+              },
             },
           },
-        },
+        }),
+      );
+      expect(testProviderConnectivity).toHaveBeenCalledWith({ provider: mockHttpProvider });
+      expect(testProviderSession).toHaveBeenCalledWith({
+        provider: mockHttpProvider,
+        options: { skipConfigValidation: true },
       });
-      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
-      expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
-        skipConfigValidation: true,
-      });
-      expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      // Verify provider info is logged during testing
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(process.exitCode).toBe(0);
     });
 
     it('should skip session test when connectivity test fails', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
-      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
         success: false,
         message: 'Connection failed',
         error: 'Network error',
@@ -118,23 +116,22 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith({ provider: mockHttpProvider });
       expect(testProviderSession).not.toHaveBeenCalled();
+      // Session test is skipped when connectivity fails
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping session management test'),
+        expect.stringContaining('Session test (skipped - connectivity failed)'),
       );
     });
 
     it('should skip session test when target is not stateful (stateful=false)', async () => {
-      const mockNonStatefulHttpProvider: ApiProvider = {
-        id: () => 'http://example.com',
-        callApi: jest.fn(),
+      const mockNonStatefulHttpProvider = createMockProvider({
+        id: 'http://example.com',
         config: { stateful: false },
-        constructor: { name: 'HttpProvider' },
-      } as any;
+      });
 
-      jest.mocked(loadApiProvider).mockResolvedValue(mockNonStatefulHttpProvider);
-      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockNonStatefulHttpProvider);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Connectivity test passed',
         providerResponse: { output: 'test' },
@@ -143,23 +140,27 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(testHTTPProviderConnectivity).toHaveBeenCalledWith(mockNonStatefulHttpProvider);
+      expect(testProviderConnectivity).toHaveBeenCalledWith({
+        provider: mockNonStatefulHttpProvider,
+      });
       expect(testProviderSession).not.toHaveBeenCalled();
+      // Session test is skipped for stateless targets
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('Skipping session management test (target is not stateful)'),
+        expect.stringContaining('Session test (skipped - target is stateless)'),
       );
     });
 
     it('should test non-HTTP provider with basic connectivity only when -t flag is provided', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('echo');
+      expect(loadApiProvider).toHaveBeenCalledWith('echo', expect.objectContaining({}));
       expect(mockEchoProvider.callApi).toHaveBeenCalledWith('Hello, world!', expect.any(Object));
-      expect(testHTTPProviderConnectivity).not.toHaveBeenCalled();
+      expect(testProviderConnectivity).not.toHaveBeenCalled();
       expect(testProviderSession).not.toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test passed'));
+      // Basic connectivity test logs success with checkmark symbol
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
     });
 
     it('should load cloud provider when -t flag is UUID', async () => {
@@ -169,16 +170,20 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
-      jest.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+      vi.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
       expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', {
-        options: mockProviderOptions,
-      });
-      expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'openai:gpt-4',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
+      // Verify provider info is logged during testing
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
     });
   });
@@ -193,13 +198,13 @@ describe('Validate Command Provider Tests', () => {
       const mockValidTestSuite = {
         prompts: [{ raw: 'test prompt', label: 'test' }],
         providers: [
-          { id: () => 'echo', label: 'echo' },
-          { id: () => 'openai:gpt-4', label: 'openai' },
+          createMockProvider({ id: 'echo', label: 'echo', response: {} }),
+          createMockProvider({ id: 'openai:gpt-4', label: 'openai', response: {} }),
         ],
         tests: [],
       };
 
-      jest.mocked(resolveConfigs).mockResolvedValue({
+      vi.mocked(resolveConfigs).mockResolvedValue({
         config: mockValidConfig as any,
         testSuite: mockValidTestSuite as any,
         basePath: '/test',
@@ -229,7 +234,7 @@ describe('Validate Command Provider Tests', () => {
         tests: [],
       };
 
-      jest.mocked(resolveConfigs).mockResolvedValue({
+      vi.mocked(resolveConfigs).mockResolvedValue({
         config: mockValidConfig as any,
         testSuite: mockValidTestSuite as any,
         basePath: '/test',
@@ -243,69 +248,75 @@ describe('Validate Command Provider Tests', () => {
   });
 
   describe('Error handling in provider tests', () => {
-    it('should warn but not fail validation when provider test fails', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
-      (mockEchoProvider.callApi as jest.Mock).mockRejectedValue(new Error('Connection failed'));
+    it('should log error and set exitCode 1 when provider test throws', async () => {
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      (mockEchoProvider.callApi as Mock).mockRejectedValue(new Error('Connection failed'));
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test failed'));
-      expect(process.exitCode).toBe(0); // Should not fail validation
+      // When callApi throws, testBasicConnectivity logs the error
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Connection failed'));
+      // Connectivity test failed, so exitCode is 1
+      expect(process.exitCode).toBe(1);
     });
 
-    it('should warn but not fail validation when provider returns error', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
-      (mockEchoProvider.callApi as jest.Mock).mockResolvedValue({
+    it('should log error and set exitCode 1 when provider returns error response', async () => {
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      (mockEchoProvider.callApi as Mock).mockResolvedValue({
         error: 'Provider error',
       });
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test failed'));
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Provider error'));
-      expect(process.exitCode).toBe(0);
+      // When result.error is set, testBasicConnectivity logs the error
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Provider error'));
+      // Connectivity test failed, so exitCode is 1
+      expect(process.exitCode).toBe(1);
     });
 
-    it('should warn but not fail validation when provider returns no output', async () => {
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
-      (mockEchoProvider.callApi as jest.Mock).mockResolvedValue({});
+    it('should warn when provider returns no output', async () => {
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      (mockEchoProvider.callApi as Mock).mockResolvedValue({});
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Connectivity test returned no output'),
-      );
-      expect(process.exitCode).toBe(0);
+      // When result has no output, testBasicConnectivity warns
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Connectivity test'));
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('No output'));
+      // Connectivity test failed, so exitCode is 1
+      expect(process.exitCode).toBe(1);
     });
 
-    it('should warn when loadApiProvider fails with -t flag', async () => {
-      jest.mocked(loadApiProvider).mockRejectedValue(new Error('Failed to load provider'));
+    it('should error when loadApiProvider fails with -t flag', async () => {
+      vi.mocked(loadApiProvider).mockRejectedValue(new Error('Failed to load provider'));
 
       await doValidateTarget({ target: 'invalid-provider' }, defaultConfig);
 
-      expect(logger.warn).toHaveBeenCalledWith(
+      // When loadApiProvider fails, runProviderTests catches and logs error
+      expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Provider tests failed: Failed to load provider'),
       );
-      expect(process.exitCode).toBe(0);
+      expect(process.exitCode).toBe(1); // Errors set exit code to 1
     });
   });
 
   describe('HTTP provider detection with target flag', () => {
     it('should detect HTTP provider by url in id when using target', async () => {
-      const mockHttpProviderById: ApiProvider = {
-        id: () => 'http://custom-api.com',
-        callApi: jest.fn().mockResolvedValue({ output: 'HTTP response' }),
-        constructor: { name: 'HttpProvider' },
-      } as any;
+      const mockHttpProviderById = createMockProvider({
+        id: 'http://custom-api.com',
+        response: { output: 'HTTP response' },
+      });
 
-      jest.mocked(loadApiProvider).mockResolvedValue(mockHttpProviderById);
-      jest.mocked(testHTTPProviderConnectivity).mockResolvedValue({
+      vi.mocked(loadApiProvider).mockResolvedValue(mockHttpProviderById);
+      vi.mocked(testProviderConnectivity).mockResolvedValue({
         success: true,
         message: 'Test passed',
         providerResponse: { output: 'test' },
         transformedRequest: {},
       });
-      jest.mocked(testProviderSession).mockResolvedValue({
+      vi.mocked(testProviderSession).mockResolvedValue({
         success: true,
         message: 'Test passed',
       });
@@ -313,7 +324,7 @@ describe('Validate Command Provider Tests', () => {
       await doValidateTarget({ target: 'http://custom-api.com' }, defaultConfig);
 
       // Should call HTTP-specific tests for providers with http:// id
-      expect(testHTTPProviderConnectivity).toHaveBeenCalled();
+      expect(testProviderConnectivity).toHaveBeenCalled();
       expect(testProviderSession).toHaveBeenCalled();
     });
   });
@@ -321,13 +332,14 @@ describe('Validate Command Provider Tests', () => {
   describe('Testing without config file', () => {
     it('should test provider with -t flag when no config file is present', async () => {
       // No config paths provided
-      jest.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockEchoProvider);
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('echo');
+      expect(loadApiProvider).toHaveBeenCalledWith('echo', expect.objectContaining({}));
       expect(mockEchoProvider.callApi).toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      // Verify that provider info is logged during validation
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(process.exitCode).toBe(0);
     });
 
@@ -338,30 +350,84 @@ describe('Validate Command Provider Tests', () => {
         config: {},
       };
 
-      jest.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
-      jest.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
+      vi.mocked(getProviderFromCloud).mockResolvedValue(mockProviderOptions as any);
+      vi.mocked(loadApiProvider).mockResolvedValue(mockOpenAIProvider);
 
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
       expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', {
-        options: mockProviderOptions,
-      });
-      expect(logger.info).toHaveBeenCalledWith('Testing provider...');
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'openai:gpt-4',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
+      // Verify that provider info is logged during validation
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Provider:'));
       expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
       expect(process.exitCode).toBe(0);
     });
 
     it('should handle errors gracefully when testing without config', async () => {
-      jest.mocked(loadApiProvider).mockRejectedValue(new Error('Provider not found'));
+      vi.mocked(loadApiProvider).mockRejectedValue(new Error('Provider not found'));
 
       await doValidateTarget({ target: 'invalid-provider' }, defaultConfig);
 
-      // The error is caught by runProviderTests which logs a warning
-      expect(logger.warn).toHaveBeenCalledWith(
+      // The error is caught by runProviderTests which logs an error
+      expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Provider tests failed: Provider not found'),
       );
-      // Warnings don't cause validation to fail
+      // Errors cause validation to fail
+      expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe('Target command edge cases', () => {
+    it('should require either target or config', async () => {
+      await doValidateTarget({}, defaultConfig);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Please specify either -t <provider-id> or -c <config-path>'),
+      );
+      expect(process.exitCode).toBe(1);
+      expect(loadApiProvider).not.toHaveBeenCalled();
+      expect(loadApiProviders).not.toHaveBeenCalled();
+    });
+
+    it('should set exitCode 1 when loading config fails', async () => {
+      vi.mocked(resolveConfigs).mockRejectedValue(new Error('Config not found'));
+
+      await doValidateTarget({ config: 'missing.yaml' }, defaultConfig);
+
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['missing.yaml'], envPath: undefined },
+        defaultConfig,
+      );
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to load configuration: Config not found'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should handle config mode with no providers gracefully', async () => {
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config: {
+          providers: [],
+        } as any,
+        testSuite: {} as any,
+        basePath: '/test',
+      });
+
+      await doValidateTarget({ config: 'empty-providers.yaml' }, defaultConfig);
+
+      expect(resolveConfigs).toHaveBeenCalledWith(
+        { config: ['empty-providers.yaml'], envPath: undefined },
+        defaultConfig,
+      );
+      expect(loadApiProviders).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('No providers found in configuration to test.'),
+      );
       expect(process.exitCode).toBe(0);
     });
   });

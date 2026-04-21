@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
@@ -334,7 +335,7 @@ function CallToActionSection() {
   );
 }
 
-export default function ModelSecurity(): JSX.Element {
+export default function ModelSecurity(): React.ReactElement {
   return (
     <Layout
       title="AI Model Security"

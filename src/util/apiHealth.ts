@@ -1,7 +1,7 @@
 import { getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { fetchWithTimeout } from './fetch';
+import { fetchWithTimeout } from './fetch/index';
 
 interface HealthResponse {
   status: string;
@@ -92,8 +92,9 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
       };
     }
 
-    // If it's a timeout error, return a softer message
-    if (error.name === 'TimeoutError') {
+    // If it's a timeout error, proceed anyway - a slow health check
+    // doesn't necessarily mean the generation endpoint is broken.
+    if (error.message.includes('timed out')) {
       return {
         status: 'OK',
         message: 'API health check timed out, proceeding anyway',

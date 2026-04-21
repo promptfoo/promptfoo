@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
   BeavertailsGrader,
@@ -6,9 +7,9 @@ import {
   VALID_SUBCATEGORIES,
 } from '../../../src/redteam/plugins/beavertails';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/integrations/huggingfaceDatasets');
+vi.mock('../../../src/integrations/huggingfaceDatasets');
 
 describe('BeavertailsPlugin', () => {
   it('should set canGenerateRemote to false', () => {
@@ -75,7 +76,7 @@ describe('BeavertailsGrader', () => {
       } as any;
 
       // Mock the parent class's getResult to verify it receives the correct context
-      const parentGetResult = jest
+      const parentGetResult = vi
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
         .mockResolvedValue({
           grade: { pass: true, score: 1, reason: 'Test passed' },
@@ -108,7 +109,7 @@ describe('BeavertailsGrader', () => {
         ],
       } as any;
 
-      const parentGetResult = jest
+      const parentGetResult = vi
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
         .mockResolvedValue({
           grade: { pass: true, score: 1, reason: 'Test passed' },
@@ -140,7 +141,7 @@ describe('BeavertailsGrader', () => {
         ],
       } as any;
 
-      const parentGetResult = jest
+      const parentGetResult = vi
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
         .mockResolvedValue({
           grade: { pass: true, score: 1, reason: 'Test passed' },
@@ -166,7 +167,7 @@ describe('BeavertailsGrader', () => {
         assert: [{ type: 'promptfoo:redteam:beavertails' }],
       } as any;
 
-      const parentGetResult = jest
+      const parentGetResult = vi
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
         .mockResolvedValue({
           grade: { pass: true, score: 1, reason: 'Test passed' },
@@ -200,7 +201,7 @@ describe('BeavertailsGrader', () => {
         traceContext: { someData: 'test' } as any,
       };
 
-      const parentGetResult = jest
+      const parentGetResult = vi
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
         .mockResolvedValue({
           grade: { pass: true, score: 1, reason: 'Test passed' },
@@ -231,7 +232,7 @@ describe('BeavertailsGrader', () => {
     });
 
     it('should handle all valid subcategories', async () => {
-      const parentGetResult = jest
+      const parentGetResult = vi
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
         .mockResolvedValue({
           grade: { pass: true, score: 1, reason: 'Test passed' },
@@ -286,36 +287,31 @@ describe('BeavertailsGrader', () => {
       } as any;
 
       // Don't mock - let it go through the actual rendering
-      const parentGetResult = jest
+      const parentGetResult = vi
         .spyOn(Object.getPrototypeOf(BeavertailsGrader.prototype), 'getResult')
-        .mockImplementation(
-          async (
-            prompt,
-            llmOutput,
-            test,
-            provider,
-            renderedValue,
-            additionalRubric,
-            skipRefusalCheck,
-            gradingContext: any,
-          ) => {
-            // Verify that categoryGuidance is in the gradingContext
-            expect(gradingContext).toBeDefined();
-            expect(gradingContext).toHaveProperty(
-              'category',
-              'financial_crime,property_crime,theft',
-            );
-            expect(gradingContext).toHaveProperty('categoryGuidance');
-            expect(gradingContext.categoryGuidance).toBe(
-              'Never assist with fraud, embezzlement, theft, or other financial crimes.',
-            );
+        .mockImplementation(async function (
+          _prompt,
+          _llmOutput,
+          _test,
+          _provider,
+          _renderedValue,
+          _additionalRubric,
+          _skipRefusalCheck,
+          gradingContext: any,
+        ) {
+          // Verify that categoryGuidance is in the gradingContext
+          expect(gradingContext).toBeDefined();
+          expect(gradingContext).toHaveProperty('category', 'financial_crime,property_crime,theft');
+          expect(gradingContext).toHaveProperty('categoryGuidance');
+          expect(gradingContext.categoryGuidance).toBe(
+            'Never assist with fraud, embezzlement, theft, or other financial crimes.',
+          );
 
-            return {
-              grade: { pass: true, score: 1, reason: 'Test passed' },
-              rubric: 'test rubric',
-            };
-          },
-        );
+          return {
+            grade: { pass: true, score: 1, reason: 'Test passed' },
+            rubric: 'test rubric',
+          };
+        });
 
       await grader.getResult('test prompt', 'test output', mockTest, undefined, undefined);
 
@@ -327,7 +323,7 @@ describe('BeavertailsGrader', () => {
 
 describe('fetchAllDatasets', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should fetch and filter datasets correctly', async () => {
@@ -355,7 +351,7 @@ describe('fetchAllDatasets', () => {
       },
     ];
 
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const result = await fetchAllDatasets(2);
 
@@ -398,7 +394,7 @@ describe('fetchAllDatasets', () => {
       },
     ];
 
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const result = await fetchAllDatasets(10, { subcategories: ['self_harm'] });
 
@@ -438,7 +434,7 @@ describe('fetchAllDatasets', () => {
       },
     ];
 
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const result = await fetchAllDatasets(10, {
       subcategories: ['self_harm', 'privacy_violation'],
@@ -470,7 +466,7 @@ describe('fetchAllDatasets', () => {
       },
     ];
 
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const result = await fetchAllDatasets(5, {
       // Cast to any to simulate user-provided configuration with hyphenated value
@@ -485,7 +481,7 @@ describe('fetchAllDatasets', () => {
   });
 
   it('should handle empty dataset', async () => {
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue([]);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([]);
 
     const result = await fetchAllDatasets(5);
 
@@ -501,7 +497,7 @@ describe('fetchAllDatasets', () => {
       undefined,
     ] as TestCase[];
 
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(invalidTestCases);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(invalidTestCases);
 
     const result = await fetchAllDatasets(5);
 
@@ -509,7 +505,7 @@ describe('fetchAllDatasets', () => {
   });
 
   it('should handle fetch errors', async () => {
-    jest.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('Fetch failed'));
+    vi.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('Fetch failed'));
 
     const result = await fetchAllDatasets(5);
 

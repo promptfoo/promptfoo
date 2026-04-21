@@ -1,0 +1,21 @@
+# Ruby script test for script value resolution fix (#6200)
+providers:
+  - id: echo
+
+prompts:
+  - '{{prompt}}'
+
+tests:
+  - description: 'contains should use Ruby script output'
+    vars:
+      prompt: 'The answer is SCRIPT_OUTPUT_12345 here'
+    assert:
+      - type: contains
+        value: file://rubric-generator.rb:known_value
+
+  - description: 'equals should use Ruby script output'
+    vars:
+      prompt: 'SCRIPT_OUTPUT_12345'
+    assert:
+      - type: equals
+        value: file://rubric-generator.rb:known_value

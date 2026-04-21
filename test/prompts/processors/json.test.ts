@@ -1,19 +1,18 @@
 import * as fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processJsonFile } from '../../../src/prompts/processors/json';
 import * as fileModule from '../../../src/util/file';
 
-jest.mock('fs');
-jest.mock('../../../src/util/file');
+vi.mock('fs');
+vi.mock('../../../src/util/file');
 
 describe('processJsonFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
-  const mockMaybeLoadConfigFromExternalFile = jest.mocked(
-    fileModule.maybeLoadConfigFromExternalFile,
-  );
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
+  const mockMaybeLoadConfigFromExternalFile = vi.mocked(fileModule.maybeLoadConfigFromExternalFile);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // By default, maybeLoadConfigFromExternalFile returns its input unchanged
     mockMaybeLoadConfigFromExternalFile.mockImplementation((input) => input);
   });

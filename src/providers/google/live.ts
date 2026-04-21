@@ -7,9 +7,15 @@ import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
-import { geminiFormatAndSystemInstructions, loadFile } from './util';
+import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import {
+  geminiFormatAndSystemInstructions,
+  getGoogleAccessToken,
+  loadCredentials,
+  normalizeTools,
+} from './util';
 
 import type {
   ApiProvider,
@@ -129,15 +135,43 @@ export class GoogleLiveProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('GOOGLE_API_KEY');
+    // Priority aligned with Python SDK: GOOGLE_API_KEY > GEMINI_API_KEY
+    return this.config.apiKey || getEnvString('GOOGLE_API_KEY') || getEnvString('GEMINI_API_KEY');
+  }
+
+  /**
+   * Gets an OAuth2 access token from Google credentials for the Generative Language API.
+   * Returns undefined if credentials are not available or if there's an error.
+   *
+   * Supports authentication via:
+   * - Service account JSON (via config.credentials or GOOGLE_APPLICATION_CREDENTIALS)
+   * - Application Default Credentials (via `gcloud auth application-default login`)
+   */
+  private async getAccessToken(): Promise<string | undefined> {
+    const credentials = loadCredentials(this.config.credentials);
+    return getGoogleAccessToken(credentials);
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini#gemini-pro
 
-    if (!this.getApiKey()) {
+    // Try OAuth2 first (required for WebSocket Live API - API keys are not supported)
+    // Fall back to API key only if OAuth2 is not available
+    const accessToken = await this.getAccessToken();
+    const apiKey = this.getApiKey();
+
+    if (!accessToken && !apiKey) {
       throw new Error(
-        'Google API key is not set. Set the GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google authentication is not configured. The Live API requires OAuth2 authentication.\n\n' +
+          'Either:\n' +
+          '1. Set up Application Default Credentials:\n' +
+          '   gcloud auth application-default login --client-id-file=client_secret.json ' +
+          '--scopes="https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/generative-language.retriever"\n' +
+          '2. Set GOOGLE_APPLICATION_CREDENTIALS to a service account key file, or\n' +
+          '3. Add `credentials` to the provider config with service account JSON\n\n' +
+          'Note: GOOGLE_API_KEY is NOT supported for the Live API WebSocket endpoint.\n' +
+          'For OAuth2 setup instructions, see: https://ai.google.dev/gemini-api/docs/oauth\n' +
+          'These options require the google-auth-library package to be installed.',
       );
     }
 
@@ -184,6 +218,16 @@ export class GoogleLiveProvider implements ApiProvider {
       }
     }
 
+    // Load tools before creating WebSocket Promise
+    const fileTools = this.config.tools
+      ? await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars)
+      : [];
+    const normalizedTools = Array.isArray(fileTools)
+      ? normalizeTools(fileTools)
+      : fileTools
+        ? [fileTools]
+        : [];
+
     return new Promise<ProviderResponse>((resolve) => {
       const isNativeAudioModel = this.modelName.includes('native-audio');
       let isResolved = false;
@@ -200,7 +244,16 @@ export class GoogleLiveProvider implements ApiProvider {
         apiVersion = 'v1alpha';
       }
 
-      const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${this.getApiKey()}`;
+      // Construct WebSocket URL with OAuth2 token (required) or API key (fallback, likely won't work)
+      let url: string;
+      if (accessToken) {
+        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?access_token=${accessToken}`;
+        logger.debug('Using OAuth2 access token for Google Live API authentication');
+      } else {
+        // Note: API keys are likely to be rejected by the Live API WebSocket endpoint
+        url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${apiVersion}.GenerativeService.BidiGenerateContent?key=${apiKey}`;
+        logger.debug('Using API key for Google Live API authentication (may not be supported)');
+      }
 
       const ws = new WebSocket(url);
 
@@ -210,6 +263,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let hasAudioContent = false;
       const function_calls_total: FunctionCall[] = [];
       let statefulApiState: any = undefined;
+      let hasFinalized = false;
 
       const isTextExpected =
         this.config.generationConfig?.response_modalities?.includes('text') ?? false;
@@ -231,6 +285,13 @@ export class GoogleLiveProvider implements ApiProvider {
       }, this.config.timeoutMs || 30000);
 
       const finalizeResponse = async () => {
+        // Prevent multiple calls to finalizeResponse
+        if (hasFinalized) {
+          logger.debug('finalizeResponse already called, skipping duplicate call');
+          return;
+        }
+        hasFinalized = true;
+
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
@@ -336,7 +397,7 @@ export class GoogleLiveProvider implements ApiProvider {
               ...(formattedProactivity ? { proactivity: formattedProactivity } : {}),
             },
             ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
-            ...(this.config.tools ? { tools: loadFile(this.config.tools, context?.vars) } : {}),
+            ...(normalizedTools.length > 0 ? { tools: normalizedTools } : {}),
             ...(systemInstruction ? { systemInstruction } : {}),
             ...(outputAudioTranscription
               ? { output_audio_transcription: outputAudioTranscription }
@@ -455,10 +516,12 @@ export class GoogleLiveProvider implements ApiProvider {
               hasAudioStreamEnded = true;
             }
             if (hasTextStreamEnded && hasAudioStreamEnded) {
-              finalizeResponse().catch((err) => {
+              try {
+                await finalizeResponse();
+              } catch (err) {
                 logger.error(`Error in finalizeResponse: ${err}`);
                 safeResolve({ error: `Error finalizing response: ${err}` });
-              });
+              }
               return;
             }
           } else if (response.serverContent?.turnComplete && contentIndex >= contents.length) {
@@ -480,10 +543,12 @@ export class GoogleLiveProvider implements ApiProvider {
               }
             }
             if (hasTextStreamEnded && hasAudioStreamEnded) {
-              finalizeResponse().catch((err) => {
+              try {
+                await finalizeResponse();
+              } catch (err) {
                 logger.error(`Error in finalizeResponse: ${err}`);
                 safeResolve({ error: `Error finalizing response: ${err}` });
-              });
+              }
               return;
             }
           } else if (response.serverContent?.turnComplete && contentIndex < contents.length) {
@@ -585,11 +650,13 @@ export class GoogleLiveProvider implements ApiProvider {
                 'Unknown message with transcription enabled - marking audio as complete',
               );
               hasAudioStreamEnded = true;
-              if (hasTextStreamEnded && hasAudioStreamEnded) {
-                finalizeResponse().catch((err) => {
+              if (hasTextStreamEnded) {
+                try {
+                  await finalizeResponse();
+                } catch (err) {
                   logger.error(`Error in finalizeResponse: ${err}`);
                   safeResolve({ error: `Error finalizing response: ${err}` });
-                });
+                }
               }
             }
           }

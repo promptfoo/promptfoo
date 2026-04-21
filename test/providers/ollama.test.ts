@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
   OllamaChatProvider,
@@ -7,11 +8,11 @@ import {
 
 import type { CallApiContextParams } from '../../src/types/index';
 
-jest.mock('../../src/cache');
+vi.mock('../../src/cache');
 
 describe('OllamaCompletionProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should construct with model name and options', () => {
@@ -33,7 +34,7 @@ describe('OllamaCompletionProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -52,7 +53,7 @@ describe('OllamaCompletionProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -63,7 +64,7 @@ describe('OllamaCompletionProvider', () => {
   });
 
   it('should handle API errors', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -80,7 +81,7 @@ describe('OllamaCompletionProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -97,7 +98,7 @@ describe('OllamaCompletionProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -124,7 +125,7 @@ describe('OllamaCompletionProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -148,7 +149,7 @@ describe('OllamaCompletionProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -167,7 +168,7 @@ describe('OllamaCompletionProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -191,7 +192,7 @@ describe('OllamaCompletionProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaCompletionProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -209,7 +210,7 @@ describe('OllamaCompletionProvider', () => {
 
 describe('OllamaChatProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should construct with model name and options', () => {
@@ -231,7 +232,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -250,7 +251,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -261,7 +262,7 @@ describe('OllamaChatProvider', () => {
   });
 
   it('should handle chat API errors', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -278,7 +279,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -295,7 +296,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -323,12 +324,12 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     await provider.callApi('test prompt');
 
-    expect(jest.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
-    const call = jest.mocked(fetchWithCache).mock.calls[0] as any;
+    expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
+    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
     expect(JSON.parse(call[1].body).think).toBeFalsy();
   });
 
@@ -346,12 +347,12 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     await provider.callApi('test prompt');
 
-    expect(jest.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
-    const call = jest.mocked(fetchWithCache).mock.calls[0] as any;
+    expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
+    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
     expect(JSON.parse(call[1].body).think).toBeFalsy();
   });
 
@@ -369,12 +370,12 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     await provider.callApi('test prompt');
 
-    expect(jest.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
-    const call = jest.mocked(fetchWithCache).mock.calls[0] as any;
+    expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
+    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
     expect(JSON.parse(call[1].body).think).toBeTruthy();
   });
 
@@ -392,7 +393,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const context: CallApiContextParams = {
       prompt: { raw: 'test prompt', label: 'test' },
@@ -402,8 +403,8 @@ describe('OllamaChatProvider', () => {
 
     await provider.callApi('test prompt', context);
 
-    expect(jest.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
-    const call = jest.mocked(fetchWithCache).mock.calls[0] as any;
+    expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
+    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
     expect(JSON.parse(call[1].body)).toMatchObject({
       tools: [{ name: 'test-tool' }],
     });
@@ -420,7 +421,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const context: CallApiContextParams = {
       prompt: { raw: 'test prompt', label: 'test' },
@@ -430,8 +431,8 @@ describe('OllamaChatProvider', () => {
 
     await provider.callApi('test prompt', context);
 
-    expect(jest.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
-    const call = jest.mocked(fetchWithCache).mock.calls[0] as any;
+    expect(vi.mocked(fetchWithCache).mock.calls[0]).toBeDefined();
+    const call = vi.mocked(fetchWithCache).mock.calls[0] as any;
     expect(call[4]).toBe(true);
   });
 
@@ -444,7 +445,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -468,7 +469,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -487,7 +488,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -511,7 +512,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3');
     const result = await provider.callApi('test prompt');
@@ -535,7 +536,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
@@ -586,7 +587,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
@@ -640,7 +641,7 @@ describe('OllamaChatProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaChatProvider('llama3.3', {
       config: {
@@ -691,7 +692,7 @@ describe('OllamaChatProvider', () => {
 
 describe('OllamaEmbeddingProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should call embeddings API and return response', async () => {
@@ -705,7 +706,7 @@ describe('OllamaEmbeddingProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaEmbeddingProvider('llama3.3');
     const result = await provider.callEmbeddingApi('test text');
@@ -716,7 +717,7 @@ describe('OllamaEmbeddingProvider', () => {
   });
 
   it('should handle embeddings API errors', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
     const provider = new OllamaEmbeddingProvider('llama3.3');
     const result = await provider.callEmbeddingApi('test text');
@@ -733,7 +734,7 @@ describe('OllamaEmbeddingProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaEmbeddingProvider('llama3.3');
     const result = await provider.callEmbeddingApi('test text');
@@ -750,7 +751,7 @@ describe('OllamaEmbeddingProvider', () => {
       headers: {},
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new OllamaEmbeddingProvider('llama3.3');
     const result = await provider.callEmbeddingApi('test text');

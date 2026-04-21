@@ -1,13 +1,14 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
-import { matchesClosedQa } from '../../src/matchers';
+import { matchesClosedQa } from '../../src/matchers/llmGrading';
 
 import type { AssertionParams } from '../../src/types/index';
 
-jest.mock('../../src/matchers');
+vi.mock('../../src/matchers/llmGrading');
 
 describe('handleModelGradedClosedQa', () => {
   beforeEach(() => {
-    jest.mocked(matchesClosedQa).mockResolvedValue({
+    vi.mocked(matchesClosedQa).mockResolvedValue({
       pass: true,
       score: 1,
       reason: 'test reason',
