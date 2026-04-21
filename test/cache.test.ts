@@ -26,8 +26,16 @@ vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
 }));
 
+vi.mock('../src/globalConfig/cloud', () => ({
+  CLOUD_API_HOST: 'https://api.promptfoo.app',
+  cloudConfig: {
+    getApiKey: vi.fn(() => process.env.PROMPTFOO_API_KEY),
+  },
+}));
+
 // Mock fetchWithRetries to return proper Response objects
-vi.mock('../src/util/fetch/index', () => ({
+vi.mock('../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/util/fetch/index')>()),
   fetchWithRetries: vi.fn(),
 }));
 
@@ -809,6 +817,56 @@ describe('fetchWithCache', () => {
         expect(cacheKey).not.toContain('secret-url-token');
         expect(cacheKey).not.toContain('secret-header-token');
         expect(cacheKey).not.toContain('secret-body-token');
+      }
+    });
+
+    it('should isolate cloud requests by injected API key without storing the key', async () => {
+      const cache = getCache();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_API_KEY: 'secret-cloud-token-one' });
+      mockFetchWithRetries.mockImplementation(() =>
+        Promise.resolve(
+          mockFetchWithRetriesResponse(true, {
+            data:
+              process.env.PROMPTFOO_API_KEY === 'secret-cloud-token-one'
+                ? 'cloud token one data'
+                : 'cloud token two data',
+          }),
+        ),
+      );
+
+      try {
+        const requestOptions = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task: 'same-body' }),
+        };
+
+        const tokenOneResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
+
+        mockProcessEnv({ PROMPTFOO_API_KEY: 'secret-cloud-token-two' });
+
+        const tokenTwoResult = await fetchWithCache(
+          'https://api.promptfoo.app/api/v1/task',
+          requestOptions,
+          1000,
+        );
+
+        expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+        expect(tokenOneResult.data).toEqual({ data: 'cloud token one data' });
+        expect(tokenTwoResult.data).toEqual({ data: 'cloud token two data' });
+
+        const cacheKeys = vi.mocked(cache.set).mock.calls.map(([cacheKey]) => String(cacheKey));
+        expect(cacheKeys).toHaveLength(2);
+        for (const cacheKey of cacheKeys) {
+          expect(cacheKey).not.toContain('secret-cloud-token-one');
+          expect(cacheKey).not.toContain('secret-cloud-token-two');
+        }
+      } finally {
+        restoreEnv();
       }
     });
 

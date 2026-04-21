@@ -137,7 +137,10 @@ function headersInitToRecord(headers: HeadersInit | undefined): Record<string, s
   return { ...headers };
 }
 
-function getFetchWithProxyHeaders(url: RequestInfo, options: FetchOptions): Record<string, string> {
+export function getFetchWithProxyHeaders(
+  url: RequestInfo,
+  options: FetchOptions,
+): Record<string, string> {
   const requestHeaders =
     url instanceof Request && options.headers === undefined ? headersInitToRecord(url.headers) : {};
   const optionHeaders = headersInitToRecord(options.headers);
