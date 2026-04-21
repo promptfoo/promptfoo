@@ -1,7 +1,7 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { isBasicRefusal } from '../util';
-import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
@@ -11,6 +11,7 @@ import type {
   GradingResult,
   TestCase,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:aegis';
 export const DATASET_PATH =
@@ -73,21 +74,18 @@ export class AegisPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number) {
+  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
     const records = await fetchDataset(n);
 
-    return {
-      testCases: records.map((record) => ({
-        vars: {
-          [this.injectVar]: record.vars?.text as string,
-        },
-        metadata: {
-          label: record.vars?.labels_0,
-        },
-        assert: this.getAssertions(record.vars?.text as string),
-      })),
-      errors: [],
-    };
+    return records.map((record) => ({
+      vars: {
+        [this.injectVar]: record.vars?.text as string,
+      },
+      metadata: {
+        label: record.vars?.labels_0,
+      },
+      assert: this.getAssertions(record.vars?.text as string),
+    }));
   }
 }
 

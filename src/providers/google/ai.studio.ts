@@ -13,19 +13,31 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  normalizeSafetySettings,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
+  ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
   GuardrailResponse,
+  ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
 import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
+const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'paligemma'];
+
+function usesGenerateContentApi(modelName: string): boolean {
+  return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
+}
+
+function shouldBustCache(context?: CallApiContextParams): boolean {
+  return context?.bustCache ?? context?.debug ?? false;
+}
 
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
@@ -244,8 +256,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
     }
 
-    const isGemini = this.modelName.startsWith('gemini');
-    if (isGemini) {
+    if (usesGenerateContentApi(this.modelName)) {
       return this.callGemini(prompt, context);
     }
 
@@ -263,7 +274,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       temperature: config.temperature,
       topP: config.topP,
       topK: config.topK,
-      safetySettings: config.safetySettings,
+      safetySettings: normalizeSafetySettings(config.safetySettings),
       stopSequences: config.stopSequences,
       maxOutputTokens: config.maxOutputTokens,
     };
@@ -284,7 +295,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.bustCache ?? context?.debug,
+        shouldBustCache(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {
@@ -330,9 +341,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        data.usageMetadata?.candidatesTokenCount != null
-          ? data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0)
-          : undefined;
+        data.usageMetadata?.candidatesTokenCount == null
+          ? undefined
+          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
         : calculateGoogleCost(
@@ -397,7 +408,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         }),
         ...config.generationConfig,
       },
-      safetySettings: config.safetySettings,
+      safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
@@ -434,7 +445,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        shouldBustCache(context),
       )) as {
         data: GeminiResponseData;
         cached: boolean;
@@ -502,9 +513,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       // Calculate cost (only for non-cached responses)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        data.usageMetadata?.candidatesTokenCount != null
-          ? data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0)
-          : undefined;
+        data.usageMetadata?.candidatesTokenCount == null
+          ? undefined
+          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
       const cost = cached
         ? undefined
         : calculateGoogleCost(
@@ -536,6 +547,110 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   }
 
   // cleanup() is inherited from GoogleGenericProvider
+}
+
+/**
+ * Google AI Studio embedding provider.
+ *
+ * Calls the Gemini API `:embedContent` endpoint and normalizes the response
+ * into `ProviderEmbeddingResponse`.
+ *
+ * Exposes the three standard knobs the Gemini API accepts: `taskType`
+ * (optimizes the vector for a particular use case), `outputDimensionality`
+ * (truncates the vector; useful for storage cost), and `title` (only
+ * meaningful when `taskType` is `RETRIEVAL_DOCUMENT`).
+ */
+export class AIStudioEmbeddingProvider
+  extends AIStudioChatProvider
+  implements ApiEmbeddingProvider
+{
+  id(): string {
+    if (this.customId) {
+      return this.customId();
+    }
+    return `google:embedding:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Google AI Studio Embedding Provider ${this.modelName}]`;
+  }
+
+  async callApi(_prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
+    return {
+      error: `Provider ${this.id()} is an embedding provider; use a non-embedding google: provider for chat completions.`,
+    };
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      return {
+        error:
+          'Google API key is not set. Set the GOOGLE_API_KEY or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
+      };
+    }
+
+    if (typeof text !== 'string') {
+      return {
+        error: `Invalid input type for embedding API. Expected string, got ${typeof text}.`,
+      };
+    }
+
+    const config = this.config as CompletionOptions & {
+      taskType?: string;
+      outputDimensionality?: number;
+      title?: string;
+    };
+
+    const body: Record<string, any> = {
+      content: { parts: [{ text }] },
+      ...(config.taskType !== undefined && { taskType: config.taskType }),
+      ...(config.outputDimensionality !== undefined && {
+        outputDimensionality: config.outputDimensionality,
+      }),
+      ...(config.title !== undefined && { title: config.title }),
+    };
+
+    let data: any;
+    let cached = false;
+    try {
+      const endpoint = this.getApiEndpoint('embedContent');
+      const headers = await this.getAuthHeaders();
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
+      ({ data, cached } = (await fetchWithCache(
+        endpoint,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
+        REQUEST_TIMEOUT_MS,
+        'json',
+      )) as unknown as { data: any; cached: boolean });
+    } catch (err) {
+      logger.error(`Google AI Studio embedding API call error: ${String(err)}`);
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    const values: number[] | undefined = data?.embedding?.values;
+    if (!values) {
+      return {
+        error: `No embedding found in Google AI Studio response: ${JSON.stringify(data)}`,
+      };
+    }
+
+    const promptTokens: number | undefined = data?.usageMetadata?.promptTokenCount;
+    return {
+      embedding: values,
+      tokenUsage: cached
+        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 0 }
+        : { total: promptTokens ?? 0, numRequests: 1 },
+      cached,
+    };
+  }
 }
 
 export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');

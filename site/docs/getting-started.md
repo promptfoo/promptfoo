@@ -1,5 +1,5 @@
 ---
-title: Getting Started
+title: Getting started
 description: Learn how to set up your first promptfoo config file, create prompts, configure providers, and run your first LLM evaluation.
 keywords: [getting started, setup, configuration, prompts, providers, evaluation, llm testing]
 sidebar_position: 5
@@ -10,7 +10,9 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-After [installing](/docs/installation) promptfoo, you can set up your first config file in two ways:
+This guide will walk you through creating a working eval that tests prompts across multiple models and opens a web view for comparing outputs.
+
+After [installing](/docs/installation) promptfoo, you can set up your first config file in a few ways:
 
 ## Running an example
 
@@ -24,11 +26,13 @@ Set up your first config file with a pre-built example by running this command w
     </TabItem>
     <TabItem value="npm" label="npm">
       ```bash
+      npm install -g promptfoo
       promptfoo init --example getting-started
       ```
     </TabItem>
     <TabItem value="brew" label="brew">
       ```bash
+      brew install promptfoo
       promptfoo init --example getting-started
       ```
     </TabItem>
@@ -71,9 +75,9 @@ Then navigate to the example directory, run the eval, and view results:
   </TabItem>
 </Tabs>
 
-## Starting from scratch
+## Set up via the CLI
 
-If you prefer to start from scratch instead of using the example, simply run `promptfoo init` without the `--example` flag:
+To start from scratch, run `promptfoo init` to create a config through an interactive CLI walkthrough:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
@@ -93,11 +97,37 @@ If you prefer to start from scratch instead of using the example, simply run `pr
   </TabItem>
 </Tabs>
 
-The command will guide you through an interactive setup process to create your custom configuration.
+## Set up via the Web UI
+
+If you prefer a visual interface, run `promptfoo eval setup` to configure your first eval through the web UI:
+
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    ```bash
+    npx promptfoo@latest eval setup
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    ```bash
+    promptfoo eval setup
+    ```
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    ```bash
+    promptfoo eval setup
+    ```
+  </TabItem>
+</Tabs>
+
+This opens a browser-based setup flow that walks you through creating prompts, choosing providers, and adding test cases.
+
+<div style={{ textAlign: 'center' }}>   
+  <img src="/img/docs/eval-setup.png" alt="Promptfoo eval setup Web UI" style={{ width: '80%' }} />
+</div>
 
 ## Configuration
 
-To configure your evaluation:
+Now that you've created an initial configuration, you can update `promptfooconfig.yaml` with your own prompts, providers, and test cases:
 
 1. **Set up your prompts**: Open `promptfooconfig.yaml` and add prompts that you want to test. Use double curly braces for variable placeholders: `{{variable_name}}`. For example:
 
@@ -108,12 +138,12 @@ To configure your evaluation:
 
    [&raquo; More information on setting up prompts](/docs/configuration/prompts)
 
-2. Add `providers` to specify AI models you want to test. Promptfoo supports 60+ providers including OpenAI, Anthropic, Google, and many others:
+2. **Add providers**: Add `providers` to specify AI models you want to test. Promptfoo supports 60+ providers including OpenAI, Anthropic, Google, and many others:
 
    ```yaml
    providers:
-     - openai:gpt-5.2
-     - openai:gpt-5-mini
+     - openai:chat:gpt-5.4
+     - openai:chat:gpt-5.4-mini
      - anthropic:messages:claude-opus-4-6
      - google:gemini-3-pro-preview
      # Or use your own custom provider
@@ -170,7 +200,7 @@ To configure your evaluation:
 
    This tests every prompt, model, and test case.
 
-5. After the evaluation is complete, open the web viewer to review the outputs:
+5. **Review outputs**: After the evaluation is complete, open the web viewer to review the outputs:
 
    <Tabs groupId="promptfoo-command">
      <TabItem value="npx" label="npx" default>
@@ -204,26 +234,28 @@ See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
 
 ## Examples
 
+The examples below cover a few common eval patterns: prompt quality, model quality, RAG quality, and agent quality.
+
 ### Prompt quality
 
-In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses.
+In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-self-grading), we evaluate whether adding adjectives to the personality of an assistant bot affects the responses.
 
 You can quickly set up this example by running:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     ```bash
-    npx promptfoo@latest init --example self-grading
+    npx promptfoo@latest init --example eval-self-grading
     ```
   </TabItem>
   <TabItem value="npm" label="npm">
     ```bash
-    promptfoo init --example self-grading
+    promptfoo init --example eval-self-grading
     ```
   </TabItem>
   <TabItem value="brew" label="brew">
     ```bash
-    promptfoo init --example self-grading
+    promptfoo init --example eval-self-grading
     ```
   </TabItem>
 </Tabs>
@@ -239,7 +271,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-5.2
+  - openai:chat:gpt-5.4
 defaultTest:
   assert:
     - type: llm-rubric
@@ -292,24 +324,24 @@ You can also output a [spreadsheet](https://docs.google.com/spreadsheets/d/1nano
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-model-comparison), we evaluate the difference between GPT-5 and GPT-5.2 outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate the difference between GPT-5.4 and GPT-5.4 Mini outputs for a given prompt:
 
 You can quickly set up this example by running:
 
 <Tabs groupId="promptfoo-command">
   <TabItem value="npx" label="npx" default>
     ```bash
-    npx promptfoo@latest init --example openai-model-comparison
+    npx promptfoo@latest init --example compare-openai-models
     ```
   </TabItem>
   <TabItem value="npm" label="npm">
     ```bash
-    promptfoo init --example openai-model-comparison
+    promptfoo init --example compare-openai-models
     ```
   </TabItem>
   <TabItem value="brew" label="brew">
     ```bash
-    promptfoo init --example openai-model-comparison
+    promptfoo init --example compare-openai-models
     ```
   </TabItem>
 </Tabs>
@@ -325,8 +357,8 @@ prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
-  - openai:gpt-5
-  - openai:gpt-5-mini
+  - openai:chat:gpt-5.4
+  - openai:chat:gpt-5.4-mini
 
 defaultTest:
   assert:
@@ -429,13 +461,80 @@ It produces the following table, with Gemini models replacing the GPT models in 
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
-- Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/gpt-4o-temperature-comparison))
-- Compare Llama vs. GPT (see [Llama vs GPT benchmark](/docs/guides/compare-llama2-vs-gpt))
-- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
+- Compare GPT-5.4 reasoning effort settings (see [GPT reasoning effort comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-reasoning-effort))
+- Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-temperature))
+- Compare open-source models (see [Comparing Open-Source Models](/docs/guides/compare-open-source-models))
+- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT (see [LangChain example](/docs/configuration/testing-llm-chains))
+
+### RAG quality
+
+In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-rag), we evaluate whether RAG outputs are factual, relevant, and grounded in the retrieved context.
+
+You can quickly set up this example by running:
+
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    ```bash
+    npx promptfoo@latest init --example eval-rag
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    ```bash
+    promptfoo init --example eval-rag
+    ```
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    ```bash
+    promptfoo init --example eval-rag
+    ```
+  </TabItem>
+</Tabs>
+
+From the newly created directory, run `npx promptfoo@latest eval` or `promptfoo eval` to grade outputs on factuality, answer relevance, context recall, context relevance, and context faithfulness. For a deeper walkthrough, see the [RAG evaluation guide](/docs/guides/evaluate-rag).
+
+### Agent quality
+
+In [this example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-basic), we evaluate an OpenAI Agents SDK workflow that uses tools for dice rolls, inventory checks, scene descriptions, and character stats.
+
+You can quickly set up this example by running:
+
+<Tabs groupId="promptfoo-command">
+  <TabItem value="npx" label="npx" default>
+    ```bash
+    npx promptfoo@latest init --example openai-agents-basic
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
+    ```bash
+    promptfoo init --example openai-agents-basic
+    ```
+  </TabItem>
+  <TabItem value="brew" label="brew">
+    ```bash
+    promptfoo init --example openai-agents-basic
+    ```
+  </TabItem>
+</Tabs>
+
+From the newly created directory, run `npm install`, then `npx promptfoo@latest eval` or `promptfoo eval` to test tool use and response quality across multi-turn scenarios. For task completion and trajectory checks, see the [agent evaluation guide](/docs/guides/evaluate-coding-agents) and [tracing docs](/docs/tracing).
 
 ## Next steps
 
-- [&raquo; Configuration guide](/docs/configuration/guide) for detailed setup instructions
-- [&raquo; Providers documentation](/docs/providers) for all supported AI models and services
-- [&raquo; Assertions & Metrics](/docs/configuration/expected-outputs) for automatically grading outputs on a pass/fail basis
-- [&raquo; More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository
+Now that you've run your first eval, here are some ways to go deeper:
+
+**Customize your setup:**
+
+- [Configuration guide](/docs/configuration/guide) - Detailed walkthrough of all config options
+- [Providers documentation](/docs/providers) - All 60+ supported AI models and services
+- [Assertions & Metrics](/docs/configuration/expected-outputs) - Automatically grade outputs on a pass/fail basis
+
+**Explore use cases:**
+
+- [Agent evaluation](/docs/guides/evaluate-coding-agents) - Test whether agents complete tasks and follow expected trajectories
+- [RAG evaluation](/docs/guides/evaluate-rag) - Test retrieval-augmented generation pipelines
+- [Red teaming quickstart](/docs/red-team/quickstart) - Scan your LLM app for security vulnerabilities
+- [CI/CD integration](/docs/integrations/github-action) - Run evals automatically on every PR
+
+**Learn from examples:**
+
+- [More examples](https://github.com/promptfoo/promptfoo/tree/main/examples) in our GitHub repository

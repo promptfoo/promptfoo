@@ -5,7 +5,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { RedteamPluginBase } from './base';
 
-import type { ApiProvider, Assertion, TestCase } from '../../types/index';
+import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
 
 const CustomPluginDefinitionSchema = z.strictObject({
   generator: z.string().min(1, 'Generator must not be empty').trim(),
@@ -45,8 +45,14 @@ export class CustomPlugin extends RedteamPluginBase {
     return this.definition.id || `promptfoo:redteam:custom`;
   }
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, filePath: string) {
-    super(provider, purpose, injectVar);
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    filePath: string,
+    config: PluginConfig = {},
+  ) {
+    super(provider, purpose, injectVar, config);
     this.definition = loadCustomPluginDefinition(filePath);
   }
 
@@ -75,17 +81,14 @@ export class CustomPlugin extends RedteamPluginBase {
     return [assertion];
   }
 
-  async generateTests(n: number, delayMs: number = 0) {
-    const { testCases: tests, errors } = await super.generateTests(n, delayMs);
-    return {
-      testCases: tests.map((test) => ({
-        ...test,
-        metadata: {
-          purpose: this.purpose,
-          ...(test.metadata ?? {}),
-        },
-      })),
-      errors,
-    };
+  async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+    const tests = await super.generateTests(n, delayMs);
+    return tests.map((test) => ({
+      ...test,
+      metadata: {
+        purpose: this.purpose,
+        ...(test.metadata ?? {}),
+      },
+    }));
   }
 }

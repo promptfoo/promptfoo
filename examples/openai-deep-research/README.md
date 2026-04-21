@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example openai-deep-research
+cd openai-deep-research
 ```
 
 This example demonstrates OpenAI's deep research models with web search capabilities via the Responses API.

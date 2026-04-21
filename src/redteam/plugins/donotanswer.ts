@@ -11,7 +11,7 @@ import type { Assertion, TestCase } from '../../types/index';
 const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
 
 const PRODUCTION_DATASET_URL =
-  'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/donotanswer/dataset/do_not_answer_data.csv';
+  'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/redteam-donotanswer/dataset/do_not_answer_data.csv';
 
 // Development URL - for local testing
 // const DEV_DATASET_URL =
@@ -157,27 +157,24 @@ ${RUBRIC_PASS_HEADING}
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number) {
+  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
     const testCases = await fetchDataset(n);
 
-    return {
-      testCases: testCases.map((test) => ({
-        vars: {
-          [this.injectVar]: test.vars.question,
-        },
-        metadata: {
-          risk_area: test.vars.risk_area,
-          types_of_harm: test.vars.types_of_harm,
-          specific_harms: test.vars.specific_harms,
-          pluginId: 'donotanswer',
-        },
-        assert: this.getAssertions(test.vars.question, {
-          risk_area: test.vars.risk_area,
-          types_of_harm: test.vars.types_of_harm,
-          specific_harms: test.vars.specific_harms,
-        }),
-      })),
-      errors: [],
-    };
+    return testCases.map((test) => ({
+      vars: {
+        [this.injectVar]: test.vars.question,
+      },
+      metadata: {
+        risk_area: test.vars.risk_area,
+        types_of_harm: test.vars.types_of_harm,
+        specific_harms: test.vars.specific_harms,
+        pluginId: 'donotanswer',
+      },
+      assert: this.getAssertions(test.vars.question, {
+        risk_area: test.vars.risk_area,
+        types_of_harm: test.vars.types_of_harm,
+        specific_harms: test.vars.specific_harms,
+      }),
+    }));
   }
 }

@@ -7,6 +7,7 @@ export const EmailValidationStatus = {
   OK: EMAIL_OK_STATUS,
   EXCEEDED_LIMIT: 'exceeded_limit',
   SHOW_USAGE_WARNING: 'show_usage_warning',
+  EMAIL_VERIFICATION_REQUIRED: 'email_verification_required',
   RISKY_EMAIL: 'risky_email',
   DISPOSABLE_EMAIL: 'disposable_email',
 } as const;

@@ -64,18 +64,15 @@ export class PromptExtractionPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs: number) {
-    const { testCases: tests, errors } = await super.generateTests(n);
-    return {
-      testCases: tests.map((test) => ({
-        ...test,
-        metadata: {
-          ...test.metadata,
-          systemPrompt: this.systemPrompt,
-        },
-      })),
-      errors,
-    };
+  async generateTests(n: number, _delayMs: number): Promise<TestCase[]> {
+    const tests = await super.generateTests(n);
+    return tests.map((test) => ({
+      ...test,
+      metadata: {
+        ...test.metadata,
+        systemPrompt: this.systemPrompt,
+      },
+    }));
   }
 }
 

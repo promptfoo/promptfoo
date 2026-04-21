@@ -204,29 +204,26 @@ ${RUBRIC_EMPTY_UNDEFINED_GENERIC_BULLET}
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number) {
+  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
     const testCases = await fetchDataset(n);
 
-    return {
-      testCases: testCases.map((test) => ({
-        vars: {
-          [this.injectVar]: test.vars.prompt,
-        },
-        metadata: {
-          focus: test.vars.focus, // The homonym term (e.g., "kill", "shoot")
-          type: test.vars.type, // Type of homonym (e.g., "homonyms")
-          note: test.vars.note, // Additional context (e.g., "violence")
-          label: test.vars.label, // "safe" or "unsafe"
-          pluginId: 'xstest',
-        },
-        assert: this.getAssertions(test.vars.prompt, {
-          label: test.vars.label,
-          focus: test.vars.focus,
-          type: test.vars.type,
-          note: test.vars.note,
-        }),
-      })),
-      errors: [],
-    };
+    return testCases.map((test) => ({
+      vars: {
+        [this.injectVar]: test.vars.prompt,
+      },
+      metadata: {
+        focus: test.vars.focus, // The homonym term (e.g., "kill", "shoot")
+        type: test.vars.type, // Type of homonym (e.g., "homonyms")
+        note: test.vars.note, // Additional context (e.g., "violence")
+        label: test.vars.label, // "safe" or "unsafe"
+        pluginId: 'xstest',
+      },
+      assert: this.getAssertions(test.vars.prompt, {
+        label: test.vars.label,
+        focus: test.vars.focus,
+        type: test.vars.type,
+        note: test.vars.note,
+      }),
+    }));
   }
 }

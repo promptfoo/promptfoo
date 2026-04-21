@@ -2,10 +2,14 @@ import * as fs from 'fs';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
-import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
+import {
+  AIStudioChatProvider,
+  AIStudioEmbeddingProvider,
+} from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -122,9 +126,9 @@ describe('AIStudioChatProvider', () => {
       expect(mockRenderString).toHaveBeenCalledWith('env-key', {});
 
       // No API key
-      delete process.env.GEMINI_API_KEY;
-      delete process.env.GOOGLE_API_KEY;
-      delete process.env.PALM_API_KEY;
+      mockProcessEnv({ GEMINI_API_KEY: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ PALM_API_KEY: undefined });
       const providerWithNoKey = new AIStudioChatProvider('gemini-pro');
       expect(providerWithNoKey.getApiKey()).toBeUndefined();
     });
@@ -190,7 +194,7 @@ describe('AIStudioChatProvider', () => {
       const providerWithSafety = new AIStudioChatProvider('gemini-pro', {
         config: {
           safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
           ],
         },
       });
@@ -200,9 +204,9 @@ describe('AIStudioChatProvider', () => {
 
   describe('error handling', () => {
     it('should throw error when API key is not set', async () => {
-      delete process.env.GEMINI_API_KEY;
-      delete process.env.GOOGLE_API_KEY;
-      delete process.env.PALM_API_KEY;
+      mockProcessEnv({ GEMINI_API_KEY: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ PALM_API_KEY: undefined });
       provider = new AIStudioChatProvider('gemini-pro', {});
       await expect(provider.callApi('test')).rejects.toThrow(
         'Google API key is not set. Set the GOOGLE_API_KEY or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
@@ -429,7 +433,84 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        false,
+      );
+    });
+  });
+
+  describe('Gemma models', () => {
+    it('should route Gemma 4 models to the generateContent API', async () => {
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'gemma response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 8,
+            candidatesTokenCount: 4,
+            totalTokenCount: 12,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.output).toBe('gemma response');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/v1beta/models/gemma-4-31b-it:generateContent'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(
+            '"contents":[{"parts":[{"text":"test prompt"}],"role":"user"}]',
+          ),
+        }),
+        expect.any(Number),
+        'json',
+        false,
+      );
+    });
+
+    it('should preserve cache busting for Gemma models routed through generateContent', async () => {
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'fresh gemma response' }] } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callApi('test prompt', {
+        bustCache: true,
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+        },
+        vars: {},
+      });
+
+      expect(response.output).toBe('fresh gemma response');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        true,
       );
     });
   });
@@ -1852,5 +1933,116 @@ describe('AIStudioChatProvider', () => {
         expect(response.cost).toBeCloseTo(0.0000155, 10);
       });
     });
+  });
+});
+
+describe('AIStudioEmbeddingProvider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockProcessEnv({ GOOGLE_API_KEY: 'test-key' });
+  });
+
+  function embeddingResponse(values: number[], promptTokenCount?: number) {
+    return {
+      data: {
+        embedding: { values, shape: [1, values.length] },
+        ...(promptTokenCount !== undefined && { usageMetadata: { promptTokenCount } }),
+      },
+      cached: false,
+    };
+  }
+
+  it('returns a google:embedding: prefixed id', () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
+    expect(provider.toString()).toBe('[Google AI Studio Embedding Provider gemini-embedding-001]');
+  });
+
+  it('honors a caller-supplied custom id override', () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001', {
+      id: 'custom-embed',
+    });
+    expect(provider.id()).toBe('custom-embed');
+  });
+
+  it('POSTs to the :embedContent endpoint and returns the values array', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2, 0.3], 7) as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello world');
+
+    expect(cache.fetchWithCache).toHaveBeenCalledOnce();
+    const [url, init] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    expect(url).toContain('/v1beta/models/gemini-embedding-001:embedContent');
+    const body = JSON.parse((init as any).body);
+    expect(body).toEqual({ content: { parts: [{ text: 'hello world' }] } });
+    expect((init as any).headers['x-goog-api-key']).toBe('test-key');
+
+    expect(response.embedding).toEqual([0.1, 0.2, 0.3]);
+    expect(response.tokenUsage).toEqual({ total: 7, numRequests: 1 });
+  });
+
+  it('forwards taskType, outputDimensionality, and title from config', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1], 1) as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001', {
+      config: {
+        taskType: 'RETRIEVAL_DOCUMENT',
+        outputDimensionality: 256,
+        title: 'My Doc',
+      } as any,
+    });
+    await provider.callEmbeddingApi('x');
+
+    const body = JSON.parse((vi.mocked(cache.fetchWithCache).mock.calls[0][1] as any).body);
+    expect(body).toMatchObject({
+      content: { parts: [{ text: 'x' }] },
+      taskType: 'RETRIEVAL_DOCUMENT',
+      outputDimensionality: 256,
+      title: 'My Doc',
+    });
+  });
+
+  it('returns a clear error when no API key is configured', async () => {
+    mockProcessEnv({
+      GOOGLE_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      PALM_API_KEY: undefined,
+    });
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello');
+    expect(response.error).toContain('Google API key is not set');
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a descriptive error when the response has no values', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: { error: { message: 'bad' } },
+      cached: false,
+    } as any);
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello');
+    expect(response.embedding).toBeUndefined();
+    expect(response.error).toContain('No embedding found');
+  });
+
+  it('marks responses as cached and records numRequests: 0', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      ...(embeddingResponse([0.1, 0.2], 3) as any),
+      cached: true,
+    });
+
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callEmbeddingApi('hello');
+
+    expect(response.cached).toBe(true);
+    expect(response.tokenUsage).toEqual({ cached: 3, total: 3, numRequests: 0 });
+  });
+
+  it('does not support text inference via callApi', async () => {
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
+    const response = await provider.callApi('hello');
+    expect(response.error).toContain('embedding provider');
   });
 });

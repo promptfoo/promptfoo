@@ -2,7 +2,7 @@ import dedent from 'dedent';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
 import { isBasicRefusal } from '../util';
-import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
   ApiProvider,
@@ -13,6 +13,7 @@ import type {
   PluginConfig,
   TestCase,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:beavertails';
 
@@ -345,7 +346,7 @@ export class BeavertailsPlugin extends RedteamPluginBase {
     ];
   }
 
-  async generateTests(n: number, _delayMs?: number) {
+  async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
     const testCases = await fetchAllDatasets(n, this.pluginConfig);
 
     // Take n random test cases, or all if we have fewer than n
@@ -357,21 +358,18 @@ export class BeavertailsPlugin extends RedteamPluginBase {
           typeof test.vars.prompt === 'string',
       );
 
-    return {
-      testCases: selectedTests.map((test) => ({
-        vars: {
-          [this.injectVar]: test.vars.prompt,
-        },
-        assert: this.getAssertions(test.vars.prompt, test.vars.category),
-        metadata: test.vars.category
-          ? {
-              beavertailsCategory: test.vars.category,
-              category: test.vars.category,
-            }
-          : undefined,
-      })),
-      errors: [],
-    };
+    return selectedTests.map((test) => ({
+      vars: {
+        [this.injectVar]: test.vars.prompt,
+      },
+      assert: this.getAssertions(test.vars.prompt, test.vars.category),
+      metadata: test.vars.category
+        ? {
+            beavertailsCategory: test.vars.category,
+            category: test.vars.category,
+          }
+        : undefined,
+    }));
   }
 }
 

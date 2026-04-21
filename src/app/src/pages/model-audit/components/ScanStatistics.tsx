@@ -79,7 +79,7 @@ function StatCard({
           type="button"
           onClick={onClick}
           className={cn(
-            'group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 transition-all duration-200',
+            'group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 border-border transition-all duration-200',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
             styles.bg,
             styles.bgHover,
