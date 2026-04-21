@@ -1353,6 +1353,11 @@ export const providerMap: ProviderFactory[] = [
             id: providerPath,
           });
         } else if (serviceType === 'embedding' || serviceType === 'embeddings') {
+          if (!modelName) {
+            throw new Error(
+              `Missing model name for ${providerPath}. Use e.g. google:embedding:gemini-embedding-001.`,
+            );
+          }
           return new AIStudioEmbeddingProvider(modelName, providerOptions);
         }
       }

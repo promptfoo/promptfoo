@@ -2035,7 +2035,7 @@ describe('AIStudioEmbeddingProvider', () => {
 
   it('does not support text inference via callApi', async () => {
     const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
-    const response = await provider.callApi();
+    const response = await provider.callApi('hello');
     expect(response.error).toContain('embedding provider');
   });
 });

@@ -572,7 +572,7 @@ export class AIStudioEmbeddingProvider
     return `[Google AI Studio Embedding Provider ${this.modelName}]`;
   }
 
-  async callApi(): Promise<ProviderResponse> {
+  async callApi(_prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     return {
       error: `Provider ${this.id()} is an embedding provider; use a non-embedding google: provider for chat completions.`,
     };

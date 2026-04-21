@@ -716,5 +716,17 @@ describe('Provider Registry', () => {
       expect(typeof (provider as any).callEmbeddingApi).not.toBe('function');
       expect(provider.id()).toContain('gemini-2.5-flash');
     });
+
+    it.each([
+      'google:embedding:',
+      'google:embeddings:',
+      'palm:embedding:',
+    ])('throws a clear error for %s with no model name', async (providerPath) => {
+      const factory = providerMap.find((f) => f.test(providerPath));
+      expect(factory).toBeDefined();
+      await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        /Missing model name/,
+      );
+    });
   });
 });
