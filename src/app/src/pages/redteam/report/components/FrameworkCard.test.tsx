@@ -132,6 +132,24 @@ describe('FrameworkCard', () => {
     expect(screen.getAllByText('rbac').length).toBeGreaterThan(0);
   });
 
+  it('should render principle names for the DoD AI ethics framework', () => {
+    renderFrameworkCard({
+      framework: 'dod:ai:ethics',
+      isCompliant: false,
+      frameworkSeverity: Severity.High,
+      categoryStats: {
+        'excessive-agency': { pass: 0, total: 10, failCount: 10 },
+        'bias:race': { pass: 10, total: 10, failCount: 0 },
+      },
+      pluginPassRateThreshold: 0.8,
+      nonCompliantPlugins: ['excessive-agency'],
+    });
+
+    expect(screen.getByText('DoD AI Ethical Principles')).toBeInTheDocument();
+    expect(screen.getByText(/Responsible/)).toBeInTheDocument();
+    expect(screen.getByText(/Governable/)).toBeInTheDocument();
+  });
+
   it('should display the correct pass rate percentage and tooltip for a plugin with test data', () => {
     const pluginName = 'excessive-agency';
     const pass = 7;
@@ -235,10 +253,10 @@ describe('FrameworkCard', () => {
       'harmful:privacy',
       'harmful:misinformation-disinformation',
     ];
-    const categoryStats = nonCompliantPlugins.reduce((acc, plugin) => {
+    const categoryStats = nonCompliantPlugins.reduce<CategoryStats>((acc, plugin) => {
       acc[plugin] = { pass: 0, total: 10, failCount: 10 };
       return acc;
-    }, {} as CategoryStats);
+    }, {});
 
     renderFrameworkCard({
       isCompliant: false,

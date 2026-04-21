@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Promptfoo Redteam Setup'
+  short_description: 'Plan red team scans from endpoints or code'
+  default_prompt: 'Use $promptfoo-redteam-setup to create a focused red team config from a live endpoint, OpenAPI spec, or code.'
+
+policy:
+  allow_implicit_invocation: true

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
+import { useServerVirtualizedRows } from '@app/components/data-table/use-server-virtualized-rows';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -30,7 +31,7 @@ interface EvalsTableProps {
   deletionEnabled?: boolean;
 }
 
-const DEFAULT_PAGE_SIZE = 50;
+const SERVER_PAGE_SIZE = 50;
 
 interface ResultsResponse {
   data: EvalSummary[];
@@ -39,6 +40,12 @@ interface ResultsResponse {
     limit: number;
     offset: number;
   };
+}
+
+interface FetchResultsOptions {
+  signal: AbortSignal;
+  limit?: number;
+  offset?: number;
 }
 
 export default function EvalsTable({
@@ -58,32 +65,33 @@ export default function EvalsTable({
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [totalRows, setTotalRows] = useState(0);
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: DEFAULT_PAGE_SIZE,
-  });
 
   const location = useLocation();
   const useServerPagination = !filterByDatasetId;
 
-  // Fetch evals from the API
+  const fetchResults = useCallback(async ({ signal, limit, offset }: FetchResultsOptions) => {
+    const searchParams = new URLSearchParams();
+    if (limit !== undefined) {
+      searchParams.set('limit', String(limit));
+      searchParams.set('offset', String(offset ?? 0));
+    }
+
+    const url = searchParams.size > 0 ? `/results?${searchParams.toString()}` : '/results';
+    const response = await callApi(url, { cache: 'no-store', signal });
+    if (!response.ok) {
+      throw new Error('Failed to fetch evals');
+    }
+    return (await response.json()) as ResultsResponse;
+  }, []);
+
   const fetchEvals = useCallback(
     async (signal: AbortSignal) => {
       try {
         setIsLoading(true);
-
-        const searchParams = new URLSearchParams();
-        if (useServerPagination) {
-          searchParams.set('limit', String(pagination.pageSize));
-          searchParams.set('offset', String(pagination.pageIndex * pagination.pageSize));
-        }
-
-        const url = searchParams.size > 0 ? `/results?${searchParams.toString()}` : '/results';
-        const response = await callApi(url, { cache: 'no-store', signal });
-        if (!response.ok) {
-          throw new Error('Failed to fetch evals');
-        }
-        const body = (await response.json()) as ResultsResponse;
+        const body = await fetchResults({
+          signal,
+          ...(useServerPagination ? { limit: SERVER_PAGE_SIZE, offset: 0 } : {}),
+        });
         setEvals(body.data);
         setTotalRows(body.pagination?.totalCount ?? body.data.length);
         setError(null);
@@ -97,8 +105,46 @@ export default function EvalsTable({
         }
       }
     },
-    [pagination.pageIndex, pagination.pageSize, useServerPagination],
+    [fetchResults, useServerPagination],
   );
+
+  const fetchServerRows = useCallback(
+    async ({
+      startIndex,
+      endIndex,
+      signal,
+    }: {
+      startIndex: number;
+      endIndex: number;
+      signal: AbortSignal;
+    }) => {
+      try {
+        const limit = endIndex - startIndex + 1;
+        const body = await fetchResults({ signal, limit, offset: startIndex });
+        setTotalRows(body.pagination?.totalCount ?? body.data.length);
+        setError(null);
+        return {
+          rows: body.data,
+          offset: body.pagination?.offset ?? startIndex,
+        };
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          setError((err as Error).message);
+        }
+        throw err;
+      }
+    },
+    [fetchResults],
+  );
+
+  const serverVirtualizationResetKey = `${location.pathname}${location.search}`;
+  const { serverVirtualization } = useServerVirtualizedRows<EvalSummary>({
+    initialRows: useServerPagination ? evals : [],
+    rowCount: useServerPagination ? totalRows : 0,
+    pageSize: SERVER_PAGE_SIZE,
+    fetchRows: fetchServerRows,
+    resetKey: serverVirtualizationResetKey,
+  });
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
@@ -124,8 +170,8 @@ export default function EvalsTable({
   }, [evals, filterByDatasetId, focusedEvalId]);
 
   const hasRedteamEvals = useMemo(() => {
-    return evals.some(({ isRedteam }) => isRedteam);
-  }, [evals]);
+    return useServerPagination || evals.some(({ isRedteam }) => isRedteam);
+  }, [evals, useServerPagination]);
 
   // Get selected eval IDs from row selection state
   const selectedEvalIds = useMemo(() => {
@@ -168,11 +214,22 @@ export default function EvalsTable({
   };
 
   // Export CSV handler
-  const handleExportCSV = useCallback(() => {
+  const handleExportCSV = useCallback(async () => {
+    let exportRows = rows;
+    if (useServerPagination) {
+      try {
+        exportRows = (await fetchResults({ signal: new AbortController().signal })).data;
+      } catch (err) {
+        console.error('Failed to export evals:', err);
+        alert('Failed to export evals');
+        return;
+      }
+    }
+
     const headers = ['ID', 'Created', 'Type', 'Description', 'Pass Rate', '# Tests'];
     const csvRows = [
       headers.join(','),
-      ...rows.map((row) =>
+      ...exportRows.map((row) =>
         [
           row.evalId,
           new Date(row.createdAt).toISOString(),
@@ -191,7 +248,7 @@ export default function EvalsTable({
     link.download = `evals-${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
-  }, [rows]);
+  }, [fetchResults, rows, useServerPagination]);
 
   // Column definitions
   const columns: ColumnDef<EvalSummary>[] = useMemo(
@@ -317,10 +374,6 @@ export default function EvalsTable({
     [focusedEvalId, onEvalSelected, hasRedteamEvals],
   );
 
-  const pageCount = useMemo(() => {
-    return Math.max(1, Math.ceil(totalRows / pagination.pageSize));
-  }, [pagination.pageSize, totalRows]);
-
   // Delete button for toolbar
   const deleteButton =
     deletionEnabled && selectedEvalIds.length > 0 ? (
@@ -354,23 +407,13 @@ export default function EvalsTable({
           onRowSelectionChange={setRowSelection}
           getRowId={(row) => row.evalId}
           initialSorting={[{ id: 'createdAt', desc: true }]}
-          initialPageSize={DEFAULT_PAGE_SIZE}
           showToolbar={showUtilityButtons}
           showColumnToggle={showUtilityButtons}
           toolbarActions={deleteButton}
           showExport={showUtilityButtons}
           onExportCSV={handleExportCSV}
-          manualPagination={true}
-          rowCount={totalRows}
-          pageCount={pageCount}
-          pageIndex={pagination.pageIndex}
-          pageSize={pagination.pageSize}
-          onPaginationChange={(nextPagination: { pageIndex: number; pageSize: number }) =>
-            setPagination(nextPagination)
-          }
-          onPageSizeChange={(nextPageSize: number) =>
-            setPagination({ pageIndex: 0, pageSize: nextPageSize })
-          }
+          rowDisplayMode="server-virtualized"
+          serverVirtualization={serverVirtualization}
         />
       ) : (
         <DataTable
@@ -389,7 +432,6 @@ export default function EvalsTable({
           onRowSelectionChange={setRowSelection}
           getRowId={(row) => row.evalId}
           initialSorting={[{ id: 'createdAt', desc: true }]}
-          initialPageSize={DEFAULT_PAGE_SIZE}
           showToolbar={showUtilityButtons}
           showColumnToggle={showUtilityButtons}
           toolbarActions={deleteButton}

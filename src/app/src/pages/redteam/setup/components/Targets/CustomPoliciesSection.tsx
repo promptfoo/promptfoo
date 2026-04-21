@@ -434,7 +434,7 @@ export const CustomPoliciesSection = () => {
       setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
-      let errorMessage = 'Failed to generate policies';
+      let errorMessage: string;
 
       if (error instanceof Error) {
         // Handle network errors
@@ -741,7 +741,6 @@ export const CustomPoliciesSection = () => {
             getRowId={(row) => row.id}
             toolbarActions={toolbarActions}
             showToolbar
-            showPagination={false}
             emptyMessage="No custom policies configured. Add your first policy using the 'Add Policy' button above."
           />
         </div>

@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example mistral
+cd mistral
 ```
 
 ## Environment Variables
@@ -91,6 +92,7 @@ This example includes multiple configuration files for different use cases:
 ### Advanced Features
 
 - **`promptfooconfig.tool-use.yaml`** - Function calling and tool integration
+- **`promptfooconfig.tool-routing.yaml`** - End-to-end QA for tool-only, mixed content+tool_calls, file-based tools, and plain chat output
 - **`promptfooconfig.json-mode.yaml`** - Structured JSON output generation
 - **`promptfooconfig.yaml`** - Main example with evaluation using Mistral models
 
@@ -103,6 +105,5 @@ npx promptfoo@latest eval -c promptfooconfig.comparison.yaml  # Model comparison
 
 ## Additional Resources
 
-- **[Magistral AIME2024 Reasoning Guide](/docs/guides/mistral-magistral-aime2024)** - Comprehensive guide to mathematical reasoning evaluation
 - **[Mistral Provider Documentation](/docs/providers/mistral)** - Complete API reference and configuration options
 - **[Mistral Magistral Announcement](https://mistral.ai/news/magistral/)** - Official announcement and technical details

@@ -2,13 +2,12 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
-import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
@@ -53,6 +52,78 @@ vi.mock('./PluginConfigDialog', () => ({
   default: () => <div data-testid="plugin-config-dialog"></div>,
 }));
 
+vi.mock('./TestCaseDialog', () => ({
+  TestCaseDialog: () => <div data-testid="test-case-dialog" />,
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
+    <button type="button" {...props}>
+      {children ?? 'Generate test case'}
+    </button>
+  ),
+}));
+
+vi.mock('./PluginsTab', async () => {
+  const [{ DEFAULT_PLUGINS, MINIMAL_TEST_PLUGINS }, { useSearchParams }] = await Promise.all([
+    import('@promptfoo/redteam/constants'),
+    import('react-router-dom'),
+  ]);
+
+  return {
+    default: ({
+      selectedPlugins,
+      handlePluginToggle,
+      setSelectedPlugins,
+    }: {
+      selectedPlugins: Set<string>;
+      handlePluginToggle: (plugin: string) => void;
+      setSelectedPlugins: (plugins: Set<string>) => void;
+    }) => {
+      const [searchParams] = useSearchParams();
+      const showEnterpriseMappings = searchParams.get('showEnterpriseMappings') === '1';
+
+      return (
+        <div data-testid="plugins-tab-mock">
+          <h2>Presets</h2>
+          <input placeholder="Search plugins..." />
+          <button type="button" onClick={() => setSelectedPlugins(new Set(DEFAULT_PLUGINS))}>
+            Recommended
+          </button>
+          <button type="button" onClick={() => setSelectedPlugins(new Set(MINIMAL_TEST_PLUGINS))}>
+            Minimal Test
+          </button>
+          <div>RAG</div>
+          <div>Foundation</div>
+          <div>Guardrails Evaluation</div>
+          <div>Harmful</div>
+          <div>NIST</div>
+          <div>OWASP LLM Top 10</div>
+          <div>OWASP Gen AI Red Team</div>
+          <div>OWASP API Top 10</div>
+          <div>MITRE</div>
+          <div>EU AI Act</div>
+          <div>ISO 42001</div>
+          {showEnterpriseMappings && <div>DoD AI Ethical Principles</div>}
+          {selectedPlugins.size > 0 && (
+            <input
+              aria-label="Toggle indirect prompt injection"
+              checked={selectedPlugins.has('indirect-prompt-injection')}
+              onChange={() => handlePluginToggle('indirect-prompt-injection')}
+              type="checkbox"
+            />
+          )}
+        </div>
+      );
+    },
+  };
+});
+
 vi.mock('react-error-boundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -61,16 +132,11 @@ const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
 const mockUseRecentlyUsedPlugins = useRecentlyUsedPlugins as unknown as Mock;
 
 // Helper function for rendering with providers
-const renderWithProviders = (ui: React.ReactNode) => {
-  const redTeamConfig = mockUseRedTeamConfig();
+const renderWithProviders = (ui: React.ReactNode, initialEntries: string[] = ['/']) => {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <TooltipProvider>
-        <ToastProvider>
-          <TestCaseGenerationProvider redTeamConfig={redTeamConfig}>
-            {ui}
-          </TestCaseGenerationProvider>
-        </ToastProvider>
+        <ToastProvider>{ui}</ToastProvider>
       </TooltipProvider>
     </MemoryRouter>,
   );
@@ -142,6 +208,15 @@ describe('Plugins', () => {
     expect(screen.getByText('MITRE')).toBeInTheDocument();
     expect(screen.getByText('EU AI Act')).toBeInTheDocument();
     expect(screen.getByText('ISO 42001')).toBeInTheDocument();
+    expect(screen.queryByText('DoD AI Ethical Principles')).not.toBeInTheDocument();
+  });
+
+  it('should render the DoD preset when showEnterpriseMappings=1 is set', async () => {
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />, [
+      '/?showEnterpriseMappings=1',
+    ]);
+
+    expect(screen.getByText('DoD AI Ethical Principles')).toBeInTheDocument();
   });
 
   it('should render custom configuration sections in tabs', async () => {
@@ -353,6 +428,18 @@ describe('Plugins', () => {
       expect(screen.getByRole('tab', { name: /Plugins/ })).toBeInTheDocument();
       expect(screen.getByRole('tab', { name: /Custom Intents/ })).toBeInTheDocument();
       expect(screen.getByRole('tab', { name: /Custom Policies/ })).toBeInTheDocument();
+    });
+
+    it('should use pointer cursor styles on tab triggers', () => {
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      expect(screen.getByRole('tab', { name: /Plugins/ })).toHaveStyle({ cursor: 'pointer' });
+      expect(screen.getByRole('tab', { name: /Custom Intents/ })).toHaveStyle({
+        cursor: 'pointer',
+      });
+      expect(screen.getByRole('tab', { name: /Custom Policies/ })).toHaveStyle({
+        cursor: 'pointer',
+      });
     });
 
     it('should have the Plugins tab selected by default', () => {
@@ -867,7 +954,9 @@ describe('Plugins', () => {
 
       // Simulate keyboard navigation (ArrowRight to move to next tab)
       await act(async () => {
-        fireEvent.keyDown(pluginsTab, { key: 'ArrowRight' });
+        const user = userEvent.setup();
+        pluginsTab.focus();
+        await user.keyboard('{ArrowRight}');
       });
 
       // Radix Tabs handles keyboard navigation

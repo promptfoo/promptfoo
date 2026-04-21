@@ -56,7 +56,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       logger.debug(`Using unknown chat model: ${modelName}`);
     }
     super(modelName, options);
-    this.config = options.config || {};
+    this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
       this.initializationPromise = this.initializeMCP();
@@ -226,13 +226,21 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
-    const maxTokens =
-      isReasoningModel || isGPT5Model
+    const maxTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
         ? undefined
-        : (config.max_tokens ?? getEnvInt('OPENAI_MAX_TOKENS', 1024));
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const maxTokens =
+      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
 
+    const temperatureDefault = config.omitDefaults
+      ? getEnvString('OPENAI_TEMPERATURE') === undefined
+        ? undefined
+        : getEnvFloat('OPENAI_TEMPERATURE')
+      : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature = this.supportsTemperature()
-      ? (config.temperature ?? getEnvFloat('OPENAI_TEMPERATURE', 0))
+      ? (config.temperature ?? temperatureDefault)
       : undefined;
     const reasoningEffort = isReasoningModel
       ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
@@ -252,10 +260,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       model: this.modelName,
       messages,
       seed: config.seed,
-      ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
-      ...(maxCompletionTokens !== undefined ? { max_completion_tokens: maxCompletionTokens } : {}),
+      ...(maxTokens === undefined ? {} : { max_tokens: maxTokens }),
+      ...(maxCompletionTokens === undefined ? {} : { max_completion_tokens: maxCompletionTokens }),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-      ...(temperature !== undefined ? { temperature } : {}),
+      ...(temperature === undefined ? {} : { temperature }),
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
@@ -333,6 +341,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.store = config.store;
     }
 
+    // Sanitize body for models that reject max_tokens (e.g. GPT-5, reasoning models).
+    // This catches max_tokens introduced via passthrough or YAML anchors that bypass
+    // the normal maxTokens variable logic above.
+    if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
+      delete body.max_tokens;
+    }
+
     return { body, config };
   }
 
@@ -345,9 +360,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       await this.initializationPromise;
     }
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     // Set up tracing context
@@ -805,6 +818,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             statusText,
             headers: responseHeaders ?? {},
           },
+          // Include all choices for multi-response requests (n > 1)
+          ...(data.choices.length > 1 && { choices: data.choices }),
         },
       };
     } catch (err) {

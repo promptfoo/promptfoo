@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider setup HTTP smoke
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: https
+    label: provider-setup-smoke
+    config:
+      url: '{{env.PROVIDER_SETUP_SMOKE_URL}}'
+      method: POST
+      stateful: false
+      headers:
+        Content-Type: application/json
+      body:
+        user_id: '{{user_id}}'
+        message: '{{prompt}}'
+      transformResponse: json.output
+
+tests:
+  - description: endpoint returns pong
+    vars:
+      user_id: qa-user
+      message: Say exactly PONG.
+    assert:
+      - type: contains
+        value: PONG

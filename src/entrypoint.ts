@@ -10,31 +10,142 @@
  */
 import { fileURLToPath } from 'node:url';
 
-// Build-time constant injected by tsdown from package.json engines field
-declare const __PROMPTFOO_MIN_NODE_VERSION__: number | undefined;
+type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
+type NodeEngineVersionTuple = [number, number, number];
+type NodeEngineComparator = {
+  operator: '' | NodeEngineComparatorOperator;
+  version: string;
+};
+type ParseNodeEngineVersionOptions = {
+  allowPrerelease?: boolean;
+};
 
-// Use injected value at build time, fallback to 20 for development/testing
-const minNodeVersion =
-  typeof __PROMPTFOO_MIN_NODE_VERSION__ !== 'undefined' ? __PROMPTFOO_MIN_NODE_VERSION__ : 20;
+// Build-time constants injected by tsdown from package.json engines field
+declare const __PROMPTFOO_NODE_ENGINE_RANGE__: string | undefined;
+declare const __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__: NodeEngineComparator[][] | undefined;
+
+const fallbackNodeEngineRange = '>=20.0.0';
+const fallbackNodeEngineComparatorSets: NodeEngineComparator[][] = [
+  [{ operator: '>=', version: '20.0.0' }],
+];
+
+const nodeEngineRange =
+  typeof __PROMPTFOO_NODE_ENGINE_RANGE__ === 'undefined'
+    ? fallbackNodeEngineRange
+    : __PROMPTFOO_NODE_ENGINE_RANGE__;
+const nodeEngineComparatorSets =
+  typeof __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__ === 'undefined'
+    ? fallbackNodeEngineComparatorSets
+    : __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__;
+
+function parseNodeEngineVersion(
+  version: string,
+  options: ParseNodeEngineVersionOptions = {},
+): NodeEngineVersionTuple | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$/.exec(version);
+  if (!match) {
+    return null;
+  }
+  if (!options.allowPrerelease && match[4]) {
+    return null;
+  }
+
+  return [
+    Number.parseInt(match[1], 10),
+    Number.parseInt(match[2], 10),
+    Number.parseInt(match[3], 10),
+  ];
+}
+
+function compareNodeEngineVersion(
+  left: NodeEngineVersionTuple,
+  right: NodeEngineVersionTuple,
+): number {
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] > right[index]) {
+      return 1;
+    }
+    if (left[index] < right[index]) {
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+function satisfiesNodeEngineComparator(
+  currentVersion: NodeEngineVersionTuple,
+  comparator: NodeEngineComparator,
+): boolean {
+  const comparatorVersion = parseNodeEngineVersion(comparator.version, { allowPrerelease: true });
+  if (!comparatorVersion) {
+    return false;
+  }
+
+  const comparison = compareNodeEngineVersion(currentVersion, comparatorVersion);
+  switch (comparator.operator || '=') {
+    case '=':
+      return comparison === 0;
+    case '>':
+      return comparison > 0;
+    case '>=':
+      return comparison >= 0;
+    case '<':
+      return comparison < 0;
+    case '<=':
+      return comparison <= 0;
+    default:
+      return false;
+  }
+}
+
+function isSupportedNodeEngineVersion(currentVersion: string): boolean | null {
+  const parsedCurrentVersion = parseNodeEngineVersion(currentVersion);
+  if (!parsedCurrentVersion) {
+    return null;
+  }
+
+  return nodeEngineComparatorSets.some(
+    (comparatorSet) =>
+      comparatorSet.length === 0 ||
+      comparatorSet.every((comparator) =>
+        satisfiesNodeEngineComparator(parsedCurrentVersion, comparator),
+      ),
+  );
+}
+
+function formatUnsupportedNodeVersionMessage(currentVersion: string): string {
+  return [
+    '\x1b[33mpromptfoo requires a supported Node.js runtime.',
+    '',
+    `Detected: ${currentVersion}`,
+    `Required: ${nodeEngineRange}`,
+    '',
+    'Install a supported Node.js version and try again.\x1b[0m',
+  ].join('\n');
+}
+
+function formatMalformedNodeVersionMessage(currentVersion: string): string {
+  return [
+    `\x1b[33mUnable to parse the current Node.js version: ${currentVersion}`,
+    `Required: ${nodeEngineRange}`,
+    '',
+    'Install a supported Node.js version and try again.\x1b[0m',
+  ].join('\n');
+}
 
 // Skip version check for alternative runtimes (Bun, Deno) - they support modern JS features
 const isBun = typeof (globalThis as Record<string, unknown>).Bun !== 'undefined';
 const isDeno = typeof (globalThis as Record<string, unknown>).Deno !== 'undefined';
 
 if (!isBun && !isDeno) {
-  // process.version is always "vX.Y.Z" (e.g., "v20.0.0"), so slice(1) gives "20.0.0"
-  const major = parseInt(process.version.slice(1), 10);
-  // NaN check handles malformed version strings - fail safely rather than allowing through
-  if (Number.isNaN(major)) {
-    console.error(
-      `\x1b[33mUnexpected Node.js version format: ${process.version}. Please use Node.js ${minNodeVersion} or later.\x1b[0m`,
-    );
+  const isSupportedVersion = isSupportedNodeEngineVersion(process.version);
+  if (isSupportedVersion === null) {
+    console.error(formatMalformedNodeVersionMessage(process.version));
     process.exit(1);
   }
-  if (major < minNodeVersion) {
-    console.error(
-      `\x1b[33mNode.js ${process.version} is not supported. Please upgrade to Node.js ${minNodeVersion} or later.\x1b[0m`,
-    );
+  if (!isSupportedVersion) {
+    console.error(formatUnsupportedNodeVersionMessage(process.version));
     process.exit(1);
   }
 }
