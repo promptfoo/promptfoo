@@ -124,7 +124,7 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
 
 ### Setting grader parameters (temperature, etc.)
 
-To pin `temperature`, `max_tokens`, or other provider-specific parameters on the grader, expand the `provider` shorthand into an object with `id` and `config`. This is the supported way to force deterministic grading when swapping in a custom judge:
+To pin `temperature`, `max_tokens`, or other provider-specific parameters on the grader, expand the `provider` shorthand into an object with `id` and `config`. This is the supported way to push grading toward reproducibility when swapping in a custom judge:
 
 ```yaml
 assert:
