@@ -49,6 +49,7 @@ export interface SanitizedLogContext {
 
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
+let sourceMapSupportInitializationPromise: Promise<void> | null = null;
 
 // Shutdown state tracking - prevents writes once logger closure begins
 let isLoggerShuttingDown = false;
@@ -64,15 +65,23 @@ export function getLoggerShuttingDown(): boolean {
 }
 
 export async function initializeSourceMapSupport(): Promise<void> {
-  if (!sourceMapSupportInitialized) {
+  if (sourceMapSupportInitialized) {
+    return;
+  }
+
+  sourceMapSupportInitializationPromise ??= (async () => {
     try {
       const sourceMapSupport = await import('source-map-support');
       sourceMapSupport.install();
       sourceMapSupportInitialized = true;
     } catch {
       // Ignore errors. This happens in the production build, because source-map-support is a dev dependency.
+    } finally {
+      sourceMapSupportInitializationPromise = null;
     }
-  }
+  })();
+
+  await sourceMapSupportInitializationPromise;
 }
 
 /**
@@ -81,7 +90,7 @@ export async function initializeSourceMapSupport(): Promise<void> {
  */
 export function getCallerLocation(): string {
   try {
-    const error = new Error();
+    const error = new Error('stack trace capture');
     const stack = error.stack?.split('\n') || [];
 
     // Skip first 3 lines (Error, getCallerLocation, and the logger method)
@@ -186,7 +195,7 @@ export function setLogLevel(level: LogLevel) {
     winstonLogger.transports[0].level = level;
 
     if (level === 'debug') {
-      initializeSourceMapSupport();
+      void initializeSourceMapSupport();
     }
   } else {
     throw new Error(`Invalid log level: ${level}`);
@@ -285,7 +294,7 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
       level === 'debug' ? getCallerLocation() : isDebugEnabled() ? getCallerLocation() : '';
 
     if (level === 'debug') {
-      initializeSourceMapSupport();
+      void initializeSourceMapSupport();
     }
 
     // Handle both string and structured object inputs
@@ -530,7 +539,7 @@ export async function closeLogger(): Promise<void> {
 
 // Initialize source maps if debug is enabled at startup
 if (getEnvString('LOG_LEVEL', 'info') === 'debug') {
-  initializeSourceMapSupport();
+  void initializeSourceMapSupport();
 }
 
 export default logger;

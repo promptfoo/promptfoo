@@ -52,7 +52,7 @@ export function registerShareEvaluationTool(server: McpServer) {
       showAuth: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe(
           dedent`
             Whether to include authentication information in the shared URL.
@@ -62,7 +62,7 @@ export function registerShareEvaluationTool(server: McpServer) {
       overwrite: z
         .boolean()
         .optional()
-        .default(false)
+        .prefault(false)
         .describe(
           dedent`
             Whether to overwrite if the evaluation has already been shared.

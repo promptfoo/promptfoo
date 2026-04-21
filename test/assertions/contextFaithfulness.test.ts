@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextFaithfulness } from '../../src/assertions/contextFaithfulness';
 import * as contextUtils from '../../src/assertions/contextUtils';
-import * as matchers from '../../src/matchers';
+import * as matchers from '../../src/matchers/rag';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextFaithfulness', () => {

@@ -32,7 +32,7 @@ function ErrorFallback({
   error,
   resetErrorBoundary,
 }: {
-  error: Error;
+  error: unknown;
   resetErrorBoundary: () => void;
 }) {
   return (
@@ -41,7 +41,7 @@ function ErrorFallback({
       className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-destructive"
     >
       <p className="font-medium">Something went wrong:</p>
-      <pre className="mt-2 text-sm">{error.message}</pre>
+      <pre className="mt-2 text-sm">{error instanceof Error ? error.message : String(error)}</pre>
       <Button variant="outline" size="sm" onClick={resetErrorBoundary} className="mt-3">
         Try again
       </Button>
@@ -430,8 +430,8 @@ const EvaluateTestSuiteCreator = () => {
                             </li>
                           </ul>
                           <p className="mt-2">
-                            <strong>Getting started:</strong> Select at least one provider from the
-                            dropdown below. You can compare multiple providers side-by-side.
+                            <strong>Getting started:</strong> Select at least one provider below.
+                            You can compare multiple providers side-by-side.
                           </p>
                         </InfoBox>
                       ) : (

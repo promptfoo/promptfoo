@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
@@ -76,7 +75,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         if (configParse.success) {
           validationResults.config = config;
         } else {
-          const formattedError = fromError(configParse.error).message;
+          const formattedError = z.prettifyError(configParse.error);
           validationResults.errors.push(`Configuration validation error: ${formattedError}`);
           validationResults.isValid = false;
         }
@@ -86,7 +85,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         if (suiteParse.success) {
           validationResults.testSuite = testSuite;
         } else {
-          const formattedError = fromError(suiteParse.error).message;
+          const formattedError = z.prettifyError(suiteParse.error);
           validationResults.errors.push(`Test suite validation error: ${formattedError}`);
           validationResults.isValid = false;
         }

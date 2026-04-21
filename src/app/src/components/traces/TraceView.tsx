@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { SpanData } from '@promptfoo/tracing/store';
 import { Download } from 'lucide-react';
@@ -117,15 +117,17 @@ export default function TraceView({
     return (
       <div className="p-2">
         <Alert variant="info">
-          <AlertTitle>No spans received</AlertTitle>
-          <AlertDescription>
-            <p>Traces were created but no spans were received. Make sure your provider is:</p>
-            <ul className="mt-2 ml-4 list-disc space-y-1">
-              <li>Configured to send traces to the OTLP endpoint (http://localhost:4318)</li>
-              <li>Creating spans within the trace context</li>
-              <li>Properly exporting spans before the evaluation completes</li>
-            </ul>
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>No spans received</AlertTitle>
+            <AlertDescription>
+              <p>Traces were created but no spans were received. Make sure your provider is:</p>
+              <ul className="mt-2 ml-4 list-disc space-y-1">
+                <li>Configured to send traces to the OTLP endpoint (http://localhost:4318)</li>
+                <li>Creating spans within the trace context</li>
+                <li>Properly exporting spans before the evaluation completes</li>
+              </ul>
+            </AlertDescription>
+          </AlertContent>
         </Alert>
       </div>
     );

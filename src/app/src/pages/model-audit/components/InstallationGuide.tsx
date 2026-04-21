@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { Alert, AlertDescription, AlertTitle } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import {
@@ -53,11 +53,13 @@ export default function InstallationGuide({
       <CardContent className="p-6">
         <Alert variant="warning" className="mb-6">
           <WarningIcon className="size-4" />
-          <AlertTitle>ModelAudit CLI Not Found</AlertTitle>
-          <AlertDescription>
-            {error ||
-              'The modelaudit command-line tool needs to be installed to run security scans.'}
-          </AlertDescription>
+          <AlertContent>
+            <AlertTitle>ModelAudit CLI Not Found</AlertTitle>
+            <AlertDescription>
+              {error ||
+                'The modelaudit command-line tool needs to be installed to run security scans.'}
+            </AlertDescription>
+          </AlertContent>
         </Alert>
 
         <h3 className="text-lg font-semibold mb-4">Quick Installation</h3>

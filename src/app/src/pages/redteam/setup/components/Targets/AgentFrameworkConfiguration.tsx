@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -19,7 +19,7 @@ import type { ProviderOptions } from '../../types';
 
 interface AgentFrameworkConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   agentType: string;
 }
 
@@ -141,20 +141,22 @@ export default function AgentFrameworkConfiguration({
     <div>
       <Alert variant="info" className="mb-6">
         <Info className="size-4" />
-        <AlertDescription>
-          <p className="mb-2 font-semibold">{frameworkDetails.name} Agent Configuration</p>
-          <p className="mb-3">{frameworkDetails.description}</p>
-          {agentType === 'generic-agent' ? (
-            <p className="italic">
-              <strong>Tip:</strong> Promptfoo works with ANY Python-based agent framework. Simply
-              implement the call_api function in your Python file to connect your agent.
-            </p>
-          ) : (
-            <p className="font-mono text-xs">
-              Install with: <strong>pip install {frameworkDetails.pip}</strong>
-            </p>
-          )}
-        </AlertDescription>
+        <AlertContent>
+          <AlertDescription>
+            <p className="mb-2 font-semibold">{frameworkDetails.name} Agent Configuration</p>
+            <p className="mb-3">{frameworkDetails.description}</p>
+            {agentType === 'generic-agent' ? (
+              <p className="italic">
+                <strong>Tip:</strong> Promptfoo works with ANY Python-based agent framework. Simply
+                implement the call_api function in your Python file to connect your agent.
+              </p>
+            ) : (
+              <p className="font-mono text-xs">
+                Install with: <strong>pip install {frameworkDetails.pip}</strong>
+              </p>
+            )}
+          </AlertDescription>
+        </AlertContent>
       </Alert>
 
       <div className="space-y-6">
@@ -200,34 +202,36 @@ export default function AgentFrameworkConfiguration({
           <div className="space-y-4">
             <Alert variant="warning">
               <AlertTriangle className="size-4" />
-              <AlertDescription>
-                <p className="font-semibold">Next Steps:</p>
-                <ol className="ml-5 mt-2 list-decimal">
-                  <li>Save the template to a Python file</li>
-                  {agentType === 'generic-agent' ? (
-                    <>
-                      <li>Install your agent framework's dependencies</li>
-                      <li>
-                        Replace the TODOs in the <code>call_api</code> function with your agent
-                        implementation
-                      </li>
-                    </>
-                  ) : (
-                    <>
-                      <li>
-                        Install required dependencies:{' '}
-                        <code className="rounded bg-muted px-1">
-                          pip install {frameworkDetails.pip}
-                        </code>
-                      </li>
-                      <li>
-                        Customize the agent logic in the <code>call_api</code> function
-                      </li>
-                    </>
-                  )}
-                  <li>Update the Provider ID field above with the file path</li>
-                </ol>
-              </AlertDescription>
+              <AlertContent>
+                <AlertDescription>
+                  <p className="font-semibold">Next Steps:</p>
+                  <ol className="ml-5 mt-2 list-decimal">
+                    <li>Save the template to a Python file</li>
+                    {agentType === 'generic-agent' ? (
+                      <>
+                        <li>Install your agent framework's dependencies</li>
+                        <li>
+                          Replace the TODOs in the <code>call_api</code> function with your agent
+                          implementation
+                        </li>
+                      </>
+                    ) : (
+                      <>
+                        <li>
+                          Install required dependencies:{' '}
+                          <code className="rounded bg-muted px-1">
+                            pip install {frameworkDetails.pip}
+                          </code>
+                        </li>
+                        <li>
+                          Customize the agent logic in the <code>call_api</code> function
+                        </li>
+                      </>
+                    )}
+                    <li>Update the Provider ID field above with the file path</li>
+                  </ol>
+                </AlertDescription>
+              </AlertContent>
             </Alert>
 
             <div className="rounded-lg border border-border bg-muted/50 p-4 dark:bg-zinc-900">

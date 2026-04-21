@@ -169,6 +169,32 @@ tests:
         value: 'output.length >= context.vars.min_length'
 ```
 
+## Passing assertion-specific parameters
+
+If you want to reuse the same JavaScript assertion with different parameters in a single test case, prefer assertion-level `config` over test `vars`. Test vars are shared across all assertions and appear as report columns, while `config` stays attached to one assertion and is available as `context.config`.
+
+```yaml
+tests:
+  - description: 'Reuse one assertion script with two thresholds'
+    vars:
+      topic: 'bananas'
+    assert:
+      - type: javascript
+        value: file://assertions/min-length.js
+        config:
+          minLength: 5
+      - type: javascript
+        value: file://assertions/min-length.js
+        config:
+          minLength: 20
+```
+
+```js
+module.exports = (output, context) => {
+  return output.length >= context.config.minLength;
+};
+```
+
 ## External script
 
 To reference an external file, use the `file://` prefix:
@@ -407,6 +433,16 @@ if (context.trace && maxDepth(context.trace.spans) > 5) {
 ### ES modules
 
 ES modules are supported, but must have a `.mjs` file extension. Alternatively, if you are transpiling Javascript or Typescript, we recommend pointing promptfoo to the transpiled plain Javascript output.
+
+## Negation
+
+Use `not-javascript` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-javascript
+    value: output.includes('error')
+```
 
 ## Other assertion types
 

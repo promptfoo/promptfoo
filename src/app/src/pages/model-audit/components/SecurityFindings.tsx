@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -137,11 +137,13 @@ function IssueCard({ issue }: { issue: ScanIssue }) {
           {issue.why && <p className="text-sm text-muted-foreground mt-1">{issue.why}</p>}
           {issue.details && (
             <Alert variant="info" className="mt-3">
-              <AlertDescription>
-                <pre className="text-xs whitespace-pre-wrap font-mono overflow-x-auto">
-                  {JSON.stringify(issue.details, null, 2)}
-                </pre>
-              </AlertDescription>
+              <AlertContent>
+                <AlertDescription>
+                  <pre className="text-xs whitespace-pre-wrap font-mono overflow-x-auto">
+                    {JSON.stringify(issue.details, null, 2)}
+                  </pre>
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
         </div>
@@ -182,7 +184,7 @@ function FileGroup({
         )}
       >
         {/* File Header */}
-        <div className={cn('p-4 border-b', headerConfig.headerBg)}>
+        <div className={cn('p-4 border-b border-border', headerConfig.headerBg)}>
           <div className="flex items-center gap-3">
             <FileIcon className={cn('size-5', headerConfig.iconColor)} />
             <div className="flex-1 min-w-0">
@@ -223,7 +225,7 @@ function FileGroup({
             ) : (
               <ExpandMoreIcon className="size-4" />
             )}
-            {isExpanded ? 'Hide' : 'Show'} {issues.length} issue{issues.length !== 1 ? 's' : ''}
+            {isExpanded ? 'Hide' : 'Show'} {issues.length} issue{issues.length === 1 ? '' : 's'}
           </button>
         </CollapsibleTrigger>
 
@@ -296,17 +298,14 @@ export default function SecurityFindings({
     return mapSeverityForFiltering(selectedSeverity, issue.severity);
   });
 
-  const issuesByFile = filteredIssues.reduce(
-    (acc, issue) => {
-      const file = getIssueFilePath(issue);
-      if (!acc[file]) {
-        acc[file] = [];
-      }
-      acc[file].push(issue);
-      return acc;
-    },
-    {} as Record<string, ScanIssue[]>,
-  );
+  const issuesByFile = filteredIssues.reduce<Record<string, ScanIssue[]>>((acc, issue) => {
+    const file = getIssueFilePath(issue);
+    if (!acc[file]) {
+      acc[file] = [];
+    }
+    acc[file].push(issue);
+    return acc;
+  }, {});
 
   const toggleFileExpansion = (file: string) => {
     const newExpanded = new Set(expandedFiles);
@@ -331,7 +330,9 @@ export default function SecurityFindings({
       {scanResults.issues.length > 0 && (
         <Alert variant="info">
           <InfoIcon className="size-4" />
-          <AlertDescription>{getIssueSummaryText(scanResults.issues)}</AlertDescription>
+          <AlertContent>
+            <AlertDescription>{getIssueSummaryText(scanResults.issues)}</AlertDescription>
+          </AlertContent>
         </Alert>
       )}
 

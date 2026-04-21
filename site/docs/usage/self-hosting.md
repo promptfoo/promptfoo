@@ -59,6 +59,9 @@ docker pull ghcr.io/promptfoo/promptfoo:latest
 
 # Or pull a specific version
 # docker pull ghcr.io/promptfoo/promptfoo:0.109.1
+
+# You can verify image authenticity with:
+# gh attestation verify oci://ghcr.io/promptfoo/promptfoo:latest --owner promptfoo
 ```
 
 ### 2. Run the Container

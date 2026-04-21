@@ -75,7 +75,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   'text-generation-webui': `${BASE_DOCS_URL}/text-generation-webui`,
 
   // Additional providers found in docs
-  adaline: `${BASE_DOCS_URL}/adaline`,
   alibaba: `${BASE_DOCS_URL}/alibaba`,
   cerebras: `${BASE_DOCS_URL}/cerebras`,
   cloudera: `${BASE_DOCS_URL}/cloudera`,
@@ -106,7 +105,7 @@ export function getProviderDocumentationUrl(providerType?: string): string {
     return BASE_DOCS_URL;
   }
 
-  // Handle provider formats like 'openrouter:openai/gpt-4o' or 'azure:chat:'
+  // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
   const normalizedType = providerType.includes(':') ? providerType.split(':')[0] : providerType;
 
   return PROVIDER_DOCUMENTATION_MAP[normalizedType] || BASE_DOCS_URL;

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -116,9 +116,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         const content =
           typeof output === 'string'
             ? output
-            : output != null
-              ? JSON.stringify(output)
-              : (targetResponse.error ?? 'No response from target');
+            : output == null
+              ? (targetResponse.error ?? 'No response from target')
+              : JSON.stringify(output);
 
         messages.push({
           role: 'assistant' as const,
@@ -207,10 +207,12 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           {generatedTestCases.length > 0 && (
             <Alert variant="info">
               <Info className="size-4" />
-              <AlertDescription>
-                Dissatisfied with the test case? Fine tune it by adjusting your{' '}
-                {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
-              </AlertDescription>
+              <AlertContent>
+                <AlertDescription>
+                  Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+                  {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
         </div>
