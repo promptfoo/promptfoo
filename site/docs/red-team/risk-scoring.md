@@ -65,12 +65,12 @@ Additional penalty for easily executable attacks:
 
 ### Score Ranges
 
-Following CVSS-aligned severity levels:
+Following CVSS v3.x/v4.0 severity levels:
 
-- **7.5 - 10.0**: Critical risk requiring immediate attention
-- **5.0 - 7.4**: High risk that should be addressed promptly
-- **2.5 - 4.9**: Medium risk that needs investigation
-- **0 - 2.4**: Low risk that can be monitored
+- **9.0 - 10.0**: Critical risk requiring immediate attention
+- **7.0 - 8.9**: High risk that should be addressed promptly
+- **4.0 - 6.9**: Medium risk that needs investigation
+- **0.1 - 3.9**: Low risk that can be monitored
 
 ## Example Scenarios
 
@@ -133,13 +133,13 @@ This approach follows industry best practices for aggregating individual vulnera
 
 ## Using Risk Scores in Practice
 
-1. **Prioritize Critical and High Scores**: Address vulnerabilities with scores ≥7.5 (critical) and ≥5.0 (high) immediately
+1. **Prioritize Critical and High Scores**: Address vulnerabilities with scores ≥9.0 (critical) and ≥7.0 (high) immediately
 
 2. **Establish SLA-Based Remediation**: Use CVSS-aligned timelines:
-   - Critical (7.5-10.0): 24-48 hours
-   - High (5.0-7.4): 1-2 weeks
-   - Medium (2.5-4.9): 30-90 days
-   - Low (0-2.4): Next maintenance cycle
+   - Critical (9.0-10.0): 24-48 hours
+   - High (7.0-8.9): 1-2 weeks
+   - Medium (4.0-6.9): 30-90 days
+   - Low (0.1-3.9): Next maintenance cycle
 
 3. **Set Deployment Gates**: Establish risk score thresholds for CI/CD pipelines (e.g., block deployment if system score > 7.0)
 

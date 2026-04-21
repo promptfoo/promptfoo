@@ -1,12 +1,18 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { toDataUri } from '../../util/dataUrl';
 import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
+import {
+  createAuthCacheDiscriminator,
+  getGoogleClient,
+  loadCredentials,
+  resolveProjectId,
+} from './util';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { CompletionOptions } from './types';
 
 interface GoogleImageOptions {
@@ -37,6 +43,16 @@ interface ImagePrediction {
   };
   bytesBase64Encoded?: string;
   mimeType?: string;
+}
+
+// Response type for image generation APIs
+interface ImageGenerationResponse {
+  predictions?: ImagePrediction[];
+  error?: {
+    code?: number;
+    message?: string;
+    status?: string;
+  };
 }
 
 export class GoogleImageProvider implements ApiProvider {
@@ -82,7 +98,11 @@ export class GoogleImageProvider implements ApiProvider {
 
     // Check if we should use Vertex AI (when projectId is provided)
     const projectId =
-      this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
+      this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID;
 
     if (projectId) {
       // Use Vertex AI if project ID is available
@@ -100,7 +120,7 @@ export class GoogleImageProvider implements ApiProvider {
       error:
         'Imagen models require either:\n' +
         '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable\n' +
-        '2. Vertex AI: Set GOOGLE_PROJECT_ID environment variable or provide projectId in config, and run "gcloud auth application-default login"',
+        '2. Vertex AI: Set GOOGLE_CLOUD_PROJECT environment variable or provide projectId in config, and run "gcloud auth application-default login"',
     };
   }
 
@@ -145,7 +165,8 @@ export class GoogleImageProvider implements ApiProvider {
         },
       };
 
-      const response = await this.withRetry(
+      const startTime = Date.now();
+      const response = (await this.withRetry(
         () =>
           client.request({
             url: endpoint,
@@ -158,9 +179,10 @@ export class GoogleImageProvider implements ApiProvider {
             timeout: REQUEST_TIMEOUT_MS,
           }),
         'Vertex AI API call',
-      );
+      )) as { data: ImageGenerationResponse };
+      const latencyMs = Date.now() - startTime;
 
-      return this.processResponse(response.data, false);
+      return this.processResponse(response.data, false, latencyMs);
     } catch (err: any) {
       if (err.response?.data?.error) {
         return {
@@ -208,26 +230,29 @@ export class GoogleImageProvider implements ApiProvider {
     logger.debug(`Making request to ${endpoint} with API key`);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        ...(this.config.headers || {}),
+      };
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       const response = await this.withRetry(
         () =>
           fetchWithCache(
             endpoint,
             {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey,
-                ...(this.config.headers || {}),
-              },
+              headers,
               body: JSON.stringify(body),
-            },
+              ...(authDiscriminator && { _authHash: authDiscriminator }),
+            } as RequestInit,
             REQUEST_TIMEOUT_MS,
             'json',
           ),
         'Google AI Studio API call',
       );
 
-      return this.processResponse(response.data, response.cached);
+      return this.processResponse(response.data, response.cached, response.latencyMs);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -235,7 +260,7 @@ export class GoogleImageProvider implements ApiProvider {
     }
   }
 
-  private processResponse(data: any, cached?: boolean): ProviderResponse {
+  private processResponse(data: any, cached?: boolean, latencyMs?: number): ProviderResponse {
     logger.debug(`Response data: ${JSON.stringify(data).substring(0, 200)}...`);
 
     if (!data || typeof data !== 'object') {
@@ -256,7 +281,7 @@ export class GoogleImageProvider implements ApiProvider {
       };
     }
 
-    const imageOutputs = [];
+    const imageOutputs: { data: string; mimeType: string }[] = [];
     let totalCost = 0;
 
     // Get cost per image from model prices
@@ -269,8 +294,10 @@ export class GoogleImageProvider implements ApiProvider {
       const mimeType = imageData.mimeType || 'image/png';
 
       if (base64Image) {
-        // Return as markdown image with data URL
-        imageOutputs.push(`![Generated Image](data:${mimeType};base64,${base64Image})`);
+        imageOutputs.push({
+          data: toDataUri(mimeType, base64Image),
+          mimeType,
+        });
         totalCost += costPerImage;
       }
     }
@@ -282,8 +309,12 @@ export class GoogleImageProvider implements ApiProvider {
     }
 
     return {
-      output: imageOutputs.join('\n\n'),
+      // First image as raw data URI for blob externalization
+      output: imageOutputs[0].data,
+      // All images in structured field for UI rendering
+      images: imageOutputs,
       cached,
+      latencyMs,
       cost: totalCost,
     };
   }

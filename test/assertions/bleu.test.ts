@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { calculateBleuScore, handleBleuScore } from '../../src/assertions/bleu';
 
 import type { AssertionParams } from '../../src/types/index';

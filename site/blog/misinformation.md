@@ -127,7 +127,7 @@ Perplexity measures the uncertainty of a model when predicting the next token in
 
 Research [indicates](https://arxiv.org/pdf/2212.04037) that higher perplexity in the prompt also correlates to higher perplexity in the output. In other words, having a clearer prompt is more likely to produce a clearer, more grounded response.
 
-You can use Promptfoo to [measure perplexity](https://www.promptfoo.dev/docs/guides/prevent-llm-hallucations/) through the evals framework.
+You can use Promptfoo to [measure perplexity](https://www.promptfoo.dev/docs/guides/prevent-llm-hallucinations/) through the evals framework.
 
 ### Measuring Output Uncertainty
 

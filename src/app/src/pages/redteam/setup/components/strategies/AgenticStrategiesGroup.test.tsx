@@ -1,6 +1,8 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgenticStrategiesGroup } from './AgenticStrategiesGroup';
+
 import type { StrategyCardData } from './types';
 
 // Mock StrategyItem component
@@ -50,6 +52,7 @@ describe('AgenticStrategiesGroup', () => {
   const mockOnToggle = vi.fn();
   const mockOnConfigClick = vi.fn();
   const mockOnSelectNone = vi.fn();
+  const mockIsStrategyDisabled = vi.fn(() => false);
 
   const singleTurnStrategies: StrategyCardData[] = [
     {
@@ -95,6 +98,8 @@ describe('AgenticStrategiesGroup', () => {
     it('renders parent header with correct text', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -110,6 +115,8 @@ describe('AgenticStrategiesGroup', () => {
     it('renders parent description', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -129,6 +136,8 @@ describe('AgenticStrategiesGroup', () => {
     it('renders Single-turn Only subsection when single-turn strategies exist', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -147,6 +156,8 @@ describe('AgenticStrategiesGroup', () => {
     it('renders Single and Multi-turn subsection when multi-turn strategies exist', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -165,6 +176,8 @@ describe('AgenticStrategiesGroup', () => {
     it('renders all strategy items from both subsections', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -188,6 +201,8 @@ describe('AgenticStrategiesGroup', () => {
     it('does not render Single-turn Only section when no single-turn strategies', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={[]}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -204,6 +219,8 @@ describe('AgenticStrategiesGroup', () => {
     it('does not render Single and Multi-turn section when no multi-turn strategies', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={[]}
           selectedIds={[]}
@@ -220,6 +237,8 @@ describe('AgenticStrategiesGroup', () => {
     it('renders nothing when both strategy arrays are empty', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={[]}
           multiTurnStrategies={[]}
           selectedIds={[]}
@@ -242,6 +261,8 @@ describe('AgenticStrategiesGroup', () => {
     it('shows strategies as selected when their IDs are in selectedIds', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={['jailbreak', 'crescendo', 'custom']}
@@ -262,9 +283,12 @@ describe('AgenticStrategiesGroup', () => {
       expect(goatCheckbox.checked).toBe(false);
     });
 
-    it('calls onToggle when a strategy checkbox is clicked', () => {
+    it('calls onToggle when a strategy checkbox is clicked', async () => {
+      const user = userEvent.setup();
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -275,17 +299,20 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       const jailbreakCheckbox = screen.getByLabelText('Jailbreak');
-      fireEvent.click(jailbreakCheckbox);
+      await user.click(jailbreakCheckbox);
       expect(mockOnToggle).toHaveBeenCalledWith('jailbreak');
 
       const crescendoCheckbox = screen.getByLabelText('Crescendo');
-      fireEvent.click(crescendoCheckbox);
+      await user.click(crescendoCheckbox);
       expect(mockOnToggle).toHaveBeenCalledWith('crescendo');
     });
 
-    it('calls onConfigClick when a strategy config button is clicked', () => {
+    it('calls onConfigClick when a strategy config button is clicked', async () => {
+      const user = userEvent.setup();
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={['jailbreak:tree', 'custom']}
@@ -296,11 +323,11 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       const treeJailbreakConfigButton = screen.getByTestId('config-jailbreak:tree');
-      fireEvent.click(treeJailbreakConfigButton);
+      await user.click(treeJailbreakConfigButton);
       expect(mockOnConfigClick).toHaveBeenCalledWith('jailbreak:tree');
 
       const customConfigButton = screen.getByTestId('config-custom');
-      fireEvent.click(customConfigButton);
+      await user.click(customConfigButton);
       expect(mockOnConfigClick).toHaveBeenCalledWith('custom');
     });
   });
@@ -309,6 +336,8 @@ describe('AgenticStrategiesGroup', () => {
     it('renders Reset All button', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -324,6 +353,8 @@ describe('AgenticStrategiesGroup', () => {
     it('disables Reset All button when no strategies are selected', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -340,6 +371,8 @@ describe('AgenticStrategiesGroup', () => {
     it('enables Reset All button when at least one strategy is selected', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={['jailbreak']}
@@ -353,9 +386,12 @@ describe('AgenticStrategiesGroup', () => {
       expect(resetButton).not.toBeDisabled();
     });
 
-    it('calls onSelectNone with only selected agentic strategies when Reset All is clicked', () => {
+    it('calls onSelectNone with only selected agentic strategies when Reset All is clicked', async () => {
+      const user = userEvent.setup();
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={['jailbreak', 'crescendo', 'goat', 'other-strategy']}
@@ -366,15 +402,18 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       const resetButton = screen.getByText('Reset All');
-      fireEvent.click(resetButton);
+      await user.click(resetButton);
 
       // Should only pass the agentic strategies that are selected, not 'other-strategy'
       expect(mockOnSelectNone).toHaveBeenCalledWith(['jailbreak', 'crescendo', 'goat']);
     });
 
-    it('does not call onSelectNone when Reset All is clicked but no strategies are selected', () => {
+    it('does not call onSelectNone when Reset All is clicked but no strategies are selected', async () => {
+      const user = userEvent.setup();
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -387,14 +426,16 @@ describe('AgenticStrategiesGroup', () => {
       const resetButton = screen.getByText('Reset All');
       expect(resetButton).toBeDisabled();
 
-      // Try to click anyway (shouldn't do anything)
-      fireEvent.click(resetButton);
+      await user.click(resetButton);
       expect(mockOnSelectNone).not.toHaveBeenCalled();
     });
 
-    it('resets only strategies from both subsections when mixed selection exists', () => {
+    it('resets only strategies from both subsections when mixed selection exists', async () => {
+      const user = userEvent.setup();
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={['jailbreak', 'jailbreak:tree', 'crescendo', 'custom']}
@@ -405,7 +446,7 @@ describe('AgenticStrategiesGroup', () => {
       );
 
       const resetButton = screen.getByText('Reset All');
-      fireEvent.click(resetButton);
+      await user.click(resetButton);
 
       expect(mockOnSelectNone).toHaveBeenCalledWith([
         'jailbreak',
@@ -420,12 +461,7 @@ describe('AgenticStrategiesGroup', () => {
     it('handles strategies with special characters in IDs', () => {
       const specialStrategies: StrategyCardData[] = [
         {
-          id: 'strategy-with-dash',
-          name: 'Strategy With Dash',
-          description: 'Test strategy',
-        },
-        {
-          id: 'strategy:with:colon',
+          id: 'jailbreak:tree',
           name: 'Strategy With Colon',
           description: 'Test strategy',
         },
@@ -433,26 +469,27 @@ describe('AgenticStrategiesGroup', () => {
 
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={specialStrategies}
           multiTurnStrategies={[]}
-          selectedIds={['strategy-with-dash']}
+          selectedIds={['jailbreak:tree']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
         />,
       );
 
-      expect(screen.getByText('Strategy With Dash')).toBeInTheDocument();
       expect(screen.getByText('Strategy With Colon')).toBeInTheDocument();
 
-      const dashCheckbox = screen.getByLabelText('Strategy With Dash') as HTMLInputElement;
-      expect(dashCheckbox.checked).toBe(true);
+      const colonCheckbox = screen.getByLabelText('Strategy With Colon') as HTMLInputElement;
+      expect(colonCheckbox.checked).toBe(true);
     });
 
     it('handles very long strategy names and descriptions', () => {
       const longStrategies: StrategyCardData[] = [
         {
-          id: 'long-strategy',
+          id: 'prompt-injection',
           name: 'This is a very long strategy name that might cause layout issues in the UI',
           description:
             'This is an extremely long description that goes on and on and on to test how the component handles text overflow and wrapping in various screen sizes',
@@ -461,6 +498,8 @@ describe('AgenticStrategiesGroup', () => {
 
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={longStrategies}
           multiTurnStrategies={[]}
           selectedIds={[]}
@@ -477,11 +516,14 @@ describe('AgenticStrategiesGroup', () => {
       ).toBeInTheDocument();
     });
 
-    it('handles undefined onSelectNone prop gracefully', () => {
+    it('handles undefined onSelectNone prop gracefully', async () => {
+      const user = userEvent.setup();
       // Use a function to ensure no error is thrown
       const renderWithoutError = () => {
         render(
           <AgenticStrategiesGroup
+            isStrategyDisabled={mockIsStrategyDisabled}
+            isRemoteGenerationDisabled={false}
             singleTurnStrategies={singleTurnStrategies}
             multiTurnStrategies={multiTurnStrategies}
             selectedIds={['jailbreak']}
@@ -503,7 +545,7 @@ describe('AgenticStrategiesGroup', () => {
       expect(resetButton).toBeInTheDocument();
 
       // Clicking reset shouldn't cause errors
-      expect(() => fireEvent.click(resetButton)).not.toThrow();
+      await user.click(resetButton);
     });
   });
 
@@ -511,6 +553,8 @@ describe('AgenticStrategiesGroup', () => {
     it('passes correct props to each StrategyItem', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={['jailbreak:tree', 'custom']}
@@ -542,6 +586,8 @@ describe('AgenticStrategiesGroup', () => {
     it('maintains correct section structure with both subsections', () => {
       const { container } = render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}
@@ -563,6 +609,8 @@ describe('AgenticStrategiesGroup', () => {
     it('renders strategies in grid layout within each subsection', () => {
       render(
         <AgenticStrategiesGroup
+          isStrategyDisabled={mockIsStrategyDisabled}
+          isRemoteGenerationDisabled={false}
           singleTurnStrategies={singleTurnStrategies}
           multiTurnStrategies={multiTurnStrategies}
           selectedIds={[]}

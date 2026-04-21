@@ -1,15 +1,20 @@
+import { describe, expect, it } from 'vitest';
 import { handleTraceSpanDuration } from '../../src/assertions/traceSpanDuration';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const mockTraceData: TraceData = {
   traceId: 'test-trace-id',
+  evaluationId: 'test-evaluation-id',
+  testCaseId: 'test-test-case-id',
+  metadata: { test: 'value' },
   spans: [
     {
       spanId: 'span-1',
@@ -46,7 +51,7 @@ const mockTraceData: TraceData = {
 
 const defaultParams = {
   baseType: 'trace-span-duration' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',
@@ -70,10 +75,13 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1500 },
       },
       renderedValue: { max: 1500 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'fast-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             { spanId: '1', name: 'fast.op1', startTime: 0, endTime: 100 },
             { spanId: '2', name: 'fast.op2', startTime: 100, endTime: 500 },
@@ -100,9 +108,14 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1000 },
       },
       renderedValue: { max: 1000 },
-      context: {
-        ...defaultParams.context,
-        trace: mockTraceData,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -124,8 +137,8 @@ describe('handleTraceSpanDuration', () => {
         value: { pattern: '*llm*', max: 1000 },
       },
       renderedValue: { pattern: '*llm*', max: 1000 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -147,8 +160,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 2000, percentile: 90 },
       },
       renderedValue: { max: 2000, percentile: 90 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -172,8 +185,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1500, percentile: 50 },
       },
       renderedValue: { max: 1500, percentile: 50 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -196,10 +209,13 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1000 },
       },
       renderedValue: { max: 1000 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'incomplete-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             { spanId: '1', name: 'complete.op', startTime: 0, endTime: 500 },
             { spanId: '2', name: 'incomplete.op', startTime: 600 }, // No endTime
@@ -225,9 +241,15 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1000 },
       },
       renderedValue: { max: 1000 },
-      context: {
-        ...defaultParams.context,
-        trace: { traceId: 'empty-trace', spans: [] },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'empty-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [],
+        },
       },
     };
 
@@ -263,8 +285,8 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 100 },
       },
       renderedValue: { max: 100 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -284,8 +306,8 @@ describe('handleTraceSpanDuration', () => {
       ...defaultParams,
       assertion: { type: 'trace-span-duration', value: 'invalid' },
       renderedValue: 'invalid',
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -300,8 +322,8 @@ describe('handleTraceSpanDuration', () => {
       ...defaultParams,
       assertion: { type: 'trace-span-duration', value: { pattern: '*' } },
       renderedValue: { pattern: '*' },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: mockTraceData,
       },
     };
@@ -319,10 +341,13 @@ describe('handleTraceSpanDuration', () => {
         value: { max: 1000, percentile: 95 },
       },
       renderedValue: { max: 1000, percentile: 95 },
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'single-span',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [{ spanId: '1', name: 'single.op', startTime: 0, endTime: 750 }],
         },
       },

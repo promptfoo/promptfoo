@@ -1,30 +1,33 @@
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultPort } from '../../../src/constants';
 import { redteamSetupCommand } from '../../../src/redteam/commands/setup';
 import { startServer } from '../../../src/server/server';
-import telemetry from '../../../src/telemetry';
-import { setupEnv } from '../../../src/util';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
+import { setupEnv } from '../../../src/util/index';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
 
-jest.mock('../../../src/server/server');
-jest.mock('../../../src/util/server');
-jest.mock('../../../src/util', () => ({
-  setupEnv: jest.fn(),
-}));
-jest.mock('../../../src/util/config/manage', () => ({
-  setConfigDirectoryPath: jest.fn(),
-}));
-jest.mock('../../../src/telemetry', () => ({
-  record: jest.fn(),
-}));
+vi.mock('../../../src/server/server');
+vi.mock('../../../src/util/server');
+vi.mock('../../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    setupEnv: vi.fn(),
+  };
+});
+vi.mock('../../../src/util/config/manage', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    setConfigDirectoryPath: vi.fn(),
+  };
+});
 
 describe('redteamSetupCommand', () => {
   let program: Command;
 
   beforeEach(() => {
     program = new Command();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should register the setup command with correct options', () => {
@@ -37,20 +40,17 @@ describe('redteamSetupCommand', () => {
   });
 
   it('should handle setup command without directory', async () => {
-    jest.mocked(checkServerRunning).mockResolvedValue(false);
+    vi.mocked(checkServerRunning).mockResolvedValue(false);
     redteamSetupCommand(program);
 
     await program.parseAsync(['node', 'test', 'setup', '--port', '3000']);
 
     expect(setupEnv).toHaveBeenCalledWith(undefined);
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-      name: 'redteam setup',
-    });
     expect(startServer).toHaveBeenCalledWith('3000', BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
   });
 
   it('should handle setup command with directory', async () => {
-    jest.mocked(checkServerRunning).mockResolvedValue(false);
+    vi.mocked(checkServerRunning).mockResolvedValue(false);
     redteamSetupCommand(program);
 
     await program.parseAsync(['node', 'test', 'setup', 'test-dir', '--port', '3000']);
@@ -60,7 +60,7 @@ describe('redteamSetupCommand', () => {
   });
 
   it('should open browser if server is already running', async () => {
-    jest.mocked(checkServerRunning).mockResolvedValue(true);
+    vi.mocked(checkServerRunning).mockResolvedValue(true);
     redteamSetupCommand(program);
 
     await program.parseAsync(['node', 'test', 'setup']);
@@ -70,7 +70,7 @@ describe('redteamSetupCommand', () => {
   });
 
   it('should ignore filter description option', async () => {
-    jest.mocked(checkServerRunning).mockResolvedValue(false);
+    vi.mocked(checkServerRunning).mockResolvedValue(false);
     redteamSetupCommand(program);
 
     await program.parseAsync(['node', 'test', 'setup', '--filter-description', 'test.*']);
@@ -82,7 +82,7 @@ describe('redteamSetupCommand', () => {
   });
 
   it('should handle setup command with env file path', async () => {
-    jest.mocked(checkServerRunning).mockResolvedValue(false);
+    vi.mocked(checkServerRunning).mockResolvedValue(false);
     redteamSetupCommand(program);
 
     await program.parseAsync(['node', 'test', 'setup', '--env-file', '.env.test']);

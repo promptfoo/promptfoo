@@ -3,7 +3,7 @@ title: 'Top Open Source AI Red-Teaming and Fuzzing Tools in 2025'
 description: 'Compare the top open source AI red teaming tools in 2025. See features, use cases, and real differences across Promptfoo, PyRIT, Garak, FuzzyAI, and promptmap2.'
 image: /img/blog/top-5-open-source-ai-red-teaming-tools-2025.jpg
 authors: [tabs]
-tags: [red-teaming, security, open-source, ai-security, tools]
+tags: [red-teaming, open-source, ai-security, tool-comparison]
 keywords:
   [
     LLM red teaming tools,
@@ -162,7 +162,7 @@ _Note: We build Promptfoo. We include competitors and link to their docs for bal
 - CLI and polished web interface with model-agnostic testing
 - Deep Python integration alongside JavaScript/TypeScript support
 - Flexible YAML/JSON configuration with programmatic APIs
-- [Agent tracing and debugging capabilities](https://www.promptfoo.dev/docs/guides/agent-eval/) for complex workflows
+- [Agent tracing and debugging capabilities](https://www.promptfoo.dev/docs/guides/evaluate-coding-agents/) for complex workflows
 - [Multi-turn testing via plugins](https://www.promptfoo.dev/docs/red-team/strategies/multi-turn/) and attack strategies
 - **Adaptive red teaming**: Smart AI agents generate context-specific attacks from the start, not static prompt lists
 - Active community with extensive plugin ecosystem

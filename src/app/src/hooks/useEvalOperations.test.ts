@@ -1,10 +1,9 @@
-import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-
 import { callApi } from '@app/utils/api';
-import type { ReplayEvaluationParams } from '@app/pages/eval/components/EvalOutputPromptDialog';
-import type { Trace } from '@app/components/traces/TraceView';
+import { act, renderHook } from '@testing-library/react';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useEvalOperations } from './useEvalOperations';
+import type { Trace } from '@app/components/traces/TraceView';
+import type { ReplayEvaluationParams } from '@app/pages/eval/components/EvalOutputPromptDialog';
 
 vi.mock('@app/utils/api');
 
@@ -157,15 +156,16 @@ describe('useEvalOperations', () => {
 
       const { result } = renderHook(() => useEvalOperations());
 
+      const signal = new AbortController().signal;
       let traces;
       await act(async () => {
-        traces = await result.current.fetchTraces('eval-123', new AbortController().signal);
+        traces = await result.current.fetchTraces('eval-123', signal);
       });
 
       expect(traces).toEqual([]);
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/eval-123', {
-        signal: new AbortController().signal,
+        signal,
       });
     });
 
@@ -180,34 +180,34 @@ describe('useEvalOperations', () => {
 
       const { result } = renderHook(() => useEvalOperations());
 
-      await expect(
-        result.current.fetchTraces('eval-id', new AbortController().signal),
-      ).rejects.toThrowError(`HTTP error! status: ${mockStatus}`);
+      const signal = new AbortController().signal;
+      await expect(result.current.fetchTraces('eval-id', signal)).rejects.toThrowError(
+        `HTTP error! status: ${mockStatus}`,
+      );
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/eval-id', {
-        signal: new AbortController().signal,
+        signal,
       });
     });
 
-    it.each([400, 404, 500])(
-      'should throw an error with the correct status code when the API call returns an HTTP error (status %s)',
-      async (statusCode) => {
-        vi.mocked(callApi).mockResolvedValue({
-          ok: false,
-          status: statusCode,
-        } as Response);
+    it.each([
+      400, 404, 500,
+    ])('should throw an error with the correct status code when the API call returns an HTTP error (status %s)', async (statusCode) => {
+      vi.mocked(callApi).mockResolvedValue({
+        ok: false,
+        status: statusCode,
+      } as Response);
 
-        const { result } = renderHook(() => useEvalOperations());
+      const { result } = renderHook(() => useEvalOperations());
 
-        await expect(
-          result.current.fetchTraces('test-eval-id', new AbortController().signal),
-        ).rejects.toThrowError(`HTTP error! status: ${statusCode}`);
-        expect(callApi).toHaveBeenCalledTimes(1);
-        expect(callApi).toHaveBeenCalledWith('/traces/evaluation/test-eval-id', {
-          signal: expect.any(AbortSignal),
-        });
-      },
-    );
+      await expect(
+        result.current.fetchTraces('test-eval-id', new AbortController().signal),
+      ).rejects.toThrowError(`HTTP error! status: ${statusCode}`);
+      expect(callApi).toHaveBeenCalledTimes(1);
+      expect(callApi).toHaveBeenCalledWith('/traces/evaluation/test-eval-id', {
+        signal: expect.any(AbortSignal),
+      });
+    });
 
     it('should handle AbortError when the API call is aborted', async () => {
       const abortController = new AbortController();

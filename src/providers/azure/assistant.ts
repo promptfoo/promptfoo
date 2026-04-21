@@ -1,6 +1,7 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
@@ -110,14 +111,19 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
-      throw new Error('Azure API key must be set.');
-    }
+    await this.ensureInitialized();
+    invariant(this.authHeaders, 'auth headers are not initialized');
 
     const apiBaseUrl = this.getApiBaseUrl();
     if (!apiBaseUrl) {
       throw new Error('Azure API host must be set.');
+    }
+
+    if (!this.authHeaders['api-key'] && !this.authHeaders.Authorization) {
+      throw new Error(
+        'Azure API authentication failed. Set AZURE_API_KEY environment variable or configure apiKey in provider config.\n' +
+          'You can also use Microsoft Entra ID authentication.',
+      );
     }
 
     const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';
@@ -134,7 +140,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
       tools: JSON.stringify(
-        maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
+        await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
       ),
       top_p: this.assistantConfig.top_p,
     })}`;
@@ -201,10 +207,13 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         runOptions.tool_choice = this.assistantConfig.tool_choice;
       }
       if (this.assistantConfig.tools) {
-        runOptions.tools = maybeLoadToolsFromExternalFile(
+        const loadedTools = await maybeLoadToolsFromExternalFile(
           this.assistantConfig.tools,
           context?.vars,
         );
+        if (loadedTools !== undefined) {
+          runOptions.tools = loadedTools;
+        }
       }
       if (this.assistantConfig.modelName) {
         runOptions.model = this.assistantConfig.modelName;
@@ -356,8 +365,8 @@ export class AzureAssistantProvider extends AzureGenericProvider {
    * Helper method to make HTTP requests using fetchWithCache
    */
   private async makeRequest<T>(url: string, options: RequestInit): Promise<T> {
-    const timeoutMs = this.assistantConfig.timeoutMs || REQUEST_TIMEOUT_MS;
-    const retries = this.assistantConfig.retryOptions?.maxRetries || 4;
+    const timeoutMs = this.assistantConfig.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const retries = this.assistantConfig.retryOptions?.maxRetries ?? 4;
 
     // These operations should never be cached
     const shouldBustCache =

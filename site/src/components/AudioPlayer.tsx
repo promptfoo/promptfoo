@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+
 import styles from './AudioPlayer.module.css';
 
 interface AudioPlayerProps {
@@ -11,7 +12,7 @@ export default function AudioPlayer({
   audioData,
   format = 'wav',
   transcript,
-}: AudioPlayerProps): JSX.Element {
+}: AudioPlayerProps): React.ReactElement {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {

@@ -1,0 +1,31 @@
+{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "comparison_response",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "item1": {
+          "type": "string",
+          "description": "First item being compared"
+        },
+        "item2": {
+          "type": "string",
+          "description": "Second item being compared"
+        },
+        "winner": {
+          "type": "string",
+          "enum": ["item1", "item2", "tie"],
+          "description": "Which item is better or if they're equal"
+        },
+        "reasoning": {
+          "type": "string",
+          "description": "Explanation of the comparison and decision"
+        }
+      },
+      "required": ["item1", "item2", "winner", "reasoning"],
+      "additionalProperties": false
+    }
+  }
+}

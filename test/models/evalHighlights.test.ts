@@ -1,7 +1,8 @@
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
-import { ResultFailureReason } from '../../src/types';
 import { runDbMigrations } from '../../src/migrate';
 import { queryTestIndicesOptimized } from '../../src/models/evalPerformance';
+import { ResultFailureReason } from '../../src/types/index';
 import EvalFactory from '../factories/evalFactory';
 
 import type { EvaluateResult } from '../../src/types/index';

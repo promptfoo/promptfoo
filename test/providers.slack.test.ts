@@ -1,35 +1,52 @@
 import { WebClient } from '@slack/web-api';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SlackProvider } from '../src/providers/slack';
-import type { ApiProvider } from '../src/types';
+import { mockProcessEnv } from './util/utils';
 
-jest.mock('@slack/web-api');
+import type { ApiProvider } from '../src/types/index';
+
+const slackMocks = vi.hoisted(() => ({
+  webClientImpl: vi.fn(),
+}));
+
+vi.mock('@slack/web-api', () => {
+  const WebClientMock = vi.fn(function WebClientMock(...args: any[]) {
+    return slackMocks.webClientImpl(...args);
+  });
+
+  return { WebClient: WebClientMock };
+});
 
 describe('SlackProvider', () => {
   let mockWebClient: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    slackMocks.webClientImpl.mockReset();
+    mockProcessEnv({ SLACK_BOT_TOKEN: 'xoxb-test-token' });
 
     mockWebClient = {
       chat: {
-        postMessage: jest.fn(),
+        postMessage: vi.fn(),
       },
       conversations: {
-        history: jest.fn(),
+        history: vi.fn(),
       },
     };
 
-    (WebClient as jest.MockedClass<typeof WebClient>).mockImplementation(() => mockWebClient);
+    slackMocks.webClientImpl.mockReturnValue(mockWebClient);
   });
 
   afterEach(() => {
-    delete process.env.SLACK_BOT_TOKEN;
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    mockProcessEnv({ SLACK_BOT_TOKEN: undefined });
   });
 
   describe('constructor', () => {
     it('should throw error if no token is provided', () => {
-      delete process.env.SLACK_BOT_TOKEN;
+      mockProcessEnv({ SLACK_BOT_TOKEN: undefined });
       expect(() => new SlackProvider({ config: { channel: 'C123' } })).toThrow(
         'Slack provider requires a token',
       );
@@ -119,7 +136,9 @@ describe('SlackProvider', () => {
           ],
         } as any);
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
 
       expect(mockWebClient.chat.postMessage).toHaveBeenCalledWith({
         channel: 'C123',
@@ -175,7 +194,9 @@ describe('SlackProvider', () => {
         messages: [],
       } as any);
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
 
       expect(result.error).toContain('Timeout waiting for Slack response');
     });
@@ -267,7 +288,9 @@ describe('SlackProvider', () => {
           ],
         } as any);
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
 
       expect(result.output).toBe('Correct user');
       expect(result.metadata?.waitForUser).toBe('U456');
@@ -321,7 +344,9 @@ describe('SlackProvider', () => {
         }
       });
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
 
       expect(result.output).toBe('First response\n\nSecond response');
     });
@@ -442,7 +467,9 @@ describe('SlackProvider', () => {
           ],
         });
 
-      const result = await provider.callApi('Test prompt');
+      const resultPromise = provider.callApi('Test prompt');
+      await vi.runAllTimersAsync();
+      const result = await resultPromise;
 
       expect(result.output).toBe('Response');
       expect(result.metadata).toBeDefined();

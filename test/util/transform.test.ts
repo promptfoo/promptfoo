@@ -1,48 +1,63 @@
-import * as path from 'path';
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { runPython } from '../../src/python/pythonUtils';
-import { TransformInputType, transform } from '../../src/util/transform';
+import {
+  FILE_TRANSFORM_LABEL,
+  getTransformErrorMessage,
+  getTransformLabel,
+  INLINE_FUNCTION_LABEL,
+  INLINE_STRING_LABEL,
+  TransformInputType,
+  transform,
+} from '../../src/util/transform';
 
-jest.mock('../../src/esm');
-jest.mock('../../src/logger', () => ({
-  __esModule: true,
+import type { TransformFunction } from '../../src/types/transform';
+
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(),
+  getDirectory: vi.fn().mockReturnValue('/test/dir'),
+}));
+
+vi.mock('../../src/logger', () => ({
   default: {
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
-jest.mock('../../src/python/pythonUtils', () => ({
-  runPython: jest.fn().mockImplementation(async (filePath, functionName, args) => {
+vi.mock('../../src/python/pythonUtils', () => ({
+  runPython: vi.fn().mockImplementation(async (_filePath, _functionName, args) => {
     const [output] = args;
     return output.toUpperCase() + ' FROM PYTHON';
   }),
 }));
 
-jest.mock('fs', () => ({
-  unlink: jest.fn(),
+vi.mock('fs', () => ({
+  unlink: vi.fn(),
 }));
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
+
+const mockedImportModule = vi.mocked(importModule);
 
 describe('util', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('transform', () => {
     afterEach(() => {
-      jest.clearAllMocks();
-      jest.resetModules();
+      vi.clearAllMocks();
+      vi.resetModules();
     });
 
     it('transforms output using a direct function', async () => {
@@ -70,9 +85,7 @@ describe('util', () => {
     it('transforms output using an imported function from a file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-      jest.doMock(path.resolve('transform.js'), () => (output: string) => output.toUpperCase(), {
-        virtual: true,
-      });
+      mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase());
 
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transform(transformFunctionPath, output, context);
@@ -82,13 +95,10 @@ describe('util', () => {
     it('transforms vars using a direct function from a file', async () => {
       const vars = { key: 'value' };
       const context = { vars: {}, prompt: {} };
-      jest.doMock(
-        path.resolve('transform.js'),
-        () => (vars: any) => ({ ...vars, key: 'transformed' }),
-        {
-          virtual: true,
-        },
-      );
+      mockedImportModule.mockResolvedValueOnce((vars: any) => ({
+        ...vars,
+        key: 'transformed',
+      }));
       const transformFunctionPath = 'file://transform.js';
       const transformedOutput = await transform(
         transformFunctionPath,
@@ -112,13 +122,16 @@ describe('util', () => {
     it('throws error if file does not export a function', async () => {
       const output = 'test';
       const context = { vars: {}, prompt: {} };
-      jest.doMock(path.resolve('transform.js'), () => 'banana', { virtual: true });
+      mockedImportModule.mockResolvedValueOnce('banana');
       const transformFunctionPath = 'file://transform.js';
       await expect(transform(transformFunctionPath, output, context)).rejects.toThrow(
         'Transform transform.js must export a function, have a default export as a function, or export the specified function "undefined"',
       );
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error loading transform function from file:'),
+        'Error loading transform function from file',
+        expect.objectContaining({
+          transform: FILE_TRANSFORM_LABEL,
+        }),
       );
     });
 
@@ -140,7 +153,11 @@ describe('util', () => {
         'Unsupported transform file format: file://transform.txt',
       );
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error loading transform function from file:'),
+        'Error loading transform function from file',
+        expect.objectContaining({
+          message: 'Unsupported transform file format: file://transform.txt',
+          transform: FILE_TRANSFORM_LABEL,
+        }),
       );
     });
 
@@ -159,12 +176,8 @@ describe('util', () => {
     it('transforms output using a default export function from a file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-      jest.doMock(
-        path.resolve('transform.js'),
-        () => ({
-          default: (output: string) => output.toUpperCase() + ' DEFAULT',
-        }),
-        { virtual: true },
+      mockedImportModule.mockResolvedValueOnce(
+        (output: string) => output.toUpperCase() + ' DEFAULT',
       );
 
       const transformFunctionPath = 'file://transform.js';
@@ -175,13 +188,8 @@ describe('util', () => {
     it('transforms output using a named function from a JavaScript file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-      jest.doMock(
-        path.resolve('transform.js'),
-        () => ({
-          namedFunction: (output: string) => output.toUpperCase() + ' NAMED',
-        }),
-        { virtual: true },
-      );
+      // When a function name is specified, importModule returns that specific function
+      mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase() + ' NAMED');
 
       const transformFunctionPath = 'file://transform.js:namedFunction';
       const transformedOutput = await transform(transformFunctionPath, output, context);
@@ -255,18 +263,16 @@ describe('util', () => {
       const context = { vars: {}, prompt: {} };
       const errorMessage = 'File not found';
 
-      jest.doMock(
-        path.resolve('transform.js'),
-        () => {
-          throw new Error(errorMessage);
-        },
-        { virtual: true },
-      );
+      mockedImportModule.mockRejectedValueOnce(new Error(errorMessage));
 
       const transformFunctionPath = 'file://transform.js';
       await expect(transform(transformFunctionPath, output, context)).rejects.toThrow(errorMessage);
       expect(logger.error).toHaveBeenCalledWith(
-        `Error loading transform function from file: ${errorMessage}`,
+        'Error loading transform function from file',
+        expect.objectContaining({
+          message: errorMessage,
+          transform: FILE_TRANSFORM_LABEL,
+        }),
       );
     });
 
@@ -279,19 +285,59 @@ describe('util', () => {
         'Unexpected identifier',
       );
       expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error creating inline transform function:'),
+        'Error creating inline transform function',
+        expect.objectContaining({
+          transform: expect.stringContaining(INLINE_STRING_LABEL),
+        }),
       );
+    });
+
+    describe('ESM compatibility', () => {
+      it('provides process.mainModule.require for backwards compatibility with CommonJS patterns', async () => {
+        const output = 'test';
+        const context = { vars: {}, prompt: {} };
+        // This is the exact pattern users were using before ESM migration
+        // const require = process.mainModule.require;
+        const transformFunction = `
+          const require = process.mainModule.require;
+          const path = require('node:path');
+          return path.basename('/foo/bar/baz.txt');
+        `;
+        const result = await transform(transformFunction, output, context);
+        expect(result).toBe('baz.txt');
+      });
+
+      it('allows direct use of process.mainModule.require without assignment', async () => {
+        const output = 'hello';
+        const context = { vars: {}, prompt: {} };
+        const transformFunction = `
+          const fs = process.mainModule.require('node:fs');
+          const os = process.mainModule.require('node:os');
+          return typeof fs.existsSync === 'function' && typeof os.homedir === 'function' ? output.toUpperCase() : output;
+        `;
+        const result = await transform(transformFunction, output, context);
+        expect(result).toBe('HELLO');
+      });
+
+      it('preserves other process properties like process.env', async () => {
+        const output = 'test';
+        const context = { vars: {}, prompt: {} };
+        const transformFunction = `
+          // process.env should still work
+          const env = process.env;
+          return typeof env === 'object' ? 'env-works' : 'env-broken';
+        `;
+        const result = await transform(transformFunction, output, context);
+        expect(result).toBe('env-works');
+      });
     });
 
     describe('file path handling', () => {
       it('handles absolute paths in transform files', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const mockPath = path.resolve('transform.js');
 
-        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
-          virtual: true,
-        });
+        mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase());
 
         const transformFunctionPath = 'file://transform.js';
         const transformedOutput = await transform(transformFunctionPath, output, context);
@@ -301,11 +347,8 @@ describe('util', () => {
       it('handles file URLs in transform files', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const mockPath = path.resolve('transform.js');
 
-        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
-          virtual: true,
-        });
+        mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase());
 
         const transformFunctionPath = 'file://transform.js';
         const transformedOutput = await transform(transformFunctionPath, output, context);
@@ -329,11 +372,8 @@ describe('util', () => {
       it('handles complex nested paths', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const mockPath = path.resolve('deeply/nested/path/with spaces/transform.js');
 
-        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
-          virtual: true,
-        });
+        mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase());
 
         const transformFunctionPath = 'file://deeply/nested/path/with spaces/transform.js';
         const transformedOutput = await transform(transformFunctionPath, output, context);
@@ -343,15 +383,225 @@ describe('util', () => {
       it('handles paths with special characters', async () => {
         const output = 'hello';
         const context = { vars: { key: 'value' }, prompt: { id: '123' } };
-        const mockPath = path.resolve('path/with-hyphens/and_underscores/transform.js');
 
-        jest.doMock(mockPath, () => (output: string) => output.toUpperCase(), {
-          virtual: true,
-        });
+        mockedImportModule.mockResolvedValueOnce((output: string) => output.toUpperCase());
 
         const transformFunctionPath = 'file://path/with-hyphens/and_underscores/transform.js';
         const transformedOutput = await transform(transformFunctionPath, output, context);
         expect(transformedOutput).toBe('HELLO');
+      });
+    });
+
+    describe('inline function transforms (Node.js package)', () => {
+      it('transforms output using a directly passed function', async () => {
+        const output = 'hello world';
+        const context = { vars: { key: 'value' }, prompt: { id: '123' } };
+        const fn: TransformFunction = (output) => String(output).toUpperCase();
+
+        const result = await transform(fn, output, context);
+        expect(result).toBe('HELLO WORLD');
+      });
+
+      it('transforms output using an async function', async () => {
+        const output = 'hello';
+        const context = { vars: {}, prompt: {} };
+        const fn: TransformFunction = async (output) => {
+          return output + ' async';
+        };
+
+        const result = await transform(fn, output, context);
+        expect(result).toBe('hello async');
+      });
+
+      it('passes context to the function', async () => {
+        const output = 'test';
+        const context = { vars: { name: 'Alice' }, prompt: { label: 'greeting' } };
+        const fn: TransformFunction = (output, ctx: any) => `${output} for ${ctx.vars.name}`;
+
+        const result = await transform(fn, output, context);
+        expect(result).toBe('test for Alice');
+      });
+
+      it('transforms vars using a directly passed function', async () => {
+        const vars = { key: 'value', other: 'data' };
+        const context = { vars: {}, prompt: {} };
+        const fn: TransformFunction = (vars: any) => ({ ...vars, key: vars.key.toUpperCase() });
+
+        const result = await transform(fn, vars, context, true, TransformInputType.VARS);
+        expect(result).toEqual({ key: 'VALUE', other: 'data' });
+      });
+
+      it('throws when inline function returns undefined and validateReturn is true', async () => {
+        const output = 'test';
+        const context = { vars: {}, prompt: {} };
+        const fn: TransformFunction = () => undefined as any;
+
+        await expect(transform(fn, output, context, true)).rejects.toThrow(
+          'Transform function did not return a value',
+        );
+      });
+
+      it('does not throw when inline function returns undefined and validateReturn is false', async () => {
+        const output = 'test';
+        const context = { vars: {}, prompt: {} };
+        const fn: TransformFunction = () => undefined as any;
+
+        const result = await transform(fn, output, context, false);
+        expect(result).toBeUndefined();
+      });
+
+      it('handles function that accesses metadata from context', async () => {
+        const output = 'raw output';
+        const context = {
+          vars: {},
+          prompt: {},
+          metadata: { toolCalls: [{ name: 'search' }, { name: 'calculate' }] },
+        };
+        const fn: TransformFunction = (_output, ctx: any) => {
+          const tools = ctx.metadata?.toolCalls ?? [];
+          return tools.map((t: any) => t.name).join(', ');
+        };
+
+        const result = await transform(fn, output, context);
+        expect(result).toBe('search, calculate');
+      });
+
+      it('propagates errors thrown by inline functions', async () => {
+        const fn: TransformFunction = () => {
+          throw new Error('user transform error');
+        };
+
+        await expect(transform(fn, 'test', { vars: {}, prompt: {} })).rejects.toThrow(
+          'user transform error',
+        );
+        expect(logger.error).toHaveBeenCalledWith(
+          'Error in transform function',
+          expect.objectContaining({
+            message: 'user transform error',
+            transform: expect.stringContaining(INLINE_FUNCTION_LABEL),
+          }),
+        );
+      });
+
+      it('wraps thrown errors with the transform label and preserves the original via cause', async () => {
+        const original = new Error('raw user error');
+        const fn: TransformFunction = () => {
+          throw original;
+        };
+
+        try {
+          await transform(fn, 'test', { vars: {}, prompt: {} });
+          throw new Error('expected transform to throw');
+        } catch (err) {
+          expect(err).toBeInstanceOf(Error);
+          const e = err as Error & { cause?: unknown };
+          // Wrapped message includes the label AND the original error text.
+          expect(e.message).toContain('Transform failed (');
+          expect(e.message).toContain(INLINE_FUNCTION_LABEL);
+          expect(e.message).toContain('raw user error');
+          // The original error is attached via the standard `cause` chain.
+          expect(e.cause).toBe(original);
+        }
+      });
+
+      it('resolves thenables returned by inline functions', async () => {
+        // Bare thenable built via Object.defineProperty to dodge the `noThenProperty`
+        // lint rule; verifies `transform()` awaits anything Promise-like.
+        const thenable = Object.defineProperty({}, 'then', {
+          value: (resolve: (value: unknown) => void) => resolve('thenable-resolved'),
+          enumerable: true,
+        }) as unknown as Promise<string>;
+        const fn: TransformFunction = () => thenable;
+
+        const result = await transform(fn, 'ignored', { vars: {}, prompt: {} });
+        expect(result).toBe('thenable-resolved');
+      });
+    });
+
+    describe('getTransformErrorMessage', () => {
+      it('returns the raw message from a transform-wrapped Error via .cause', () => {
+        const raw = new Error('underlying boom');
+        const wrapped = new Error('Transform failed ([inline function]: fn): underlying boom');
+        (wrapped as Error & { cause?: unknown }).cause = raw;
+        expect(getTransformErrorMessage(wrapped)).toBe('underlying boom');
+      });
+
+      it('falls back to the error message when there is no cause', () => {
+        expect(getTransformErrorMessage(new Error('plain'))).toBe('plain');
+      });
+
+      it('stringifies non-Error throw values', () => {
+        expect(getTransformErrorMessage('just a string')).toBe('just a string');
+        expect(getTransformErrorMessage(42)).toBe('42');
+      });
+
+      it('returns the outer message when the cause is not an Error', () => {
+        const wrapped = new Error('outer');
+        (wrapped as Error & { cause?: unknown }).cause = 'a string cause';
+        expect(getTransformErrorMessage(wrapped)).toBe('outer');
+      });
+    });
+
+    describe('getTransformLabel', () => {
+      it('shows inline string transforms verbatim', () => {
+        expect(getTransformLabel('output.toUpperCase()')).toBe(
+          `${INLINE_STRING_LABEL}: output.toUpperCase()`,
+        );
+      });
+
+      it('collapses whitespace in multi-line inline strings', () => {
+        expect(getTransformLabel('const x = output;\n  return x.trim();')).toBe(
+          `${INLINE_STRING_LABEL}: const x = output; return x.trim();`,
+        );
+      });
+
+      it('truncates long inline string transforms', () => {
+        const longExpr = 'output.' + 'a'.repeat(200);
+        const label = getTransformLabel(longExpr);
+        expect(label.startsWith(`${INLINE_STRING_LABEL}: `)).toBe(true);
+        expect(label.endsWith('…')).toBe(true);
+        expect(label.length).toBeLessThan(longExpr.length);
+      });
+
+      it('does not truncate an inline string exactly at the max length', () => {
+        const exprAtLimit = 'a'.repeat(80);
+        expect(getTransformLabel(exprAtLimit)).toBe(`${INLINE_STRING_LABEL}: ${exprAtLimit}`);
+      });
+
+      it('truncates an inline string one character over the max length', () => {
+        const exprOverLimit = 'a'.repeat(81);
+        const label = getTransformLabel(exprOverLimit);
+        // Label body is 79 chars + ellipsis → total 80 chars after the prefix.
+        expect(label).toBe(`${INLINE_STRING_LABEL}: ${'a'.repeat(79)}…`);
+      });
+
+      it('redacts file transform paths', () => {
+        expect(getTransformLabel('file://transform.js')).toBe(FILE_TRANSFORM_LABEL);
+      });
+
+      it('does not render function source in error labels', async () => {
+        const secretFn = function SECRET_SHOULD_NOT_APPEAR_IN_LABEL() {
+          return undefined;
+        };
+        await expect(transform(secretFn as any, 'test', { vars: {}, prompt: {} })).rejects.toThrow(
+          `Transform function did not return a value\n\n${INLINE_FUNCTION_LABEL}: SECRET_SHOULD_NOT_APPEAR_IN_LABEL`,
+        );
+      });
+
+      it('returns [inline function] for anonymous functions', () => {
+        expect(getTransformLabel(() => 'x')).toBe(INLINE_FUNCTION_LABEL);
+      });
+
+      it('includes function name for named functions', () => {
+        function myTransform() {
+          return 'x';
+        }
+        expect(getTransformLabel(myTransform)).toBe(`${INLINE_FUNCTION_LABEL}: myTransform`);
+      });
+
+      it('falls back to inline label for null or undefined inputs', () => {
+        expect(getTransformLabel(undefined)).toBe(INLINE_STRING_LABEL);
+        expect(getTransformLabel(null)).toBe(INLINE_STRING_LABEL);
       });
     });
   });

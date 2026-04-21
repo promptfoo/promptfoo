@@ -80,9 +80,9 @@ The Slack provider supports multiple formats:
 ```yaml
 # Basic format with channel in config
 providers:
-  - id: slack
+  - id: slack  # Uses SLACK_BOT_TOKEN env var
     config:
-      token: ${SLACK_BOT_TOKEN}
+      # token: "{{ env.SLACK_BOT_TOKEN }}"  # optional, auto-detected
       channel: "C0123456789"
 
 # Short format - channel ID directly in provider string

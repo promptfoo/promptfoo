@@ -1,0 +1,228 @@
+/* Container */
+.navMenuCard {
+  position: relative;
+  display: inline-block;
+}
+
+/* Button */
+.navMenuCardButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: var(--ifm-navbar-item-padding-vertical) var(--ifm-navbar-item-padding-horizontal);
+}
+
+/* Dropdown icon */
+.navMenuCardIcon {
+  opacity: 0.4;
+  margin-left: 2px;
+  transition: transform 0.2s ease;
+}
+
+.navMenuCard:hover .navMenuCardIcon {
+  transform: rotate(180deg);
+}
+
+/* Dropdown container - hidden by default */
+.navMenuCardDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    visibility 0.2s ease;
+  padding-top: 8px;
+  z-index: 1000;
+}
+
+/* Show dropdown on hover */
+.navMenuCard:hover .navMenuCardDropdown {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: all;
+}
+
+/* Inner dropdown with background and border */
+.navMenuCardContainer {
+  background: white;
+  border-radius: 12px;
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  padding: 32px;
+  display: flex;
+  gap: 56px;
+  min-width: 700px;
+}
+
+/* Section container */
+.navMenuCardSection {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Section title */
+.navMenuCardSectionTitle {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ifm-color-emphasis-500);
+  margin-bottom: 20px;
+  padding-left: 0;
+}
+
+/* Grid of items within a section */
+.navMenuCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+/* Individual menu items */
+.navMenuCardItem {
+  display: block;
+  padding: 16px 18px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ifm-font-color-base);
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.navMenuCardItem:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  text-decoration: none;
+  color: var(--ifm-font-color-base);
+  transform: translateY(-1px);
+}
+
+.navMenuCardItemTitle {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--ifm-heading-color);
+  margin-bottom: 6px;
+}
+
+.navMenuCardItemDescription {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ifm-color-emphasis-600);
+}
+
+/* Dark mode adjustments */
+[data-theme='dark'] .navMenuCardContainer {
+  background: var(--ifm-background-surface-color);
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.4),
+    0 8px 10px -6px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .navMenuCardItem:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Open state for mobile (when clicked) */
+.navMenuCardDropdownOpen {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: all;
+}
+
+.navMenuCardDropdownOpen .navMenuCardIcon {
+  transform: rotate(180deg);
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  /* Hide dropdown menus in the top navbar but keep them for the hamburger menu */
+  :global(.navbar__inner) .navMenuCard {
+    display: none;
+  }
+
+  /* Style for mobile sidebar/hamburger menu */
+  :global(.navbar-sidebar__items) .navMenuCard {
+    display: block;
+    width: 100%;
+  }
+
+  :global(.navbar-sidebar__items) .navMenuCardButton {
+    color: var(--ifm-menu-color);
+  }
+
+  :global(.navbar-sidebar__items) .navMenuCardButton:hover {
+    color: var(--ifm-menu-color-active);
+  }
+
+  .navMenuCardButton {
+    width: 100%;
+    justify-content: space-between;
+    font-weight: 600;
+  }
+
+  .navMenuCardDropdown {
+    position: static;
+    padding: 0;
+    width: 100%;
+  }
+
+  /* Show dropdown inline when open, hide when closed */
+  .navMenuCardDropdown {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  .navMenuCardDropdownOpen {
+    max-height: 2000px;
+  }
+
+  .navMenuCardContainer {
+    min-width: auto;
+    max-width: 100%;
+    flex-direction: column;
+    gap: 16px;
+    padding: 12px 0;
+    box-shadow: none;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  .navMenuCardGrid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .navMenuCardItem {
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  .navMenuCardItemTitle {
+    font-size: 14px;
+  }
+
+  .navMenuCardItemDescription {
+    font-size: 12px;
+  }
+
+  .navMenuCardSectionTitle {
+    font-size: 9px;
+    padding-left: 16px;
+  }
+
+  /* Dark mode adjustments for mobile */
+  [data-theme='dark'] .navMenuCardContainer {
+    box-shadow: none;
+    background: transparent;
+  }
+}

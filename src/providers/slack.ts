@@ -1,11 +1,12 @@
 import { WebClient } from '@slack/web-api';
+import logger from '../logger';
+
 import type {
   ApiProvider,
-  ProviderResponse,
   CallApiContextParams,
   CallApiOptionsParams,
-} from '../types';
-import logger from '../logger';
+  ProviderResponse,
+} from '../types/index';
 
 export interface SlackProviderOptions {
   id?: string;

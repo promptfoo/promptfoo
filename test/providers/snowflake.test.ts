@@ -1,24 +1,27 @@
-import { clearCache } from '../../src/cache';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearCache, fetchWithCache } from '../../src/cache';
 import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
+import { mockProcessEnv } from '../util/utils';
 
-jest.mock('../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-  clearCache: jest.fn(),
-  enableCache: jest.fn(),
-  disableCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
-}));
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+    clearCache: vi.fn(),
+    enableCache: vi.fn(),
+    disableCache: vi.fn(),
+    isCacheEnabled: vi.fn(),
+  };
+});
 
-const mockFetchWithCache = jest.mocked(
-  require('../../src/cache').fetchWithCache,
-) as jest.MockedFunction<typeof import('../../src/cache').fetchWithCache>;
+const mockFetchWithCache = vi.mocked(fetchWithCache);
 
 describe('Snowflake Cortex Provider', () => {
   afterEach(async () => {
     await clearCache();
-    jest.clearAllMocks();
-    delete process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER;
-    delete process.env.SNOWFLAKE_API_KEY;
+    vi.clearAllMocks();
+    mockProcessEnv({ SNOWFLAKE_ACCOUNT_IDENTIFIER: undefined });
+    mockProcessEnv({ SNOWFLAKE_API_KEY: undefined });
   });
 
   describe('initialization', () => {
@@ -36,7 +39,7 @@ describe('Snowflake Cortex Provider', () => {
     });
 
     it('should initialize with accountIdentifier from environment', () => {
-      process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER = 'myorg-myaccount';
+      mockProcessEnv({ SNOWFLAKE_ACCOUNT_IDENTIFIER: 'myorg-myaccount' });
 
       const provider = new SnowflakeCortexProvider('claude-3-5-sonnet', {
         config: {
@@ -93,8 +96,8 @@ describe('Snowflake Cortex Provider', () => {
 
   describe('callApi', () => {
     beforeEach(() => {
-      process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER = 'myorg-myaccount';
-      process.env.SNOWFLAKE_API_KEY = 'test-key';
+      mockProcessEnv({ SNOWFLAKE_ACCOUNT_IDENTIFIER: 'myorg-myaccount' });
+      mockProcessEnv({ SNOWFLAKE_API_KEY: 'test-key' });
     });
 
     it('should call Snowflake Cortex API with correct endpoint', async () => {
@@ -144,10 +147,12 @@ describe('Snowflake Cortex Provider', () => {
           total: 10,
           prompt: 5,
           completion: 5,
+          numRequests: 1,
         },
         cached: false,
         cost: undefined,
         finishReason: 'stop',
+        latencyMs: undefined,
       });
     });
 
