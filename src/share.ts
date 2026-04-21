@@ -505,10 +505,10 @@ async function sendChunkedResults(
     }
 
     const error = e instanceof Error ? e : new Error(String(e));
-    logger.error(`Upload failed: ${error.message}`);
+    logger.error('[share] Upload failed', { evalId, error, url });
 
     if (evalId) {
-      logger.info(`Upload failed, rolling back...`);
+      logger.info('[share] Rolling back after failed upload', { evalId, url });
       await rollbackEval(url, evalId, headers);
     }
     return { evalId: null, error };
@@ -543,6 +543,14 @@ export function stripAuthFromUrl(urlString: string): string {
 }
 
 async function handleEmailCollection(evalRecord: Eval): Promise<void> {
+  // Skip email collection if author is already set
+  if (evalRecord.author) {
+    logger.debug(`[Share] Skipping email collection because author is already set`, {
+      evalId: evalRecord.id,
+    });
+    return;
+  }
+
   if (!process.stdout.isTTY || isCI() || getEnvBool('PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST')) {
     return;
   }

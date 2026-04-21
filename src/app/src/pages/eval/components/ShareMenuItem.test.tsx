@@ -1,8 +1,31 @@
+import type { MouseEvent, ReactNode } from 'react';
+
 import { callApi } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ShareMenuItem from './ShareMenuItem';
+
+interface DropdownMenuItemMockProps {
+  children: ReactNode;
+  disabled?: boolean;
+  onSelect?: (event: MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
+}
+
+interface ChildrenMockProps {
+  children: ReactNode;
+}
+
+const mockConstants = vi.hoisted(() => ({
+  IS_RUNNING_LOCALLY: true,
+}));
+
+vi.mock('@app/constants', () => ({
+  get IS_RUNNING_LOCALLY() {
+    return mockConstants.IS_RUNNING_LOCALLY;
+  },
+}));
 
 // Mock the API utility
 vi.mock('@app/utils/api', () => ({
@@ -11,7 +34,7 @@ vi.mock('@app/utils/api', () => ({
 
 // Mock the dropdown menu components to avoid context dependency
 vi.mock('@app/components/ui/dropdown-menu', () => ({
-  DropdownMenuItem: vi.fn(({ children, disabled, onSelect, className }) => (
+  DropdownMenuItem: ({ children, disabled, onSelect, className }: DropdownMenuItemMockProps) => (
     <button
       type="button"
       role="menuitem"
@@ -21,14 +44,16 @@ vi.mock('@app/components/ui/dropdown-menu', () => ({
     >
       {children}
     </button>
-  )),
+  ),
 }));
 
 // Mock the tooltip components
 vi.mock('@app/components/ui/tooltip', () => ({
-  Tooltip: vi.fn(({ children }) => <>{children}</>),
-  TooltipTrigger: vi.fn(({ children }) => <>{children}</>),
-  TooltipContent: vi.fn(({ children }) => <div data-testid="tooltip-content">{children}</div>),
+  Tooltip: ({ children }: ChildrenMockProps) => <>{children}</>,
+  TooltipTrigger: ({ children }: ChildrenMockProps) => <>{children}</>,
+  TooltipContent: ({ children }: ChildrenMockProps) => (
+    <div data-testid="tooltip-content">{children}</div>
+  ),
 }));
 
 describe('ShareMenuItem', () => {
@@ -36,16 +61,15 @@ describe('ShareMenuItem', () => {
   const mockOnClick = vi.fn();
 
   beforeEach(() => {
+    mockConstants.IS_RUNNING_LOCALLY = true;
     vi.clearAllMocks();
   });
 
-  describe('when IS_RUNNING_LOCALLY is true', () => {
-    beforeEach(() => {
-      vi.doMock('@app/constants', () => ({
-        IS_RUNNING_LOCALLY: true,
-      }));
-    });
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
 
+  describe('when IS_RUNNING_LOCALLY is true', () => {
     it('shows disabled menu item while checking sharing status', async () => {
       // Never resolves to keep in loading state
       mockCallApi.mockImplementation(() => new Promise(() => {}));
@@ -161,6 +185,23 @@ describe('ShareMenuItem', () => {
       expect(mockOnClick).toHaveBeenCalledTimes(1);
     });
 
+    it('shows loading state while sharing is in progress', async () => {
+      mockCallApi.mockResolvedValue(
+        Response.json({
+          domain: 'localhost:3000',
+          isCloudEnabled: true,
+          sharingEnabled: true,
+        }),
+      );
+
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} loading />);
+
+      await waitFor(() => {
+        const menuItem = screen.getByRole('menuitem', { name: /share/i });
+        expect(menuItem).toBeDisabled();
+      });
+    });
+
     it('does not call onClick when menu item is disabled', async () => {
       mockCallApi.mockResolvedValue(
         Response.json({
@@ -204,25 +245,33 @@ describe('ShareMenuItem', () => {
         expect(mockCallApi).toHaveBeenCalledWith('/results/share/check-domain?id=eval-2');
       });
     });
+
+    it('encodes eval id when checking sharing status', async () => {
+      mockCallApi.mockResolvedValue(
+        Response.json({
+          domain: 'localhost:3000',
+          isCloudEnabled: true,
+          sharingEnabled: true,
+        }),
+      );
+
+      render(<ShareMenuItem evalId="eval/id with space" onClick={mockOnClick} />);
+
+      await waitFor(() => {
+        expect(mockCallApi).toHaveBeenCalledWith(
+          '/results/share/check-domain?id=eval%2Fid%20with%20space',
+        );
+      });
+    });
   });
 
   describe('when IS_RUNNING_LOCALLY is false', () => {
     beforeEach(() => {
-      vi.doMock('@app/constants', () => ({
-        IS_RUNNING_LOCALLY: false,
-      }));
+      mockConstants.IS_RUNNING_LOCALLY = false;
     });
 
     it('enables sharing without API check for non-local instances', async () => {
-      // Import fresh module with mocked constant
-      vi.resetModules();
-      vi.doMock('@app/constants', () => ({
-        IS_RUNNING_LOCALLY: false,
-      }));
-
-      const { default: ShareMenuItemNonLocal } = await import('./ShareMenuItem');
-
-      render(<ShareMenuItemNonLocal evalId="test-eval-id" onClick={mockOnClick} />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });
@@ -234,14 +283,7 @@ describe('ShareMenuItem', () => {
     });
 
     it('calls onClick when clicking share button on non-local instances', async () => {
-      vi.resetModules();
-      vi.doMock('@app/constants', () => ({
-        IS_RUNNING_LOCALLY: false,
-      }));
-
-      const { default: ShareMenuItemNonLocal } = await import('./ShareMenuItem');
-
-      render(<ShareMenuItemNonLocal evalId="test-eval-id" onClick={mockOnClick} />);
+      render(<ShareMenuItem evalId="test-eval-id" onClick={mockOnClick} />);
 
       await waitFor(() => {
         const menuItem = screen.getByRole('menuitem', { name: /share/i });

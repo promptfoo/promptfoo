@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
@@ -22,6 +23,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
+import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -33,6 +35,7 @@ import {
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -326,6 +329,12 @@ export async function runRedteamConversation({
         injectVar,
         perTurnLayers,
         Strategies,
+        {
+          evaluationId: context?.evaluationId,
+          testCaseId: test?.metadata?.testCaseId as string | undefined,
+          purpose: test?.metadata?.purpose as string | undefined,
+          goal: test?.metadata?.goal as string | undefined,
+        },
       );
 
       if (lastTransformResult.error) {
@@ -467,20 +476,88 @@ export async function runRedteamConversation({
         const graderTraceSummary = tracingOptions.includeInGrading
           ? computedTraceSummary
           : undefined;
+
+        // Build grading context with exfil tracking data
+        let gradingContext:
+          | {
+              traceContext?: TraceContextData | null;
+              traceSummary?: string;
+              wasExfiltrated?: boolean;
+              exfilCount?: number;
+              exfilRecords?: Array<{
+                timestamp: string;
+                ip: string;
+                userAgent: string;
+                queryParams: Record<string, string>;
+              }>;
+            }
+          | undefined;
+
+        // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
+        // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
+        // (set by indirect-web-pwn strategy during applyRuntimeTransforms)
+        const webPageUuid = lastTransformResult?.metadata?.webPageUuid as string | undefined;
+        if (webPageUuid) {
+          // evalId: context.evaluationId is primary, extract from webPageUrl as fallback
+          const webPageUrl = lastTransformResult?.metadata?.webPageUrl as string | undefined;
+          const evalId =
+            context?.evaluationId ??
+            (webPageUrl?.match(/\/dynamic-pages\/([^/]+)\//)?.[1] as string | undefined);
+
+          logger.debug('[Iterative] Fetching exfil tracking from server API', {
+            webPageUuid,
+            evalId,
+            source: 'lastTransformResult.metadata',
+          });
+
+          try {
+            const exfilData = await checkExfilTracking(webPageUuid, evalId);
+            if (exfilData) {
+              gradingContext = {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext, traceSummary: graderTraceSummary }
+                  : {}),
+                wasExfiltrated: exfilData.wasExfiltrated,
+                exfilCount: exfilData.exfilCount,
+                exfilRecords: exfilData.exfilRecords,
+              };
+            }
+          } catch (error) {
+            logger.warn('[Iterative] Failed to fetch exfil tracking from server', {
+              error,
+              webPageUuid,
+            });
+          }
+        }
+
+        // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
+        if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+          logger.debug('[Iterative] Using exfil data from provider response metadata (fallback)');
+          gradingContext = {
+            ...(tracingOptions.includeInGrading
+              ? { traceContext, traceSummary: graderTraceSummary }
+              : {}),
+            wasExfiltrated: targetResponse.metadata.wasExfiltrated as boolean,
+            exfilCount: (targetResponse.metadata.exfilCount as number) ?? 0,
+            // Note: Full exfilRecords with all fields come from server API, not provider metadata
+            exfilRecords: [],
+          };
+        }
+
+        // Fallback to just tracing context if no exfil data found
+        if (!gradingContext && tracingOptions.includeInGrading) {
+          gradingContext = { traceContext, traceSummary: graderTraceSummary };
+        }
+
         const { grade, rubric } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
           iterationTest,
           gradingProvider,
-          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          getGraderAssertionValue(assertToUse),
           additionalRubric,
           undefined,
-          tracingOptions.includeInGrading
-            ? {
-                traceContext,
-                traceSummary: graderTraceSummary,
-              }
-            : undefined,
+          gradingContext,
         );
         storedGraderResult = {
           ...grade,
@@ -532,7 +609,7 @@ export async function runRedteamConversation({
       continue;
     }
 
-    let currentScore = 1;
+    let currentScore: number;
     let previousScore = bestResponse ? highestScore : 0;
     try {
       const parsed =
@@ -705,8 +782,12 @@ class RedteamIterativeProvider implements ApiProvider {
     this.injectVar = config.injectVar;
     this.inputs = config.inputs as Record<string, string> | undefined;
 
-    this.numIterations =
+    const configuredIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    this.numIterations = isLoggedIntoCloud()
+      ? configuredIterations
+      : Math.min(configuredIterations, 10);
+
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );

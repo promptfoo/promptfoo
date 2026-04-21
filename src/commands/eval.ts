@@ -11,7 +11,11 @@ import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
-import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  getAuthor,
+  promptForEmailUnverified,
+} from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -24,18 +28,22 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { checkCloudPermissions, getOrgContext } from '../util/cloud';
+import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
+import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { isUuid } from '../util/uuid';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
@@ -92,6 +100,40 @@ export async function doEval(
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
 
+  const configArgs = Array.isArray(cmdObj.config)
+    ? cmdObj.config
+    : typeof cmdObj.config === 'string'
+      ? [cmdObj.config]
+      : [];
+  const uuidConfigArgs = configArgs.filter((configArg) => isUuid(configArg));
+
+  if (configArgs.length > 1 && uuidConfigArgs.length > 0) {
+    throw new Error(
+      'Cloud config UUID mode supports exactly one -c value. Use: promptfoo eval -c <cloud-config-uuid>',
+    );
+  }
+
+  if (configArgs.length === 1 && uuidConfigArgs.length === 1) {
+    const cloudConfigId = uuidConfigArgs[0];
+    if (cmdObj.watch) {
+      throw new Error(
+        '--watch is not supported when using a cloud config UUID with -c. Use a local config file path for watch mode.',
+      );
+    }
+
+    try {
+      defaultConfig = await getEvalConfigFromCloud(cloudConfigId);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to load cloud eval config "${cloudConfigId}". ${reason}. Cloud UUID inputs do not fall back to local file paths. Check authentication and that the UUID exists.`,
+      );
+    }
+
+    cmdObj.config = undefined;
+    defaultConfigPath = undefined;
+  }
+
   const runEvaluation = async (initialization?: boolean) => {
     const startTime = Date.now();
     telemetry.record('command_used', {
@@ -124,7 +166,9 @@ export async function doEval(
             cmdObj.config.push(newConfigPath);
             defaultConfig = { ...defaultConfig, ...dirConfig };
           } else {
-            logger.warn(`No configuration file found in directory: ${configPath}`);
+            logger.warn(
+              `No configuration file found in directory: ${configPath}. Looked for promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(',')}}. Run "${promptfooCommand('init')}" or pass --config path/to/promptfooconfig.yaml.`,
+            );
           }
         }
       }
@@ -262,24 +306,12 @@ export async function doEval(
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
-    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath);
     }
 
-    // Check if config has redteam section but no test cases
-    if (
-      config.redteam &&
-      (!testSuite.tests || testSuite.tests.length === 0) &&
-      (!testSuite.scenarios || testSuite.scenarios.length === 0)
-    ) {
-      logger.warn(
-        chalk.yellow(dedent`
-        Warning: Config file has a redteam section but no test cases.
-        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
-        `),
-      );
-    }
+    warnIfRedteamConfigHasNoTests(config, testSuite);
 
     // TODO(faizan): Crazy condition to see when we run the example redteam config.
     // Remove this once we have a better way to track this.
@@ -337,7 +369,7 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
-    if (cache === false || repeat > 1) {
+    if (cache === false) {
       logger.info('Cache is disabled.');
       disableCache();
     }
@@ -403,6 +435,23 @@ export async function doEval(
       );
     }
 
+    // Check for missing API keys after provider filtering
+    const missingApiKeys = checkProviderApiKeys(testSuite.providers);
+
+    if (missingApiKeys.size > 0) {
+      for (const [envVar, providerIds] of missingApiKeys) {
+        logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerIds.join(', ')})`));
+      }
+      logger.error('');
+      logger.error(`To fix, set the environment variable or use ${chalk.bold('--env-file')}:`);
+      for (const envVar of missingApiKeys.keys()) {
+        logger.error(`    export ${envVar}=your-api-key-here`);
+      }
+      logger.error('');
+      process.exitCode = 1;
+      return new Eval({}, { persisted: false });
+    }
+
     await checkCloudPermissions(config as UnifiedConfig);
 
     const options: EvaluateOptions = {
@@ -410,11 +459,11 @@ export async function doEval(
       showProgressBar:
         getLogLevel() === 'debug'
           ? false
-          : cmdObj.progressBar !== undefined
-            ? cmdObj.progressBar !== false
-            : evaluateOptions.showProgressBar !== undefined
-              ? evaluateOptions.showProgressBar
-              : true,
+          : cmdObj.progressBar === undefined
+            ? evaluateOptions.showProgressBar === undefined
+              ? true
+              : evaluateOptions.showProgressBar
+            : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
@@ -476,11 +525,12 @@ export async function doEval(
     }
 
     // Create or load eval record
+    const author = getAuthor();
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
-        : new Eval(config, { runtimeOptions: options });
+        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
+        : new Eval(config, { author, runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();
@@ -673,6 +723,9 @@ export async function doEval(
     const duration = Math.round((Date.now() - startTime) / 1000);
     const tracker = TokenUsageTracker.getInstance();
 
+    // Check if scan was aborted due to target error (efficient DB query, not loading all results)
+    const targetErrorStatus = await evalRecord.findTargetErrorStatus();
+
     // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
       evalId: evalRecord.id,
@@ -690,6 +743,7 @@ export async function doEval(
       duration,
       maxConcurrency,
       tracker,
+      targetErrorStatus,
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't
@@ -777,7 +831,11 @@ export async function doEval(
       if (initialization) {
         const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
         if (!configPaths.length) {
-          logger.error('Could not locate config file(s) to watch');
+          logger.error(
+            `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+              ',',
+            )}}.`,
+          );
           process.exitCode = 1;
           return ret;
         }
@@ -897,7 +955,7 @@ export function evalCommand(
     // Core configuration
     .option(
       '-c, --config <paths...>',
-      'Path to configuration file. Automatically loads promptfooconfig.yaml',
+      'Path to configuration file or cloud config UUID. Automatically loads promptfooconfig.yaml',
     )
 
     // Input sources
@@ -962,6 +1020,10 @@ export function evalCommand(
     .option(
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
+    )
+    .option(
+      '--filter-prompts <pattern>',
+      'Only run tests with prompts whose id or label matches the regex pattern',
     )
     .option(
       '--filter-providers, --filter-targets <providers>',
@@ -1049,7 +1111,9 @@ export function evalCommand(
           evalCmd.help();
           return;
         }
-        logger.warn(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+        logger.error(`Unknown command: ${command.args[0]}. Did you mean -c ${command.args[0]}?`);
+        process.exitCode = 1;
+        return;
       }
 
       if (validatedOpts.help) {

@@ -38,6 +38,7 @@ import {
 import { fetchWithProxy } from '../util/fetch/index';
 import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
+import { csrfProtection } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
@@ -125,6 +126,7 @@ export function createApp() {
   const staticDir = findStaticDir();
 
   app.use(cors());
+  app.use(csrfProtection);
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
@@ -248,9 +250,7 @@ export function createApp() {
               : `Cloud API error: ${response.statusText}`;
         }
       } catch (error) {
-        logger.debug(
-          `Failed to validate cloud auth: ${error instanceof Error ? error.message : error}`,
-        );
+        logger.debug('[share check-domain] Failed to validate cloud auth', { error });
         sharingEnabled = false;
         authError = 'Could not connect to cloud service. Please check your network connection.';
       }
@@ -277,9 +277,8 @@ export function createApp() {
       logger.debug(`Generated share URL for eval ${id}: ${stripAuthFromUrl(url || '')}`);
       res.json({ url });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`Failed to generate share URL for eval ${id}: ${errorMessage}`);
-      res.status(500).json({ error: `Failed to generate share URL: ${errorMessage}` });
+      logger.error('[share] Failed to generate share URL', { evalId: id, error });
+      res.status(500).json({ error: 'Failed to generate share URL' });
     }
   });
 
@@ -366,7 +365,7 @@ export async function startServer(
         logger.debug(
           `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
         );
-        io.emit('update', updatedEval);
+        io.emit('update', { evalId: updatedEval?.id });
         allPrompts = null;
       }
     };
@@ -375,7 +374,8 @@ export async function startServer(
   });
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await Eval.latest());
+    const latestEval = await Eval.latest();
+    socket.emit('init', latestEval ? { evalId: latestEval.id } : null);
   });
 
   // Return a Promise that only resolves when the server shuts down

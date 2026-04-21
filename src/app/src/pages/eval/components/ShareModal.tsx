@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import {
@@ -11,22 +11,18 @@ import {
 } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';
 import { Spinner } from '@app/components/ui/spinner';
-import { IS_RUNNING_LOCALLY } from '@app/constants';
-import { EVAL_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import { Check, Copy } from 'lucide-react';
+import logger from '../../../../../logger';
 
-interface ShareDialogProps {
+interface ShareModalProps {
   open: boolean;
   onClose: () => void;
   evalId: string;
+  onShare: (id: string) => Promise<string>;
 }
 
-/**
- * Dialog for sharing an evaluation.
- * Handles the share URL generation internally.
- */
-export function ShareDialog({ open, onClose, evalId }: ShareDialogProps) {
+const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [copied, setCopied] = useState(false);
   const [showNeedsSignup, setShowNeedsSignup] = useState(false);
@@ -43,41 +39,19 @@ export function ShareDialog({ open, onClose, evalId }: ShareDialogProps) {
     setError(null);
   }, [evalId]);
 
-  // Generate the share URL
-  const generateShareUrl = useCallback(async (id: string): Promise<string> => {
-    if (!IS_RUNNING_LOCALLY) {
-      // For non-local instances, include base path in the URL
-      const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-      return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
-    }
-
-    const response = await callApi('/results/share', {
-      method: 'POST',
-      body: JSON.stringify({ id }),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to generate share URL');
-    }
-    return data.url;
-  }, []);
-
   useEffect(() => {
     const handleShare = async () => {
-      if (!open || !evalId || shareUrl) {
+      if (!open || !evalId || shareUrl || error) {
         return;
       }
 
       try {
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
+        const response = await callApi(
+          `/results/share/check-domain?id=${encodeURIComponent(evalId)}`,
+        );
         const data = (await response.json()) as {
           domain: string;
           isCloudEnabled: boolean;
-          sharingEnabled: boolean;
-          authError?: string;
           error?: string;
         };
 
@@ -88,32 +62,28 @@ export function ShareDialog({ open, onClose, evalId }: ShareDialogProps) {
             return;
           }
 
-          // If it's not a public domain or we already have a URL, no need to generate
-          if (!shareUrl && !error) {
-            setIsLoading(true);
-            try {
-              const url = await generateShareUrl(evalId);
-              setShareUrl(url);
-            } catch (err) {
-              console.error('Failed to generate share URL:', err);
-              const errorMessage =
-                err instanceof Error ? err.message : 'Failed to generate share URL';
-              setError(errorMessage);
-            } finally {
-              setIsLoading(false);
-            }
+          // Sharing is allowed, so generate the share URL.
+          setIsLoading(true);
+          try {
+            const url = await onShare(evalId);
+            setShareUrl(url);
+          } catch (error) {
+            logger.error('Failed to generate share URL', { error, evalId });
+            setError(error instanceof Error ? error.message : 'Failed to generate share URL');
+          } finally {
+            setIsLoading(false);
           }
         } else {
           setError(data.error || 'Failed to check share domain');
         }
       } catch (error) {
-        console.error('Failed to check share domain:', error);
+        logger.error('Failed to check share domain', { error, evalId });
         setError('Failed to check share domain');
       }
     };
 
     handleShare();
-  }, [open, evalId, shareUrl, error, generateShareUrl]);
+  }, [open, evalId, shareUrl, error, onShare]);
 
   const handleCopyClick = () => {
     if (inputRef.current) {
@@ -127,6 +97,8 @@ export function ShareDialog({ open, onClose, evalId }: ShareDialogProps) {
     onClose();
     setCopied(false);
     setShareUrl('');
+    setShowNeedsSignup(false);
+    setIsLoading(false);
     setError(null);
   };
 
@@ -224,7 +196,6 @@ export function ShareDialog({ open, onClose, evalId }: ShareDialogProps) {
       </DialogContent>
     </Dialog>
   );
-}
+};
 
-// Keep default export for backward compatibility
-export default ShareDialog;
+export default ShareModal;

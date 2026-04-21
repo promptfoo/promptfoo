@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { DropdownMenuItem } from '@app/components/ui/dropdown-menu';
+import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { callApi } from '@app/utils/api';
@@ -9,13 +10,14 @@ import { Share } from 'lucide-react';
 interface ShareMenuItemProps {
   evalId: string;
   onClick: () => void;
+  loading?: boolean;
 }
 
 /**
  * Menu item that triggers the share dialog.
  * Checks if sharing is enabled and shows a disabled state with tooltip if not.
  */
-export default function ShareMenuItem({ evalId, onClick }: ShareMenuItemProps) {
+export default function ShareMenuItem({ evalId, onClick, loading = false }: ShareMenuItemProps) {
   const [sharingEnabled, setSharingEnabled] = React.useState<boolean | null>(null);
   const [sharingDisabledReason, setSharingDisabledReason] = React.useState<string | null>(null);
 
@@ -29,7 +31,9 @@ export default function ShareMenuItem({ evalId, onClick }: ShareMenuItemProps) {
 
     const checkSharingEnabled = async () => {
       try {
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
+        const response = await callApi(
+          `/results/share/check-domain?id=${encodeURIComponent(evalId)}`,
+        );
         if (response.ok) {
           const data = await response.json();
           setSharingEnabled(data.sharingEnabled ?? false);
@@ -71,8 +75,8 @@ export default function ShareMenuItem({ evalId, onClick }: ShareMenuItemProps) {
   }
 
   return (
-    <DropdownMenuItem onSelect={onClick} disabled={sharingEnabled === null}>
-      <Share className="size-4 mr-2" />
+    <DropdownMenuItem onSelect={onClick} disabled={sharingEnabled === null || loading}>
+      {loading ? <Spinner className="size-4 mr-2" /> : <Share className="size-4 mr-2" />}
       Share
     </DropdownMenuItem>
   );
