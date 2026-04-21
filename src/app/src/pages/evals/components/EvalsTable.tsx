@@ -321,7 +321,6 @@ export default function EvalsTable({
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
         initialSorting={[{ id: 'createdAt', desc: true }]}
-        initialPageSize={50}
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}
         toolbarActions={deleteButton}

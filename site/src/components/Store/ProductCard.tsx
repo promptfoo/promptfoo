@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
@@ -14,23 +14,13 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product, onClick }: ProductCardProps) {
-  const [imageLoaded, setImageLoaded] = useState(false);
+  const [primaryLoaded, setPrimaryLoaded] = useState(false);
+  const [hoverLoaded, setHoverLoaded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const prevSrcRef = useRef<string | undefined>(undefined);
 
   const primaryImage = product.images[0];
-  const hoverImage = product.images[1] || primaryImage;
-
-  const displayImage = isHovered && product.images.length > 1 ? hoverImage : primaryImage;
-
-  // Reset imageLoaded when the displayed image URL changes so the skeleton
-  // shows while the new image loads (e.g. on hover with a second image).
-  useEffect(() => {
-    if (displayImage?.url !== prevSrcRef.current) {
-      setImageLoaded(false);
-      prevSrcRef.current = displayImage?.url;
-    }
-  }, [displayImage?.url]);
+  const hoverImage = product.images[1];
+  const hasHoverImage = Boolean(hoverImage);
 
   const lowestPrice = useMemo(
     () =>
@@ -84,7 +74,7 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           overflow: 'hidden',
         }}
       >
-        {!imageLoaded && (
+        {!primaryLoaded && (
           <Skeleton
             variant="rectangular"
             animation="wave"
@@ -96,19 +86,40 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
             }}
           />
         )}
+        {/* Primary image — always rendered */}
         <Box
           component="img"
-          src={displayImage?.url}
+          src={primaryImage?.url}
           alt={product.name}
-          onLoad={() => setImageLoaded(true)}
+          onLoad={() => setPrimaryLoaded(true)}
           sx={{
+            position: 'absolute',
+            inset: 0,
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            opacity: imageLoaded ? 1 : 0,
+            opacity: primaryLoaded && !(isHovered && hasHoverImage && hoverLoaded) ? 1 : 0,
             transition: 'opacity 0.3s ease-out',
           }}
         />
+        {/* Hover image — rendered once to preload, shown on hover */}
+        {hasHoverImage && (
+          <Box
+            component="img"
+            src={hoverImage.url}
+            alt={`${product.name} alternate view`}
+            onLoad={() => setHoverLoaded(true)}
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: isHovered && hoverLoaded ? 1 : 0,
+              transition: 'opacity 0.3s ease-out',
+            }}
+          />
+        )}
       </Box>
       <Box
         sx={{

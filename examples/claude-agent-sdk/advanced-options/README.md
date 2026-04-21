@@ -127,6 +127,7 @@ providers:
 | `sandbox`                            | object                       | Sandbox settings for command execution isolation |
 | `sandbox.enabled`                    | boolean                      | Enable sandboxed execution                       |
 | `sandbox.autoAllowBashIfSandboxed`   | boolean                      | Auto-allow bash when sandboxed                   |
+| `sandbox.failIfUnavailable`          | boolean                      | Fail closed if sandbox support is unavailable    |
 | `sandbox.network`                    | object                       | Network configuration for sandbox                |
 | `sandbox.network.allowedDomains`     | string[]                     | Domains allowed for network access               |
 | `sandbox.network.allowLocalBinding`  | boolean                      | Allow binding to localhost                       |

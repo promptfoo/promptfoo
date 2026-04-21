@@ -253,10 +253,10 @@ describe('FrameworkCard', () => {
       'harmful:privacy',
       'harmful:misinformation-disinformation',
     ];
-    const categoryStats = nonCompliantPlugins.reduce((acc, plugin) => {
+    const categoryStats = nonCompliantPlugins.reduce<CategoryStats>((acc, plugin) => {
       acc[plugin] = { pass: 0, total: 10, failCount: 10 };
       return acc;
-    }, {} as CategoryStats);
+    }, {});
 
     renderFrameworkCard({
       isCompliant: false,

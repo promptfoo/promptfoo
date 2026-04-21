@@ -196,10 +196,8 @@ export default function Review({
 
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
-  // Using "use no memo" - this effect intentionally runs once after hydration with limited deps
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    'use no memo';
     if (!_hasHydrated || hasAttemptedRecovery.current) {
       return;
     }
@@ -1051,6 +1049,7 @@ export default function Review({
               <div className="p-4 pt-0">
                 <RunOptionsContent
                   numTests={config.numTests}
+                  maxCharsPerMessage={config.maxCharsPerMessage}
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
                     delay: config.target.config.delay,

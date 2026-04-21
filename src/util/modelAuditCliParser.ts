@@ -34,6 +34,9 @@ export const ModelAuditCliOptionsSchema = z.object({
   dryRun: z.boolean().optional(),
   cache: z.boolean().optional(), // when false, adds --no-cache
   stream: z.boolean().optional(), // scan and delete files immediately
+  scanners: z.array(z.string()).optional(),
+  excludeScanner: z.array(z.string()).optional(),
+  listScanners: z.boolean().optional(),
 
   // Sharing options (promptfoo-only, not passed to modelaudit)
   share: z.boolean().optional(),
@@ -50,7 +53,7 @@ export const ValidatedModelAuditArgsSchema = z.object({
 export type ValidatedModelAuditArgs = z.infer<typeof ValidatedModelAuditArgsSchema>;
 
 /**
- * Valid ModelAudit CLI options as of version 0.2.5
+ * Valid ModelAudit CLI options as of version 0.2.37
  */
 export const VALID_MODELAUDIT_OPTIONS = new Set([
   '--format',
@@ -72,6 +75,9 @@ export const VALID_MODELAUDIT_OPTIONS = new Set([
   '--dry-run',
   '--no-cache',
   '--stream',
+  '--scanners',
+  '--exclude-scanner',
+  '--list-scanners',
 ]);
 
 /**
@@ -125,6 +131,9 @@ const CLI_ARG_MAP: Partial<
   dryRun: { flag: '--dry-run', type: 'boolean' },
   cache: { flag: '--no-cache', type: 'inverted-boolean' },
   stream: { flag: '--stream', type: 'boolean' },
+  scanners: { flag: '--scanners', type: 'array' },
+  excludeScanner: { flag: '--exclude-scanner', type: 'array' },
+  listScanners: { flag: '--list-scanners', type: 'boolean' },
 };
 
 /**

@@ -3,6 +3,7 @@ import cliState from '../src/cliState';
 import { updateSignalFile } from '../src/database/signal';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+import { createMockProvider } from './factories/provider';
 
 import type { ApiProvider, TestSuite } from '../src/types';
 
@@ -32,9 +33,8 @@ describe('evaluate SIGINT/abort handling', () => {
     let providerCallCount = 0;
 
     // Provider that aborts after first successful call
-    const testProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockImplementation(async () => {
+    const testProvider = createMockProvider({
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async () => {
         providerCallCount++;
         if (providerCallCount === 1) {
           // First call succeeds, then we trigger abort to simulate user SIGINT
@@ -48,7 +48,7 @@ describe('evaluate SIGINT/abort handling', () => {
         // Second call will see the abort
         throw new Error('Operation cancelled');
       }),
-    };
+    });
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
     const mockSetVars = vi.fn();
@@ -110,21 +110,41 @@ describe('evaluate SIGINT/abort handling', () => {
     // Both paths call updateSignalFile, just at different points.
     let longTimer: NodeJS.Timeout | null = null;
 
-    const slowProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('slow-provider'),
-      callApi: vi.fn().mockImplementation(() => {
-        // Long-running call that will be interrupted by timeout
-        return new Promise((resolve) => {
-          longTimer = setTimeout(() => {
-            resolve({
-              output: 'Slow response',
-              tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-            });
-          }, 5000); // 5 seconds - will be interrupted by 100ms timeout
-        });
-      }),
-      cleanup: vi.fn(),
-    };
+    const slowProvider = createMockProvider({
+      id: 'slow-provider',
+      cleanup: true,
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockImplementation((_prompt, _context, callApiOptions) => {
+          // Long-running call that will be interrupted by timeout
+          return new Promise((resolve, reject) => {
+            const abortSignal = callApiOptions?.abortSignal;
+            const onAbort = () => {
+              if (longTimer) {
+                clearTimeout(longTimer);
+                longTimer = null;
+              }
+              const abortError = new Error('Operation aborted');
+              abortError.name = 'AbortError';
+              reject(abortError);
+            };
+
+            if (abortSignal?.aborted) {
+              onAbort();
+              return;
+            }
+
+            abortSignal?.addEventListener('abort', onAbort, { once: true });
+            longTimer = setTimeout(() => {
+              abortSignal?.removeEventListener('abort', onAbort);
+              resolve({
+                output: 'Slow response',
+                tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+              });
+            }, 5000); // 5 seconds - will be interrupted by 100ms timeout
+          });
+        }),
+    });
 
     const mockAddResult = vi.fn().mockResolvedValue(undefined);
 
@@ -175,8 +195,9 @@ describe('evaluate SIGINT/abort handling', () => {
         }),
       );
 
-      // Provider cleanup should be called
-      expect(slowProvider.cleanup).toHaveBeenCalled();
+      // Timeout should abort the in-flight call without invoking provider-wide cleanup
+      expect(vi.mocked(slowProvider.callApi).mock.calls[0]?.[2]?.abortSignal?.aborted).toBe(true);
+      expect(slowProvider.cleanup).not.toHaveBeenCalled();
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
@@ -188,26 +209,27 @@ describe('evaluate SIGINT/abort handling', () => {
     const abortController = new AbortController();
     const resultsAdded: unknown[] = [];
 
-    const testProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockImplementation(async (_prompt, _context, opts) => {
-        // Check if already aborted
-        if (opts?.abortSignal?.aborted) {
-          throw new Error('Operation cancelled');
-        }
+    const testProvider = createMockProvider({
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockImplementation(async (_prompt, _context, opts) => {
+          // Check if already aborted
+          if (opts?.abortSignal?.aborted) {
+            throw new Error('Operation cancelled');
+          }
 
-        // Abort after returning first result
-        if (resultsAdded.length === 1) {
-          abortController.abort();
-          throw new Error('Operation cancelled');
-        }
+          // Abort after returning first result
+          if (resultsAdded.length === 1) {
+            abortController.abort();
+            throw new Error('Operation cancelled');
+          }
 
-        return {
-          output: `Response ${resultsAdded.length}`,
-          tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-        };
-      }),
-    };
+          return {
+            output: `Response ${resultsAdded.length}`,
+            tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+          };
+        }),
+    });
 
     const mockAddResult = vi.fn().mockImplementation(async (result: unknown) => {
       resultsAdded.push(result);
@@ -307,7 +329,7 @@ describe('evaluate SIGINT/abort handling', () => {
     const testSuite: TestSuite = {
       providers: [testProvider],
       prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
-      tests: [{}], // One test — already completed per mock
+      tests: [{}], // One test - already completed per mock
     };
 
     try {
@@ -322,7 +344,7 @@ describe('evaluate SIGINT/abort handling', () => {
       // Provider should NOT have been called (no work to do)
       expect(testProvider.callApi).not.toHaveBeenCalled();
 
-      // Finalization should still run — save() should be called
+      // Finalization should still run - save() should be called
       expect(mockSave).toHaveBeenCalled();
     } finally {
       cliState.resume = originalResume;

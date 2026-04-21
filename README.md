@@ -20,6 +20,8 @@
   <a href="https://discord.gg/promptfoo">Discord</a>
 </p>
 
+> Promptfoo is now part of OpenAI. Promptfoo remains open source and MIT licensed. Read the [company update](https://www.promptfoo.dev/blog/promptfoo-joining-openai/).
+
 ## Quick Start
 
 ```sh

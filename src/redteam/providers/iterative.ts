@@ -35,6 +35,7 @@ import {
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -553,7 +554,7 @@ export async function runRedteamConversation({
           targetResponse.output,
           iterationTest,
           gradingProvider,
-          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          getGraderAssertionValue(assertToUse),
           additionalRubric,
           undefined,
           gradingContext,
@@ -608,7 +609,7 @@ export async function runRedteamConversation({
       continue;
     }
 
-    let currentScore = 1;
+    let currentScore: number;
     let previousScore = bestResponse ? highestScore : 0;
     try {
       const parsed =

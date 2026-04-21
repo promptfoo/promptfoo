@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import dotenv from 'dotenv';
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { setupEnv } from '../../src/util/env';
+import { mockProcessEnv } from './utils';
 
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
@@ -21,7 +22,7 @@ describe('setupEnv', () => {
   beforeEach(() => {
     originalEnv = { ...process.env };
     // Ensure NODE_ENV is not set at the start of each test
-    delete process.env.NODE_ENV;
+    mockProcessEnv({ NODE_ENV: undefined });
     // Spy on dotenv.config to verify it's called with the right parameters
     dotenvConfigSpy = vi.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
     // Mock file existence check - default to true for backward compat with existing tests
@@ -29,7 +30,7 @@ describe('setupEnv', () => {
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     vi.resetAllMocks();
   });
 
@@ -58,14 +59,14 @@ describe('setupEnv', () => {
     dotenvConfigSpy.mockImplementation((options?: dotenv.DotenvConfigOptions) => {
       if (options?.path === '.env.production') {
         if (options.override) {
-          process.env.NODE_ENV = 'production';
+          mockProcessEnv({ NODE_ENV: 'production' });
         } else if (!process.env.NODE_ENV) {
-          process.env.NODE_ENV = 'production';
+          mockProcessEnv({ NODE_ENV: 'production' });
         }
       } else {
         // Default .env file
         if (!process.env.NODE_ENV) {
-          process.env.NODE_ENV = 'development';
+          mockProcessEnv({ NODE_ENV: 'development' });
         }
       }
       return { parsed: {} };
