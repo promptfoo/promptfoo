@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
-import Box from '@mui/material/Box';
-import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Card } from '@app/components/ui/card';
+import { Collapsible, CollapsibleContent } from '@app/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { TraceData, TraceSpan } from '@promptfoo/types';
 
 // Use TraceSpan from base types
@@ -21,20 +21,31 @@ interface ProcessedSpan extends SpanData {
   children: ProcessedSpan[];
 }
 
-const getSpanStatus = (statusCode?: number): { color: string; label: string } => {
+const getSpanStatus = (
+  statusCode?: number,
+): { bgClass: string; textClass: string; label: string } => {
   // From SpanStatusCode in @opentelemetry/api
   if (statusCode === 1) {
-    return { color: 'success', label: 'OK' };
+    return {
+      bgClass: 'bg-emerald-500',
+      textClass: 'text-emerald-600 dark:text-emerald-400',
+      label: 'OK',
+    };
   } else if (statusCode === 2) {
-    return { color: 'error', label: 'ERROR' };
+    return {
+      bgClass: 'bg-red-500',
+      textClass: 'text-red-600 dark:text-red-400',
+      label: 'ERROR',
+    };
   }
-  return { color: 'default', label: 'UNSET' };
+  return { bgClass: 'bg-primary', textClass: 'text-foreground', label: 'UNSET' };
 };
 
-const formatDuration = (microseconds: number): string => {
-  const milliseconds = microseconds / 1000;
+// Duration values are stored in milliseconds (both LocalSpanExporter and OTLPReceiver
+// convert to milliseconds before storing in the database)
+const formatDuration = (milliseconds: number): string => {
   if (milliseconds < 1) {
-    return `${Math.round(milliseconds)}ms`;
+    return `<1ms`;
   } else if (milliseconds < 1000) {
     return `${Math.round(milliseconds)}ms`;
   } else {
@@ -42,13 +53,26 @@ const formatDuration = (microseconds: number): string => {
   }
 };
 
-const formatTimestamp = (millis: number): string => {
-  const date = new Date(millis); // Timestamps are already in milliseconds
+// Timestamps are stored in milliseconds (Unix epoch ms)
+const formatTimestamp = (ms: number): string => {
+  const date = new Date(ms);
   return date.toISOString();
 };
 
 export default function TraceTimeline({ trace }: TraceTimelineProps) {
-  const theme = useTheme();
+  const [expandedSpans, setExpandedSpans] = useState<Set<string>>(new Set());
+
+  const toggleSpan = (spanId: string) => {
+    setExpandedSpans((prev) => {
+      const next = new Set(prev);
+      if (next.has(spanId)) {
+        next.delete(spanId);
+      } else {
+        next.add(spanId);
+      }
+      return next;
+    });
+  };
 
   const processedSpans = useMemo(() => {
     if (!trace.spans || trace.spans.length === 0) {
@@ -123,29 +147,26 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
 
   if (!trace.spans || trace.spans.length === 0) {
     return (
-      <Box sx={{ p: 2 }}>
-        <Typography variant="body2" color="text.secondary">
-          No trace data available
-        </Typography>
-      </Box>
+      <div className="p-2">
+        <p className="text-sm text-muted-foreground">No trace data available</p>
+      </div>
     );
   }
 
   const { spans, totalDuration } = processedSpans;
 
   return (
-    <Box pt={2}>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Trace ID: {trace.traceId}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Total Duration: {formatDuration(totalDuration * 1000)}{' '}
-        {/* Convert milliseconds to microseconds */}
-      </Typography>
+    <div className="pt-4">
+      <p className="text-sm text-muted-foreground mb-2">Trace ID: {trace.traceId}</p>
+      <p className="text-sm text-muted-foreground mb-6">
+        Total Duration: {formatDuration(totalDuration)}
+      </p>
 
-      <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
+      <Card className="p-4 overflow-auto">
         {spans.map((span, index) => {
           const status = getSpanStatus(span.statusCode);
+          const isExpanded = expandedSpans.has(span.spanId);
+          const hasAttributes = span.attributes && Object.keys(span.attributes).length > 0;
 
           // Original temporal timeline approach - both position AND width based on time
           const spanDurationPercent = totalDuration > 0 ? (span.duration / totalDuration) * 100 : 0;
@@ -153,123 +174,144 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
             totalDuration > 0 ? (span.relativeStart / totalDuration) * 100 : 0;
 
           return (
-            <Box
+            <Collapsible
               key={`${span.spanId}-${index}`}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                mb: 1,
-                minHeight: 40,
-                position: 'relative',
-              }}
+              open={isExpanded}
+              onOpenChange={() => toggleSpan(span.spanId)}
+              className="mb-2"
             >
-              {/* Span name with indentation */}
-              <Box
-                sx={{
-                  width: '30%',
-                  pr: 2,
-                  pl: span.depth * 2,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <Tooltip title={span.name}>
-                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                    {span.name}
-                  </Typography>
-                </Tooltip>
-              </Box>
-
-              {/* Timeline bar */}
-              <Box
-                sx={{
-                  flex: 1,
-                  position: 'relative',
-                  height: 24,
-                  backgroundColor: theme.palette.action.hover,
-                  borderRadius: 1,
-                }}
-              >
-                <Tooltip
-                  title={
-                    <Box>
-                      <Typography variant="caption">
-                        Duration: {formatDuration(span.duration * 1000)}
-                      </Typography>
-                      <br />
-                      <Typography variant="caption">
-                        Start: {formatTimestamp(span.startTime)}
-                      </Typography>
-                      {span.endTime && (
-                        <>
-                          <br />
-                          <Typography variant="caption">
-                            End: {formatTimestamp(span.endTime)}
-                          </Typography>
-                        </>
-                      )}
-                      {span.attributes && Object.keys(span.attributes).length > 0 && (
-                        <>
-                          <br />
-                          <Typography variant="caption">Attributes:</Typography>
-                          {Object.entries(span.attributes).map(([key, value]) => (
-                            <Typography
-                              key={key}
-                              variant="caption"
-                              sx={{ display: 'block', ml: 1 }}
-                            >
-                              {key}: {JSON.stringify(value)}
-                            </Typography>
-                          ))}
-                        </>
-                      )}
-                    </Box>
-                  }
+              <div className="flex items-center min-h-10 relative">
+                {/* Expand/collapse button */}
+                <button
+                  type="button"
+                  onClick={() => toggleSpan(span.spanId)}
+                  className={cn(
+                    'mr-1 p-1 rounded hover:bg-muted transition-colors',
+                    !hasAttributes && 'invisible',
+                  )}
                 >
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      left: `${spanStartPercent}%`,
-                      width: `${Math.max(spanDurationPercent, 0.5)}%`, // Minimum width for visibility
-                      height: '100%',
-                      backgroundColor:
-                        status.color === 'error'
-                          ? theme.palette.error.main
-                          : status.color === 'success'
-                            ? theme.palette.success.main
-                            : theme.palette.primary.main,
-                      borderRadius: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      px: 1,
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: theme.palette.getContrastText(
-                          status.color === 'error'
-                            ? theme.palette.error.main
-                            : status.color === 'success'
-                              ? theme.palette.success.main
-                              : theme.palette.primary.main,
-                        ),
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {formatDuration(span.duration * 1000)}
-                    </Typography>
-                  </Box>
-                </Tooltip>
-              </Box>
-            </Box>
+                  {isExpanded ? (
+                    <ChevronUp className="size-4" />
+                  ) : (
+                    <ChevronDown className="size-4" />
+                  )}
+                </button>
+
+                {/* Span name with indentation */}
+                <div
+                  className="w-[28%] pr-4 overflow-hidden text-ellipsis whitespace-nowrap"
+                  style={{ paddingLeft: span.depth * 16 }}
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-sm font-mono">{span.name}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>{span.name}</TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Timeline bar */}
+                <div className="flex-1 relative h-6 bg-muted/50 rounded">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div
+                        className={cn(
+                          'absolute h-full rounded flex items-center px-2 overflow-hidden',
+                          hasAttributes && 'cursor-pointer',
+                          status.bgClass,
+                        )}
+                        style={{
+                          left: `${spanStartPercent}%`,
+                          width: `${Math.max(spanDurationPercent, 0.5)}%`,
+                        }}
+                        onClick={() => hasAttributes && toggleSpan(span.spanId)}
+                      >
+                        <span className="text-xs text-white whitespace-nowrap overflow-hidden text-ellipsis">
+                          {formatDuration(span.duration)}
+                        </span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="space-y-1">
+                        <p className="text-xs">Duration: {formatDuration(span.duration)}</p>
+                        <p className="text-xs">Start: {formatTimestamp(span.startTime)}</p>
+                        {span.endTime && (
+                          <p className="text-xs">End: {formatTimestamp(span.endTime)}</p>
+                        )}
+                        {hasAttributes && (
+                          <p className="text-xs italic">Click expand to view attributes</p>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
+
+              {/* Expandable attributes panel */}
+              <CollapsibleContent>
+                <div className="ml-10 mt-2 mb-4 p-4 bg-muted/50 rounded border-l-[3px] border-primary">
+                  <h4 className="text-sm font-semibold mb-2">Span Details</h4>
+
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Span ID</p>
+                      <p className="text-sm font-mono text-[11px]">{span.spanId}</p>
+                    </div>
+                    {span.parentSpanId && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Parent Span ID</p>
+                        <p className="text-sm font-mono text-[11px]">{span.parentSpanId}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-muted-foreground">Start Time</p>
+                      <p className="text-xs">{formatTimestamp(span.startTime)}</p>
+                    </div>
+                    {span.endTime && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">End Time</p>
+                        <p className="text-xs">{formatTimestamp(span.endTime)}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-muted-foreground">Duration</p>
+                      <p className="text-xs">{formatDuration(span.duration)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className={cn('text-xs', status.textClass)}>{status.label}</p>
+                    </div>
+                  </div>
+
+                  {hasAttributes && (
+                    <>
+                      <h4 className="text-sm font-semibold mb-2">Attributes</h4>
+                      <div className="bg-background rounded p-2 max-h-[300px] overflow-auto">
+                        {Object.entries(span.attributes!).map(([key, value], attrIndex, arr) => (
+                          <div
+                            key={key}
+                            className={cn(
+                              'flex gap-2 py-1',
+                              attrIndex < arr.length - 1 && 'border-b border-border',
+                            )}
+                          >
+                            <span className="font-mono text-[11px] text-primary min-w-[200px] break-all">
+                              {key}
+                            </span>
+                            <span className="font-mono text-[11px] break-all whitespace-pre-wrap">
+                              {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           );
         })}
-      </Paper>
-    </Box>
+      </Card>
+    </div>
   );
 }

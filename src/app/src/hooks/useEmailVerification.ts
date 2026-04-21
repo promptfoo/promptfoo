@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 
-import { UserEmailStatus, EmailValidationStatus } from '../../../types/email';
 import { callApi } from '@app/utils/api';
+import { EmailValidationStatus, UserEmailStatus } from '../../../types/email';
 
 interface EmailStatus {
   hasEmail: boolean;
@@ -56,6 +56,17 @@ export function useEmailVerification() {
             status,
             error:
               'You have exceeded the maximum cloud inference limit. Please contact inquiries@promptfoo.dev to upgrade your account.',
+          };
+        }
+
+        if (status.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+          return {
+            canProceed: false,
+            needsEmail: false,
+            status,
+            error:
+              status.message ||
+              'Your email address is not verified. Check your inbox for a verification link, then try again.',
           };
         }
 

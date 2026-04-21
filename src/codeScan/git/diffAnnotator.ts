@@ -3,56 +3,57 @@
  *
  * Adds absolute line numbers to unified diff format for easier LLM processing.
  * This eliminates the need for LLMs to manually calculate line numbers from hunk headers.
+ *
+ * Also extracts valid line ranges for each file, which can be used to validate
+ * and clamp comment line numbers for GitHub PR reviews.
  */
 
+import { parseHunkHeader } from '../util/diffHunkParser';
+
+import type { LineRange } from '../util/diffLineRanges';
+
+export interface AnnotationResult {
+  annotatedDiff: string;
+  lineRanges: LineRange[];
+}
+
 /**
- * Annotate a single file unified diff patch with absolute line numbers.
- *
- * For each line that exists in the NEW file (context lines and added lines),
- * prepends the absolute line number in the format "L##: ".
- *
- * Removed lines (starting with "-") are not annotated since they don't exist in the new file.
- *
- * @param patch - Raw unified diff patch string from git diff
- * @returns Annotated patch with line numbers prepended to new file lines
- *
- * @example
- * Input:
- * ```
- * @@ -18,20 +20,64 @@
- *   context line
- * - removed line
- * + added line
- * ```
- *
- * Output:
- * ```
- * @@ -18,20 +20,64 @@
- * L20:   context line
- * -     removed line
- * L21: + added line
- * ```
+ * Annotate a unified diff patch with absolute line numbers and extract valid line ranges.
  */
-export function annotateSingleFileDiffWithLineNumbers(patch: string): string {
+export function annotateDiffWithLineRanges(patch: string): AnnotationResult {
   if (!patch || patch.trim() === '') {
-    return patch;
+    return { annotatedDiff: patch, lineRanges: [] };
   }
 
   const lines = patch.split('\n');
   const result: string[] = [];
+  const lineRanges: LineRange[] = [];
   let currentNewLine = 0;
   let inHunk = false;
+  let hunkStartLine = 0;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const isLastLine = i === lines.length - 1;
     // Check if this is a hunk header: @@ -start,count +start,count @@
-    const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    const hunkHeader = parseHunkHeader(line);
 
-    if (hunkMatch) {
+    if (hunkHeader) {
+      // Save the previous hunk's range if we have one
+      if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
+        lineRanges.push({
+          start: hunkStartLine,
+          end: currentNewLine - 1,
+        });
+      }
+
       // Extract the starting line number for the new file (right side)
-      currentNewLine = parseInt(hunkMatch[1], 10);
+      currentNewLine = hunkHeader.newStart;
       inHunk = true;
+
+      // Start tracking new hunk (unless it's a pure deletion with 0 new lines)
+      hunkStartLine = hunkHeader.newCount === 0 ? 0 : hunkHeader.newStart;
+
       // Hunk headers are not annotated
       result.push(line);
       continue;
@@ -90,5 +91,29 @@ export function annotateSingleFileDiffWithLineNumbers(patch: string): string {
     }
   }
 
-  return result.join('\n');
+  // Save the last hunk's range
+  if (hunkStartLine > 0 && currentNewLine > hunkStartLine) {
+    lineRanges.push({
+      start: hunkStartLine,
+      end: currentNewLine - 1,
+    });
+  }
+
+  return {
+    annotatedDiff: result.join('\n'),
+    lineRanges,
+  };
+}
+
+/**
+ * Annotate a single file unified diff patch with absolute line numbers.
+ *
+ * This is a convenience wrapper around annotateDiffWithLineRanges that
+ * returns only the annotated diff string.
+ *
+ * @param patch - Raw unified diff patch string from git diff
+ * @returns Annotated patch with line numbers prepended to new file lines
+ */
+export function annotateSingleFileDiffWithLineNumbers(patch: string): string {
+  return annotateDiffWithLineRanges(patch).annotatedDiff;
 }

@@ -1,7 +1,7 @@
-import { vi } from 'vitest';
-import type { AssertionParams, GradingResult } from '../../src/types/index';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor';
+import type { AssertionParams, GradingResult } from '../../src/types/index';
 
 const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<GradingResult> => {
   const { assertion, renderedValue, outputString, inverse } = params;

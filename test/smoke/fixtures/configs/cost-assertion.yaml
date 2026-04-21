@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing cost assertion
+description: 'Smoke test - cost assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'Test prompt for cost check'
+
+tests:
+  - assert:
+      # Echo provider has 0 cost, should pass with any threshold
+      - type: cost
+        threshold: 1.0

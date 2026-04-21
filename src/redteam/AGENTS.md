@@ -41,18 +41,20 @@ strategies:
 
 One plugin can be tested with multiple strategies for comprehensive coverage.
 
-## Security Requirements
+## Generation and Strategy QA
 
-**Always sanitize when logging** (test content may be harmful/sensitive):
+When changing redteam generation, trace the full path before editing: `src/redteam/commands/generate.ts`, `src/redteam/index.ts`, `src/redteam/plugins/index.ts`, plugin `generateTests`, strategies, and iterative providers such as meta, hydra, and crescendo.
 
-```typescript
-logger.debug('[RedTeam] Test result', {
-  prompt: testCase.prompt, // May contain exploits
-  output: response.output, // May contain harmful content
-});
-```
+Evaluate generated cases for diversity, realism, coverage, and failure modes. For agent redteams, include coding-agent risks, connectors, sandboxing, traces, raw provider events, changed files, canaries, and sidecar evidence where available.
 
-Second parameter is auto-sanitized.
+## Public Documentation
+
+Redteam behavior is user-facing. When changing plugins, strategies, generated config,
+grading, or reports, update the matching pages under `site/docs/red-team/`.
+
+## Logging
+
+See `docs/logging.md` - especially important here since test content may contain harmful/sensitive data.
 
 ## Adding New Plugins
 
@@ -62,6 +64,18 @@ Second parameter is auto-sanitized.
 4. Add tests in `test/redteam/`
 
 See `src/redteam/plugins/pii.ts` for reference pattern.
+
+## Plugin/Grader Standards
+
+**CRITICAL:** All graders must use standardized tags per `.claude/skills/redteam-plugin-development/skill.md`
+
+Quick reference:
+
+- User prompt: `<UserQuery>{{prompt}}</UserQuery>` (NOT `<UserPrompt>`, `<UserInput>`, or `<prompt>`)
+- Purpose: `<purpose>{{purpose}}</purpose>`
+- Entities: `<AllowedEntities>` with `<Entity>` children
+
+See `src/redteam/plugins/harmful/graders.ts` for reference implementation.
 
 ## Risk Scoring
 

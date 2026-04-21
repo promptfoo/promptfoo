@@ -1,42 +1,65 @@
-import { MockedFunction, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CrescendoProvider } from '../../../src/redteam/providers/crescendo/index';
-import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
 import { CustomProvider } from '../../../src/redteam/providers/custom/index';
-import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import RedteamIterativeProvider from '../../../src/redteam/providers/iterative';
+import { createMockProvider } from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiFunction,
-  AtomicTestCase,
-} from '../../../src/types/index';
+import type { ApiProvider, AtomicTestCase, CallApiContextParams } from '../../../src/types/index';
 
-// Mock the shared getTargetResponse to test provider-specific logic
-vi.mock('../../../src/redteam/providers/shared', async () => {
-  const actual = await vi.importActual('../../../src/redteam/providers/shared');
+// Use vi.hoisted for proper mock isolation
+const mockGetProvider = vi.hoisted(() => vi.fn());
+const mockGetTargetResponse = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
+
+// Mock the shared module with hoisted functions
+vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => {
   return {
-    ...actual,
-    getTargetResponse: vi.fn(),
+    ...(await importOriginal()),
+    getTargetResponse: mockGetTargetResponse,
     redteamProviderManager: {
-      getProvider: vi.fn().mockResolvedValue({
-        id: () => 'mock-redteam-provider',
-        callApi: vi.fn().mockResolvedValue({
-          output: { generatedQuestion: 'mocked question', rationale: 'mocked rationale' },
-        }),
-        delay: 0,
-      }),
+      getProvider: mockGetProvider,
+      getGradingProvider: mockGetProvider,
     },
+    // Mock tryUnblocking to avoid network calls
+    tryUnblocking: vi.fn().mockResolvedValue({ success: false }),
   };
 });
 
-const mockGetTargetResponse = getTargetResponse as MockedFunction<typeof getTargetResponse>;
+// Mock graders to avoid dynamic import issues
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getGraderById: vi.fn().mockReturnValue(undefined),
+  };
+});
+
+// Mock remote generation to ensure consistent behavior
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+  };
+});
 
 describe('Multi-turn strategies empty response handling', () => {
-  const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
-  const createMockTargetProvider = (): ApiProvider => ({
-    id: () => 'mock-target',
-    callApi: vi.fn() as CallApiFunction,
-  });
+  let restoreEnv: () => void;
+  const createMockTargetProvider = () => createMockProvider({ id: 'mock-target' });
 
   const createTestContext = (targetProvider: ApiProvider): CallApiContextParams => ({
     originalProvider: targetProvider,
@@ -48,17 +71,62 @@ describe('Multi-turn strategies empty response handling', () => {
     } as AtomicTestCase,
   });
 
+  // Create a mock redteam provider that returns appropriate responses
+  const createMockRedteamProvider = () =>
+    createMockProvider({
+      id: 'mock-redteam-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
+        // Prefer prompt labels when available: they are explicit and avoid false matches
+        // against attack-generation system prompts that may also mention "conversation objective".
+        const label = context?.prompt?.label;
+
+        if (label === 'refusal') {
+          return {
+            output: JSON.stringify({
+              value: false, // not a refusal
+              metadata: 0,
+              rationale: 'Mock: not a refusal',
+            }),
+          };
+        }
+
+        if (label === 'eval') {
+          return {
+            output: JSON.stringify({
+              value: false,
+              metadata: 0,
+              rationale: 'Mock: objective not met',
+              description: 'Mock description',
+            }),
+          };
+        }
+
+        // Default: attack prompt generation / history prompts.
+        return {
+          output: JSON.stringify({
+            generatedQuestion: 'mocked question',
+            rationaleBehindJailbreak: 'mocked rationale',
+            lastResponseSummary: 'mocked summary',
+          }),
+        };
+      }),
+      delay: 0,
+    });
+
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.OPENAI_API_KEY = 'test-api-key';
+    // Reset hoisted mocks
+    mockGetProvider.mockReset();
+    mockGetTargetResponse.mockReset();
+
+    restoreEnv = mockProcessEnv({ OPENAI_API_KEY: 'test-api-key' });
+
+    // Set up the mock provider
+    mockGetProvider.mockResolvedValue(createMockRedteamProvider());
   });
 
   afterEach(() => {
-    if (originalOpenAiApiKey) {
-      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
-    } else {
-      delete process.env.OPENAI_API_KEY;
-    }
+    restoreEnv();
   });
 
   describe('Crescendo strategy', () => {
@@ -85,7 +153,7 @@ describe('Multi-turn strategies empty response handling', () => {
       expect(result.output).toBeDefined();
       expect(result.metadata).toBeDefined();
       expect(result.tokenUsage).toBeDefined();
-    }, 10000);
+    });
 
     it('handles other falsy values without throwing invariant error', async () => {
       const falsyValues = [0, false, null];
@@ -114,7 +182,30 @@ describe('Multi-turn strategies empty response handling', () => {
         expect(result.metadata).toBeDefined();
         expect(result.tokenUsage).toBeDefined();
       }
-    }, 10000);
+    });
+
+    it('stops early when target ends conversation', async () => {
+      mockGetTargetResponse.mockResolvedValue({
+        output: '',
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+        tokenUsage: { numRequests: 1 },
+      });
+
+      const mockTarget = createMockTargetProvider();
+      const strategy = new CrescendoProvider({
+        injectVar: 'prompt',
+        redteamProvider: 'openai:gpt-4',
+        maxTurns: 3,
+        maxBacktracks: 0,
+      });
+      const context = createTestContext(mockTarget);
+
+      const result = await strategy.callApi('test prompt', context);
+
+      expect(result.metadata?.stopReason).toBe('Target ended conversation');
+      expect(result.metadata?.crescendoRoundsCompleted).toBe(1);
+    });
   });
 
   describe('Custom strategy', () => {
@@ -141,7 +232,30 @@ describe('Multi-turn strategies empty response handling', () => {
       expect(result.output).toBeDefined();
       expect(result.metadata).toBeDefined();
       expect(result.tokenUsage).toBeDefined();
-    }, 10000);
+    });
+
+    it('stops early when target ends conversation', async () => {
+      mockGetTargetResponse.mockResolvedValue({
+        output: '',
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+        tokenUsage: { numRequests: 1 },
+      });
+
+      const mockTarget = createMockTargetProvider();
+      const strategy = new CustomProvider({
+        injectVar: 'prompt',
+        redteamProvider: 'openai:gpt-4',
+        maxTurns: 3,
+        strategyText: 'Test strategy for target-ended conversations',
+      });
+      const context = createTestContext(mockTarget);
+
+      const result = await strategy.callApi('test prompt', context);
+
+      expect(result.metadata?.stopReason).toBe('Target ended conversation');
+      expect(result.metadata?.customRoundsCompleted).toBe(1);
+    });
   });
 
   describe('Iterative strategy', () => {
@@ -167,7 +281,7 @@ describe('Multi-turn strategies empty response handling', () => {
       expect(result.output).toBeDefined();
       expect(result.metadata).toBeDefined();
       expect(result.tokenUsage).toBeDefined();
-    }, 10000);
+    });
   });
 
   // Test that our fix doesn't break when responses are truly malformed

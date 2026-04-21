@@ -1,5 +1,6 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockDb = { prepare: vi.fn() };
 const mockMigrate = vi.fn();
@@ -70,7 +71,7 @@ describe('migrate', () => {
 
       expect(mockMigrate).toHaveBeenCalledTimes(1);
       expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
-        migrationsFolder: path.join('/project/', 'drizzle'),
+        migrationsFolder: path.join('/project/', 'dist', 'drizzle'),
       });
     });
 

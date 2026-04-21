@@ -1,18 +1,14 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { validate as isUUID } from 'uuid';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import {
   isValidInlinePolicyId,
   isValidPolicyId,
   isValidReusablePolicyId,
 } from '../../../../src/redteam/plugins/policy/validators';
+import { isUuid } from '../../../../src/util/uuid';
 
 // Mock dependencies
-vi.mock('uuid', () => ({
-  validate: vi.fn(),
-}));
-
-vi.mock('../../../../src/util/createHash', () => ({
-  sha256: vi.fn(),
+vi.mock('../../../../src/util/uuid', () => ({
+  isUuid: vi.fn(),
 }));
 
 describe('Policy Validators', () => {
@@ -22,26 +18,26 @@ describe('Policy Validators', () => {
     });
 
     it('should return true for valid UUIDs', () => {
-      (isUUID as Mock).mockReturnValue(true);
+      (isUuid as Mock).mockReturnValue(true);
       expect(isValidReusablePolicyId('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
-      expect(isUUID).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000');
+      expect(isUuid).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000');
     });
 
     it('should return false for invalid UUIDs', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(isValidReusablePolicyId('not-a-uuid')).toBe(false);
       expect(isValidReusablePolicyId('abcdef123456')).toBe(false);
       expect(isValidReusablePolicyId('')).toBe(false);
     });
 
     it('should return false for inline policy IDs', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(isValidReusablePolicyId('abcdef123456')).toBe(false);
       expect(isValidReusablePolicyId('123456789abc')).toBe(false);
     });
 
     it('should handle various invalid formats', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(isValidReusablePolicyId('550e8400')).toBe(false);
       expect(isValidReusablePolicyId('550e8400-e29b-41d4')).toBe(false);
       expect(isValidReusablePolicyId('not-valid-at-all')).toBe(false);
@@ -95,20 +91,20 @@ describe('Policy Validators', () => {
     });
 
     it('should return true for valid reusable policy IDs (UUIDs)', () => {
-      (isUUID as Mock).mockReturnValue(true);
+      (isUuid as Mock).mockReturnValue(true);
       expect(isValidPolicyId('550e8400-e29b-41d4-a716-446655440000')).toBe(true);
       expect(isValidPolicyId('123e4567-e89b-12d3-a456-426614174000')).toBe(true);
     });
 
     it('should return true for valid inline policy IDs (12-char hex)', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(isValidPolicyId('abcdef123456')).toBe(true);
       expect(isValidPolicyId('123456789abc')).toBe(true);
       expect(isValidPolicyId('FEDCBA987654')).toBe(true);
     });
 
     it('should return false for invalid policy IDs', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(isValidPolicyId('not-a-valid-id')).toBe(false);
       expect(isValidPolicyId('abc')).toBe(false);
       expect(isValidPolicyId('')).toBe(false);
@@ -116,7 +112,7 @@ describe('Policy Validators', () => {
     });
 
     it('should return false for strings that are neither UUID nor 12-char hex', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(isValidPolicyId('abcdef12345')).toBe(false); // 11 chars
       expect(isValidPolicyId('abcdef1234567')).toBe(false); // 13 chars
       expect(isValidPolicyId('ghijkl123456')).toBe(false); // non-hex chars
@@ -124,7 +120,7 @@ describe('Policy Validators', () => {
     });
 
     it('should handle edge cases', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(isValidPolicyId('000000000000')).toBe(true); // All zeros is valid hex
       expect(isValidPolicyId('ffffffffffff')).toBe(true); // All f's is valid hex
       expect(isValidPolicyId('123')).toBe(false); // Too short
