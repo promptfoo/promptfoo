@@ -1,8 +1,8 @@
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
+import { sampleBalancedSafetyRecords } from '../shared/safetyBalance';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
-import { sampleBalancedSafetyRecords } from './safetyBalance';
 
 import type {
   ApiProvider,

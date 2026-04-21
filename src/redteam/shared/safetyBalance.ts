@@ -11,7 +11,6 @@ export function sampleBalancedSafetyRecords<T>(
 
   const unsafeTarget = Math.ceil(limit / 2);
   const safeTarget = limit - unsafeTarget;
-
   const selected = [
     ...sampleArray(safeRecords, safeTarget),
     ...sampleArray(unsafeRecords, unsafeTarget),

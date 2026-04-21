@@ -3,8 +3,8 @@ import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets'
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sampleArray } from '../../util/generation';
+import { sampleBalancedSafetyRecords } from '../shared/safetyBalance';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
-import { sampleBalancedSafetyRecords } from './safetyBalance';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
 

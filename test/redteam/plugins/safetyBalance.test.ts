@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sampleBalancedSafetyRecords } from '../../../src/redteam/plugins/safetyBalance';
+import { sampleBalancedSafetyRecords } from '../../../src/redteam/shared/safetyBalance';
 
 describe('sampleBalancedSafetyRecords', () => {
   it('returns a balanced mix with one extra unsafe record for odd limits', () => {
