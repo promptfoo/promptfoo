@@ -37,6 +37,7 @@ describe('ReplicateProvider', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     enableCache();
   });
 
@@ -430,8 +431,38 @@ describe('ReplicateProvider', () => {
     expect(cacheKeyA).not.toContain('Shared replicate prompt');
   });
 
+  it('should canonicalize config order when hashing cache keys', async () => {
+    mockedFetchWithCache.mockResolvedValue({
+      data: {
+        id: 'test-id',
+        status: 'succeeded',
+        output: 'canonical config response',
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    } as any;
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockResolvedValue(mockCache);
+
+    const providerA = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey, temperature: 0.1, top_p: 0.9 },
+    });
+    const providerB = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey, top_p: 0.9, temperature: 0.1 },
+    });
+
+    await providerA.callApi('Shared canonical prompt');
+    await providerB.callApi('Shared canonical prompt');
+
+    expect(mockCache.get.mock.calls[0][0]).toBe(mockCache.get.mock.calls[1][0]);
+  });
+
   it('should separate cache keys for env-backed generation defaults', async () => {
-    const originalTemperature = process.env.REPLICATE_TEMPERATURE;
     mockedFetchWithCache.mockResolvedValue({
       data: {
         id: 'test-id',
@@ -449,28 +480,20 @@ describe('ReplicateProvider', () => {
     vi.mocked(isCacheEnabled).mockReturnValue(true);
     vi.mocked(getCache).mockResolvedValue(mockCache);
 
-    try {
-      const provider = new ReplicateProvider('test-model', {
-        config: { apiKey: mockApiKey },
-      });
+    const provider = new ReplicateProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
 
-      process.env.REPLICATE_TEMPERATURE = '0.1';
-      await provider.callApi('Shared env prompt');
-      process.env.REPLICATE_TEMPERATURE = '0.9';
-      await provider.callApi('Shared env prompt');
+    vi.stubEnv('REPLICATE_TEMPERATURE', '0.1');
+    await provider.callApi('Shared env prompt');
+    vi.stubEnv('REPLICATE_TEMPERATURE', '0.9');
+    await provider.callApi('Shared env prompt');
 
-      const cacheKeyA = mockCache.get.mock.calls[0][0] as string;
-      const cacheKeyB = mockCache.get.mock.calls[1][0] as string;
-      expect(cacheKeyA).not.toBe(cacheKeyB);
-      expect(cacheKeyA).not.toContain('Shared env prompt');
-      expect(cacheKeyA).not.toContain(mockApiKey);
-    } finally {
-      if (originalTemperature === undefined) {
-        delete process.env.REPLICATE_TEMPERATURE;
-      } else {
-        process.env.REPLICATE_TEMPERATURE = originalTemperature;
-      }
-    }
+    const cacheKeyA = mockCache.get.mock.calls[0][0] as string;
+    const cacheKeyB = mockCache.get.mock.calls[1][0] as string;
+    expect(cacheKeyA).not.toBe(cacheKeyB);
+    expect(cacheKeyA).not.toContain('Shared env prompt');
+    expect(cacheKeyA).not.toContain(mockApiKey);
   });
 });
 

@@ -62,9 +62,32 @@ interface ReplicatePrediction {
 }
 
 const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
+
+function normalizeReplicateCacheValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeReplicateCacheValue);
+  }
+
+  if (value && typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return value;
+    }
+
+    return Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((normalized, key) => {
+        normalized[key] = normalizeReplicateCacheValue((value as Record<string, unknown>)[key]);
+        return normalized;
+      }, {});
+  }
+
+  return value;
+}
+
 function hashReplicateCacheValue(value: unknown) {
   return createHmac('sha256', REPLICATE_CACHE_KEY_HMAC_KEY)
-    .update(safeJsonStringify(value) ?? '')
+    .update(safeJsonStringify(normalizeReplicateCacheValue(value)) ?? '')
     .digest('hex');
 }
 
