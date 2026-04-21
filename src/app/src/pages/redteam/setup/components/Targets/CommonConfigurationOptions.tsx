@@ -12,7 +12,7 @@ import { cn } from '@app/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import ExtensionEditor from './ExtensionEditor';
 import InputsEditor from './InputsEditor';
-import type { ProviderOptions } from '@promptfoo/types';
+import type { Inputs, ProviderOptions } from '@promptfoo/types';
 
 interface CommonConfigurationOptionsProps {
   selectedTarget: ProviderOptions;
@@ -41,7 +41,7 @@ const CommonConfigurationOptions = ({
   onPromptsChange,
   hideTestGeneration = false,
 }: CommonConfigurationOptionsProps) => {
-  const inputs = (selectedTarget as { inputs?: Record<string, string> }).inputs;
+  const inputs = (selectedTarget as { inputs?: Inputs }).inputs;
   const hasInputs = inputs && Object.keys(inputs).length > 0;
   const hasInstructions = !!testGenerationInstructions?.trim();
   const [isTestGenExpanded, setIsTestGenExpanded] = useState(hasInputs || hasInstructions);
@@ -69,7 +69,7 @@ const CommonConfigurationOptions = ({
   );
 
   const handleInputsChange = React.useCallback(
-    (inputs: Record<string, string> | undefined) => {
+    (inputs: Inputs | undefined) => {
       updateCustomTarget('inputs', inputs);
 
       // Auto-generate prompts JSON template when inputs are configured

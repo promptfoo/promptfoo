@@ -1,10 +1,17 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { type Inputs } from '../types/shared';
 import { safeJsonStringify } from '../util/json';
 import { escapeRegExp } from '../util/text';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
+import {
+  type InputMaterializationContext,
+  type MaterializedInputVariablesResult,
+  materializeInputVariables,
+  materializeInputVariablesWithMetadata,
+} from './inputVariables';
 import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
 
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
@@ -56,7 +63,7 @@ export function extractAllPromptsFromTags(text: string): string[] {
  */
 export function extractVariablesFromJson(
   parsed: Record<string, unknown>,
-  inputs: Record<string, string>,
+  inputs: Inputs,
 ): Record<string, string> {
   const extractedVars: Record<string, string> = {};
   for (const key of Object.keys(inputs)) {
@@ -69,6 +76,25 @@ export function extractVariablesFromJson(
   return extractedVars;
 }
 
+export function extractMaterializedVariablesFromJson(
+  parsed: Record<string, unknown>,
+  inputs: Inputs,
+): Record<string, string> {
+  return materializeInputVariables(extractVariablesFromJson(parsed, inputs), inputs);
+}
+
+export async function extractMaterializedVariablesFromJsonWithMetadata(
+  parsed: Record<string, unknown>,
+  inputs: Inputs,
+  context: InputMaterializationContext = {},
+): Promise<MaterializedInputVariablesResult> {
+  return materializeInputVariablesWithMetadata(
+    extractVariablesFromJson(parsed, inputs),
+    inputs,
+    context,
+  );
+}
+
 /**
  * Extracts input variables from a prompt string for multi-input mode.
  * Handles JSON parsing and variable extraction in one step.
@@ -79,7 +105,7 @@ export function extractVariablesFromJson(
  */
 export function extractInputVarsFromPrompt(
   prompt: string,
-  inputs: Record<string, string> | undefined,
+  inputs: Inputs | undefined,
 ): Record<string, string> | undefined {
   if (!inputs || Object.keys(inputs).length === 0) {
     return undefined;

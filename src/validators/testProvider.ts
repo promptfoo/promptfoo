@@ -4,6 +4,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { HttpProviderConfig } from '../providers/http';
+import { createPlaceholderInputValue } from '../redteam/inputVariables';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { fetchWithProxy } from '../util/fetch/index';
@@ -17,6 +18,7 @@ import {
 
 import type { EvaluateOptions, TestSuite } from '../types/index';
 import type { ApiProvider, ProviderResponse } from '../types/providers';
+import type { Inputs } from '../types/shared';
 
 interface Result {
   response?: ProviderResponse;
@@ -68,7 +70,7 @@ export async function testProviderConnectivity({
   /** An optional prompt to test with */
   prompt?: string;
   /** Input variable definitions for multi-input configurations */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
 }): Promise<ProviderTestResult> {
   const vars: Record<string, string> = {};
 
@@ -82,9 +84,8 @@ export async function testProviderConnectivity({
   // Generate dummy values for each input variable defined in multi-input configuration
   // The inputs object has variable names as keys and descriptions as values
   if (inputs && typeof inputs === 'object') {
-    for (const [varName, _description] of Object.entries(inputs)) {
-      // Generate a placeholder test value for each variable
-      vars[varName] = `test_${varName}`;
+    for (const [varName, definition] of Object.entries(inputs)) {
+      vars[varName] = createPlaceholderInputValue(varName, definition);
     }
   }
 
@@ -438,7 +439,7 @@ export async function testProviderSession({
   /** Test options */
   options?: { skipConfigValidation?: boolean };
   /** Input variable definitions for multi-input configurations */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   /**
    * For multi-input configurations, specifies which variable to use for
    * the conversation prompts (e.g., 'user_message'). Other input variables get dummy test values.
@@ -463,16 +464,26 @@ export async function testProviderSession({
 
     const initialSessionId = effectiveSessionSource === 'server' ? undefined : crypto.randomUUID();
 
-    // Generate dummy values for each input variable defined in multi-input configuration
-    // If mainInputVariable is specified, that variable will use the actual conversation prompts
+    const materializeSessionPrompt = (prompt: string) => {
+      if (!mainInputVariable) {
+        return prompt;
+      }
+      const definition = inputs?.[mainInputVariable];
+      return definition
+        ? createPlaceholderInputValue(mainInputVariable, definition, prompt)
+        : prompt;
+    };
+
+    // Generate dummy values for each input variable defined in multi-input configuration.
+    // If mainInputVariable is specified, it is materialized from the actual conversation prompts.
     const inputVars: Record<string, string> = {};
     if (inputs && typeof inputs === 'object') {
-      for (const [varName, _description] of Object.entries(inputs)) {
+      for (const [varName, definition] of Object.entries(inputs)) {
         // Skip the main input variable - it will be set to the actual prompts
         if (varName === mainInputVariable) {
           continue;
         }
-        inputVars[varName] = `test_${varName}`;
+        inputVars[varName] = createPlaceholderInputValue(varName, definition);
       }
     }
 
@@ -490,9 +501,10 @@ export async function testProviderSession({
       vars: {
         ...(initialSessionId ? { sessionId: initialSessionId } : {}),
         ...inputVars,
-        // If mainInputVariable is specified, set it to the first prompt
-        // This allows multi-input configurations to use a custom variable for the conversation
-        ...(mainInputVariable ? { [mainInputVariable]: firstPrompt } : {}),
+        // This allows multi-input configurations to use a custom variable for the conversation.
+        ...(mainInputVariable
+          ? { [mainInputVariable]: materializeSessionPrompt(firstPrompt) }
+          : {}),
       },
       prompt: {
         raw: firstPrompt,
@@ -554,8 +566,9 @@ export async function testProviderSession({
       vars: {
         ...(extractedSessionId ? { sessionId: extractedSessionId } : {}),
         ...inputVars,
-        // If mainInputVariable is specified, set it to the second prompt
-        ...(mainInputVariable ? { [mainInputVariable]: secondPrompt } : {}),
+        ...(mainInputVariable
+          ? { [mainInputVariable]: materializeSessionPrompt(secondPrompt) }
+          : {}),
       },
       prompt: {
         raw: secondPrompt,
