@@ -122,6 +122,7 @@ describe('escapeDrawtextString', () => {
 describe('simpleVideo strategy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockWriteFileSync.mockReset();
     mockVideoGenerator.mockClear();
   });
 

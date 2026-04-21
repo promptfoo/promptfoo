@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -90,9 +91,11 @@ describe('AzureFoundryAgentProvider', () => {
   let mockGetAgent: ReturnType<typeof vi.fn>;
   let mockListAgents: ReturnType<typeof vi.fn>;
   let mockClient: any;
+  let restoreEnv: () => void;
 
   beforeEach(() => {
     vi.resetAllMocks();
+    restoreEnv = mockProcessEnv({ AZURE_AI_PROJECT_URL: undefined });
 
     mockResponsesCreate = vi.fn();
     mockGetAgent = vi.fn();
@@ -115,7 +118,7 @@ describe('AzureFoundryAgentProvider', () => {
   });
 
   afterEach(() => {
-    delete process.env.AZURE_AI_PROJECT_URL;
+    restoreEnv();
     vi.restoreAllMocks();
   });
 
@@ -138,13 +141,16 @@ describe('AzureFoundryAgentProvider', () => {
     });
 
     it('should accept projectUrl from AZURE_AI_PROJECT_URL', () => {
-      process.env.AZURE_AI_PROJECT_URL = projectUrl;
+      const restoreProjectUrl = mockProcessEnv({ AZURE_AI_PROJECT_URL: projectUrl });
+      try {
+        const provider = new AzureFoundryAgentProvider('weather-agent', {
+          config: {},
+        });
 
-      const provider = new AzureFoundryAgentProvider('weather-agent', {
-        config: {},
-      });
-
-      expect(provider).toBeDefined();
+        expect(provider).toBeDefined();
+      } finally {
+        restoreProjectUrl();
+      }
     });
   });
 

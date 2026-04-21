@@ -1,100 +1,58 @@
-/**
- * Config Generator Tests
- */
-
 import * as fs from 'fs';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { ZodError } from 'zod';
 import { generateConfigFile } from '../../code-scan-action/src/config';
 
 describe('generateConfigFile', () => {
+  const generatedPaths: string[] = [];
+
   afterEach(() => {
-    // Clean up any generated config files
-    vi.restoreAllMocks();
-  });
-
-  it('should generate config file with minimum severity', () => {
-    const configPath = generateConfigFile('high');
-
-    expect(configPath).toBeTruthy();
-    expect(configPath).toMatch(/code-scan-config-.*\.yaml$/);
-    expect(fs.existsSync(configPath)).toBe(true);
-
-    const content = fs.readFileSync(configPath, 'utf8');
-    expect(content).toContain('minimumSeverity: high');
-    expect(content).toContain('diffsOnly: false');
-
-    // Cleanup
-    fs.unlinkSync(configPath);
-  });
-
-  it('should handle different severity levels', () => {
-    const levels = ['low', 'medium', 'high', 'critical'];
-
-    for (const level of levels) {
-      const configPath = generateConfigFile(level);
-      const content = fs.readFileSync(configPath, 'utf8');
-
-      expect(content).toContain(`minimumSeverity: ${level}`);
-
-      // Cleanup
-      fs.unlinkSync(configPath);
+    for (const configPath of generatedPaths.splice(0)) {
+      if (fs.existsSync(configPath)) {
+        fs.unlinkSync(configPath);
+      }
     }
   });
 
-  it('should always enable full repo exploration (never diffs-only)', () => {
-    const configPath = generateConfigFile('medium');
-    const content = fs.readFileSync(configPath, 'utf8');
+  function readGeneratedConfig(minimumSeverity: string, guidance?: string): string {
+    const configPath = generateConfigFile(minimumSeverity, guidance);
+    generatedPaths.push(configPath);
+    return fs.readFileSync(configPath, 'utf8');
+  }
 
-    expect(content).toContain('diffsOnly: false');
-
-    // Cleanup
-    fs.unlinkSync(configPath);
+  it('writes a normalized config for full-repository scans', () => {
+    expect(readGeneratedConfig(' HIGH ')).toBe('minimumSeverity: high\ndiffsOnly: false\n');
   });
 
-  it('should normalize severity case (uppercase)', () => {
-    const configPath = generateConfigFile('HIGH');
-    const content = fs.readFileSync(configPath, 'utf8');
-
-    expect(content).toContain('minimumSeverity: high');
-
-    // Cleanup
-    fs.unlinkSync(configPath);
+  it('escapes single-line guidance as a YAML string', () => {
+    expect(readGeneratedConfig('medium', 'Review "auth" carefully')).toBe(
+      'minimumSeverity: medium\ndiffsOnly: false\nguidance: "Review \\"auth\\" carefully"\n',
+    );
   });
 
-  it('should normalize severity case (mixed case)', () => {
-    const configPath = generateConfigFile('CriTicAL');
-    const content = fs.readFileSync(configPath, 'utf8');
-
-    expect(content).toContain('minimumSeverity: critical');
-
-    // Cleanup
-    fs.unlinkSync(configPath);
+  it('writes multiline guidance as a YAML literal block', () => {
+    expect(readGeneratedConfig('critical', 'Line one\nLine two')).toBe(
+      'minimumSeverity: critical\ndiffsOnly: false\nguidance: |\n  Line one\n  Line two\n',
+    );
   });
 
-  it('should trim whitespace from severity', () => {
-    const configPath = generateConfigFile('  medium  ');
-    const content = fs.readFileSync(configPath, 'utf8');
+  it('rejects invalid severities', () => {
+    let thrown: unknown;
 
-    expect(content).toContain('minimumSeverity: medium');
+    try {
+      generateConfigFile('high!');
+    } catch (error) {
+      thrown = error;
+    }
 
-    // Cleanup
-    fs.unlinkSync(configPath);
-  });
+    expect(thrown).toBeInstanceOf(ZodError);
 
-  it('should throw error for invalid severity level', () => {
-    expect(() => generateConfigFile('invalid')).toThrow();
-  });
-
-  it('should throw error for empty severity', () => {
-    expect(() => generateConfigFile('')).toThrow();
-  });
-
-  it('should throw error for numeric severity', () => {
-    expect(() => generateConfigFile('123')).toThrow();
-  });
-
-  it('should throw error for severity with special characters', () => {
-    expect(() => generateConfigFile('high!')).toThrow();
+    const issue = (thrown as ZodError).issues[0];
+    expect(issue).toMatchObject({
+      code: 'invalid_value',
+      message: expect.stringContaining('Invalid option'),
+    });
+    expect(issue).toHaveProperty('values', ['critical', 'high', 'medium', 'low', 'none']);
   });
 });

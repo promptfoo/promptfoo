@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
@@ -10,12 +9,16 @@ import EvalResult from '../../models/evalResult';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
+import { sanitizeObject } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { sendError } from '../utils/errors';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
   generateEvalCsv,
+  getEvalTableOutputPromptLocationsBySize,
+  getEvalTablePromptStrippedPayload,
   mergeComparisonTables,
 } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
@@ -36,6 +39,86 @@ export const evalRouter = Router();
 
 // Running jobs
 export const evalJobs = new Map<string, Job>();
+
+function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
+  try {
+    res.json(responsePayload);
+  } catch (error) {
+    if (!(error instanceof RangeError)) {
+      throw error;
+    }
+
+    logger.warn('[GET /:id/table] Response too large, stripping per-cell prompts by size', {
+      evalId,
+    });
+
+    const promptLocations = getEvalTableOutputPromptLocationsBySize(responsePayload);
+    if (promptLocations.length === 0) {
+      logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
+        evalId,
+      });
+      res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
+      return;
+    }
+
+    const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
+      const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
+        responsePayload,
+        promptLocations,
+        promptCountToStrip,
+      );
+      try {
+        const responseBody = JSON.stringify(responseWithoutPrompts);
+        invariant(typeof responseBody === 'string', 'Eval table response must serialize to JSON');
+        return responseBody;
+      } catch (retryError) {
+        if (!(retryError instanceof RangeError)) {
+          throw retryError;
+        }
+        return null;
+      }
+    };
+
+    let lowerBound = 0;
+    let upperBound = 1;
+    let responseBody: string | null = null;
+
+    while (upperBound < promptLocations.length) {
+      responseBody = tryStringifyWithStrippedPrompts(upperBound);
+      if (responseBody) {
+        break;
+      }
+      lowerBound = upperBound;
+      upperBound *= 2;
+    }
+
+    if (!responseBody) {
+      upperBound = promptLocations.length;
+      responseBody = tryStringifyWithStrippedPrompts(upperBound);
+    }
+
+    if (responseBody) {
+      while (upperBound - lowerBound > 1) {
+        const midPoint = lowerBound + Math.floor((upperBound - lowerBound) / 2);
+        const midpointResponseBody = tryStringifyWithStrippedPrompts(midPoint);
+        if (midpointResponseBody) {
+          upperBound = midPoint;
+          responseBody = midpointResponseBody;
+        } else {
+          lowerBound = midPoint;
+        }
+      }
+
+      res.type('json').send(responseBody);
+      return;
+    }
+
+    logger.error('[GET /:id/table] Response still too large after stripping prompts', {
+      evalId,
+    });
+    res.status(413).json({ error: 'Eval too large to display. Try reducing the page size.' });
+  }
+}
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const result = EvalSchemas.CreateJob.Request.safeParse(req.body);
@@ -90,9 +173,10 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       console.log(`[${id}] Complete`);
     })
     .catch((error) => {
-      logger.error(dedent`Failed to eval tests:
-        Error: ${error}
-        Body: ${JSON.stringify(req.body, null, 2)}`);
+      logger.error('Failed to eval tests', {
+        error,
+        body: sanitizeObject(testSuite, { context: 'request body' }),
+      });
 
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
@@ -370,8 +454,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     }
   }
 
-  // Default response for table view
-  res.json({
+  const responsePayload = {
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
@@ -381,7 +464,9 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
-  } as EvalTableDTO);
+  } as EvalTableDTO;
+
+  sendEvalTableResponse(res, id, responsePayload);
 });
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
@@ -613,74 +698,85 @@ evalRouter.post(
       return;
     }
 
-    const { id } = paramsResult.data;
-    // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
-    const gradingResult = bodyResult.data as unknown as GradingResult;
-    const result = await EvalResult.findById(id);
-    invariant(result, 'Result not found');
-    const eval_ = await Eval.findById(result.evalId);
-    invariant(eval_, 'Eval not found');
+    try {
+      const { evalId, id } = paramsResult.data;
+      // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
+      const gradingResult = bodyResult.data as unknown as GradingResult;
+      const result = await EvalResult.findById(id);
+      if (!result || result.evalId !== evalId) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
 
-    // Capture the current state before we change it
-    const hasExistingManualOverride = Boolean(
-      result.gradingResult?.componentResults?.some(
-        (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-      ),
-    );
-    const successChanged = result.success !== gradingResult.pass;
-    const scoreChange = gradingResult.score - result.score;
+      const eval_ = await Eval.findById(evalId);
+      if (!eval_) {
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
 
-    // Update the result
-    result.gradingResult = gradingResult;
-    result.success = gradingResult.pass;
-    result.score = gradingResult.score;
-
-    // Update the prompt metrics
-    const prompt = eval_.prompts[result.promptIdx];
-    invariant(prompt, 'Prompt not found');
-    if (!prompt.metrics) {
-      logger.error(
-        `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
+      // Capture the current state before we change it
+      const hasExistingManualOverride = Boolean(
+        result.gradingResult?.componentResults?.some(
+          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
+        ),
       );
+      const successChanged = result.success !== gradingResult.pass;
+      const scoreChange = gradingResult.score - result.score;
 
-      res.status(400).json({ error: 'Prompt metrics not found' });
-      return;
-    }
+      // Update the result
+      result.gradingResult = gradingResult;
+      result.success = gradingResult.pass;
+      result.score = gradingResult.score;
 
-    if (successChanged) {
-      if (result.success) {
-        // Result changed from fail to pass
-        prompt.metrics.testPassCount += 1;
-        prompt.metrics.testFailCount -= 1;
-        prompt.metrics.assertPassCount += 1;
-        prompt.metrics.score += scoreChange;
-        if (hasExistingManualOverride) {
-          // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-          prompt.metrics.assertFailCount -= 1;
+      // Update the prompt metrics
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt, 'Prompt not found');
+      if (!prompt.metrics) {
+        logger.error(
+          `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
+        );
+
+        res.status(400).json({ error: 'Prompt metrics not found' });
+        return;
+      }
+
+      if (successChanged) {
+        if (result.success) {
+          // Result changed from fail to pass
+          prompt.metrics.testPassCount += 1;
+          prompt.metrics.testFailCount -= 1;
+          prompt.metrics.assertPassCount += 1;
+          prompt.metrics.score += scoreChange;
+          if (hasExistingManualOverride) {
+            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
+            prompt.metrics.assertFailCount -= 1;
+          }
+        } else {
+          prompt.metrics.testPassCount -= 1;
+          prompt.metrics.testFailCount += 1;
+          prompt.metrics.assertFailCount += 1;
+          prompt.metrics.score += scoreChange;
+          if (hasExistingManualOverride) {
+            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
+            prompt.metrics.assertPassCount -= 1;
+          }
         }
-      } else {
-        prompt.metrics.testPassCount -= 1;
-        prompt.metrics.testFailCount += 1;
-        prompt.metrics.assertFailCount += 1;
-        prompt.metrics.score += scoreChange;
-        if (hasExistingManualOverride) {
-          // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-          prompt.metrics.assertPassCount -= 1;
+      } else if (!hasExistingManualOverride) {
+        // Nothing changed, so the user just added an assertion
+        if (result.success) {
+          prompt.metrics.assertPassCount += 1;
+        } else {
+          prompt.metrics.assertFailCount += 1;
         }
       }
-    } else if (!hasExistingManualOverride) {
-      // Nothing changed, so the user just added an assertion
-      if (result.success) {
-        prompt.metrics.assertPassCount += 1;
-      } else {
-        prompt.metrics.assertFailCount += 1;
-      }
+
+      await eval_.save();
+      await result.save();
+
+      res.json(result);
+    } catch (error) {
+      sendError(res, 500, 'Failed to submit rating', error);
     }
-
-    await eval_.save();
-    await result.save();
-
-    res.json(result);
   },
 );
 
@@ -727,9 +823,10 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       res.json(EvalSchemas.Save.Response.parse({ id: eval_.id }));
     }
   } catch (error) {
-    logger.error(dedent`Failed to write eval to database:
-      Error: ${error}
-      Body: ${JSON.stringify(body, null, 2)}`);
+    logger.error('Failed to write eval to database', {
+      error,
+      body: sanitizeObject(body, { context: 'request body' }),
+    });
     res.status(500).json({ error: 'Failed to write eval to database' });
   }
 });

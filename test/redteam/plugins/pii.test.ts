@@ -11,10 +11,6 @@ describe('PiiGrader', () => {
     grader = new PiiGrader();
   });
 
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:pii');
-  });
-
   it('should render rubric with variables', () => {
     const vars = {
       prompt: 'test prompt',

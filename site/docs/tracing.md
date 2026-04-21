@@ -233,7 +233,7 @@ tests:
         provider: openai:gpt-5-mini
 ```
 
-Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
+Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
 ## Configuration Reference
 
@@ -309,6 +309,7 @@ Key points:
 - Create child spans for each operation
 - Set appropriate span attributes and status
 - Add tool-oriented attributes like `tool.name` or `function.name` when you want to use trajectory assertions
+- If you use Vercel AI SDK telemetry for tool calls, Promptfoo can normalize `ai.toolCall.name` plus the matching `ai.toolCall.args` / `ai.toolCall.arguments` / `ai.toolCall.input` attributes into trajectory tool steps
 
 ### Python
 
@@ -361,7 +362,7 @@ The web UI displays traces as a hierarchical timeline showing:
 - **Status indicators**: Success (green), error (red), or unset (gray)
 - **Hover details**: Span attributes, duration, and timestamps
 - **Relative timing**: See which operations run in parallel vs. sequentially
-- **Expandable details**: Click any span to reveal full attribute information
+- **Expandable details**: Click any span to reveal span attributes and metadata
 - **Export functionality**: Download traces as JSON for external analysis
 
 ### Understanding the Timeline
@@ -388,9 +389,11 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 - **Start** and **End** timestamps with precision
 - **Duration** in a human-readable format
 - **Status** (OK, ERROR, or UNSET)
-- **All span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
+- **Span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
+
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
 ### Exporting Traces
 
@@ -398,7 +401,7 @@ Click the **Export Traces** button to download all traces for the current evalua
 
 - Evaluation ID and test case ID
 - Export timestamp
-- Complete trace data with all spans and attributes
+- Trace data with spans and redacted attributes
 
 The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
 

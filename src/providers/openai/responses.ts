@@ -91,7 +91,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
+    'gpt-audio-1.5',
     'gpt-audio-mini',
+    'gpt-audio-mini-2025-12-15',
     'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',

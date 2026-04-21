@@ -20,6 +20,7 @@ import {
   withCacheNamespace,
 } from '../src/cache';
 import { fetchWithRetries } from '../src/util/fetch/index';
+import { mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
@@ -191,27 +192,27 @@ const mockFetchWithRetriesResponse = (
 };
 
 describe('cache configuration', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
   let mkdirSyncMock: MockInstance;
   let existsSyncMock: MockInstance;
 
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...originalEnv };
+    mockProcessEnv({ ...originalEnv }, { clear: true });
     // Clear cache type override from test setup
-    delete process.env.PROMPTFOO_CACHE_TYPE;
+    mockProcessEnv({ PROMPTFOO_CACHE_TYPE: undefined });
     mkdirSyncMock = vi.spyOn(fs, 'mkdirSync').mockImplementation(() => undefined);
     existsSyncMock = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     mkdirSyncMock.mockRestore();
     existsSyncMock.mockRestore();
   });
 
   it('should use memory cache in test environment', async () => {
-    process.env.NODE_ENV = 'test';
+    mockProcessEnv({ NODE_ENV: 'test' });
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
     // In test environment, promptfoo falls back to an in-memory store instead of disk.
@@ -219,7 +220,7 @@ describe('cache configuration', () => {
   });
 
   it('should use disk cache in non-test environment', async () => {
-    process.env.NODE_ENV = 'production';
+    mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
     // In production, stores array should have at least one store (disk cache)
@@ -227,18 +228,18 @@ describe('cache configuration', () => {
   });
 
   it('should respect custom cache path', async () => {
-    process.env.PROMPTFOO_CACHE_PATH = '/custom/cache/path';
-    process.env.NODE_ENV = 'production';
+    mockProcessEnv({ PROMPTFOO_CACHE_PATH: '/custom/cache/path' });
+    mockProcessEnv({ NODE_ENV: 'production' });
     const cacheModule = await import('../src/cache');
     cacheModule.getCache();
     expect(fs.mkdirSync).toHaveBeenCalledWith('/custom/cache/path', { recursive: true });
   });
 
   it('should respect cache configuration from environment', async () => {
-    process.env.PROMPTFOO_CACHE_MAX_FILE_COUNT = '100';
-    process.env.PROMPTFOO_CACHE_TTL = '3600';
-    process.env.PROMPTFOO_CACHE_MAX_SIZE = '1000000';
-    process.env.NODE_ENV = 'production';
+    mockProcessEnv({ PROMPTFOO_CACHE_MAX_FILE_COUNT: '100' });
+    mockProcessEnv({ PROMPTFOO_CACHE_TTL: '3600' });
+    mockProcessEnv({ PROMPTFOO_CACHE_MAX_SIZE: '1000000' });
+    mockProcessEnv({ NODE_ENV: 'production' });
 
     const cacheModule = await import('../src/cache');
     const cache = cacheModule.getCache();
@@ -248,7 +249,7 @@ describe('cache configuration', () => {
 
   it('should handle cache directory creation when it exists', async () => {
     existsSyncMock.mockReturnValue(true);
-    process.env.NODE_ENV = 'production';
+    mockProcessEnv({ NODE_ENV: 'production' });
 
     const cacheModule = await import('../src/cache');
     cacheModule.getCache();
