@@ -1337,6 +1337,7 @@ export type EvalSummary = ResultLightweightWithLabel & {
   isRedteam: boolean;
   passRate: number;
   label: string;
+  completedTestCount?: number;
   providers: {
     id: string;
     label: string | null;

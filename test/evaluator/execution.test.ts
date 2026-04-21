@@ -349,6 +349,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setEvalStatus: vi.fn(),
+      setExpectedTestCount: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -426,6 +428,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setEvalStatus: vi.fn(),
+      setExpectedTestCount: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -492,6 +496,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setEvalStatus: vi.fn(),
+      setExpectedTestCount: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -587,6 +593,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setEvalStatus: vi.fn(),
+      setExpectedTestCount: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -603,13 +611,8 @@ describeEvaluator('evaluator execution control', () => {
       await vi.advanceTimersByTimeAsync(10);
       await evalPromise;
 
-      expect(mockAddResult).toHaveBeenCalledWith(
-        expect.objectContaining({
-          error: expect.stringContaining('aborted'),
-          success: false,
-          failureReason: ResultFailureReason.ERROR,
-        }),
-      );
+      expect(mockAddResult).not.toHaveBeenCalled();
+      expect(mockEval.setEvalStatus).toHaveBeenCalledWith('canceled');
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
@@ -672,6 +675,8 @@ describeEvaluator('evaluator execution control', () => {
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setEvalStatus: vi.fn(),
+      setExpectedTestCount: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -687,11 +692,12 @@ describeEvaluator('evaluator execution control', () => {
 
       expect(mockAddResult).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: expect.stringContaining('aborted'),
+          error: expect.stringContaining('Evaluation exceeded max duration of 100ms'),
           success: false,
           failureReason: ResultFailureReason.ERROR,
         }),
       );
+      expect(mockEval.setEvalStatus).toHaveBeenCalledWith('complete');
     } finally {
       if (longTimer) {
         clearTimeout(longTimer);
@@ -747,6 +753,8 @@ describeEvaluator('evaluator execution control', () => {
       getResults: vi.fn().mockResolvedValue(results),
       save: vi.fn().mockResolvedValue(undefined),
       setDurationMs: vi.fn(),
+      setEvalStatus: vi.fn(),
+      setExpectedTestCount: vi.fn(),
       setVars: vi.fn(),
       toEvaluateSummary: vi.fn(),
     };

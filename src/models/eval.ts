@@ -1693,6 +1693,11 @@ export async function getEvalSummaries(
         return memo + (prompt.metrics?.testFailCount ?? 0);
       }, 0) ?? 0;
 
+    const errorCount =
+      result.prompts?.reduce((memo, prompt) => {
+        return memo + (prompt.metrics?.testErrorCount ?? 0);
+      }, 0) ?? 0;
+
     // All prompts should have the same number of test cases:
     const testCounts = result.prompts?.map((p) => {
       return (
@@ -1707,6 +1712,7 @@ export async function getEvalSummaries(
 
     // Test count * prompt count
     const testRunCount = testCount * (result.prompts?.length ?? 0);
+    const completedTestCount = passCount + failCount + errorCount;
 
     // Construct an array of providers
     const deserializedProviders = [];
@@ -1757,6 +1763,7 @@ export async function getEvalSummaries(
       createdAt: result.createdAt,
       description: result.description,
       numTests: testCount,
+      completedTestCount,
       datasetId: result.datasetId,
       isRedteam: Boolean(result.isRedteam),
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,

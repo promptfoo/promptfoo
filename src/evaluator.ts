@@ -4287,9 +4287,8 @@ class Evaluator {
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
 
-    // Track eval lifecycle: set expected test case count (distinct testIdx values) and running status
-    const distinctTestCount = new Set(runEvalOptions.map((opt) => opt.testIdx)).size;
-    this.evalRecord.setExpectedTestCount(distinctTestCount);
+    // Track eval lifecycle against expected result rows, not just distinct test indexes.
+    this.evalRecord.setExpectedTestCount(runEvalOptions.length);
     this.evalRecord.setEvalStatus('running');
     if (this.evalRecord.persisted) {
       await this.evalRecord.save();

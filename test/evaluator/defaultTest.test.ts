@@ -443,6 +443,33 @@ describe('Evaluator with external defaultTest', () => {
     }
   });
 
+  it('tracks expected test count across every prompt/provider/test row', async () => {
+    const providerA: ApiProvider = {
+      id: () => 'provider-a',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const providerB: ApiProvider = {
+      id: () => 'provider-b',
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ok',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [providerA, providerB],
+      prompts: [toPrompt('Prompt 1 {{var}}'), toPrompt('Prompt 2 {{var}}')],
+      tests: [{ vars: { var: 'one' } }, { vars: { var: 'two' } }],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+
+    expect(evalRecord.getStats().expectedTestCount).toBe(8);
+  });
+
   it('should backfill legacy named score weights when resuming evaluation', async () => {
     const originalResume = cliState.resume;
     cliState.resume = false;

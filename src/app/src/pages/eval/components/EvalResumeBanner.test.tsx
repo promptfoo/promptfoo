@@ -1,3 +1,4 @@
+import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -56,6 +57,7 @@ const stats = (overrides: Partial<EvaluateStats> = {}): EvaluateStats => ({
 describe('EvalResumeBanner', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetCallApiMock();
   });
 
   it('does not show a resume prompt while the eval is still running', () => {
@@ -67,10 +69,7 @@ describe('EvalResumeBanner', () => {
 
   it('starts a resume job for stopped incomplete evals', async () => {
     const user = userEvent.setup();
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({ data: { id: 'job-1' } }),
-    } as any);
+    mockCallApiResponse({ data: { id: 'job-1' } });
 
     render(<EvalResumeBanner evalId="eval-1" stats={stats()} />);
     await user.click(screen.getByRole('button', { name: /resume/i }));

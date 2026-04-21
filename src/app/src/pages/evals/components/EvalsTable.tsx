@@ -229,10 +229,10 @@ export default function EvalsTable({
           row.isRedteam ? 'Red Team' : 'Eval',
           `"${(row.description || row.label || '').replace(/"/g, '""')}"`,
           row.passRate.toFixed(2),
-          row.expectedTestCount &&
+          row.expectedTestCount != null &&
           row.evalStatus !== 'complete' &&
-          row.numTests < row.expectedTestCount
-            ? `${row.numTests} / ${row.expectedTestCount}`
+          (row.completedTestCount ?? row.numTests) < row.expectedTestCount
+            ? `${row.completedTestCount ?? row.numTests} / ${row.expectedTestCount}`
             : row.numTests,
         ].join(','),
       ),
@@ -348,8 +348,8 @@ export default function EvalsTable({
           const expected = row.original.expectedTestCount;
           const status = row.original.evalStatus;
           const evalId = row.original.evalId;
-          const isIncomplete =
-            status !== 'complete' && expected != null && row.original.numTests < expected;
+          const completed = row.original.completedTestCount ?? row.original.numTests;
+          const isIncomplete = status !== 'complete' && expected != null && completed < expected;
           const isRunningIncomplete = status === 'running' && isIncomplete;
 
           if (isRunningIncomplete) {
@@ -412,12 +412,13 @@ export default function EvalsTable({
           const numTests = row.original.numTests;
           const expected = row.original.expectedTestCount;
           const status = row.original.evalStatus;
-          const isIncomplete = status !== 'complete' && expected != null && numTests < expected;
+          const completed = row.original.completedTestCount ?? numTests;
+          const isIncomplete = status !== 'complete' && expected != null && completed < expected;
 
           if (isIncomplete) {
             return (
               <span className="font-mono tabular-nums text-amber-600 dark:text-amber-400">
-                {numTests} / {expected}
+                {completed} / {expected}
               </span>
             );
           }
