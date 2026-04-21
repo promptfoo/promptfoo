@@ -12,7 +12,7 @@
 # ===================================================================
 description: Foundation Model Red Team Template (Copy)
 targets:
-  - id: openai:chat:gpt-5.2
+  - id: openai:chat:gpt-5.4
     config:
       reasoning_effort: 'none'
       max_completion_tokens: 2048

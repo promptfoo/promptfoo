@@ -31,6 +31,44 @@ export function DownloadMenuItem({ onClick }: DownloadMenuItemProps) {
   );
 }
 
+interface CommandBlockProps {
+  fileName: string;
+  helpText?: string;
+  isDownloaded: boolean;
+  onCopy: (commandText: string) => void;
+}
+
+function CommandBlock({ fileName, helpText, isDownloaded, onCopy }: CommandBlockProps) {
+  const commandText = `promptfoo eval -c ${fileName}`;
+
+  return (
+    <div className="mt-4 p-4 bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.08] dark:border-white/[0.08] rounded-lg">
+      {helpText && (
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium text-muted-foreground">{helpText}</span>
+          {isDownloaded && (
+            <div className="flex items-center">
+              <CheckCircle className="size-4 text-emerald-500 mr-1" />
+              <span className="text-sm font-medium text-emerald-500">Downloaded</span>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex items-center bg-white/80 dark:bg-black/40 border border-black/15 dark:border-white/15 rounded-md p-3">
+        <code className="flex-1 font-mono text-sm font-medium">{commandText}</code>
+        <button
+          type="button"
+          onClick={() => onCopy(commandText)}
+          className="ml-2 p-1 text-primary hover:bg-primary/15 rounded transition-colors"
+          aria-label="Copy command"
+        >
+          <Copy className="size-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface DownloadDialogProps {
   open: boolean;
   onClose: () => void;
@@ -281,44 +319,6 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     handleClose();
   };
 
-  // Generate the command text based on filename
-  const getCommandText = (fileName: string) => {
-    return `promptfoo eval -c ${fileName}`;
-  };
-
-  // Create a component for the command with copy button
-  const CommandBlock = ({ fileName, helpText }: { fileName: string; helpText?: string }) => {
-    const commandText = getCommandText(fileName);
-    const isDownloaded = downloadedFiles.has(fileName);
-
-    return (
-      <div className="mt-4 p-4 bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.08] dark:border-white/[0.08] rounded-lg">
-        {helpText && (
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-muted-foreground">{helpText}</span>
-            {isDownloaded && (
-              <div className="flex items-center">
-                <CheckCircle className="size-4 text-emerald-500 mr-1" />
-                <span className="text-sm font-medium text-emerald-500">Downloaded</span>
-              </div>
-            )}
-          </div>
-        )}
-        <div className="flex items-center bg-white/80 dark:bg-black/40 border border-black/15 dark:border-white/15 rounded-md p-3">
-          <code className="flex-1 font-mono text-sm font-medium">{commandText}</code>
-          <button
-            type="button"
-            onClick={() => copyToClipboard(commandText)}
-            className="ml-2 p-1 text-primary hover:bg-primary/15 rounded transition-colors"
-            aria-label="Copy command"
-          >
-            <Copy className="size-4" />
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -344,6 +344,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     <CommandBlock
                       fileName={getFilename('config.yaml')}
                       helpText="Run this command to execute the eval again:"
+                      isDownloaded={downloadedFiles.has(getFilename('config.yaml'))}
+                      onCopy={copyToClipboard}
                     />
                   )}
                 </div>
@@ -369,6 +371,8 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     <CommandBlock
                       fileName={getFilename('failed-tests.yaml')}
                       helpText="Run this command to re-run just the failed tests:"
+                      isDownloaded={downloadedFiles.has(getFilename('failed-tests.yaml'))}
+                      onCopy={copyToClipboard}
                     />
                   )}
                 </div>

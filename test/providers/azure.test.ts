@@ -6,6 +6,7 @@ import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { mockProcessEnv } from '../util/utils';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
@@ -126,8 +127,14 @@ describe('Azure Provider Tests', () => {
 
   describe('AzureOpenAiGenericProvider', () => {
     describe('getApiBaseUrl', () => {
+      let restoreEnv: () => void;
+
       beforeEach(() => {
-        delete process.env.AZURE_OPENAI_API_HOST;
+        restoreEnv = mockProcessEnv({ AZURE_OPENAI_API_HOST: undefined });
+      });
+
+      afterEach(() => {
+        restoreEnv();
       });
 
       it('should return apiBaseUrl if set', () => {

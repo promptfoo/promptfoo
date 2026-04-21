@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache } from '../../../src/cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../../../src/cache';
 import { getUserEmail, isLoggedIntoCloud } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
 import { addGcgTestCases, CONCURRENCY } from '../../../src/redteam/strategies/gcg';
 
 import type { TestCase } from '../../../src/types/index';
+
+type GcgGenerationResponse = {
+  responses: string[];
+};
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/globalConfig/accounts');
@@ -21,12 +29,25 @@ vi.mock('../../../src/logger', () => ({
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
+function stringifyLoggerCalls(...mocks: ReturnType<typeof vi.fn>[]) {
+  return JSON.stringify(
+    mocks.flatMap((mock) => mock.mock.calls),
+    (_key, value) =>
+      value instanceof Error
+        ? { ...value, name: value.name, message: value.message, stack: value.stack }
+        : value,
+  );
+}
+
 describe('gcg strategy', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
   const mockGetUserEmail = vi.mocked(getUserEmail);
   const mockIsLoggedIntoCloud = vi.mocked(isLoggedIntoCloud);
   const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
   const mockGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
+  const mockGetRemoteGenerationExplicitlyDisabledError = vi.mocked(
+    getRemoteGenerationExplicitlyDisabledError,
+  );
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,6 +55,10 @@ describe('gcg strategy', () => {
     mockIsLoggedIntoCloud.mockReturnValue(true);
     mockNeverGenerateRemote.mockReturnValue(false);
     mockGetRemoteGenerationUrl.mockReturnValue('http://test-url');
+    mockGetRemoteGenerationExplicitlyDisabledError.mockImplementation(
+      (strategyName) =>
+        `${strategyName} requires remote generation, which has been explicitly disabled.`,
+    );
   });
 
   const testCases: TestCase[] = [
@@ -74,6 +99,7 @@ describe('gcg strategy', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-promptfoo-silent': 'true',
         },
         body: JSON.stringify({
           task: 'gcg',
@@ -82,6 +108,8 @@ describe('gcg strategy', () => {
         }),
       },
       expect.any(Number),
+      'json',
+      true,
     );
   });
 
@@ -97,7 +125,7 @@ describe('gcg strategy', () => {
     mockNeverGenerateRemote.mockReturnValue(true);
 
     await expect(addGcgTestCases(testCases, 'prompt', {})).rejects.toThrow(
-      'GCG strategy requires remote generation to be enabled',
+      'GCG strategy requires remote generation, which has been explicitly disabled.',
     );
   });
 
@@ -115,13 +143,125 @@ describe('gcg strategy', () => {
     expect(logger.warn).toHaveBeenCalledWith('No GCG test cases were generated');
   });
 
-  it('should handle network errors gracefully', async () => {
-    mockFetchWithCache.mockRejectedValueOnce(new Error('Network error'));
+  it('redacts prompts and generated responses from logs', async () => {
+    const secretInjectVar = 'SECRET_GCG_INJECT_VAR';
+    const originalPrompt = 'SECRET_GCG_ORIGINAL_PROMPT';
+    const generatedResponse = 'SECRET_GCG_GENERATED_RESPONSE';
+    const metadataSecretKey = 'SECRET_GCG_METADATA_KEY';
+    const metadataSecret = 'SECRET_GCG_METADATA_VALUE';
+    const assertionSecret = 'SECRET_GCG_ASSERTION_VALUE';
+
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: {
+        responses: [generatedResponse],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await addGcgTestCases(
+      [
+        {
+          vars: {
+            [secretInjectVar]: originalPrompt,
+          },
+          assert: [
+            {
+              type: 'contains',
+              value: assertionSecret,
+              metric: 'secret-metric',
+            },
+          ],
+          metadata: {
+            pluginId: 'plugin-secret-key',
+            [metadataSecretKey]: metadataSecret,
+          },
+        },
+      ],
+      secretInjectVar,
+      {},
+    );
+
+    expect(result[0].vars?.[secretInjectVar]).toBe(generatedResponse);
+    expect(logger.debug).toHaveBeenCalledWith(
+      '[GCG] Processing test case',
+      expect.objectContaining({
+        hasInjectVar: true,
+        varsKeyCount: 1,
+        assertionCount: 1,
+        metadataKeyCount: 2,
+      }),
+    );
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'http://test-url',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-promptfoo-silent': 'true',
+        }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+
+    const logs = stringifyLoggerCalls(vi.mocked(logger.debug), vi.mocked(logger.error));
+    expect(logs).not.toContain(secretInjectVar);
+    expect(logs).not.toContain(originalPrompt);
+    expect(logs).not.toContain(generatedResponse);
+    expect(logs).not.toContain(metadataSecretKey);
+    expect(logs).not.toContain(metadataSecret);
+    expect(logs).not.toContain(assertionSecret);
+  });
+
+  it('redacts remote error bodies from logs', async () => {
+    const remoteError = 'SECRET_GCG_REMOTE_ERROR_WITH_PROMPT';
+
+    mockFetchWithCache.mockResolvedValueOnce({
+      data: { error: remoteError },
+      cached: false,
+      status: 500,
+      statusText: 'Error',
+    });
 
     const result = await addGcgTestCases(testCases, 'prompt', {});
 
     expect(result).toHaveLength(0);
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error in GCG generation'));
+    expect(logger.error).toHaveBeenCalledWith('[GCG] Error in GCG generation', {
+      caseNumber: 1,
+      status: 500,
+      statusText: 'Error',
+    });
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      'http://test-url',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'x-promptfoo-silent': 'true',
+        }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+    );
+
+    const logs = stringifyLoggerCalls(vi.mocked(logger.debug), vi.mocked(logger.error));
+    expect(logs).not.toContain(remoteError);
+  });
+
+  it('should handle network errors gracefully', async () => {
+    mockFetchWithCache.mockRejectedValueOnce(
+      new Error('Network error with SECRET_GCG_THROWN_ERROR'),
+    );
+
+    const result = await addGcgTestCases(testCases, 'prompt', {});
+
+    expect(result).toHaveLength(0);
+    expect(logger.error).toHaveBeenCalledWith('Error in GCG generation', {
+      errorType: 'Error',
+    });
+
+    const logs = stringifyLoggerCalls(vi.mocked(logger.debug), vi.mocked(logger.error));
+    expect(logs).not.toContain('SECRET_GCG_THROWN_ERROR');
   });
 
   it('should respect configuration options', async () => {
@@ -143,6 +283,7 @@ describe('gcg strategy', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-promptfoo-silent': 'true',
         },
         body: JSON.stringify({
           task: 'gcg',
@@ -152,6 +293,8 @@ describe('gcg strategy', () => {
         }),
       },
       expect.any(Number),
+      'json',
+      true,
     );
   });
 
@@ -186,7 +329,9 @@ describe('gcg strategy', () => {
     let concurrentCalls = 0;
     let maxConcurrentCalls = 0;
 
-    mockFetchWithCache.mockImplementation(async function () {
+    mockFetchWithCache.mockImplementation(async function (): Promise<
+      FetchWithCacheResult<GcgGenerationResponse>
+    > {
       concurrentCalls++;
       maxConcurrentCalls = Math.max(maxConcurrentCalls, concurrentCalls);
       await new Promise((resolve) => setTimeout(resolve, 10));
