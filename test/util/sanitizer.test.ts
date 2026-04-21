@@ -728,8 +728,10 @@ describe('sanitizeObject', () => {
     it('should handle BigInt values', () => {
       const input = { bigNum: BigInt(9007199254740991), password: 'secret' };
       const result = sanitizeObject(input);
-      // BigInt is not JSON serializable, safe-stringify returns a string
-      expect(result).toBe('[unable to serialize, circular reference is too complex to analyze]');
+      expect(result).toEqual({
+        bigNum: '9007199254740991',
+        password: '[REDACTED]',
+      });
     });
   });
 
