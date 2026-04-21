@@ -1,0 +1,127 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1120 500"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">LLM judge calibration workflow</title>
+  <desc id="desc">
+    A five-step workflow: pick one dimension, label a golden set, tune the rubric, validate on
+    holdout data, then monitor in CI for drift.
+  </desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-18%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#0f172a" flood-opacity="0.11" />
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2 L10 6 L2 10 Z" fill="#64748b" />
+    </marker>
+    <style>
+      text {
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      .title {
+        font-size: 20px;
+        font-weight: 800;
+        fill: #0f172a;
+      }
+      .step {
+        font-size: 15px;
+        font-weight: 800;
+        fill: #0f172a;
+      }
+      .body {
+        font-size: 13px;
+        fill: #475569;
+      }
+      .num {
+        font-size: 14px;
+        font-weight: 900;
+        fill: #ffffff;
+      }
+    </style>
+  </defs>
+
+  <rect width="1120" height="500" rx="24" fill="#f8fafc" />
+  <text x="52" y="60" class="title">Build a judge like production code</text>
+  <text x="52" y="86" class="body">
+    Tune on labeled examples, then verify the rubric on data it has never seen.
+  </text>
+
+  <g filter="url(#shadow)">
+    <rect x="50" y="140" width="180" height="180" rx="18" fill="#ffffff" stroke="#cbd5e1" />
+  </g>
+  <circle cx="140" cy="170" r="16" fill="#2563eb" />
+  <text x="140" y="175" text-anchor="middle" class="num">1</text>
+  <text x="140" y="210" text-anchor="middle" class="step">Pick one</text>
+  <text x="140" y="232" text-anchor="middle" class="step">dimension</text>
+  <text x="140" y="272" text-anchor="middle" class="body">accuracy, safety,</text>
+  <text x="140" y="294" text-anchor="middle" class="body">tone, completeness</text>
+
+  <path d="M230 230 L248 230" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <g filter="url(#shadow)">
+    <rect x="258" y="140" width="180" height="180" rx="18" fill="#ffffff" stroke="#cbd5e1" />
+  </g>
+  <circle cx="348" cy="170" r="16" fill="#0f766e" />
+  <text x="348" y="175" text-anchor="middle" class="num">2</text>
+  <text x="348" y="210" text-anchor="middle" class="step">Label</text>
+  <text x="348" y="232" text-anchor="middle" class="step">golden set</text>
+  <text x="348" y="272" text-anchor="middle" class="body">clear pass/fail</text>
+  <text x="348" y="294" text-anchor="middle" class="body">plus edge cases</text>
+
+  <path d="M438 230 L456 230" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <g filter="url(#shadow)">
+    <rect x="466" y="140" width="180" height="180" rx="18" fill="#ffffff" stroke="#cbd5e1" />
+  </g>
+  <circle cx="556" cy="170" r="16" fill="#d97706" />
+  <text x="556" y="175" text-anchor="middle" class="num">3</text>
+  <text x="556" y="210" text-anchor="middle" class="step">Tune</text>
+  <text x="556" y="232" text-anchor="middle" class="step">rubric</text>
+  <text x="556" y="272" text-anchor="middle" class="body">review reasons,</text>
+  <text x="556" y="294" text-anchor="middle" class="body">tighten criteria</text>
+
+  <path d="M646 230 L664 230" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <g filter="url(#shadow)">
+    <rect x="674" y="140" width="180" height="180" rx="18" fill="#ffffff" stroke="#cbd5e1" />
+  </g>
+  <circle cx="764" cy="170" r="16" fill="#7c3aed" />
+  <text x="764" y="175" text-anchor="middle" class="num">4</text>
+  <text x="764" y="210" text-anchor="middle" class="step">Validate</text>
+  <text x="764" y="232" text-anchor="middle" class="step">holdout</text>
+  <text x="764" y="272" text-anchor="middle" class="body">no tuning on</text>
+  <text x="764" y="294" text-anchor="middle" class="body">holdout split</text>
+
+  <path d="M854 230 L872 230" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <g filter="url(#shadow)">
+    <rect x="882" y="140" width="180" height="180" rx="18" fill="#ffffff" stroke="#cbd5e1" />
+  </g>
+  <circle cx="972" cy="170" r="16" fill="#334155" />
+  <text x="972" y="175" text-anchor="middle" class="num">5</text>
+  <text x="972" y="210" text-anchor="middle" class="step">CI drift</text>
+  <text x="972" y="232" text-anchor="middle" class="step">watch</text>
+  <text x="972" y="272" text-anchor="middle" class="body">watch agreement</text>
+  <text x="972" y="294" text-anchor="middle" class="body">in CI</text>
+
+  <path
+    d="M556 320 C556 394 348 394 348 326"
+    stroke="#d97706"
+    stroke-width="2"
+    fill="none"
+    stroke-dasharray="6 6"
+    marker-end="url(#arrow)"
+  />
+  <text x="560" y="420" text-anchor="middle" class="body" fill="#92400e">
+    If agreement is low, revise the rubric and rerun the golden set.
+  </text>
+</svg>

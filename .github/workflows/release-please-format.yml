@@ -1,0 +1,148 @@
+name: release-please-format
+run-name: format CHANGELOG on release PR (${{ github.event.pull_request.head.ref }})
+
+# Runs prettier on CHANGELOG files in release-please PRs. Lives in its own
+# workflow (not inside release-please.yml) so it re-runs on every PR
+# synchronize event — release-please force-pushes its PR branch when new
+# commits land on main, which would wipe any formatting commit created
+# inline in the release-please job.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**/CHANGELOG.md'
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    # Branch prefix alone is not a trust boundary. Require: same-repo PR (forks
+    # cannot be legitimate release-please PRs), the exact release bot as
+    # author, and the release-please branch naming convention.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login == 'promptfoobot[bot]' &&
+      startsWith(github.event.pull_request.head.ref, 'release-please--')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      # Pin an explicit Node version so this step does not depend on a
+      # PR-controlled .nvmrc — the install below happens before checkout.
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: 'lts/*'
+
+      # Isolated install before checkout so a PR-controlled .npmrc cannot
+      # redirect the registry or inject a package.
+      - name: Install prettier (outside PR checkout)
+        run: |
+          set -euo pipefail
+          install_dir="$RUNNER_TEMP/prettier-install"
+          mkdir -p "$install_dir"
+          cd "$install_dir"
+          npm install \
+            --no-save --no-audit --no-fund --ignore-scripts \
+            --registry=https://registry.npmjs.org/ \
+            prettier@3.8.1
+          echo "$install_dir/node_modules/.bin" >> "$GITHUB_PATH"
+
+      # persist-credentials: false keeps GITHUB_TOKEN out of .git/config so it
+      # can't be read via a PR-planted pre-push hook. The App token is not
+      # created until after the untrusted steps below.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Format and commit CHANGELOG files
+        id: format
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+
+          # Ensure base ref is available locally — actions/checkout with
+          # fetch-depth: 0 fetches history of the head ref, not other branches.
+          git fetch --no-tags --prune origin "${BASE_REF}"
+
+          # Capture diff output separately so a failing `git diff` does not get
+          # swallowed by `|| true` on the downstream grep pipeline.
+          changed_paths="$(git diff --name-only --diff-filter=ACMRT "origin/${BASE_REF}...HEAD")"
+
+          mapfile -t changelog_files < <(
+            printf '%s\n' "$changed_paths" | grep -E '(^|/)CHANGELOG\.md$' || true
+          )
+
+          if [[ "${#changelog_files[@]}" -eq 0 ]]; then
+            echo "No CHANGELOG files changed in release PR"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # --no-config and --no-editorconfig prevent prettier from loading a
+          # PR-controlled .prettierrc.js (which would execute arbitrary code) or
+          # .editorconfig that could change what gets written.
+          prettier --no-config --no-editorconfig --write "${changelog_files[@]}"
+
+          if git diff --quiet -- "${changelog_files[@]}"; then
+            echo "No formatting changes needed"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${changelog_files[@]}"
+          # core.hooksPath=/dev/null prevents a PR-planted .git/hooks/pre-commit
+          # from tampering with the commit.
+          git -c core.hooksPath=/dev/null \
+            commit -m "chore: format CHANGELOG files with prettier"
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+      # Refuse to push if the just-created commit touches anything other than
+      # CHANGELOG.md files. Runs before the App token is issued.
+      - name: Verify commit scope
+        if: steps.format.outputs.has_changes == 'true'
+        run: |
+          set -euo pipefail
+          mapfile -t touched < <(git diff-tree --no-commit-id --name-only -r HEAD)
+          # Match the selector used above (^|/)CHANGELOG\.md$ — basename only,
+          # so MY_CHANGELOG.md or CHANGELOG.md.bak are rejected.
+          for path in "${touched[@]}"; do
+            if [[ "$path" != "CHANGELOG.md" && "$path" != */CHANGELOG.md ]]; then
+              echo "::error::Refusing to push: commit touches non-CHANGELOG path: $path"
+              exit 1
+            fi
+          done
+
+      # Create the App token only after untrusted steps so prettier / npm
+      # install never had it in reach. Token inherits the App installation's
+      # granted permissions — do NOT add `permission-*` inputs here until the
+      # App installation is confirmed to grant every requested permission;
+      # see the matching note on release-please.yml.
+      - name: Create App token for push
+        if: steps.format.outputs.has_changes == 'true'
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3
+        id: app-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+
+      - name: Push formatted CHANGELOG commit
+        if: steps.format.outputs.has_changes == 'true'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          # core.hooksPath=/dev/null blocks PR-planted .git/hooks/pre-push from
+          # executing with GH_TOKEN in env. The extraheader scopes auth to just
+          # this invocation instead of persisting in .git/config.
+          git -c core.hooksPath=/dev/null \
+              -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" \
+              push origin "HEAD:${HEAD_REF}"

@@ -29,6 +29,30 @@ describe('renderPrompt with skipRenderVars', () => {
     expect(result).toContain('{{cycler["__init__"]["__globals__"]["os"]["popen"]("whoami")}}');
   });
 
+  it('should skip file:// dereferencing for variables in skipRenderVars array', async () => {
+    const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
+    const vars = {
+      user_input: 'file:///tmp/does-not-exist.txt',
+    };
+
+    await expect(renderPrompt(prompt, vars)).rejects.toThrow('ENOENT');
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+    expect(result).toBe('User input: file:///tmp/does-not-exist.txt');
+  });
+
+  it('should skip package: dereferencing for variables in skipRenderVars array', async () => {
+    const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
+    const vars = {
+      user_input: 'package:@promptfoo/does-not-exist:testFunction',
+    };
+
+    await expect(renderPrompt(prompt, vars)).rejects.toThrow('Package not found');
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+    expect(result).toBe('User input: package:@promptfoo/does-not-exist:testFunction');
+  });
+
   it('should still render other variables not in skipRenderVars', async () => {
     const prompt = { raw: 'Name: {{name}}, Payload: {{payload}}', label: 'test' };
     const vars = {
@@ -44,6 +68,57 @@ describe('renderPrompt with skipRenderVars', () => {
 
     // payload should NOT be rendered (because it's in skipRenderVars)
     expect(result).toContain('Payload: {{dangerous}}');
+  });
+
+  it('should not resolve nested variable references inside skipRenderVars values', async () => {
+    const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
+    const vars = {
+      secret: 'do-not-inline',
+      user_input: '{{secret}}',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+
+    expect(result).toBe('User input: {{secret}}');
+  });
+
+  it('should not render skipped variable values after alias resolution', async () => {
+    const prompt = { raw: 'User input: {{wrapped_input}}', label: 'test' };
+    const vars = {
+      user_input: '{{7*7}}',
+      wrapped_input: '{{user_input}}',
+    };
+
+    const resultWithoutSkip = await renderPrompt(prompt, { ...vars });
+    expect(resultWithoutSkip).toBe('User input: 49');
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+
+    expect(result).toBe('User input: {{7*7}}');
+  });
+
+  it('should not resolve nested references copied through a skipped variable alias', async () => {
+    const prompt = { raw: 'User input: {{wrapped_input}}', label: 'test' };
+    const vars = {
+      secret: 'do-not-inline',
+      user_input: '{{secret}}',
+      wrapped_input: '{{user_input}}',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+
+    expect(result).toBe('User input: {{secret}}');
+  });
+
+  it('should preserve trailing newlines inside skipRenderVars values', async () => {
+    const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
+    const vars = {
+      user_input: 'payload-with-newline\n',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+
+    expect(result).toBe('User input: payload-with-newline\n');
   });
 
   it('should handle redteam prompts with undefined purpose and trim filter', async () => {

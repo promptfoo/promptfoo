@@ -13,7 +13,7 @@ Promptfoo automatically handles rate limits from LLM providers. When a provider 
 
 Rate limit handling is built into the evaluator and requires no configuration:
 
-- **Automatic retry**: Failed requests are retried up to 3 times with exponential backoff
+- **Automatic retry**: Failed requests are retried up to 3 times with exponential backoff by default (overridable per provider via `maxRetries`, including `0` to disable retries)
 - **Header-aware delays**: Respects `retry-after` headers from providers
 - **Adaptive concurrency**: Reduces concurrent requests when rate limits are hit
 - **Per-provider isolation**: Each provider and API key has separate rate limit tracking
@@ -96,8 +96,19 @@ PROMPTFOO_DELAY_MS=1000 promptfoo eval
 
 Promptfoo has two retry layers:
 
-1. **Provider-level retry** (scheduler): Retries `callApi()` with 1-second base backoff, up to 3 times
-2. **HTTP-level retry**: Retries failed HTTP requests with configurable backoff
+1. **Provider-level retry** (scheduler): Retries `callApi()` with 1-second base backoff, up to 3 times by default. If a provider config sets `maxRetries`, the scheduler uses that value (including `0` to disable scheduler retries entirely).
+2. **HTTP-level retry**: Retries failed HTTP requests. Defaults to 4 retries, or the provider's `maxRetries` when set.
+
+When a provider config includes `maxRetries`, promptfoo propagates that value to both layers. Explicit per-call overrides (e.g. a provider that passes a specific `maxRetries` to `fetchWithRetries`) still take precedence. For direct `fetchWithProxy` calls, transient retries (502/503/504/524) are disabled when the provider sets `maxRetries: 0`.
+
+Example — disable retries for a provider to fail fast on rate limits:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4.1-mini
+    config:
+      maxRetries: 0
+```
 
 Environment variables for the scheduler:
 

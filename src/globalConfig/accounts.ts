@@ -80,8 +80,17 @@ export function setUserEmailValidated(validated: boolean) {
   writeGlobalConfigPartial(config);
 }
 
-export function getAuthor(): string | null {
-  return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
+export function getAuthor(override?: string | null): string | null {
+  const userEmail = getUserEmail();
+  const envAuthor = getEnvString('PROMPTFOO_AUTHOR');
+  if (isLoggedIntoCloud() && userEmail) {
+    if (override && override !== userEmail) {
+      // Don't log the full emails — the rest of the codebase treats them as PII.
+      logger.debug('[Author] Ignoring author override because cloud identity takes precedence');
+    }
+    return userEmail;
+  }
+  return override || userEmail || envAuthor || null;
 }
 
 export function isLoggedIntoCloud(): boolean {
@@ -101,16 +110,10 @@ export function getAuthMethod(): 'api-key' | 'email' | 'none' {
   const hasApiKey = cloudConfig.isEnabled();
   const hasEmail = !!getUserEmail();
 
-  if (hasApiKey && hasEmail) {
-    // Both present - API key is the actual auth mechanism
-    return 'api-key';
-  }
   if (hasApiKey) {
     return 'api-key';
   }
   if (hasEmail) {
-    // Email without API key - not fully authenticated
-    // (this shouldn't happen in normal flow but handle it)
     return 'email';
   }
   return 'none';

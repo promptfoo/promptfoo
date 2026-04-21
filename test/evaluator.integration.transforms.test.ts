@@ -241,6 +241,11 @@ describe('Transformation integration', () => {
     );
   });
 
+  // Note: function-transform wiring tests used to live here but were removed
+  // in favor of `test/evaluator.integration.realTransforms.test.ts`, which
+  // exercises the real `transform()` pipeline end-to-end instead of asserting
+  // that a mock was called with a function reference.
+
   it('should work correctly with only provider transform', async () => {
     mockTransform.mockImplementation(async (expression, input) => {
       if (expression === 'output.trim().toUpperCase()') {

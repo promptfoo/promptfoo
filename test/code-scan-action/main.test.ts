@@ -198,8 +198,7 @@ function expectCliArg(args: string[], name: string, value: string): void {
 }
 
 function expectSanitizedExecEnv(options: PromptfooExecCall['options'] | NpmExecCall['options']) {
-  expect(options).toBeDefined();
-  expect(options?.env).toBeDefined();
+  expect(options?.env).toEqual(expect.any(Object));
   expect(options?.env?.NPM_CONFIG_BEFORE).toBeUndefined();
   expect(options?.env?.npm_config_before).toBeUndefined();
 }
@@ -224,7 +223,7 @@ describe('code-scan-action main', () => {
 
   describe('CLI args construction', () => {
     it('should pass --base with GITHUB_BASE_REF when set', async () => {
-      process.env.GITHUB_BASE_REF = 'feat/my-feature-branch';
+      mockProcessEnv({ GITHUB_BASE_REF: 'feat/my-feature-branch' });
 
       const { args } = await importActionAndGetPromptfooCall();
 
@@ -232,7 +231,7 @@ describe('code-scan-action main', () => {
     });
 
     it('should pass --base with "main" when GITHUB_BASE_REF is not set', async () => {
-      delete process.env.GITHUB_BASE_REF;
+      mockProcessEnv({ GITHUB_BASE_REF: undefined });
 
       const { args } = await importActionAndGetPromptfooCall();
 
@@ -240,7 +239,7 @@ describe('code-scan-action main', () => {
     });
 
     it('should pass --base for stacked PR base branches', async () => {
-      process.env.GITHUB_BASE_REF = 'feat/openai-sora-video-provider';
+      mockProcessEnv({ GITHUB_BASE_REF: 'feat/openai-sora-video-provider' });
 
       const { args } = await importActionAndGetPromptfooCall();
 
@@ -248,9 +247,9 @@ describe('code-scan-action main', () => {
     });
 
     it('should not pass NPM_CONFIG_BEFORE to the promptfoo scan command', async () => {
-      process.env.GITHUB_BASE_REF = 'main';
-      process.env.NPM_CONFIG_BEFORE = '2026-03-29T00:00:00.000Z';
-      process.env.npm_config_before = '2026-03-29T00:00:00.000Z';
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockProcessEnv({ NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z' });
+      mockProcessEnv({ npm_config_before: '2026-03-29T00:00:00.000Z' });
 
       const { options } = await importActionAndGetPromptfooCall();
 
@@ -258,9 +257,9 @@ describe('code-scan-action main', () => {
     });
 
     it('should not pass NPM_CONFIG_BEFORE to npm install', async () => {
-      process.env.GITHUB_BASE_REF = 'main';
-      process.env.NPM_CONFIG_BEFORE = '2026-03-29T00:00:00.000Z';
-      process.env.npm_config_before = '2026-03-29T00:00:00.000Z';
+      mockProcessEnv({ GITHUB_BASE_REF: 'main' });
+      mockProcessEnv({ NPM_CONFIG_BEFORE: '2026-03-29T00:00:00.000Z' });
+      mockProcessEnv({ npm_config_before: '2026-03-29T00:00:00.000Z' });
 
       const { options } = await importActionAndGetNpmInstallCall();
 
