@@ -266,7 +266,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
         : (evalData.results as EvaluateSummaryV2).table.head.prompts) || [];
     const selectedPrompt = prompts[selectedPromptIndex];
 
-    return evalData.results.results.reduce(
+    return evalData.results.results.reduce<Record<string, Required<TestResultStats>>>(
       (acc, row) => {
         // Filter by selected target/provider if multiple targets exist
         if (prompts.length > 1 && selectedPrompt && row.promptIdx !== selectedPromptIndex) {
@@ -306,7 +306,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
 
         return acc;
       },
-      {} as Record<string, Required<TestResultStats>>,
+      {},
     );
   }, [evalData, selectedPromptIndex]);
 

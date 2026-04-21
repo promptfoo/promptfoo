@@ -321,7 +321,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-5.2, GPT-5.1, and GPT-5 models')).toBeVisible();
+    expect(screen.getByText('GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano and older models')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {

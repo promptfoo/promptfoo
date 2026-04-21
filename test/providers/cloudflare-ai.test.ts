@@ -8,6 +8,7 @@ import {
   createCloudflareAiProvider,
 } from '../../src/providers/cloudflare-ai';
 import { loadApiProviders } from '../../src/providers/index';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderOptionsMap } from '../../src/types/index';
 
@@ -211,8 +212,8 @@ describe('CloudflareAi Provider', () => {
     });
 
     it('Uses environment variables when config not provided', () => {
-      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account-id';
-      process.env.CLOUDFLARE_API_KEY = 'env-api-key';
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: 'env-account-id' });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: 'env-api-key' });
 
       const provider = new CloudflareAiChatCompletionProvider(testModelName, {});
 
@@ -220,8 +221,8 @@ describe('CloudflareAi Provider', () => {
       expect(provider.toString()).toBe(`[Cloudflare AI chat Provider ${testModelName}]`);
 
       // Clean up
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-      delete process.env.CLOUDFLARE_API_KEY;
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: undefined });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: undefined });
     });
 
     it('Should use custom API base URL when provided', async () => {
@@ -374,8 +375,8 @@ describe('CloudflareAi Provider', () => {
     });
 
     it('Should use custom environment variable names', () => {
-      process.env.CUSTOM_CF_ACCOUNT = 'custom-account-id';
-      process.env.CUSTOM_CF_KEY = 'custom-api-key';
+      mockProcessEnv({ CUSTOM_CF_ACCOUNT: 'custom-account-id' });
+      mockProcessEnv({ CUSTOM_CF_KEY: 'custom-api-key' });
 
       const provider = new CloudflareAiChatCompletionProvider(testModelName, {
         config: {
@@ -387,8 +388,8 @@ describe('CloudflareAi Provider', () => {
       expect(provider.getApiKey()).toBe('custom-api-key');
 
       // Clean up
-      delete process.env.CUSTOM_CF_ACCOUNT;
-      delete process.env.CUSTOM_CF_KEY;
+      mockProcessEnv({ CUSTOM_CF_ACCOUNT: undefined });
+      mockProcessEnv({ CUSTOM_CF_KEY: undefined });
     });
 
     it('requires API key', () => {
@@ -401,8 +402,8 @@ describe('CloudflareAi Provider', () => {
     });
 
     it('uses accountIdEnvar when accountId not provided', () => {
-      process.env.CUSTOM_ACCOUNT_VAR = 'env-account-from-custom-var';
-      process.env.CLOUDFLARE_API_KEY = 'default-api-key';
+      mockProcessEnv({ CUSTOM_ACCOUNT_VAR: 'env-account-from-custom-var' });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: 'default-api-key' });
 
       const provider = new CloudflareAiChatCompletionProvider(testModelName, {
         config: {
@@ -413,8 +414,8 @@ describe('CloudflareAi Provider', () => {
       expect(provider.id()).toBe(`cloudflare-ai:chat:${testModelName}`);
 
       // Clean up
-      delete process.env.CUSTOM_ACCOUNT_VAR;
-      delete process.env.CLOUDFLARE_API_KEY;
+      mockProcessEnv({ CUSTOM_ACCOUNT_VAR: undefined });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: undefined });
     });
 
     it('throws error when account ID environment variable does not exist', () => {
@@ -442,8 +443,8 @@ describe('CloudflareAi Provider', () => {
     });
 
     it('prioritizes explicit config over environment variables', () => {
-      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account';
-      process.env.CLOUDFLARE_API_KEY = 'env-key';
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: 'env-account' });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: 'env-key' });
 
       const provider = new CloudflareAiChatCompletionProvider(testModelName, {
         config: {
@@ -455,13 +456,13 @@ describe('CloudflareAi Provider', () => {
       expect(provider.getApiKey()).toBe('explicit-key');
 
       // Clean up
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-      delete process.env.CLOUDFLARE_API_KEY;
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: undefined });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: undefined });
     });
 
     it('handles missing config gracefully with environment fallback', () => {
-      process.env.CLOUDFLARE_ACCOUNT_ID = 'fallback-account';
-      process.env.CLOUDFLARE_API_KEY = 'fallback-key';
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: 'fallback-account' });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: 'fallback-key' });
 
       const provider = new CloudflareAiChatCompletionProvider(testModelName, {});
 
@@ -469,14 +470,14 @@ describe('CloudflareAi Provider', () => {
       expect(provider.id()).toBe(`cloudflare-ai:chat:${testModelName}`);
 
       // Clean up
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-      delete process.env.CLOUDFLARE_API_KEY;
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: undefined });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: undefined });
     });
 
     it('throws error when no configuration and no environment variables', () => {
       // Ensure environment variables are not set
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-      delete process.env.CLOUDFLARE_API_KEY;
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: undefined });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: undefined });
 
       expect(() => new CloudflareAiChatCompletionProvider(testModelName, {})).toThrow(
         'Cloudflare API token required',
@@ -791,27 +792,27 @@ describe('CloudflareAi Provider', () => {
     });
 
     it('works with undefined options when environment variables are set', () => {
-      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account';
-      process.env.CLOUDFLARE_API_KEY = 'env-key';
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: 'env-account' });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: 'env-key' });
 
       const provider = createCloudflareAiProvider('cloudflare-ai:chat:test-model', undefined);
       expect(provider).toBeInstanceOf(CloudflareAiChatCompletionProvider);
 
       // Clean up
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-      delete process.env.CLOUDFLARE_API_KEY;
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: undefined });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: undefined });
     });
 
     it('works with empty options object when environment variables are set', () => {
-      process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account';
-      process.env.CLOUDFLARE_API_KEY = 'env-key';
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: 'env-account' });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: 'env-key' });
 
       const provider = createCloudflareAiProvider('cloudflare-ai:chat:test-model', {});
       expect(provider).toBeInstanceOf(CloudflareAiChatCompletionProvider);
 
       // Clean up
-      delete process.env.CLOUDFLARE_ACCOUNT_ID;
-      delete process.env.CLOUDFLARE_API_KEY;
+      mockProcessEnv({ CLOUDFLARE_ACCOUNT_ID: undefined });
+      mockProcessEnv({ CLOUDFLARE_API_KEY: undefined });
     });
 
     it('passes through provider options correctly', () => {

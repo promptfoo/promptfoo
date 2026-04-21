@@ -62,13 +62,10 @@ const showTestConsoleOutput =
 
 // These environment variables are inherited from the parent process (main promptfoo server)
 // We set VITE_ prefixed variables here so Vite can expose them to the client code
-if (process.env.NODE_ENV === 'development') {
-  process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
-    process.env.PROMPTFOO_REMOTE_API_BASE_URL || `http://localhost:${API_PORT}`;
-} else {
-  process.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL =
-    process.env.PROMPTFOO_REMOTE_API_BASE_URL || '';
-}
+const remoteApiBaseUrl =
+  process.env.PROMPTFOO_REMOTE_API_BASE_URL ||
+  (process.env.NODE_ENV === 'development' ? `http://localhost:${API_PORT}` : '');
+Object.assign(process.env, { VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL: remoteApiBaseUrl });
 
 // https://vitejs.dev/config/
 // Export a plain object here to avoid CI-only type conflicts from multiple Vite installs in the monorepo.
