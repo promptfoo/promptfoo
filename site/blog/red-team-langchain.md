@@ -42,7 +42,7 @@ You'll learn how to use adversarial LLM models to test your LangChain applicatio
 Before you begin, ensure you have the following:
 
 - **Python**: Python 3.8 or later
-- **Node.js**: Version 20 or later
+- **Node.js 20+**
 - **Promptfoo**: No prior installation needed; we'll use `npx`
 - **LangChain**: Install via pip: `pip install langchain`
 - **API Keys**: For your LLM provider (e.g., OpenAI, Anthropic)
@@ -165,7 +165,7 @@ targets:
     label: 'LangChain App'
 
 redteam:
-  # Purpose is a short description of your application.  It's used to generate highly relevant malicious test cases.
+  # Purpose is a short description of your application. It's used to generate highly relevant malicious test cases.
   purpose: 'A customer support agent for Acme, Inc...'
 
   # Number of test cases per plugin.

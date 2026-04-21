@@ -1,3 +1,5 @@
+import type { VarValue } from './shared';
+
 // Declared to avoid circular dependency with providers.ts
 declare interface ApiProvider {
   id: () => string;
@@ -13,7 +15,7 @@ export interface PromptConfig {
 }
 
 export interface PromptFunctionContext {
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   config: Record<string, any>;
   provider: {
     id: string;
@@ -44,6 +46,9 @@ export interface PromptFunction {
 export interface Prompt {
   id?: string;
   raw: string;
+  // Internal-only copy of the undecorated prompt template used when prefix/suffix
+  // wraps the runtime prompt.
+  template?: string;
   display?: string;
   label: string;
   function?: PromptFunction;

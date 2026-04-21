@@ -196,11 +196,44 @@ promptfoo scan-model models/ \
 # Enable strict mode for enhanced security validation
 promptfoo scan-model model.pkl --strict
 
+# Discover available scanner IDs and class names
+promptfoo scan-model --list-scanners
+
+# Run only selected scanners by ID
+promptfoo scan-model models/ --scanners pickle,tf_savedmodel
+
+# Repeat scanner-selection flags when that is clearer in scripts
+promptfoo scan-model models/ --scanners pickle --scanners tf_savedmodel
+
+# Exclude a scanner from the default scanner set
+promptfoo scan-model models/ --exclude-scanner weight_distribution
+
 # Strict mode with additional output options
 promptfoo scan-model models/ \
   --strict \
   --format sarif \
   --output security-scan.sarif
+```
+
+Use `--scanners` for focused triage scans. Use `--exclude-scanner` when the default scanner set is right except for a noisy or irrelevant scanner.
+
+### Sharing Results
+
+When connected to promptfoo Cloud, model audit results are automatically shared by default. This provides a web-based interface to view, analyze, and collaborate on scan results.
+
+```bash
+# Results are automatically shared when cloud is enabled
+promptfoo scan-model models/
+
+# Explicitly enable sharing
+promptfoo scan-model models/ --share
+
+# Disable sharing for this scan
+promptfoo scan-model models/ --no-share
+
+# Disable sharing globally via environment variable
+export PROMPTFOO_DISABLE_SHARING=true
+promptfoo scan-model models/
 ```
 
 ## CI/CD Integration
