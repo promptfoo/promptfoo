@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Promptfoo Evals'
+  short_description: 'Write and QA Promptfoo eval suites'
+  default_prompt: 'Use $promptfoo-evals to write and run a focused eval, including local JS/Python providers.'
+
+policy:
+  allow_implicit_invocation: true

@@ -4,12 +4,20 @@ import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
+import type { TransformFunction } from './transform';
 
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
 export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
+export type ProviderConfig =
+  | ProviderId
+  | ProviderFunction
+  | ApiProvider
+  | ProviderOptions
+  | ProviderOptionsMap;
+export type ProvidersConfig = ProviderId | ProviderFunction | ApiProvider | ProviderConfig[];
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
@@ -60,7 +68,7 @@ export interface ProviderOptions {
   label?: ProviderLabel;
   config?: any;
   prompts?: string[];
-  transform?: string;
+  transform?: string | TransformFunction;
   delay?: number;
   env?: EnvOverrides;
   inputs?: Inputs;
@@ -117,7 +125,7 @@ export interface ApiProvider {
   getSessionId?: () => string;
   inputs?: Inputs;
   label?: ProviderLabel;
-  transform?: string;
+  transform?: string | TransformFunction;
   toJSON?: () => any;
   /**
    * Provider-wide cleanup hook for releasing long-lived resources such as worker
@@ -282,7 +290,9 @@ export function isApiProvider(provider: any): provider is ApiProvider {
     typeof provider === 'object' &&
     provider != null &&
     'id' in provider &&
-    typeof provider.id === 'function'
+    typeof provider.id === 'function' &&
+    'callApi' in provider &&
+    typeof provider.callApi === 'function'
   );
 }
 

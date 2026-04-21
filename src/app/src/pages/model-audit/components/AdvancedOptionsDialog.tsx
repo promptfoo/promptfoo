@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
+import { Checkbox } from '@app/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -15,33 +16,35 @@ import { XIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
+import { Spinner } from '@app/components/ui/spinner';
 import { Switch } from '@app/components/ui/switch';
+import { DEFAULT_SCAN_OPTIONS } from '../stores';
 
-import type { ScanOptions } from '../ModelAudit.types';
+import type { ScannerCatalogEntry, ScanOptions } from '../ModelAudit.types';
 
 interface AdvancedOptionsDialogProps {
   open: boolean;
   onClose: () => void;
   scanOptions: ScanOptions;
   onOptionsChange: (options: ScanOptions) => void;
+  scannerCatalog?: ScannerCatalogEntry[];
+  isLoadingScanners?: boolean;
+  scannerCatalogError?: string | null;
 }
-
-const defaultScanOptions: ScanOptions = {
-  blacklist: [],
-  timeout: 3600,
-  maxSize: undefined,
-  strict: false,
-};
 
 export default function AdvancedOptionsDialog({
   open,
   onClose,
   scanOptions,
   onOptionsChange,
+  scannerCatalog = [],
+  isLoadingScanners = false,
+  scannerCatalogError = null,
 }: AdvancedOptionsDialogProps) {
   const [blacklistInput, setBlacklistInput] = useState('');
+  const [scannerFilter, setScannerFilter] = useState('');
   const [localOptions, setLocalOptions] = useState({
-    ...defaultScanOptions,
+    ...DEFAULT_SCAN_OPTIONS,
     ...scanOptions,
   });
 
@@ -49,7 +52,7 @@ export default function AdvancedOptionsDialog({
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     setLocalOptions({
-      ...defaultScanOptions,
+      ...DEFAULT_SCAN_OPTIONS,
       ...scanOptions,
     });
   }, [scanOptions, open]);
@@ -75,6 +78,39 @@ export default function AdvancedOptionsDialog({
     onOptionsChange(localOptions);
     onClose();
   };
+
+  const toggleScannerOption = (
+    key: 'scanners' | 'excludeScanner',
+    scannerId: string,
+    checked: boolean,
+  ) => {
+    setLocalOptions((options) => {
+      const otherKey = key === 'scanners' ? 'excludeScanner' : 'scanners';
+      const current = options[key] ?? [];
+      const otherCurrent = options[otherKey] ?? [];
+      const next = checked
+        ? Array.from(new Set([...current, scannerId]))
+        : current.filter((id) => id !== scannerId);
+
+      return {
+        ...options,
+        [key]: next,
+        [otherKey]: checked ? otherCurrent.filter((id) => id !== scannerId) : otherCurrent,
+      };
+    });
+  };
+
+  const filteredScanners = scannerCatalog.filter((scanner) => {
+    const query = scannerFilter.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+    return (
+      scanner.id.toLowerCase().includes(query) ||
+      scanner.class.toLowerCase().includes(query) ||
+      scanner.description.toLowerCase().includes(query)
+    );
+  });
 
   return (
     <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
@@ -192,6 +228,77 @@ export default function AdvancedOptionsDialog({
                 Fail on warnings, scan all file types, strict license validation
               </p>
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold">Scanner Selection</h3>
+            </div>
+            <Input
+              aria-label="Filter scanners"
+              placeholder="Filter scanners"
+              value={scannerFilter}
+              onChange={(e) => setScannerFilter(e.target.value)}
+            />
+
+            {isLoadingScanners && (
+              <div className="flex items-center gap-2 rounded-lg border border-border p-4 text-sm text-muted-foreground">
+                <Spinner size="sm" />
+                Loading scanners...
+              </div>
+            )}
+
+            {!isLoadingScanners && scannerCatalogError && (
+              <HelperText>{scannerCatalogError}</HelperText>
+            )}
+
+            {!isLoadingScanners && !scannerCatalogError && scannerCatalog.length > 0 && (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <div className="grid grid-cols-[minmax(0,1fr)_6rem_6rem] border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  <span>Scanner</span>
+                  <span className="text-center">Only</span>
+                  <span className="text-center">Exclude</span>
+                </div>
+                <div className="max-h-72 overflow-y-auto">
+                  {filteredScanners.map((scanner) => (
+                    <div
+                      key={scanner.id}
+                      className="grid grid-cols-[minmax(0,1fr)_6rem_6rem] items-center gap-2 border-b border-border px-3 py-2 last:border-b-0"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{scanner.id}</div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {scanner.class}
+                        </div>
+                      </div>
+                      <div className="flex justify-center">
+                        <Checkbox
+                          aria-label={`Only run ${scanner.id}`}
+                          checked={(localOptions.scanners ?? []).includes(scanner.id)}
+                          onCheckedChange={(checked) =>
+                            toggleScannerOption('scanners', scanner.id, checked === true)
+                          }
+                        />
+                      </div>
+                      <div className="flex justify-center">
+                        <Checkbox
+                          aria-label={`Exclude ${scanner.id}`}
+                          checked={(localOptions.excludeScanner ?? []).includes(scanner.id)}
+                          onCheckedChange={(checked) =>
+                            toggleScannerOption('excludeScanner', scanner.id, checked === true)
+                          }
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {filteredScanners.length === 0 && (
+                    <div className="px-3 py-4 text-sm text-muted-foreground">
+                      No scanners match this filter.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

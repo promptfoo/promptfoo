@@ -9,7 +9,11 @@ import { Columns3 } from 'lucide-react';
 
 import type { DataTableColumnToggleProps } from './types';
 
-export function DataTableColumnToggle<TData>({ table }: DataTableColumnToggleProps<TData>) {
+export function DataTableColumnToggle<TData>({
+  table,
+  columnVisibility,
+  setColumnVisibility,
+}: DataTableColumnToggleProps<TData>) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -25,12 +29,23 @@ export function DataTableColumnToggle<TData>({ table }: DataTableColumnTogglePro
           .map((column) => {
             const header = column.columnDef.header;
             const headerText = typeof header === 'string' ? header : column.id;
+            const isVisible = columnVisibility[column.id] !== false;
 
             return (
               <DropdownMenuCheckboxItem
                 key={column.id}
-                checked={column.getIsVisible()}
-                onCheckedChange={(value) => column.toggleVisibility(!!value)}
+                checked={isVisible}
+                onCheckedChange={(value) => {
+                  setColumnVisibility((previous) => {
+                    const next = { ...previous };
+                    if (value) {
+                      delete next[column.id];
+                    } else {
+                      next[column.id] = false;
+                    }
+                    return next;
+                  });
+                }}
               >
                 {headerText}
               </DropdownMenuCheckboxItem>

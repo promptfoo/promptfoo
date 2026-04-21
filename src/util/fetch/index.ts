@@ -14,6 +14,7 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
+import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { SystemError } from './errors';
 import type { FetchOptions } from './types';
@@ -105,6 +106,19 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
   });
   cachedProxyAgents.set(cacheKey, agent);
   return agent;
+}
+
+/**
+ * Resolve whether to disable transient-error retries. An explicit caller flag
+ * always wins (a caller may opt back in even when the provider set
+ * `maxRetries: 0`); otherwise we disable only when the retry context carries
+ * `maxRetries === 0`.
+ */
+function resolveTransientRetryDisabled(explicit?: boolean): boolean {
+  if (explicit !== undefined) {
+    return explicit;
+  }
+  return getFetchRetryContextMaxRetries() === 0;
 }
 
 export async function fetchWithProxy(
@@ -204,17 +218,16 @@ export async function fetchWithProxy(
     }
   }
 
-  // Transient error retry logic (502/503/504/524 with matching status text)
-  const maxTransientRetries = options.disableTransientRetries ? 0 : 3;
+  // Transient error retry logic (502/503/504/524 with matching status text).
+  // When a provider sets maxRetries: 0 and the caller did not pass an explicit
+  // disableTransientRetries, honor the provider intent via the retry context.
+  const disableTransientRetries = resolveTransientRetryDisabled(options.disableTransientRetries);
+  const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
     const response = await monkeyPatchFetch(finalUrl, finalOptions);
 
-    if (
-      !options.disableTransientRetries &&
-      isTransientError(response) &&
-      attempt < maxTransientRetries
-    ) {
+    if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
       logger.debug(
         `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
@@ -340,13 +353,29 @@ export function isTransientError(response: Response): boolean {
  */
 export type { FetchOptions } from './types';
 
+function formatFetchErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const typedError = error as SystemError;
+  let message = `${typedError.name}: ${typedError.message}`;
+  if (typedError.cause) {
+    message += ` (Cause: ${typedError.cause})`;
+  }
+  if (typedError.code) {
+    message += ` (Code: ${typedError.code})`;
+  }
+  return message;
+}
+
 export async function fetchWithRetries(
   url: RequestInfo,
   options: FetchOptions = {},
   timeout: number,
   maxRetries?: number,
 ): Promise<Response> {
-  maxRetries = Math.max(0, maxRetries ?? 4);
+  const contextMaxRetries = getFetchRetryContextMaxRetries();
+  maxRetries = Math.max(0, maxRetries ?? contextMaxRetries ?? 4);
 
   let lastErrorMessage: string | undefined;
   const backoff = getEnvInt('PROMPTFOO_REQUEST_BACKOFF_MS', 5000);
@@ -366,10 +395,18 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
+        lastErrorMessage = `Rate limited: ${response.status} ${response.statusText}`;
+        if (i >= maxRetries) {
+          // No retries remain: fail fast instead of honoring the Retry-After delay.
+          // `lastErrorMessage` was set above so the throw below carries the 429 detail.
+          logger.debug(
+            `Rate limited on URL ${url}: ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, no retries remain.`,
+          );
+          break;
+        }
         logger.debug(
           `Rate limited on URL ${url}: ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, waiting before retry...`,
         );
-        lastErrorMessage = `Rate limited: ${response.status} ${response.statusText}`;
         await handleRateLimit(response);
         continue;
       }
@@ -381,21 +418,7 @@ export async function fetchWithRetries(
         throw error;
       }
 
-      let errorMessage;
-      if (error instanceof Error) {
-        // Extract as much detail as possible from the error
-        const typedError = error as SystemError;
-        errorMessage = `${typedError.name}: ${typedError.message}`;
-        if (typedError.cause) {
-          errorMessage += ` (Cause: ${typedError.cause})`;
-        }
-        if (typedError.code) {
-          // Node.js system errors often have error codes
-          errorMessage += ` (Code: ${typedError.code})`;
-        }
-      } else {
-        errorMessage = String(error);
-      }
+      const errorMessage = formatFetchErrorMessage(error);
 
       logger.debug(`Request to ${url} failed (attempt #${i + 1}), retrying: ${errorMessage}`);
       if (i < maxRetries) {

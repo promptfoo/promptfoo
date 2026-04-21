@@ -128,17 +128,14 @@ describe('Prompts', () => {
     expect(within(dialog).queryByText('This is the first sample prompt.')).not.toBeInTheDocument();
   });
 
-  it('should handle pagination correctly and open the PromptDialog with the correct prompt details when a row on a different page is clicked', async () => {
+  it('should open the PromptDialog with the correct prompt details when a later virtualized row is clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders({ data: mockPromptsLarge });
 
-    const nextPageButton = screen.getByRole('button', { name: 'Next' });
-    await user.click(nextPageButton);
+    const laterPromptCells = await screen.findAllByText('This is prompt number 26.');
+    expect(laterPromptCells.length).toBeGreaterThan(0);
 
-    const promptsOnSecondPage = screen.getAllByText('This is prompt number 26.');
-    expect(promptsOnSecondPage.length).toBeGreaterThan(0);
-
-    await user.click(promptsOnSecondPage[0]);
+    await user.click(laterPromptCells[0]);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(dialog).toBeInTheDocument();

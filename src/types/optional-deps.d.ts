@@ -26,3 +26,6 @@ declare module 'ibm-cloud-sdk-core' {
     constructor(config: { bearerToken: string });
   }
 }
+
+// Optional dependency used by transformers providers through dynamic imports.
+declare module '@huggingface/transformers';

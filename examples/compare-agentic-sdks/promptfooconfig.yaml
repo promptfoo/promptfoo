@@ -61,7 +61,7 @@ providers:
       working_dir: examples/compare-agentic-sdks/test-codebase
 
   # Plain LLM for baseline (no file access)
-  - id: openai:gpt-5.1
+  - id: openai:chat:gpt-5.4
     label: plain-llm
     config:
       temperature: 0
