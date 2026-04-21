@@ -118,10 +118,8 @@ function fetchJsonCached<T>({
     return withAbortSignal(cached, signal);
   }
 
-  if (signal) {
-    return callApi(path, { signal }).then((response) =>
-      parseJsonResponse<T>(response, fallbackMessage),
-    );
+  if (signal?.aborted) {
+    return Promise.reject(createAbortError());
   }
 
   const request = callApi(path)
@@ -131,7 +129,7 @@ function fetchJsonCached<T>({
       throw error;
     });
   setCached(cache, key, request, maxEntries);
-  return request;
+  return withAbortSignal(request, signal);
 }
 
 export function clearEvalApiResponseCache(evalId?: string) {

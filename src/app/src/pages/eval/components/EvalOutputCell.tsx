@@ -1380,27 +1380,6 @@ function EvalOutputCell({
     });
   }, [cellDetail, detailAvailable, detailError, detailEvalId, detailLoading, output.id]);
 
-  React.useEffect(() => {
-    if (
-      showPrompts &&
-      !output.prompt &&
-      detailAvailable &&
-      !cellDetail &&
-      !detailLoading &&
-      !detailError
-    ) {
-      void loadCellDetail();
-    }
-  }, [
-    cellDetail,
-    detailAvailable,
-    detailError,
-    detailLoading,
-    loadCellDetail,
-    output.prompt,
-    showPrompts,
-  ]);
-
   const handlePromptOpen = () => {
     setOpen(true);
     if (!cellDetail && !detailLoading) {

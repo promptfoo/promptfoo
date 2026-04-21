@@ -43,20 +43,24 @@ export function stripOversizedStrings<T>(
       return createOmittedStringPlaceholder(current.length);
     }
 
-    if (Array.isArray(current)) {
-      return current.map(stripValue);
-    }
-
     if (current && typeof current === 'object') {
-      const toJSON = (current as { toJSON?: () => unknown }).toJSON;
-      if (typeof toJSON === 'function') {
-        return stripValue(toJSON.call(current));
-      }
-
       if (seen.has(current)) {
         return '[Circular Reference]';
       }
       seen.add(current);
+
+      if (Array.isArray(current)) {
+        const stripped = current.map(stripValue);
+        seen.delete(current);
+        return stripped;
+      }
+
+      const toJSON = (current as { toJSON?: () => unknown }).toJSON;
+      if (typeof toJSON === 'function') {
+        const stripped = stripValue(toJSON.call(current));
+        seen.delete(current);
+        return stripped;
+      }
 
       const stripped: Record<string, unknown> = {};
       for (const [key, child] of Object.entries(current)) {

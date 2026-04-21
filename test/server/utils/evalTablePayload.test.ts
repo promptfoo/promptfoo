@@ -3,6 +3,7 @@ import { FILE_METADATA_KEY } from '../../../src/providers/constants';
 import {
   trimEvalConfigForTableApi,
   trimEvalTableForApi,
+  trimTableCellForApi,
 } from '../../../src/server/utils/evalTablePayload';
 import { createCompletedPrompt, createEvaluateTable } from '../../factories/eval';
 import { createProviderResponse } from '../../factories/provider';
@@ -177,5 +178,9 @@ describe('trimEvalTableForApi', () => {
       available: true,
       omittedFields: ['tests', 'defaultTest'],
     });
+  });
+
+  it('preserves null table cells from sparse tables', () => {
+    expect(trimTableCellForApi(null)).toBeNull();
   });
 });

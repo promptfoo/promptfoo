@@ -272,7 +272,8 @@ describe('EvalOutputCell', () => {
     ]);
   });
 
-  it('lazy-loads stripped prompt details for inline prompt display', async () => {
+  it('keeps stripped prompt details user-driven when inline prompts are shown', async () => {
+    const user = userEvent.setup();
     vi.mocked(fetchEvalResultDetail).mockResolvedValue({
       evalId: 'eval-1',
       resultId: 'test-id',
@@ -297,6 +298,11 @@ describe('EvalOutputCell', () => {
       />,
     );
 
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.queryByText('Full prompt from detail')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
     await waitFor(() => {
       expect(fetchEvalResultDetail).toHaveBeenCalledWith(
         'eval-1',
@@ -304,7 +310,10 @@ describe('EvalOutputCell', () => {
         expect.any(AbortSignal),
       );
     });
-    expect(await screen.findByText('Full prompt from detail')).toBeInTheDocument();
+    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
+      'data-prompt',
+      'Full prompt from detail',
+    );
   });
 
   it('does not auto-load details when the table already includes a prompt', () => {
@@ -449,10 +458,16 @@ describe('EvalOutputCell', () => {
       />,
     );
 
-    await screen.findByText('Full prompt from detail');
     await user.click(screen.getByRole('button', { name: /view output and test details/i }));
 
-    const dialogComponent = screen.getByTestId('dialog-component');
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'test-id',
+        expect.any(AbortSignal),
+      );
+    });
+    const dialogComponent = await screen.findByTestId('dialog-component');
     expect(dialogComponent).toHaveAttribute('data-prompt', 'Full prompt from detail');
     expect(dialogComponent).toHaveAttribute('data-output', 'Full output from detail');
     expect(JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}')).toEqual({
@@ -464,6 +479,7 @@ describe('EvalOutputCell', () => {
   });
 
   it('shows detail load errors for stripped prompts', async () => {
+    const user = userEvent.setup();
     vi.mocked(fetchEvalResultDetail).mockRejectedValue(new Error('Detail unavailable'));
 
     renderWithProviders(
@@ -480,6 +496,8 @@ describe('EvalOutputCell', () => {
         }}
       />,
     );
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
 
     expect(await screen.findByText('Detail unavailable')).toBeInTheDocument();
   });

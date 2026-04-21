@@ -720,6 +720,21 @@ describe('resolveImageSource security', () => {
     ).toBe('/api/media/images/test.png');
   });
 
+  it('should NOT return external URLs from structured image data', () => {
+    expect(
+      resolveImageSource({
+        data: 'https://attacker.example/leak.png',
+        format: 'png',
+      }),
+    ).toBeUndefined();
+    expect(
+      resolveImageSource({
+        data: 'http://attacker.example/leak.png',
+        format: 'png',
+      }),
+    ).toBeUndefined();
+  });
+
   it('should convert long base64 strings to data URIs', () => {
     const base64 = 'A'.repeat(100); // Long enough to be treated as base64
     expect(resolveImageSource(base64)).toBe(`data:image/png;base64,${base64}`);

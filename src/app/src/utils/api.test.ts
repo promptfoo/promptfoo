@@ -8,6 +8,8 @@ import {
   fetchUserEmail,
   fetchUserId,
   getApiBaseUrl,
+  prefetchEvalConfig,
+  prefetchEvalResultDetail,
   updateEvalAuthor,
 } from './api';
 
@@ -249,9 +251,7 @@ describe('fetchEvalResultDetail', () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify(detail), { status: 200 }));
 
     await expect(fetchEvalResultDetail('eval 123', 'result/123')).resolves.toEqual(detail);
-    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval%20123/results/result%2F123/detail', {
-      signal: undefined,
-    });
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval%20123/results/result%2F123/detail', {});
   });
 
   it('throws API error messages from non-ok responses', async () => {
@@ -278,6 +278,32 @@ describe('fetchEvalResultDetail', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
+
+  it('returns null when prefetching result detail fails', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    await expect(prefetchEvalResultDetail('eval-123', 'result-123')).resolves.toBeNull();
+  });
+
+  it('evicts the oldest cached result detail response when the cache is full', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      const resultId = decodeURIComponent(url.split('/results/')[1].split('/detail')[0]);
+      return Promise.resolve(
+        new Response(JSON.stringify({ evalId: 'eval-123', resultId }), { status: 200 }),
+      );
+    });
+
+    for (let index = 0; index <= 50; index += 1) {
+      await expect(fetchEvalResultDetail('eval-123', `result-${index}`)).resolves.toMatchObject({
+        resultId: `result-${index}`,
+      });
+    }
+
+    await expect(fetchEvalResultDetail('eval-123', 'result-0')).resolves.toMatchObject({
+      resultId: 'result-0',
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(52);
+  });
 });
 
 describe('fetchEvalConfig', () => {
@@ -296,7 +322,7 @@ describe('fetchEvalConfig', () => {
     mockFetch.mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
 
     await expect(fetchEvalConfig('eval 123')).resolves.toEqual(body);
-    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval%20123/config', { signal: undefined });
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval%20123/config', {});
   });
 
   it('throws API error messages from non-ok config responses', async () => {
@@ -318,6 +344,54 @@ describe('fetchEvalConfig', () => {
     await fetchEvalConfig('eval-123');
 
     expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses a prefetched config response for callers with an abort signal', async () => {
+    const body = { config: { description: 'full config' } };
+    const controller = new AbortController();
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(body), { status: 200 }));
+
+    await expect(fetchEvalConfig('eval-123')).resolves.toEqual(body);
+    await expect(fetchEvalConfig('eval-123', controller.signal)).resolves.toEqual(body);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/config', {});
+  });
+
+  it('aborts an individual caller without aborting the shared config request', async () => {
+    const body = { config: { description: 'full config' } };
+    const controller = new AbortController();
+    let resolveFetch: (response: Response) => void = () => {};
+    mockFetch.mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+
+    const request = fetchEvalConfig('eval-123', controller.signal);
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+    resolveFetch(new Response(JSON.stringify(body), { status: 200 }));
+    await expect(fetchEvalConfig('eval-123')).resolves.toEqual(body);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start a config request when the caller signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(fetchEvalConfig('eval-123', controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('returns null when prefetching eval config fails', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    await expect(prefetchEvalConfig('eval-123')).resolves.toBeNull();
   });
 });
 

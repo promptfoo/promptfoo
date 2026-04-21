@@ -186,9 +186,9 @@ function trimPromptForTable(prompt: CompletedPrompt, maxStringLength: number): C
 }
 
 export function trimTableCellForApi(
-  cell: EvaluateTableOutput | undefined,
+  cell: EvaluateTableOutput | null | undefined,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},
-): EvaluateTableOutput | undefined {
+): EvaluateTableOutput | null | undefined {
   if (!cell) {
     return cell;
   }

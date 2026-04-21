@@ -212,7 +212,6 @@ export function resolveImageSource(
   return resolveInlineMediaSource(image?.data, {
     kind: 'image',
     format: image?.format || 'png',
-    allowExternalUrls: true,
   });
 }
 

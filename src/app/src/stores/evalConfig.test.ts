@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG, getPersistableEvalConfig, useStore } from './evalConfig';
+import {
+  DEFAULT_CONFIG,
+  getPersistableEvalConfig,
+  MAX_PERSISTED_EVAL_CONFIG_BYTES,
+  useStore,
+} from './evalConfig';
 import type { UnifiedConfig } from '@promptfoo/types';
 
 describe('evalConfig store', () => {
@@ -76,6 +81,49 @@ describe('evalConfig store', () => {
       expect(persistableConfig.tests).toEqual([]);
       expect(persistableConfig.defaultTest).toEqual({});
       expect(persistableConfig.scenarios).toEqual([]);
+    });
+
+    it('returns small configs unchanged for persistence', () => {
+      const config = {
+        description: 'Small config',
+        providers: ['echo'],
+        prompts: ['hello'],
+      } as Partial<UnifiedConfig>;
+
+      expect(getPersistableEvalConfig(config)).toBe(config);
+    });
+
+    it('falls back to lightweight fields when compacted configs are still too large', () => {
+      const config = {
+        description: 'Huge config',
+        providers: ['echo'],
+        prompts: ['x'.repeat(MAX_PERSISTED_EVAL_CONFIG_BYTES + 1)],
+        tests: [{ vars: { topic: 'details' } }],
+        defaultTest: { vars: { topic: 'default' } },
+        scenarios: [{ config: { topic: 'scenario' }, tests: [] }],
+      } as unknown as Partial<UnifiedConfig>;
+
+      expect(getPersistableEvalConfig(config)).toEqual({
+        ...DEFAULT_CONFIG,
+        description: 'Huge config',
+        providers: ['echo'],
+        prompts: [],
+      });
+    });
+
+    it('falls back to lightweight fields when config serialization fails', () => {
+      const config = {
+        description: 'Circular config',
+        providers: ['echo'],
+      } as Record<string, unknown>;
+      config.extra = config;
+
+      expect(getPersistableEvalConfig(config as Partial<UnifiedConfig>)).toEqual({
+        ...DEFAULT_CONFIG,
+        description: 'Circular config',
+        providers: ['echo'],
+        prompts: [],
+      });
     });
   });
 
