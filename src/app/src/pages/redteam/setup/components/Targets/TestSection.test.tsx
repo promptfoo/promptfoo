@@ -1,7 +1,8 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSection, { type TestResult } from './TestSection';
 
@@ -42,6 +43,7 @@ describe('TestSection', () => {
 
   describe('Configuration Change Suggestions', () => {
     it("should call onApplyConfigSuggestion and mark field as applied on 'Apply' click", async () => {
+      const user = userEvent.setup();
       const suggestedHeaders = { 'X-Api-Key': 'new-key-123' };
       const testResultWithSuggestion: TestResult = {
         success: false,
@@ -58,7 +60,7 @@ describe('TestSection', () => {
       expect(within(suggestionContainer).getByText('headers')).toBeInTheDocument();
 
       const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
-      fireEvent.click(applyButton);
+      await user.click(applyButton);
 
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('headers', suggestedHeaders);
@@ -77,6 +79,7 @@ describe('TestSection', () => {
     });
 
     it("should call onApplyConfigSuggestion for each field in configuration_change_suggestion and mark all fields as applied when the user clicks 'Apply All'", async () => {
+      const user = userEvent.setup();
       const testResultWithMultipleSuggestions: TestResult = {
         success: false,
         changes_needed: true,
@@ -93,7 +96,7 @@ describe('TestSection', () => {
       );
 
       const applyAllButton = screen.getByRole('button', { name: 'Apply All' });
-      fireEvent.click(applyAllButton);
+      await user.click(applyAllButton);
 
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(3);
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('header1', 'value1');
@@ -111,7 +114,8 @@ describe('TestSection', () => {
       }
     });
 
-    it('should handle complex nested objects in configuration_change_suggestion values', () => {
+    it('should handle complex nested objects in configuration_change_suggestion values', async () => {
+      const user = userEvent.setup();
       const nestedObject = {
         level1: {
           level2: {
@@ -135,7 +139,7 @@ describe('TestSection', () => {
       expect(screen.getByText('"deepValue"', { exact: false })).toBeInTheDocument();
 
       const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
-      fireEvent.click(applyButton);
+      await user.click(applyButton);
 
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('nestedConfig', nestedObject);
@@ -167,7 +171,8 @@ describe('TestSection', () => {
       expect(screen.getByText('Test Target Configuration')).toBeInTheDocument();
     });
 
-    it('should call onApplyConfigSuggestion with invalid JSON in body when Apply is clicked', () => {
+    it('should call onApplyConfigSuggestion with invalid JSON in body when Apply is clicked', async () => {
+      const user = userEvent.setup();
       const invalidJson =
         '{\n  "messages": [\n    "role": "user",\n    "content": "{{prompt}}"\n  ]\n}';
       const testResultWithInvalidJson: TestResult = {
@@ -185,7 +190,7 @@ describe('TestSection', () => {
       expect(within(suggestionContainer).getByText('body')).toBeInTheDocument();
 
       const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
-      fireEvent.click(applyButton);
+      await user.click(applyButton);
 
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('body', invalidJson);
