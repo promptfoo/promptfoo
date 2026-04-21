@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import invariant from '../../../util/invariant';
@@ -22,8 +23,11 @@ import { getGoalRubric } from '../prompts';
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  isConversationEndedResponse,
+  type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
@@ -97,8 +101,6 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
 
 `;
 
-type StopReason = 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
-
 /**
  * Represents metadata for the Custom conversation process.
  */
@@ -107,7 +109,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   customBacktrackCount: number;
   customResult: boolean;
   customConfidence: number | null;
-  stopReason: StopReason;
+  stopReason: RoundBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -185,8 +187,14 @@ export class CustomProvider implements ApiProvider {
 
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
-    this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
-    this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
+
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
     this.targetConversationId = crypto.randomUUID();
@@ -309,7 +317,7 @@ export class CustomProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let lastTargetError: string | undefined = undefined;
 
-    let exitReason: StopReason = 'Max rounds reached';
+    let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
     const totalTokenUsage = createEmptyTokenUsage();
 
@@ -408,6 +416,14 @@ export class CustomProvider implements ApiProvider {
         lastResponse = response;
         lastTransformResult = transformResult;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
+        if (isConversationEndedResponse(lastResponse)) {
+          logger.info('[Custom] Target ended conversation', {
+            round: roundNum,
+            reason: lastResponse.conversationEndReason,
+          });
+          exitReason = 'Target ended conversation';
+          break;
+        }
         if (lastResponse.error) {
           lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
           logger.info(
@@ -459,6 +475,15 @@ export class CustomProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (isConversationEndedResponse(lastResponse)) {
+            logger.info('[Custom] Target ended conversation during unblocking', {
+              round: roundNum,
+              reason: lastResponse.conversationEndReason,
+            });
+            exitReason = 'Target ended conversation';
+            break;
+          }
+
           if (lastResponse.error) {
             lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
             logger.info(
@@ -522,7 +547,7 @@ export class CustomProvider implements ApiProvider {
               lastResponse.output,
               test,
               provider,
-              assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              getGraderAssertionValue(assertToUse),
               additionalRubric,
             );
             graderPassed = grade.pass;

@@ -103,7 +103,7 @@ The dataset includes jailbreak attempts from OpenAI's internal eval suite, each 
 - The jailbreak prompt text
 - Expected guardrail triggers (e.g., "Jailbreak": true)
 
-The dataset contains approximately 51 jailbreak prompts and 49 safe prompts. If you request more tests than available, the plugin returns all available prompts with a "Partial" status.
+The dataset contains approximately 51 jailbreak prompts and 49 safe prompts. If you request more tests than available, the plugin returns the available prompts and logs when an exact safe/jailbreak split cannot be produced.
 
 ## Related Concepts
 

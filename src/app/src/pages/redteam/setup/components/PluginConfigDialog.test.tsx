@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PluginConfigDialog from './PluginConfigDialog';
 
@@ -62,6 +63,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('saves graderGuidance when Save is clicked', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -73,12 +75,12 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
-      fireEvent.change(guidanceField, {
-        target: { value: 'Our brand names are not competitor mentions' },
-      });
+      await user.click(guidanceField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Our brand names are not competitor mentions');
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalledWith(
@@ -91,6 +93,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('removes empty graderGuidance when saving', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -102,7 +105,7 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         const savedConfig = mockOnSave.mock.calls[0][1];
@@ -111,6 +114,7 @@ describe('PluginConfigDialog - OSS', () => {
     });
 
     it('preserves other config fields when saving graderGuidance', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -122,12 +126,12 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const guidanceField = screen.getByPlaceholderText(/For this financial app/);
-      fireEvent.change(guidanceField, {
-        target: { value: 'BOLA guidance' },
-      });
+      await user.click(guidanceField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('BOLA guidance');
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       await waitFor(() => {
         expect(mockOnSave).toHaveBeenCalledWith(
@@ -263,7 +267,8 @@ describe('PluginConfigDialog - OSS', () => {
   });
 
   describe("when plugin is 'openai-guardrails'", () => {
-    it("should display the 'includeSafe' checkbox and update its state on toggle", () => {
+    it("should display the 'includeSafe' checkbox and update its state on toggle", async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -278,17 +283,18 @@ describe('PluginConfigDialog - OSS', () => {
       const checkbox = screen.getByLabelText(checkboxLabel);
       expect(checkbox).toBeInTheDocument();
 
-      fireEvent.click(checkbox);
+      await user.click(checkbox);
 
       // After clicking, checkbox should change state
       expect(checkbox).toHaveAttribute('data-state', 'checked');
 
-      fireEvent.click(checkbox);
+      await user.click(checkbox);
 
       expect(checkbox).toHaveAttribute('data-state', 'unchecked');
     });
 
-    it("should call onSave with the correct plugin and localConfig (including the 'includeSafe' value) when the Save button is clicked", () => {
+    it("should call onSave with the correct plugin and localConfig (including the 'includeSafe' value) when the Save button is clicked", async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -303,13 +309,14 @@ describe('PluginConfigDialog - OSS', () => {
       const checkbox = screen.getByLabelText(checkboxLabel);
       const saveButton = screen.getByRole('button', { name: 'Save' });
 
-      fireEvent.click(checkbox);
-      fireEvent.click(saveButton);
+      await user.click(checkbox);
+      await user.click(saveButton);
 
       expect(mockOnSave).toHaveBeenCalledWith('openai-guardrails', { includeSafe: true });
     });
 
-    it('should not call onSave if no changes were made to the config', () => {
+    it('should not call onSave if no changes were made to the config', async () => {
+      const user = userEvent.setup();
       const initialConfig = { includeSafe: true };
       render(
         <PluginConfigDialog
@@ -322,12 +329,13 @@ describe('PluginConfigDialog - OSS', () => {
       );
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
-      fireEvent.click(saveButton);
+      await user.click(saveButton);
 
       expect(mockOnSave).not.toHaveBeenCalled();
     });
 
-    it('should discard changes when the dialog is closed without saving', () => {
+    it('should discard changes when the dialog is closed without saving', async () => {
+      const user = userEvent.setup();
       render(
         <PluginConfigDialog
           open={true}
@@ -340,9 +348,9 @@ describe('PluginConfigDialog - OSS', () => {
 
       const checkboxLabel = 'Include safe prompts to test for over-blocking';
       const checkbox = screen.getByLabelText(checkboxLabel);
-      fireEvent.click(checkbox);
+      await user.click(checkbox);
 
-      fireEvent.click(screen.getByText('Cancel'));
+      await user.click(screen.getByText('Cancel'));
 
       expect(mockOnSave).not.toHaveBeenCalled();
     });

@@ -49,7 +49,12 @@ export const SORA_COSTS: Record<OpenAiVideoModel, number> = {
 /**
  * Valid video sizes (aspect ratios) for OpenAI Sora
  */
-const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = ['1280x720', '720x1280'] as const;
+const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = [
+  '1280x720',
+  '720x1280',
+  '1792x1024',
+  '1024x1792',
+] as const;
 
 /**
  * Valid video durations in seconds for OpenAI Sora
@@ -293,7 +298,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     cacheKey: string,
     evalId?: string,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
-    const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant !== 'video' ? `?variant=${variant}` : ''}`;
+    const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant === 'video' ? '' : `?variant=${variant}`}`;
     const headers = this.getAuthHeaders();
 
     try {
@@ -334,9 +339,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     // Validate API key
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const config: OpenAiVideoOptions = {

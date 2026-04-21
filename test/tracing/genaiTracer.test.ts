@@ -274,6 +274,28 @@ describe('genaiTracer', () => {
       );
     });
 
+    it('should set cache token completion details attributes', () => {
+      const result: GenAISpanResult = {
+        tokenUsage: {
+          completionDetails: {
+            cacheReadInputTokens: 150,
+            cacheCreationInputTokens: 40,
+          },
+        },
+      };
+
+      setGenAIResponseAttributes(mockSpan as any, result);
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
+        40,
+      );
+    });
+
     it('should set response metadata attributes', () => {
       const result: GenAISpanResult = {
         responseModel: 'gpt-4-0613',

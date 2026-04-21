@@ -10,8 +10,9 @@
 // Build-time constants injected by tsdown's `define` option.
 // In development/test environments, these remain undefined.
 //
-// Note: __PROMPTFOO_MIN_NODE_VERSION__ is also injected at build time,
-// but is declared in entrypoint.ts to maintain its zero-dependency isolation.
+// Note: __PROMPTFOO_NODE_ENGINE_RANGE__ and __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__
+// are also injected at build time, but are declared in entrypoint.ts to maintain
+// its zero-dependency isolation.
 // The entrypoint must check Node version before importing any modules.
 declare const __PROMPTFOO_VERSION__: string | undefined;
 declare const __PROMPTFOO_POSTHOG_KEY__: string | undefined;
@@ -21,9 +22,9 @@ declare const __PROMPTFOO_POSTHOG_KEY__: string | undefined;
  * Injected at build time, or read from npm environment in development.
  */
 export const VERSION: string =
-  typeof __PROMPTFOO_VERSION__ !== 'undefined'
-    ? __PROMPTFOO_VERSION__
-    : (process.env.npm_package_version ?? '0.0.0-development');
+  typeof __PROMPTFOO_VERSION__ === 'undefined'
+    ? (process.env.npm_package_version ?? '0.0.0-development')
+    : __PROMPTFOO_VERSION__;
 
 /**
  * PostHog analytics key.
@@ -31,4 +32,4 @@ export const VERSION: string =
  * Empty string in development/test.
  */
 export const POSTHOG_KEY: string =
-  typeof __PROMPTFOO_POSTHOG_KEY__ !== 'undefined' ? __PROMPTFOO_POSTHOG_KEY__ : '';
+  typeof __PROMPTFOO_POSTHOG_KEY__ === 'undefined' ? '' : __PROMPTFOO_POSTHOG_KEY__;

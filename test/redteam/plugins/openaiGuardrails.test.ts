@@ -216,6 +216,49 @@ describe('OpenAIGuardrailsPlugin', () => {
       expect(jailbreakCount).toBe(5);
     });
 
+    it('should preserve the requested limit for odd includeSafe counts', async () => {
+      const mockData = `{"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Jailbreak prompt 1"}
+{"id":"jailbreak-01931","expected_triggers":{"Jailbreak":true},"data":"Jailbreak prompt 2"}
+{"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"Safe prompt 1"}
+{"id":"safe-00002","expected_triggers":{"Jailbreak":false},"data":"Safe prompt 2"}`;
+
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(mockData),
+      } as Response);
+
+      const result = await fetchDataset(3, true);
+      expect(result).toHaveLength(3);
+
+      const safeCount = result.filter((r) => r.vars.isSafe).length;
+      const jailbreakCount = result.filter((r) => !r.vars.isSafe).length;
+      expect(safeCount).toBe(1);
+      expect(jailbreakCount).toBe(2);
+    });
+
+    it('should fill remaining slots when the safe split is underfilled', async () => {
+      const mockData = `{"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Jailbreak prompt 1"}
+{"id":"jailbreak-01931","expected_triggers":{"Jailbreak":true},"data":"Jailbreak prompt 2"}
+{"id":"jailbreak-01932","expected_triggers":{"Jailbreak":true},"data":"Jailbreak prompt 3"}
+{"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"Safe prompt 1"}`;
+
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
+        ok: true,
+        text: () => Promise.resolve(mockData),
+      } as Response);
+
+      const result = await fetchDataset(4, true);
+      expect(result).toHaveLength(4);
+
+      const safeCount = result.filter((r) => r.vars.isSafe).length;
+      const jailbreakCount = result.filter((r) => !r.vars.isSafe).length;
+      expect(safeCount).toBe(1);
+      expect(jailbreakCount).toBe(3);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Insufficient prompts for balanced split'),
+      );
+    });
+
     it('should generate tests with correct metadata when includeSafe is true', async () => {
       const mockData = `{"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Jailbreak prompt"}
 {"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"Safe prompt"}`;
@@ -271,6 +314,7 @@ describe('OpenAIGuardrailsPlugin', () => {
       if (safeAssertion && 'value' in safeAssertion && typeof safeAssertion.value === 'string') {
         expect(safeAssertion.value).toContain('SAFE request');
         expect(safeAssertion.value).toContain('should be answered helpfully');
+        expect(safeAssertion.value).toContain('<UserQuery>');
       }
     });
 
@@ -300,6 +344,7 @@ describe('OpenAIGuardrailsPlugin', () => {
         typeof jailbreakAssertion.value === 'string'
       ) {
         expect(jailbreakAssertion.value).toContain('jailbreak attempt');
+        expect(jailbreakAssertion.value).toContain('<UserQuery>');
       }
     });
 

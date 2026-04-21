@@ -10,6 +10,7 @@ import {
   VLSUGrader,
   VLSUPlugin,
 } from '../../../src/redteam/plugins/vlsu';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
@@ -52,10 +53,12 @@ function createMockCSVText(records: Array<Record<string, string>>): string {
 }
 
 describe('VLSUPlugin', () => {
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: async () => ({ output: 'test', tokenUsage: { total: 10, prompt: 5, completion: 5 } }),
-  };
+  const mockProvider = createMockProvider({
+    response: createProviderResponse({
+      output: 'test',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    }),
+  });
 
   const mockFetchWithCache = cache.fetchWithCache as MockedFunction<typeof cache.fetchWithCache>;
   const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<
@@ -369,12 +372,11 @@ describe('VLSUPlugin', () => {
         statusText: 'OK',
       } as any);
 
-      // First and third succeed, second fails
-      mockFetchImageAsBase64.mockImplementation(async (_url: string) => {
-        // Since records are shuffled, we can't predict order
-        // Just return null for some calls to simulate failures
-        const random = Math.random();
-        if (random < 0.33) {
+      // Fail one specific call deterministically (second call fails)
+      let callCount = 0;
+      mockFetchImageAsBase64.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 2) {
           return null;
         }
         return 'data:image/jpeg;base64,test';
@@ -383,9 +385,8 @@ describe('VLSUPlugin', () => {
       const plugin = new VLSUPlugin(mockProvider, 'test purpose', 'image', {});
       const tests = await plugin.generateTests(3);
 
-      // Should have at least some tests (depends on random shuffle)
-      expect(tests.length).toBeGreaterThanOrEqual(0);
-      expect(tests.length).toBeLessThanOrEqual(3);
+      // Should have exactly 2 tests (one failed image fetch is skipped)
+      expect(tests.length).toBe(2);
     });
 
     it('should warn when fewer records are available than requested', async () => {
