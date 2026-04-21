@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 
-description: TrueFoundry LLM Gateway Example
+description: TrueFoundry AI Gateway Example
 
 prompts:
   - |

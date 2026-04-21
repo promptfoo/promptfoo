@@ -40,10 +40,10 @@ function sortObject(obj: any, seen = new WeakSet<object>()): any {
     seen.add(obj);
     return Object.keys(obj)
       .sort()
-      .reduce((result, key) => {
+      .reduce<any>((result, key) => {
         result[key] = sortObject(obj[key], seen);
         return result;
-      }, {} as any);
+      }, {});
   }
 
   return obj;

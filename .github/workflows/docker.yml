@@ -43,14 +43,13 @@ env:
 
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
 
     steps:
       - name: Free disk space
@@ -132,7 +131,7 @@ jobs:
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.11.0
 
       - name: run promptfoo eval
         id: eval
@@ -179,7 +178,11 @@ jobs:
             { runner: ubuntu-24.04-arm, platform: linux/arm64, digest-suffix: linux-arm64 },
           ]
     runs-on: ${{ matrix.platforms.runner }}
+    timeout-minutes: 60
     needs: [test]
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -236,7 +239,10 @@ jobs:
 
   merge-docker-digests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [build-docker-and-push-digests]
+    permissions:
+      packages: write
     outputs:
       manifest_digest: ${{ steps.inspect.outputs.digest }}
     steps:
@@ -298,6 +304,7 @@ jobs:
   attest-docker-image:
     name: 'Attest Multi-arch Image'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [merge-docker-digests]
     permissions:
       id-token: write
