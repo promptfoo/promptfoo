@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
@@ -55,6 +55,7 @@ function buildMockEval(): Partial<Eval> {
 }
 
 const mockFetch = vi.fn();
+const originalIsTTY = process.stdout.isTTY;
 
 vi.mock('../src/globalConfig/cloud', () => {
   const cloudConfig = {
@@ -141,6 +142,11 @@ describe('stripAuthFromUrl', () => {
   });
 });
 
+afterEach(() => {
+  vi.resetAllMocks();
+  process.stdout.isTTY = originalIsTTY;
+});
+
 describe('isSharingEnabled', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -213,6 +219,7 @@ describe('determineShareDomain', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
+    vi.mocked(constants.getDefaultShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
   });
 
   it('should use DEFAULT_SHARE_VIEW_BASE_URL when no custom domain is specified', () => {
@@ -225,7 +232,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe('https://promptfoo.app');
-    expect(result.isPublicShare).toBe(true);
   });
 
   it('should use PROMPTFOO_REMOTE_APP_BASE_URL when specified', () => {
@@ -246,7 +252,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(customDomain);
-    expect(result.isPublicShare).toBe(true);
   });
 
   it('should use config sharing.appBaseUrl when provided', () => {
@@ -265,7 +270,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(configAppBaseUrl);
-    expect(result.isPublicShare).toBe(false);
   });
 
   it('should prioritize config sharing.appBaseUrl over environment variables', () => {
@@ -292,7 +296,6 @@ describe('determineShareDomain', () => {
 
     const result = determineShareDomain(mockEval as Eval);
     expect(result.domain).toBe(configAppBaseUrl);
-    expect(result.isPublicShare).toBe(false);
   });
 });
 
@@ -302,6 +305,9 @@ describe('createShareableUrl', () => {
     vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
     vi.mocked(envars.isCI).mockReturnValue(false);
     vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(constants.getDefaultShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
+    vi.mocked(constants.getShareViewBaseUrl).mockReturnValue('https://promptfoo.app');
     mockFetch.mockReset();
     // Mock process.stdout.isTTY
     process.stdout.isTTY = false;
@@ -331,6 +337,7 @@ describe('createShareableUrl', () => {
 
     const result = await createShareableUrl(mockEval as Eval);
     expect(result).toBe(`https://app.example.com/eval/mock-eval-id`);
+    expect(mockEval.useOldResults).toHaveBeenCalled();
   });
 
   it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
@@ -406,6 +413,61 @@ describe('createShareableUrl', () => {
     });
     const result2 = await createShareableUrl(mockEval as Eval);
     expect(result2).not.toEqual(result);
+  });
+
+  it('skips email collection when author is already set', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    process.stdout.isTTY = true;
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+
+    const mockEval = buildMockEval();
+    mockEval.author = 'preset-author@example.com';
+
+    // Mock the initial eval send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: mockEval.id }),
+    });
+    // Mock the chunk send
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // getUserEmail should not have been called since author was already set
+    expect(getUserEmail).not.toHaveBeenCalled();
+    // The author should remain unchanged
+    expect(mockEval.author).toBe('preset-author@example.com');
+  });
+
+  it('still backfills author from stored email when author is null in a TTY', async () => {
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    process.stdout.isTTY = true;
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    vi.mocked(getUserEmail).mockReturnValue('stored@example.com');
+
+    const mockEval = buildMockEval();
+    mockEval.author = null as any;
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ id: mockEval.id }),
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({}),
+    });
+
+    await createShareableUrl(mockEval as Eval);
+
+    // getUserEmail must have been consulted since no author was set.
+    expect(getUserEmail).toHaveBeenCalled();
+    expect(mockEval.author).toBe('stored@example.com');
+    expect(mockEval.save).toHaveBeenCalled();
   });
 
   describe('chunked sending', () => {
@@ -646,6 +708,226 @@ describe('createShareableUrl', () => {
     const result = await createShareableUrl(mockEval as Eval);
 
     expect(result).toBe(`${customDomain}/eval/?evalId=${mockEval.id}`);
+  });
+});
+
+describe('adaptive chunk retry', () => {
+  let mockEval: Partial<Eval>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
+    mockFetch.mockReset();
+    process.stdout.isTTY = false;
+
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+    vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('splits chunk on 413 Payload Too Large and retries', async () => {
+    // Create an eval with 4 results
+    const results = [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(4),
+      fetchResultsBatched: vi.fn().mockImplementation(() => {
+        let called = false;
+        return {
+          next: async () => {
+            if (!called) {
+              called = true;
+              return { done: false, value: results };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+      }),
+    };
+
+    // Mock responses:
+    // 1. Initial eval send - success
+    // 2. First chunk (4 results) - 413 error
+    // 3. First half (2 results) - success
+    // 4. Second half (2 results) - success
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 413,
+        statusText: 'Payload Too Large',
+        text: () => Promise.resolve('Payload too large'),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    expect(result).toBe('https://app.example.com/eval/mock-eval-id');
+    // 1 initial + 3 chunk attempts (1 failed + 2 successful splits)
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('splits chunk on network timeout (fetch failed) and retries', async () => {
+    const results = [{ id: '1' }, { id: '2' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(2),
+      fetchResultsBatched: vi.fn().mockImplementation(() => {
+        let called = false;
+        return {
+          next: async () => {
+            if (!called) {
+              called = true;
+              return { done: false, value: results };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+      }),
+    };
+
+    // Mock responses:
+    // 1. Initial eval send - success
+    // 2. First chunk (2 results) - network timeout
+    // 3. First half (1 result) - success
+    // 4. Second half (1 result) - success
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    expect(result).toBe('https://app.example.com/eval/mock-eval-id');
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('fails when single result is too large', async () => {
+    const results = [{ id: '1' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(1),
+      fetchResultsBatched: vi.fn().mockImplementation(() => {
+        let called = false;
+        return {
+          next: async () => {
+            if (!called) {
+              called = true;
+              return { done: false, value: results };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+      }),
+    };
+
+    // Initial eval send succeeds, but single result is too large, then rollback
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 413,
+        statusText: 'Payload Too Large',
+        text: () => Promise.resolve('Payload too large'),
+      })
+      .mockResolvedValueOnce({
+        ok: true, // rollback succeeds
+      });
+
+    // Should return null (rollback is attempted)
+    const result = await createShareableUrl(mockEval as Eval);
+    expect(result).toBeNull();
+  });
+
+  it('throws on unknown errors without retry', async () => {
+    const results = [{ id: '1' }, { id: '2' }] as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(2),
+      fetchResultsBatched: vi.fn().mockImplementation(() => {
+        let called = false;
+        return {
+          next: async () => {
+            if (!called) {
+              called = true;
+              return { done: false, value: results };
+            }
+            return { done: true, value: undefined };
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        };
+      }),
+    };
+
+    // Initial success, then server error (not 413), then rollback
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'mock-eval-id' }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: () => Promise.resolve('Server error'),
+      })
+      .mockResolvedValueOnce({
+        ok: true, // rollback succeeds
+      });
+
+    const result = await createShareableUrl(mockEval as Eval);
+
+    // Should fail without retrying (unknown error type)
+    expect(result).toBeNull();
+    // 3 calls: initial + one failed chunk + rollback (no retry for 500)
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 });
 

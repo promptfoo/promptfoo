@@ -44,6 +44,53 @@ function getKindFromMimeType(mimeType: string): BlobKind {
   return mimeType.startsWith('audio/') ? 'audio' : 'image';
 }
 
+/**
+ * Normalize audio format to proper MIME type.
+ * Some providers return just 'wav' instead of 'audio/wav'.
+ * @internal Exported for testing
+ */
+export function normalizeAudioMimeType(format: string | undefined): string {
+  if (!format) {
+    return 'audio/wav';
+  }
+
+  const trimmedFormat = format.trim();
+
+  // Already a proper audio MIME type - validate strictly to prevent MIME injection
+  // Only allow: audio/subtype where subtype is alphanumeric with optional dash/underscore/plus
+  // Periods are NOT allowed to prevent attacks like "audio/wav.html" being interpreted as HTML
+  if (/^audio\/[a-z0-9_+-]+$/i.test(trimmedFormat)) {
+    return trimmedFormat;
+  }
+
+  // Normalize common formats (e.g., "wav", "mp3")
+  const formatLower = trimmedFormat.toLowerCase();
+  const mimeMap: Record<string, string> = {
+    wav: 'audio/wav',
+    mp3: 'audio/mpeg',
+    ogg: 'audio/ogg',
+    flac: 'audio/flac',
+    aac: 'audio/aac',
+    m4a: 'audio/mp4',
+    webm: 'audio/webm',
+  };
+
+  // Check if format is in the known map
+  if (mimeMap[formatLower]) {
+    return mimeMap[formatLower];
+  }
+
+  // Validate format contains only alphanumeric, dash, or underscore
+  // Periods are NOT allowed to prevent MIME injection attacks (e.g., "wav.html" -> "audio/wav.html")
+  // which browsers could interpret as HTML and execute embedded scripts
+  if (!/^[a-z0-9_-]+$/i.test(formatLower)) {
+    logger.warn('[BlobExtractor] Invalid audio format, using default', { format });
+    return 'audio/wav';
+  }
+
+  return `audio/${formatLower}`;
+}
+
 function parseBinary(
   base64OrDataUrl: string,
   defaultMimeType: string,
@@ -76,31 +123,37 @@ async function maybeStore(
     return null;
   }
 
-  // Try uploading to the cloud server when logged into Promptfoo Cloud
-  if (shouldAttemptRemoteBlobUpload()) {
-    const remote = await uploadBlobRemote(
-      parsed.buffer,
-      parsed.mimeType || 'application/octet-stream',
-      {
-        ...context,
-        location,
-        kind,
-      },
-    );
-    if (remote?.ref) {
-      return remote.ref;
-    }
-  }
-
   if (!isBlobStorageEnabled()) {
     return null;
   }
 
-  const { ref } = await storeBlob(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
+  const mimeType = parsed.mimeType || 'application/octet-stream';
+
+  // Always store blobs locally first for local viewing
+  const { ref } = await storeBlob(parsed.buffer, mimeType, {
     ...context,
     location,
     kind,
   });
+
+  // Also upload to cloud when authenticated (best-effort, non-blocking)
+  // This enables blobs to be viewable after sharing to cloud
+  if (shouldAttemptRemoteBlobUpload()) {
+    uploadBlobRemote(parsed.buffer, mimeType, {
+      evalId: context.evalId,
+      testIdx: context.testIdx,
+      promptIdx: context.promptIdx,
+      location,
+      kind,
+    }).catch((error) => {
+      // Log but don't fail - local storage already succeeded
+      logger.debug('[BlobExtractor] Cloud upload failed (non-fatal)', {
+        error: error instanceof Error ? error.message : String(error),
+        hash: ref.hash,
+      });
+    });
+  }
+
   return ref;
 }
 
@@ -188,7 +241,7 @@ export async function extractAndStoreBinaryData(
   if (response.audio?.data && typeof response.audio.data === 'string') {
     const stored = await maybeStore(
       response.audio.data,
-      response.audio.format || 'audio/wav',
+      normalizeAudioMimeType(response.audio.format),
       blobContext,
       'response.audio.data',
       'audio',
@@ -204,15 +257,42 @@ export async function extractAndStoreBinaryData(
     }
   }
 
+  // Images array
+  if (response.images?.length) {
+    const externalizedImages = await Promise.all(
+      response.images.map(async (img, idx) => {
+        if (!img.data || typeof img.data !== 'string' || !isDataUrl(img.data)) {
+          return img;
+        }
+        const stored = await maybeStore(
+          img.data,
+          img.mimeType || 'image/png',
+          blobContext,
+          `response.images[${idx}].data`,
+          'image',
+        );
+        if (stored) {
+          mutated = true;
+          logger.debug('[BlobExtractor] Stored image blob', { ...context, hash: stored.hash });
+          return { ...img, data: undefined, blobRef: stored };
+        }
+        return img;
+      }),
+    );
+    next.images = externalizedImages;
+  }
+
   // Turns audio (multi-turn)
-  const turns = (response as any).turns as any[] | undefined;
+
+  // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
+  const turns = (response as any).turns;
   if (Array.isArray(turns)) {
     const updatedTurns = await Promise.all(
-      turns.map(async (turn: any, idx: number) => {
+      turns.map(async (turn, idx) => {
         if (turn?.audio?.data && typeof turn.audio.data === 'string') {
           const stored = await maybeStore(
             turn.audio.data,
-            turn.audio.format || 'audio/wav',
+            normalizeAudioMimeType(turn.audio.format),
             blobContext,
             `response.turns[${idx}].audio.data`,
             'audio',
@@ -232,6 +312,8 @@ export async function extractAndStoreBinaryData(
         return turn;
       }),
     );
+
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME: This is not correct and needs to be addressed
     (next as any).turns = updatedTurns;
   }
 
@@ -264,7 +346,7 @@ export async function extractAndStoreBinaryData(
       response.output.includes('b64_json'))
   ) {
     try {
-      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, any>> };
+      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
       if (Array.isArray(parsed.data)) {
         let jsonMutated = false;
         const storedUris: string[] = [];

@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { RoleConfusionGrader } from '../../../src/redteam/plugins/roleConfusion';
 
 import type { AtomicTestCase } from '../../../src/types';
 
-vi.mock('../../../src/matchers', () => ({
+vi.mock('../../../src/matchers/llmGrading', () => ({
   matchesLlmRubric: vi.fn(),
 }));
 

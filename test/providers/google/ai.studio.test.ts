@@ -6,6 +6,7 @@ import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -17,6 +18,7 @@ vi.mock('../../../src/cache', async (importOriginal) => {
 vi.mock('../../../src/providers/google/util', async () => ({
   ...(await vi.importActual('../../../src/providers/google/util')),
   maybeCoerceToGeminiFormat: vi.fn(),
+  createAuthCacheDiscriminator: vi.fn().mockReturnValue(''),
 }));
 
 vi.mock('../../../src/util/templates', async (importOriginal) => {
@@ -29,14 +31,24 @@ vi.mock('../../../src/util/templates', async (importOriginal) => {
   };
 });
 
-// Hoisted mock for maybeLoadFromExternalFile
+// Hoisted mocks for file loading functions
+const mockMaybeLoadToolsFromExternalFile = vi.hoisted(() => vi.fn((input) => input));
 const mockMaybeLoadFromExternalFile = vi.hoisted(() => vi.fn((input) => input));
 
 vi.mock('../../../src/util/file', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     getNunjucksEngineForFilePath: vi.fn(),
+    maybeLoadToolsFromExternalFile: mockMaybeLoadToolsFromExternalFile,
     maybeLoadFromExternalFile: mockMaybeLoadFromExternalFile,
+  };
+});
+
+// Also mock the barrel file since the provider imports from util/index
+vi.mock('../../../src/util/index', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadToolsFromExternalFile: mockMaybeLoadToolsFromExternalFile,
   };
 });
 
@@ -111,67 +123,60 @@ describe('AIStudioChatProvider', () => {
       expect(mockRenderString).toHaveBeenCalledWith('env-key', {});
 
       // No API key
-      delete process.env.GEMINI_API_KEY;
-      delete process.env.GOOGLE_API_KEY;
-      delete process.env.PALM_API_KEY;
+      mockProcessEnv({ GEMINI_API_KEY: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ PALM_API_KEY: undefined });
       const providerWithNoKey = new AIStudioChatProvider('gemini-pro');
       expect(providerWithNoKey.getApiKey()).toBeUndefined();
     });
 
-    it('should resolve API URL from various sources and render with Nunjucks', () => {
-      const mockRenderString = vi.fn((str) => `rendered-${str}`);
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
-        return {
-          renderString: mockRenderString,
-        } as any;
+    it('should resolve API endpoint correctly', () => {
+      // Test that getApiEndpoint returns correct URL with model and action
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key' },
       });
 
-      // From config.apiHost
-      const providerWithConfigHost = new AIStudioChatProvider('gemini-pro', {
-        config: { apiHost: 'custom.host.com' },
-      });
-      expect(providerWithConfigHost.getApiUrl()).toBe('https://rendered-custom.host.com');
-      expect(mockRenderString).toHaveBeenCalledWith('custom.host.com', {});
+      // Check endpoint format (v1beta for standard models)
+      const endpoint = provider.getApiEndpoint('generateContent');
+      expect(endpoint).toContain('/v1beta/models/gemini-pro:generateContent');
+      expect(endpoint).toContain('generativelanguage.googleapis.com');
+    });
 
-      // From env override: GOOGLE_API_HOST
-      const providerWithEnvOverride = new AIStudioChatProvider('gemini-pro', {
-        env: { GOOGLE_API_HOST: 'env.host.com' },
+    it('should use custom apiHost in endpoint', () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'custom.host.com',
+        },
       });
-      expect(providerWithEnvOverride.getApiUrl()).toBe('https://rendered-env.host.com');
-      expect(mockRenderString).toHaveBeenCalledWith('env.host.com', {});
 
-      // From config.apiBaseUrl
-      const providerWithBaseUrl = new AIStudioChatProvider('gemini-pro', {
-        config: { apiBaseUrl: 'https://base.url.com' },
+      const endpoint = provider.getApiEndpoint('generateContent');
+      expect(endpoint).toContain('custom.host.com');
+    });
+
+    it('should use apiBaseUrl when apiHost is not set', () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://base.url.com',
+        },
       });
-      expect(providerWithBaseUrl.getApiUrl()).toBe('https://base.url.com');
 
-      // From env.GOOGLE_API_BASE_URL
-      const providerWithEnvBaseUrl = new AIStudioChatProvider('gemini-pro', {
-        env: { GOOGLE_API_BASE_URL: 'https://env-base.url.com' },
-      });
-      expect(providerWithEnvBaseUrl.getApiUrl()).toBe('https://env-base.url.com');
-
-      // Default URL fallback
-      const providerWithDefault = new AIStudioChatProvider('gemini-pro');
-      expect(providerWithDefault.getApiUrl()).toBe(
-        'https://rendered-generativelanguage.googleapis.com',
-      );
+      const endpoint = provider.getApiEndpoint('generateContent');
+      expect(endpoint).toContain('base.url.com');
     });
 
     it('should prioritize apiHost over apiBaseUrl', () => {
-      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
-        return {
-          renderString: vi.fn((str) => `rendered-${str}`),
-        } as any;
-      });
       const provider = new AIStudioChatProvider('gemini-pro', {
         config: {
+          apiKey: 'test-key',
           apiHost: 'host.googleapis.com',
           apiBaseUrl: 'https://base.googleapis.com',
         },
       });
-      expect(provider.getApiUrl()).toBe('https://rendered-host.googleapis.com');
+      const endpoint = provider.getApiEndpoint('generateContent');
+      expect(endpoint).toContain('host.googleapis.com');
+      expect(endpoint).not.toContain('base.googleapis.com');
     });
 
     it('should handle custom provider ID', () => {
@@ -186,7 +191,7 @@ describe('AIStudioChatProvider', () => {
       const providerWithSafety = new AIStudioChatProvider('gemini-pro', {
         config: {
           safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
           ],
         },
       });
@@ -196,12 +201,12 @@ describe('AIStudioChatProvider', () => {
 
   describe('error handling', () => {
     it('should throw error when API key is not set', async () => {
-      delete process.env.GEMINI_API_KEY;
-      delete process.env.GOOGLE_API_KEY;
-      delete process.env.PALM_API_KEY;
+      mockProcessEnv({ GEMINI_API_KEY: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ PALM_API_KEY: undefined });
       provider = new AIStudioChatProvider('gemini-pro', {});
       await expect(provider.callApi('test')).rejects.toThrow(
-        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Google API key is not set. Set the GOOGLE_API_KEY or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
       );
     });
 
@@ -425,7 +430,84 @@ describe('AIStudioChatProvider', () => {
         }),
         expect.any(Number),
         'json',
-        undefined,
+        false,
+      );
+    });
+  });
+
+  describe('Gemma models', () => {
+    it('should route Gemma 4 models to the generateContent API', async () => {
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'gemma response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 8,
+            candidatesTokenCount: 4,
+            totalTokenCount: 12,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.output).toBe('gemma response');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/v1beta/models/gemma-4-31b-it:generateContent'),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining(
+            '"contents":[{"parts":[{"text":"test prompt"}],"role":"user"}]',
+          ),
+        }),
+        expect.any(Number),
+        'json',
+        false,
+      );
+    });
+
+    it('should preserve cache busting for Gemma models routed through generateContent', async () => {
+      const provider = new AIStudioChatProvider('gemma-4-31b-it', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'fresh gemma response' }] } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const response = await provider.callApi('test prompt', {
+        bustCache: true,
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+        },
+        vars: {},
+      });
+
+      expect(response.output).toBe('fresh gemma response');
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        true,
       );
     });
   });
@@ -441,6 +523,36 @@ describe('AIStudioChatProvider', () => {
           topK: 40,
         },
       });
+    });
+
+    it('should pass API key in x-goog-api-key header instead of URL query param', async () => {
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: { totalTokenCount: 15 },
+        },
+        cached: false,
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+
+      await provider.callGemini('test prompt');
+
+      // Verify API key is NOT in URL
+      const calledUrl = vi.mocked(cache.fetchWithCache).mock.calls[0][0] as string;
+      expect(calledUrl).not.toContain('?key=');
+      expect(calledUrl).not.toContain('&key=');
+
+      // Verify API key IS in headers
+      const calledOptions = vi.mocked(cache.fetchWithCache).mock.calls[0][1] as any;
+      expect(calledOptions.headers['x-goog-api-key']).toBe('test-key');
     });
 
     it('should call the Gemini API and return the response with token usage', async () => {
@@ -467,7 +579,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('test prompt');
 
-      expect(response).toEqual({
+      // gemini-pro: input=0.5/1M, output=1.5/1M -> (10*0.5 + 5*1.5)/1M = 12.5/1M
+      expect(response.cost).toBeCloseTo(0.0000125, 10);
+      expect(response).toMatchObject({
         output: 'response text',
         tokenUsage: {
           prompt: 10,
@@ -851,6 +965,51 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
+    it('should allow explicit apiVersion override', async () => {
+      // Test that config.apiVersion takes precedence over auto-detection
+      const providerWithOverride = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          apiVersion: 'v1', // Override default v1beta
+        },
+      });
+
+      const mockResponse = {
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+        },
+        cached: false,
+      };
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+        return {
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        };
+      });
+
+      await providerWithOverride.callGemini('test prompt');
+
+      // Should use v1 instead of auto-detected v1beta
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/v1/models/gemini-pro:generateContent'),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        false,
+      );
+      // Ensure it's not using the auto-detected version
+      expect(cache.fetchWithCache).not.toHaveBeenCalledWith(
+        expect.stringContaining('v1beta'),
+        expect.any(Object),
+        expect.any(Number),
+        expect.any(String),
+        expect.any(Boolean),
+      );
+    });
+
     it('should handle function calling configuration', async () => {
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {
@@ -931,7 +1090,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the weather in San Francisco?');
 
-      expect(response).toEqual({
+      // gemini-pro: input=0.5/1M, output=1.5/1M -> (8*0.5 + 7*1.5)/1M = 14.5/1M
+      expect(response.cost).toBeCloseTo(0.0000145, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: [
           {
@@ -952,10 +1113,10 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
         {
           body: '{"contents":[{"parts":[{"text":"What is the weather in San Francisco?"}],"role":"user"}],"generationConfig":{},"toolConfig":{"functionCallingConfig":{"mode":"AUTO","allowedFunctionNames":["get_weather"]}},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather information","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING","description":"City name"}},"required":["location"]}}]}]}',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'rendered-test-key' },
           method: 'POST',
         },
         300000,
@@ -994,8 +1155,8 @@ describe('AIStudioChatProvider', () => {
         },
       ];
 
-      // Mock maybeLoadFromExternalFile to return tools for file:// paths
-      mockMaybeLoadFromExternalFile.mockImplementation((input) => {
+      // Mock maybeLoadToolsFromExternalFile to return tools for file:// paths
+      mockMaybeLoadToolsFromExternalFile.mockImplementation((input) => {
         if (typeof input === 'string' && input === 'file://tools.json') {
           return mockExternalTools;
         }
@@ -1045,7 +1206,9 @@ describe('AIStudioChatProvider', () => {
         prompt: { raw: 'test prompt', label: 'test' },
       });
 
-      expect(response).toEqual({
+      // gemini-pro: input=0.5/1M, output=1.5/1M -> (5*0.5 + 5*1.5)/1M = 10/1M
+      expect(response.cost).toBeCloseTo(0.00001, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with tools',
         raw: mockResponse.data,
@@ -1058,13 +1221,15 @@ describe('AIStudioChatProvider', () => {
         metadata: {},
       });
 
-      // Verify maybeLoadFromExternalFile was called with the tools file path
-      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://tools.json');
+      // Verify maybeLoadToolsFromExternalFile was called with the tools file path
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith('file://tools.json', {
+        location: 'San Francisco',
+      });
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=rendered-test-key',
+        'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
         {
           body: '{"contents":[{"parts":[{"text":"What is the weather in San Francisco?"}],"role":"user"}],"generationConfig":{},"tools":[{"functionDeclarations":[{"name":"get_weather","description":"Get weather in San Francisco","parameters":{"type":"OBJECT","properties":{"location":{"type":"STRING"}}}}]}]}',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'rendered-test-key' },
           method: 'POST',
         },
         300000,
@@ -1142,7 +1307,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the current Google stock price?');
 
-      expect(response).toEqual({
+      // gemini-2.0-flash: input=0.1/1M, output=0.4/1M -> (8*0.1 + 7*0.4)/1M = 3.6/1M
+      expect(response.cost).toBeCloseTo(0.0000036, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search results',
         raw: mockResponse.data,
@@ -1158,10 +1325,10 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=test-key',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
         {
           body: expect.stringContaining('"googleSearch":{}'),
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'test-key' },
           method: 'POST',
         },
         300000,
@@ -1244,7 +1411,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the current Google stock price?');
 
-      expect(response).toEqual({
+      // gemini-2.5-flash: input=0.3/1M, output=2.5/1M -> (8*0.3 + 7*2.5)/1M = 19.9/1M
+      expect(response.cost).toBeCloseTo(0.0000199, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search retrieval',
         raw: mockResponse.data,
@@ -1260,12 +1429,12 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=test-key',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
         {
           body: expect.stringContaining(
             '"googleSearchRetrieval":{"dynamicRetrievalConfig":{"mode":"MODE_DYNAMIC","dynamicThreshold":0.3}}',
           ),
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'test-key' },
           method: 'POST',
         },
         300000,
@@ -1326,7 +1495,9 @@ describe('AIStudioChatProvider', () => {
 
       const response = await provider.callGemini('What is the latest news?');
 
-      expect(response).toEqual({
+      // gemini-2.0-flash: input=0.1/1M, output=0.4/1M -> (8*0.1 + 12*0.4)/1M = 5.6/1M
+      expect(response.cost).toBeCloseTo(0.0000056, 10);
+      expect(response).toMatchObject({
         cached: false,
         output: 'response with search results',
         raw: mockResponse.data,
@@ -1342,10 +1513,10 @@ describe('AIStudioChatProvider', () => {
       });
 
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=test-key',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
         {
           body: expect.stringContaining('"googleSearch":{}'),
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': 'test-key' },
           method: 'POST',
         },
         300000,
@@ -1647,6 +1818,116 @@ describe('AIStudioChatProvider', () => {
             rejectedPrediction: 0,
           },
         });
+      });
+    });
+
+    describe('thinking token cost calculation', () => {
+      it('should include thinking tokens in cost calculation', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response with thinking' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 315,
+              thoughtsTokenCount: 300,
+            },
+          },
+          cached: false,
+        };
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        // gemini-2.5-flash: input=0.3/1e6, output=2.5/1e6
+        // completionForCost = candidatesTokenCount + thoughtsTokenCount = 5 + 300 = 305
+        // cost = 0.3e-6 * 10 + 2.5e-6 * 305 = 0.000003 + 0.0007625 = 0.0007655
+        expect(response.cost).toBeCloseTo(0.0007655, 10);
+      });
+
+      it('should not include thinking tokens in cost when response is cached', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 315,
+              thoughtsTokenCount: 300,
+            },
+          },
+          cached: true,
+        };
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        expect(response.cost).toBeUndefined();
+      });
+
+      it('should calculate cost correctly when thoughtsTokenCount is absent', async () => {
+        const provider = new AIStudioChatProvider('gemini-2.5-flash', {
+          config: {
+            apiKey: 'test-key',
+          },
+        });
+
+        const mockResponse = {
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 5,
+              totalTokenCount: 15,
+              // No thoughtsTokenCount field
+            },
+          },
+          cached: false,
+        };
+
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(mockResponse as any);
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockImplementation(function () {
+          return {
+            contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+            coerced: false,
+            systemInstruction: undefined,
+          };
+        });
+
+        const response = await provider.callGemini('test prompt');
+
+        // gemini-2.5-flash: input=0.3/1e6, output=2.5/1e6
+        // completionForCost = 5 + 0 = 5 (thoughtsTokenCount defaults to 0)
+        // cost = 0.3e-6 * 10 + 2.5e-6 * 5 = 0.000003 + 0.0000125 = 0.0000155
+        expect(response.cost).toBeCloseTo(0.0000155, 10);
       });
     });
   });

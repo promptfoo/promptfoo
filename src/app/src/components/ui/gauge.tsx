@@ -1,11 +1,12 @@
+import * as React from 'react';
+
 import { cn } from '@app/lib/utils';
 
-interface GaugeProps {
+interface GaugeProps extends Omit<React.ComponentProps<'div'>, 'value'> {
   value: number;
   max?: number;
   size?: number;
   strokeWidth?: number;
-  className?: string;
   showValue?: boolean;
   formatValue?: (value: number) => string;
 }
@@ -22,6 +23,7 @@ export function Gauge({
   className,
   showValue = true,
   formatValue = (v) => `${Math.round(v)}%`,
+  ...props
 }: GaugeProps) {
   // Normalize value to 0-100 range
   const normalizedValue = Math.min(Math.max((value / max) * 100, 0), 100);
@@ -50,6 +52,7 @@ export function Gauge({
       aria-valuemin={0}
       aria-valuemax={max}
       aria-label="Progress gauge"
+      {...props}
     >
       <svg
         width={size}

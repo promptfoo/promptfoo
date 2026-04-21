@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
 import { Textarea } from '@app/components/ui/textarea';
@@ -77,10 +77,10 @@ export function PromptEditor({
                     variant="ghost"
                     size="icon"
                     onClick={() => onEditModeChange(true)}
-                    className="h-8 w-8 text-muted-foreground hover:text-primary"
+                    className="size-8 text-muted-foreground hover:text-primary"
                     aria-label="Edit & Replay"
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Pencil className="size-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Edit & Replay</TooltipContent>
@@ -94,9 +94,9 @@ export function PromptEditor({
                   disabled={replayLoading || !editedPrompt.trim()}
                 >
                   {replayLoading ? (
-                    <Spinner className="h-4 w-4 mr-2" />
+                    <Spinner className="size-4 mr-2" />
                   ) : (
-                    <Play className="h-4 w-4 mr-2" />
+                    <Play className="size-4 mr-2" />
                   )}
                   Replay
                 </Button>
@@ -135,7 +135,9 @@ export function PromptEditor({
         )}
         {replayError && (
           <Alert variant="destructive" className="mt-2">
-            <AlertDescription>{replayError}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{replayError}</AlertDescription>
+            </AlertContent>
           </Alert>
         )}
       </div>

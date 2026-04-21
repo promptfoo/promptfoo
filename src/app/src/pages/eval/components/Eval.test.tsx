@@ -1,3 +1,6 @@
+import * as React from 'react';
+
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -6,14 +9,15 @@ import Eval from './Eval';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';
 
-const { mockSetSearchParams } = vi.hoisted(() => ({
+const { mockSetSearchParams, mockShowToast } = vi.hoisted(() => ({
   mockSetSearchParams: vi.fn(),
+  mockShowToast: vi.fn(),
 }));
 
 vi.mock('@app/utils/api');
 vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({
-    showToast: vi.fn(),
+    showToast: mockShowToast,
   }),
 }));
 
@@ -28,9 +32,16 @@ vi.mock('./FilterModeProvider', () => ({
   }),
 }));
 vi.mock('./ResultsView', () => ({
-  default: ({ defaultEvalId }: { defaultEvalId: string }) => (
-    <div data-testid="results-view" data-default-eval-id={defaultEvalId} />
-  ),
+  default: ({ defaultEvalId }: { defaultEvalId: string }) => {
+    const [mountId] = React.useState(() => Math.random().toString(36).slice(2));
+    return (
+      <div
+        data-testid="results-view"
+        data-default-eval-id={defaultEvalId}
+        data-mount-id={mountId}
+      />
+    );
+  },
 }));
 vi.mock('@app/components/EnterpriseBanner', () => ({
   default: () => null,
@@ -85,20 +96,43 @@ const baseMockTableStore = {
   addFilter: vi.fn(),
 };
 
+// Stable mock for useResultsViewSettingsStore to prevent infinite loops
+const baseMockResultsViewSettings = {
+  setInComparisonMode: vi.fn(),
+  setComparisonEvalIds: vi.fn(),
+};
+
 // Mock getState and subscribe for the store
 (useTableStore as any).getState = vi.fn(() => ({
   filters: { values: {} },
+  resetFilters: baseMockTableStore.resetFilters,
+  addFilter: baseMockTableStore.addFilter,
 }));
 (useTableStore as any).subscribe = vi.fn(() => vi.fn());
 
 describe('Eval', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.useFakeTimers();
-    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
-      setInComparisonMode: vi.fn(),
-      setComparisonEvalIds: vi.fn(),
-    });
+    // Clear specific mocks instead of all mocks to preserve getState
+    baseMockTableStore.resetFilters.mockClear();
+    baseMockTableStore.addFilter.mockClear();
+    baseMockTableStore.fetchEvalData.mockClear();
+    baseMockTableStore.setEvalId.mockClear();
+    baseMockTableStore.setAuthor.mockClear();
+    baseMockTableStore.setVersion.mockClear();
+    baseMockTableStore.setTable.mockClear();
+    baseMockTableStore.setTableFromResultsFile.mockClear();
+    baseMockTableStore.setConfig.mockClear();
+    baseMockTableStore.setFilteredResultsCount.mockClear();
+    baseMockTableStore.setTotalResultsCount.mockClear();
+    baseMockTableStore.setIsStreaming.mockClear();
+    baseMockResultsViewSettings.setInComparisonMode.mockClear();
+    baseMockResultsViewSettings.setComparisonEvalIds.mockClear();
+    mockShowToast.mockClear();
+
+    useTestTimers();
+
+    // Use stable mock to prevent infinite loops
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue(baseMockResultsViewSettings);
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
       json: async () => ({ data: [] }),
@@ -106,16 +140,11 @@ describe('Eval', () => {
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    restoreTestTimers({ runPending: true });
   });
 
   it('should call resetFilters when mounted with a new fetchId', async () => {
-    const resetFiltersMock = vi.fn();
-    vi.mocked(useTableStore).mockReturnValue({
-      ...baseMockTableStore,
-      resetFilters: resetFiltersMock,
-    });
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 
     await act(async () => {
       render(
@@ -125,7 +154,7 @@ describe('Eval', () => {
       );
     });
 
-    expect(resetFiltersMock).toHaveBeenCalledTimes(1);
+    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       render(
@@ -135,15 +164,11 @@ describe('Eval', () => {
       );
     });
 
-    expect(resetFiltersMock).toHaveBeenCalledTimes(2);
+    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
   });
 
   it('should call resetFilters only once per render, even with different fetchIds', async () => {
-    const resetFiltersMock = vi.fn();
-    vi.mocked(useTableStore).mockReturnValue({
-      ...baseMockTableStore,
-      resetFilters: resetFiltersMock,
-    });
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 
     await act(async () => {
       render(
@@ -153,7 +178,7 @@ describe('Eval', () => {
       );
     });
 
-    expect(resetFiltersMock).toHaveBeenCalledTimes(1);
+    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       render(
@@ -163,15 +188,11 @@ describe('Eval', () => {
       );
     });
 
-    expect(resetFiltersMock).toHaveBeenCalledTimes(2);
+    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
   });
 
   it('should call resetFilters when navigating from one eval to another', async () => {
-    const resetFiltersMock = vi.fn();
-    vi.mocked(useTableStore).mockReturnValue({
-      ...baseMockTableStore,
-      resetFilters: resetFiltersMock,
-    });
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 
     const { rerender } = render(
       <MemoryRouter>
@@ -179,7 +200,7 @@ describe('Eval', () => {
       </MemoryRouter>,
     );
 
-    expect(resetFiltersMock).toHaveBeenCalledTimes(1);
+    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       rerender(
@@ -189,15 +210,11 @@ describe('Eval', () => {
       );
     });
 
-    expect(resetFiltersMock).toHaveBeenCalledTimes(2);
+    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(2);
   });
 
   it('should not call resetFilters unnecessarily when other dependencies change', async () => {
-    const resetFiltersMock = vi.fn();
-    vi.mocked(useTableStore).mockReturnValue({
-      ...baseMockTableStore,
-      resetFilters: resetFiltersMock,
-    });
+    vi.mocked(useTableStore).mockReturnValue(baseMockTableStore);
 
     const fetchId = 'test-eval-id';
 
@@ -207,8 +224,8 @@ describe('Eval', () => {
       </MemoryRouter>,
     );
 
-    expect(resetFiltersMock).toHaveBeenCalledTimes(1);
-    resetFiltersMock.mockClear();
+    expect(baseMockTableStore.resetFilters).toHaveBeenCalledTimes(1);
+    baseMockTableStore.resetFilters.mockClear();
 
     await act(async () => {
       rerender(
@@ -218,7 +235,7 @@ describe('Eval', () => {
       );
     });
 
-    expect(resetFiltersMock).not.toHaveBeenCalled();
+    expect(baseMockTableStore.resetFilters).not.toHaveBeenCalled();
   });
 
   it('should handle null fetchId gracefully without fetching data', async () => {
@@ -294,6 +311,42 @@ describe('Eval', () => {
 
     // Should show results view when table exists
     expect(queryByTestId('results-view')).toBeInTheDocument();
+  });
+
+  it('should preserve the ResultsView instance when navigating between evals', async () => {
+    let tableStoreValue = {
+      ...baseMockTableStore,
+      table: mockTable,
+      evalId: 'eval-1',
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => tableStoreValue as any);
+
+    const { getByTestId, rerender } = render(
+      <MemoryRouter>
+        <Eval fetchId="eval-1" />
+      </MemoryRouter>,
+    );
+
+    const firstMountId = getByTestId('results-view').getAttribute('data-mount-id');
+    expect(firstMountId).toBeTruthy();
+
+    tableStoreValue = {
+      ...tableStoreValue,
+      evalId: 'eval-2',
+    };
+
+    await act(async () => {
+      rerender(
+        <MemoryRouter>
+          <Eval fetchId="eval-2" />
+        </MemoryRouter>,
+      );
+    });
+
+    const secondMountId = getByTestId('results-view').getAttribute('data-mount-id');
+    expect(secondMountId).toBeTruthy();
+    expect(secondMountId).toBe(firstMountId);
   });
 
   it('should show error state when loadEvalById fails', async () => {
