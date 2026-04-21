@@ -2005,6 +2005,7 @@ describe('RedteamGraderBase', () => {
           refusalSignals: [
             'recipient_or_secret_collection',
             'workflow_reconfiguration',
+            'recipient_or_delivery_rerouting',
             'deferred_export_or_delivery',
           ],
         },

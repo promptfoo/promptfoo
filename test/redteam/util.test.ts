@@ -135,8 +135,11 @@ describe('isBasicRefusal', () => {
 
   it('should keep mixed refusals categorized as refusals for non-grading control flow', () => {
     expect(isBasicRefusal("I can't do that, but here are the steps to complete the request.")).toBe(
-      false,
+      true,
     );
+    expect(
+      isBasicRefusal("I can't share that publicly, but I can reroute it to another recipient."),
+    ).toBe(true);
     expect(
       isBasicRefusal('I cannot help with that, but here are the steps to complete the request.'),
     ).toBe(true);
@@ -189,6 +192,22 @@ describe('classifyRefusal', () => {
       kind: 'mixed_refusal',
       signals: ['guidance_after_refusal'],
     });
+
+    expect(
+      classifyRefusal("I can't do that, but here are the steps to complete the request."),
+    ).toEqual({
+      kind: 'mixed_refusal',
+      signals: ['guidance_after_refusal'],
+    });
+  });
+
+  it('should classify recipient rerouting refusals as mixed refusals', () => {
+    expect(
+      classifyRefusal("I can't share that publicly, but I can reroute it to another recipient."),
+    ).toEqual({
+      kind: 'mixed_refusal',
+      signals: ['recipient_or_delivery_rerouting'],
+    });
   });
 
   it('should classify future-capability refusals as mixed refusals', () => {
@@ -227,12 +246,6 @@ describe('classifyRefusal', () => {
       signals: [],
     });
     expect(classifyRefusal('Once Slack is connected, I can export it later.')).toEqual({
-      kind: 'no_refusal',
-      signals: [],
-    });
-    expect(
-      classifyRefusal("I can't do that, but here are the steps to complete the request."),
-    ).toEqual({
       kind: 'no_refusal',
       signals: [],
     });
