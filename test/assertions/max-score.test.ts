@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runAssertions } from '../../src/assertions/index';
-import { selectMaxScore } from '../../src/matchers';
+import { selectMaxScore } from '../../src/matchers/comparison';
 
 import type { Assertion, GradingResult } from '../../src/types/index';
 

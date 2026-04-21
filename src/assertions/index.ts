@@ -364,7 +364,13 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
 
 export function isMetricOnlyAssertion(assertion: AssertionOrSet): boolean {
   if (assertion.type === 'assert-set') {
-    return assertion.threshold === undefined && assertion.assert.every(isMetricOnlyAssertion);
+    // An empty assert-set is not metric-only — every() returns true vacuously,
+    // which would silently drop the set from pass/fail accounting.
+    return (
+      assertion.threshold === undefined &&
+      assertion.assert.length > 0 &&
+      assertion.assert.every(isMetricOnlyAssertion)
+    );
   }
 
   const inverse = isAssertionInverse(assertion);

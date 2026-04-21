@@ -118,9 +118,14 @@ export async function selectMaxScore(
     // Get component results from gradingResult if available
     const componentResults = result.gradingResult?.componentResults || [];
 
+    // Metric-only results (e.g. thresholdless cost/latency) carry raw numeric
+    // scores that would skew max-score aggregation, so skip them alongside
+    // max-score/select-best self-references.
     const relevantResults = collectAssertedComponentResults(componentResults).filter(
       (r: GradingResult) =>
-        r.assertion?.type !== 'max-score' && r.assertion?.type !== 'select-best',
+        r.assertion?.type !== 'max-score' &&
+        r.assertion?.type !== 'select-best' &&
+        r.metadata?.isMetricOnly !== true,
     );
 
     if (relevantResults.length === 0) {
