@@ -157,6 +157,12 @@ describe('OpenAI Image Provider Functions', () => {
       expect(body.n).toBe(2);
     });
 
+    it('should include user parameter from config', () => {
+      const config = { user: 'promptfoo-user-123' };
+      const body = prepareRequestBody('gpt-image-2', 'prompt', '1024x1024', 'b64_json', config);
+      expect(body.user).toBe('promptfoo-user-123');
+    });
+
     it('should include DALL-E 3 specific parameters', () => {
       const config = {
         quality: 'hd',
