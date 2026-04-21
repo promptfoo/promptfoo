@@ -1,3 +1,4 @@
+import { HelperText } from './helper-text';
 import { Input } from './input';
 import { Label } from './label';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -36,7 +37,7 @@ export const Default: Story = {
 // With label
 export const WithLabel: Story = {
   render: () => (
-    <div className="grid w-full max-w-sm items-center gap-1.5">
+    <div className="flex flex-col w-full max-w-sm">
       <Label htmlFor="email">Email</Label>
       <Input type="email" id="email" placeholder="Email" />
     </div>
@@ -47,25 +48,30 @@ export const WithLabel: Story = {
 export const Types: Story = {
   render: () => (
     <div className="space-y-4 w-full max-w-sm">
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="text">Text</Label>
         <Input type="text" id="text" placeholder="Enter text..." />
+        <HelperText>Enter any text value</HelperText>
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="email-type">Email</Label>
         <Input type="email" id="email-type" placeholder="email@example.com" />
+        <HelperText>We'll never share your email</HelperText>
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="password">Password</Label>
         <Input type="password" id="password" placeholder="Enter password..." />
+        <HelperText>Must be at least 8 characters</HelperText>
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="number">Number</Label>
         <Input type="number" id="number" placeholder="0" />
+        <HelperText>Enter a numeric value</HelperText>
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="search">Search</Label>
         <Input type="search" id="search" placeholder="Search..." />
+        <HelperText>Search across all items</HelperText>
       </div>
     </div>
   ),
@@ -89,7 +95,7 @@ export const WithValue: Story = {
 // File input
 export const File: Story = {
   render: () => (
-    <div className="grid w-full max-w-sm items-center gap-1.5">
+    <div className="flex flex-col w-full max-w-sm">
       <Label htmlFor="picture">Picture</Label>
       <Input id="picture" type="file" />
     </div>
@@ -99,7 +105,7 @@ export const File: Story = {
 // Required input
 export const Required: Story = {
   render: () => (
-    <div className="grid w-full max-w-sm items-center gap-1.5">
+    <div className="flex flex-col w-full max-w-sm">
       <Label htmlFor="required">
         Required Field <span className="text-destructive">*</span>
       </Label>

@@ -6,7 +6,7 @@ import { isValidPolicyId } from './plugins/policy/validators';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Re-export Inputs from shared to maintain backwards compatibility
-export { InputsSchema, type Inputs };
+export { type Inputs, InputsSchema };
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -84,16 +84,80 @@ export const PluginConfigSchema = z.object({
   // CyberSecEval
   multilingual: z.boolean().optional(),
 
+  // Indirect Prompt Injection
   indirectInjectionVar: z.string().optional(),
+  // RAG Poisoning
+  intendedResults: z.array(z.string()).optional(),
   intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
   policy: z.union([z.string(), PolicyObjectSchema]).optional(),
   systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
 
+  // Coding agent deterministic fixture fields
+  protectedFilePath: z.string().optional(),
+  protectedFilePaths: z.array(z.string()).optional(),
+  secretFilePath: z.string().optional(),
+  secretFilePaths: z.array(z.string()).optional(),
+  secretLocalFilePath: z.string().optional(),
+  secretLocalFilePaths: z.array(z.string()).optional(),
+  secretFileValue: z.string().optional(),
+  secretFileValues: z.array(z.string()).optional(),
+  outsideWritePath: z.string().optional(),
+  outsideWritePaths: z.array(z.string()).optional(),
+  outsideWriteHostPath: z.string().optional(),
+  outsideWriteHostPaths: z.array(z.string()).optional(),
+  outsideWriteProbeDir: z.string().optional(),
+  outsideWriteProbeDirs: z.array(z.string()).optional(),
+  outsideWriteAllowedPath: z.string().optional(),
+  outsideWriteAllowedPaths: z.array(z.string()).optional(),
+  outsideWriteExpectedSha256: z.string().optional(),
+  outsideWritePathSha256: z.string().optional(),
+  outsideWriteSha256: z.string().optional(),
+  outsideWriteMustNotExistPath: z.string().optional(),
+  outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
+  mustNotExistPath: z.string().optional(),
+  mustNotExistPaths: z.array(z.string()).optional(),
+  protectedWritePath: z.string().optional(),
+  protectedWritePaths: z.array(z.string()).optional(),
+  sandboxWritePath: z.string().optional(),
+  sandboxWritePaths: z.array(z.string()).optional(),
+  verifierArtifactRoot: z.string().optional(),
+  verifierArtifactRoots: z.array(z.string()).optional(),
+  verifierProbeDir: z.string().optional(),
+  verifierProbeDirs: z.array(z.string()).optional(),
+  workspacePath: z.string().optional(),
+  workspacePaths: z.array(z.string()).optional(),
+  workspaceRoot: z.string().optional(),
+  workspaceRoots: z.array(z.string()).optional(),
+  workingDirectory: z.string().optional(),
+  workingDirectoryPath: z.string().optional(),
+  workingDir: z.string().optional(),
+  networkEgressUrl: z.string().optional(),
+  networkEgressUrls: z.array(z.string()).optional(),
+  networkTrapUrl: z.string().optional(),
+  networkTrapUrls: z.array(z.string()).optional(),
+  networkEgressHost: z.string().optional(),
+  networkEgressHosts: z.array(z.string()).optional(),
+  networkTrapHost: z.string().optional(),
+  networkTrapHosts: z.array(z.string()).optional(),
+  networkAllowedHost: z.string().optional(),
+  networkAllowedHosts: z.array(z.string()).optional(),
+  networkAllowedUrl: z.string().optional(),
+  networkAllowedUrls: z.array(z.string()).optional(),
+  networkTrapLogPath: z.string().optional(),
+  networkTrapLogPaths: z.array(z.string()).optional(),
+  networkScanPath: z.string().optional(),
+  networkScanPaths: z.array(z.string()).optional(),
+  networkWorkspacePath: z.string().optional(),
+  networkWorkspacePaths: z.array(z.string()).optional(),
+  networkEgressReceipt: z.string().optional(),
+  networkEgressReceipts: z.array(z.string()).optional(),
+
   // Multi-variable inputs - allows generating test cases with multiple variables
   // Keys are variable names, values are descriptions of what each variable should contain
   inputs: InputsSchema.optional(),
+  maxCharsPerMessage: z.number().int().positive().optional(),
 
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
@@ -171,9 +235,6 @@ export interface RedteamContext {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
-  // Multi-variable inputs - when specified, generates test cases with multiple variables
-  // The first key becomes the primary injectVar for strategies
-  inputs?: Inputs;
   language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];
@@ -187,6 +248,7 @@ type CommonOptions = {
   sharing?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   testGenerationInstructions?: string;
+  maxCharsPerMessage?: number;
   maxConcurrency?: number;
   tracing?: TracingConfig;
 };
@@ -198,6 +260,7 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   target?: string;
   defaultConfig: Record<string, unknown>;
   defaultConfigPath?: string;
+  description?: string;
   envFile?: string;
   maxConcurrency?: number;
   output?: string;
@@ -210,12 +273,14 @@ export interface RedteamCliGenerateOptions extends CommonOptions {
   progressBar?: boolean;
   liveRedteamConfig?: RedteamObjectConfig;
   configFromCloud?: any;
+  strict?: boolean;
 }
 
 export interface RedteamFileConfig extends CommonOptions {
   entities?: string[];
   severity?: Record<Plugin, Severity>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  graderExamples?: Array<{ output: string; pass: boolean; score: number; reason: string }>;
 }
 
 export interface SynthesizeOptions extends CommonOptions {
@@ -246,11 +311,13 @@ export interface RedteamRunOptions {
   delay?: number;
   remote?: boolean;
   force?: boolean;
+  filterPrompts?: string;
   filterProviders?: string;
   filterTargets?: string;
   verbose?: boolean;
   progressBar?: boolean;
   description?: string;
+  strict?: boolean;
 
   // Used by webui
   liveRedteamConfig?: any;
@@ -277,8 +344,10 @@ export interface SavedRedteamConfig {
   frameworks?: FrameworkComplianceId[];
   extensions?: string[];
   numTests?: number;
+  maxCharsPerMessage?: number;
   maxConcurrency?: number;
   language?: string | string[];
+  provider?: string | ProviderOptions;
   applicationDefinition: {
     purpose?: string;
     features?: string;
@@ -369,3 +438,41 @@ export interface AudioGradingConfig {
  * This is a cleaner subset of RedteamCliGenerateOptions for external use
  */
 export type RedteamGenerateOptions = Partial<RedteamCliGenerateOptions>;
+
+/**
+ * Information about a plugin that failed to generate test cases.
+ */
+export interface FailedPluginInfo {
+  pluginId: string;
+  requested: number;
+}
+
+/**
+ * Custom error class for partial test generation failures.
+ * Thrown when some plugins completely fail to generate any test cases,
+ * which would significantly impact scan quality and completeness.
+ */
+export class PartialGenerationError extends Error {
+  public readonly failedPlugins: FailedPluginInfo[];
+
+  constructor(failedPlugins: FailedPluginInfo[]) {
+    const pluginList = failedPlugins.map((p) => `  - ${p.pluginId} (0/${p.requested} tests)`);
+    const message =
+      `Test case generation failed for ${failedPlugins.length} plugin(s):\n` +
+      `${pluginList.join('\n')}\n\n` +
+      `The scan has been stopped because missing test cases would significantly ` +
+      `decrease scan quality and completeness.\n\n` +
+      `Possible causes:\n` +
+      `  - API rate limiting or connectivity issues\n` +
+      `  - Invalid plugin configuration\n` +
+      `  - Provider errors during generation\n\n` +
+      `To troubleshoot:\n` +
+      `  - Run with --verbose flag to see detailed error messages\n` +
+      `  - Check API keys and provider configuration\n` +
+      `  - Retry the scan after resolving any reported errors`;
+
+    super(message);
+    this.name = 'PartialGenerationError';
+    this.failedPlugins = failedPlugins;
+  }
+}

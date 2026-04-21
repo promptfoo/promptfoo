@@ -25,7 +25,7 @@ describe('addInjections', () => {
     // Check that metadata stores the original text correctly
     expect(result[0].metadata).toMatchObject({
       pluginId: 'harmful:test',
-      strategyId: 'prompt-injection',
+      strategyId: 'jailbreak-templates',
       originalText: 'Tell me a joke',
     });
     expect(result[0].assert?.[0].metric).toBe('Harmful/Injection');
@@ -44,11 +44,24 @@ describe('addInjections', () => {
     expect(result).toHaveLength(3);
     result.forEach((testCase) => {
       expect(testCase.metadata?.originalText).toBe('Hello world');
-      expect(testCase.metadata?.strategyId).toBe('prompt-injection');
+      expect(testCase.metadata?.strategyId).toBe('jailbreak-templates');
       // The injection might modify the prompt in various ways
       expect(testCase.vars?.prompt).toBeDefined();
       expect(testCase.vars?.prompt).not.toBe('Hello world'); // Should be modified
     });
+  });
+
+  it('should preserve an explicit sample size of 0', async () => {
+    const testCases: TestCase[] = [
+      {
+        vars: { prompt: 'Hello world' },
+        metadata: {},
+      },
+    ];
+
+    const result = await addInjections(testCases, 'prompt', { sample: 0 });
+
+    expect(result).toEqual([]);
   });
 
   it('should filter harmful only when configured', async () => {
@@ -80,6 +93,6 @@ describe('addInjections', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0].metadata?.originalText).toBe('Test content');
-    expect(result[0].metadata?.strategyId).toBe('prompt-injection');
+    expect(result[0].metadata?.strategyId).toBe('jailbreak-templates');
   });
 });

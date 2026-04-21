@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSearchRubric } from '../../src/assertions/searchRubric';
-import { matchesSearchRubric } from '../../src/matchers';
+import { matchesSearchRubric } from '../../src/matchers/search';
+import { createMockProvider } from '../factories/provider';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/search');
 
 describe('handleSearchRubric', () => {
   beforeEach(() => {
@@ -164,10 +165,7 @@ describe('handleSearchRubric', () => {
   });
 
   it('should pass provider to matchesSearchRubric', async () => {
-    const mockProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn(),
-    };
+    const mockProvider = createMockProvider();
 
     const params: AssertionParams = {
       ...defaultParams,
@@ -197,7 +195,7 @@ describe('handleSearchRubric', () => {
       test: {
         vars: { city: 'New York' },
         options: {
-          provider: 'anthropic:messages:claude-opus-4-5-20251101',
+          provider: 'anthropic:messages:claude-opus-4-6',
         },
       },
     };
@@ -214,7 +212,7 @@ describe('handleSearchRubric', () => {
 
     // Verify the options and vars are passed correctly
     const calls = mockMatchesSearchRubric.mock.calls;
-    expect(calls[0][2]).toEqual({ provider: 'anthropic:messages:claude-opus-4-5-20251101' });
+    expect(calls[0][2]).toEqual({ provider: 'anthropic:messages:claude-opus-4-6' });
     expect(calls[0][3]).toEqual({ city: 'New York' });
   });
 });

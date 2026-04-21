@@ -6,6 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
@@ -126,7 +127,10 @@ export default function InputsEditor({
             const isDuplicate = duplicateNames.has(variable.name.trim());
             const inputId = `input-${index}`;
             return (
-              <div key={index} className="flex items-start gap-3 rounded-lg border p-3">
+              <div
+                key={index}
+                className="flex items-start gap-3 rounded-lg border border-border p-3"
+              >
                 <div className="flex flex-1 flex-col gap-3 sm:flex-row">
                   <div className="sm:w-48">
                     <Label htmlFor={`${inputId}-name`} className="mb-1.5 block text-sm">
@@ -139,9 +143,7 @@ export default function InputsEditor({
                       onChange={(e) => updateVariableName(variable.name, e.target.value)}
                       className={cn('font-mono', isDuplicate && 'border-destructive')}
                     />
-                    {isDuplicate && (
-                      <p className="mt-1 text-xs text-destructive">Duplicate variable name</p>
-                    )}
+                    {isDuplicate && <HelperText error>Duplicate variable name</HelperText>}
                   </div>
                   <div className="flex-1">
                     <Label htmlFor={`${inputId}-desc`} className="mb-1.5 block text-sm">
@@ -181,7 +183,7 @@ export default function InputsEditor({
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border bg-background p-4 hover:bg-muted/50">
+      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-border bg-background p-4 hover:bg-muted/50">
         <div className="text-left">
           <h3 className="font-semibold">Multi-Variable Inputs</h3>
           <p className="text-sm text-muted-foreground">
@@ -198,7 +200,7 @@ export default function InputsEditor({
             Each variable needs a name and a description that tells the LLM what kind of value to
             generate.
           </p>
-          <div className="rounded-md border bg-muted/30 p-3">
+          <div className="rounded-md border border-border bg-muted/30 p-3">
             <p className="mb-2 text-sm font-medium">How it works:</p>
             <ul className="list-inside list-disc space-y-1 text-sm text-muted-foreground">
               <li>

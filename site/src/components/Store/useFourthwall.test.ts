@@ -5,8 +5,11 @@ import {
   getAttributeSwatch,
   getCheckoutUrl,
   isInStock,
+  isProductSoldOut,
   stripHtml,
 } from './useFourthwall';
+
+import type { FourthwallProduct } from './types';
 
 describe('formatPrice', () => {
   it('formats USD prices correctly', () => {
@@ -111,6 +114,92 @@ describe('isInStock', () => {
 
   it('returns false for unknown stock type', () => {
     expect(isInStock({ type: 'UNKNOWN' })).toBe(false);
+  });
+});
+
+describe('isProductSoldOut', () => {
+  const makeProduct = (overrides: Partial<FourthwallProduct> = {}): FourthwallProduct => ({
+    id: 'prod-1',
+    slug: 'test-product',
+    name: 'Test Product',
+    description: '',
+    status: 'AVAILABLE',
+    access: 'PUBLIC',
+    images: [],
+    variants: [
+      {
+        id: 'var-1',
+        name: 'Default',
+        sku: 'SKU-1',
+        unitPrice: { value: 10, currency: 'USD' },
+        stock: { type: 'UNLIMITED' },
+        images: [],
+        attributes: {},
+      },
+    ],
+    ...overrides,
+  });
+
+  it('returns true when the product is unavailable', () => {
+    expect(isProductSoldOut(makeProduct({ status: 'UNAVAILABLE' }))).toBe(true);
+  });
+
+  it('returns true when all variants are out of stock', () => {
+    expect(
+      isProductSoldOut(
+        makeProduct({
+          variants: [
+            {
+              id: 'var-1',
+              name: 'Small',
+              sku: 'SKU-1',
+              unitPrice: { value: 10, currency: 'USD' },
+              stock: { type: 'LIMITED', quantity: 0 },
+              images: [],
+              attributes: {},
+            },
+            {
+              id: 'var-2',
+              name: 'Large',
+              sku: 'SKU-2',
+              unitPrice: { value: 10, currency: 'USD' },
+              stock: { type: 'LIMITED' },
+              images: [],
+              attributes: {},
+            },
+          ],
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false when any variant is in stock', () => {
+    expect(
+      isProductSoldOut(
+        makeProduct({
+          variants: [
+            {
+              id: 'var-1',
+              name: 'Small',
+              sku: 'SKU-1',
+              unitPrice: { value: 10, currency: 'USD' },
+              stock: { type: 'LIMITED', quantity: 0 },
+              images: [],
+              attributes: {},
+            },
+            {
+              id: 'var-2',
+              name: 'Large',
+              sku: 'SKU-2',
+              unitPrice: { value: 10, currency: 'USD' },
+              stock: { type: 'LIMITED', quantity: 4 },
+              images: [],
+              attributes: {},
+            },
+          ],
+        }),
+      ),
+    ).toBe(false);
   });
 });
 

@@ -26,6 +26,9 @@ __pycache__
 # Jest and test-related
 .coverage
 .ruff_cache
+coverage/
+src/app/coverage/
+site/coverage/
 
 # IDE-specific
 .idea/

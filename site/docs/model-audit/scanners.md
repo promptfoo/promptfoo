@@ -24,6 +24,18 @@ sidebar_position: 200
 
 ModelAudit includes specialized scanners for different model formats and file types. Each scanner is designed to identify specific security issues relevant to that format.
 
+## Selecting Scanners
+
+Use `--list-scanners` to see the scanner IDs supported by your installed ModelAudit version. Then pass IDs or class names to `--scanners` to run only those scanners, or use `--exclude-scanner` to remove scanners from the default set.
+
+```bash
+promptfoo scan-model --list-scanners
+promptfoo scan-model models/ --scanners pickle,tf_savedmodel
+promptfoo scan-model models/ --exclude-scanner weight_distribution
+```
+
+The web UI exposes the same catalog in Advanced Scan Options.
+
 ## Pickle Scanner
 
 **File types:** `.pkl`, `.pickle`, `.dill`, `.bin` (when containing pickle data), `.pt`, `.pth`, `.ckpt`

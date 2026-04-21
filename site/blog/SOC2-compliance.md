@@ -54,7 +54,7 @@ To learn more about our security practices or request our audit reports, visit o
 
 We're committed to being the best open-source LLM red teaming and eval tool available. We invite you to:
 
-- Apply to [join our team](https://promptfoo.dev/careers)
+- Apply to [join our team](https://openai.com/careers/search/)
 - [**Follow us on GitHub**](https://github.com/promptfoo/promptfoo) to stay updated and contribute
 - Reach out with your ideas, feedback, or collaborations—we'd love to hear from you!
 - Spread the word and help grow our community even further

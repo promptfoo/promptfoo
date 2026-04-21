@@ -20,7 +20,7 @@ export interface PluginTestResult {
 
 export interface RiskScore {
   score: number;
-  level: 'critical' | 'high' | 'medium' | 'low';
+  level: 'critical' | 'high' | 'medium' | 'low' | 'informational';
   components: {
     impact: number;
     exploitability: number;
@@ -48,6 +48,7 @@ export interface SystemRiskScore extends RiskScore {
     high: number;
     medium: number;
     low: number;
+    informational: number;
   };
 }
 
@@ -131,12 +132,18 @@ function calculateStrategyRiskScore(
   successRate: number,
   metadata: StrategyMetadata,
 ): number {
+  // Informational severity always returns 0 risk score
+  if (severity === Severity.Informational) {
+    return 0;
+  }
+
   // Impact Base Score (0-4 points)
   const impactBase = {
     [Severity.Critical]: 4,
     [Severity.High]: 3,
     [Severity.Medium]: 2,
     [Severity.Low]: 1,
+    [Severity.Informational]: 0,
   }[severity];
 
   // Exploitation Modifier (0-4 points)
@@ -177,7 +184,11 @@ function calculateStrategyRiskScore(
   return Math.min(totalScore, 10);
 }
 
-function scoreToLevel(score: number): RiskScore['level'] {
+function scoreToLevel(score: number, severity?: Severity): RiskScore['level'] {
+  // Informational severity always returns 'informational' level
+  if (severity === Severity.Informational) {
+    return 'informational';
+  }
   if (score >= 9.0) {
     return 'critical';
   }
@@ -186,6 +197,9 @@ function scoreToLevel(score: number): RiskScore['level'] {
   }
   if (score >= 4.0) {
     return 'medium';
+  }
+  if (score === 0) {
+    return 'informational';
   }
   return 'low';
 }
@@ -201,7 +215,7 @@ export function calculatePluginRiskScore(
       pluginId,
       severity,
       score: 0,
-      level: 'low',
+      level: severity === Severity.Informational ? 'informational' : 'low',
       complexityScore: 0,
       worstStrategy: 'none',
       strategyBreakdown: [],
@@ -243,7 +257,7 @@ export function calculatePluginRiskScore(
       pluginId,
       severity,
       score: 0,
-      level: 'low',
+      level: severity === Severity.Informational ? 'informational' : 'low',
       complexityScore: 0,
       worstStrategy: 'none',
       strategyBreakdown: [],
@@ -262,7 +276,8 @@ export function calculatePluginRiskScore(
     [Severity.High]: 3,
     [Severity.Medium]: 2,
     [Severity.Low]: 1,
-  }[severity]; // Default to Low severity for unknown values
+    [Severity.Informational]: 0,
+  }[severity];
 
   const exploitabilityScore =
     worstStrategy.successRate > 0 ? Math.min(4, 1.5 + 2.5 * worstStrategy.successRate) : 0;
@@ -285,7 +300,7 @@ export function calculatePluginRiskScore(
     pluginId,
     severity,
     score: maxScore,
-    level: scoreToLevel(maxScore),
+    level: scoreToLevel(maxScore, severity),
     complexityScore: calculateComplexityScore(worstStrategy.metadata),
     worstStrategy: worstStrategy.strategy,
     strategyBreakdown: strategyScores.map((s) => ({
@@ -313,6 +328,7 @@ export function calculateSystemRiskScore(pluginScores: PluginRiskScore[]): Syste
         high: 0,
         medium: 0,
         low: 0,
+        informational: 0,
       },
       components: {
         impact: 0,
@@ -329,6 +345,7 @@ export function calculateSystemRiskScore(pluginScores: PluginRiskScore[]): Syste
     high: pluginScores.filter((p) => p.level === 'high').length,
     medium: pluginScores.filter((p) => p.level === 'medium').length,
     low: pluginScores.filter((p) => p.level === 'low').length,
+    informational: pluginScores.filter((p) => p.level === 'informational').length,
   };
 
   // System score is based on the worst vulnerability plus a penalty for multiple high-risk issues
@@ -465,5 +482,7 @@ export function getRiskColor(level: RiskScore['level']): string {
       return '#FFA500';
     case 'low':
       return '#32CD32';
+    case 'informational':
+      return '#1976d2';
   }
 }
