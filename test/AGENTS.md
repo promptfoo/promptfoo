@@ -53,6 +53,8 @@ Tests mirror `src/` structure:
 
 - `test/providers/` → `src/providers/`
 - `test/redteam/` → `src/redteam/`
+- `test/agentSkills/` → agent plugin contract tests; read `test/agentSkills/AGENTS.md`
+- `test/fixtures/agent-skills/` → runnable agent skill fixtures; read `test/fixtures/agent-skills/AGENTS.md`
 
 ## Mocking
 

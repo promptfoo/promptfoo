@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { handleTraceErrorSpans } from '../../src/assertions/traceErrorSpans';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const mockTraceDataWithErrors: TraceData = {
   traceId: 'test-trace-id',

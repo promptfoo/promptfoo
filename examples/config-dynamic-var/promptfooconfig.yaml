@@ -8,7 +8,7 @@ prompts:
     User: {{query}}
 
 providers:
-  - openai:responses:gpt-5.1
+  - openai:responses:gpt-5.4
 
 tests:
   - vars:
