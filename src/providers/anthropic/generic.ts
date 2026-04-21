@@ -1,4 +1,4 @@
-import { createHmac } from 'crypto';
+import { createHmac, randomBytes } from 'crypto';
 
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
@@ -38,15 +38,38 @@ interface AnthropicBaseOptions {
   outputCost?: number;
 }
 
-const ANTHROPIC_CACHE_HASH_KEY = 'promptfoo:anthropic:cache-key:v1';
+const ANTHROPIC_CACHE_HASH_CONTEXT = 'promptfoo:anthropic:cache-key:v1';
+const ANTHROPIC_CACHE_HASH_KEY_SYMBOL = Symbol.for('promptfoo.anthropic.cacheHashKey');
+
+function getAnthropicCacheHashKey(): Buffer {
+  const globalCache = globalThis as typeof globalThis & Record<symbol, Buffer | undefined>;
+  const existingKey = globalCache[ANTHROPIC_CACHE_HASH_KEY_SYMBOL];
+  if (existingKey) {
+    return existingKey;
+  }
+
+  const newKey = randomBytes(32);
+  globalCache[ANTHROPIC_CACHE_HASH_KEY_SYMBOL] = newKey;
+  return newKey;
+}
+
+const ANTHROPIC_CACHE_HASH_KEY = getAnthropicCacheHashKey();
 
 export function hashAnthropicCacheValue(value: unknown): string {
   const serialized = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
-  return createHmac('sha256', ANTHROPIC_CACHE_HASH_KEY).update(serialized).digest('hex');
+  return createHmac('sha256', ANTHROPIC_CACHE_HASH_KEY)
+    .update(ANTHROPIC_CACHE_HASH_CONTEXT)
+    .update('\0')
+    .update(serialized)
+    .digest('hex');
 }
 
 export function getAnthropicAuthCacheNamespace(apiKey: string): string {
-  return createHmac('sha256', apiKey).update(ANTHROPIC_CACHE_HASH_KEY).digest('hex');
+  return createHmac('sha256', ANTHROPIC_CACHE_HASH_KEY)
+    .update(ANTHROPIC_CACHE_HASH_CONTEXT)
+    .update('\0')
+    .update(apiKey)
+    .digest('hex');
 }
 
 /**
