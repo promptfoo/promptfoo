@@ -1461,7 +1461,7 @@ function ResultsTable({
 
   const toggleLightbox = React.useCallback((url?: string) => {
     setLightboxImage(url || null);
-    setLightboxOpen((open) => !open);
+    setLightboxOpen(Boolean(url));
   }, []);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional

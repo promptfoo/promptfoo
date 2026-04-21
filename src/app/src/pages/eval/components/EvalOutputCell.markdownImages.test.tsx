@@ -1,5 +1,6 @@
 import type React from 'react';
 
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { screen } from '@testing-library/react';
@@ -45,6 +46,7 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
 
 describe('EvalOutputCell markdown image previews', () => {
   const mockOnRating = vi.fn();
+  let timers: TestTimers | undefined;
 
   const createProps = (overrides?: Partial<EvaluateTableOutput>): MockEvalOutputCellProps => ({
     firstOutput: {
@@ -84,12 +86,13 @@ describe('EvalOutputCell markdown image previews', () => {
   });
 
   beforeEach(() => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    timers = useTestTimers({ shouldAdvanceTime: true });
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
+    timers?.restore();
+    timers = undefined;
     vi.resetAllMocks();
   });
 

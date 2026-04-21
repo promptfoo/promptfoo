@@ -1216,7 +1216,7 @@ function EvalOutputCell({
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const toggleLightbox = useCallback((url?: string) => {
     setLightboxImage(url ?? null);
-    setLightboxOpen((prev) => !prev);
+    setLightboxOpen(Boolean(url));
   }, []);
 
   // Memoized components object for ReactMarkdown to prevent re-renders.
