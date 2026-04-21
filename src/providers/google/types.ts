@@ -118,8 +118,12 @@ export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
   apiBaseUrl?: string;
-  /** Custom per-token cost override for cost calculation. */
+  /** Custom per-token cost override for both input and output tokens. */
   cost?: number;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;
@@ -492,6 +496,10 @@ export interface GoogleVideoOptions {
   // Model selection
   model?: GoogleVideoModel;
 
+  // Authentication / transport mode
+  apiKey?: string;
+  vertexai?: boolean;
+
   // Video parameters
   aspectRatio?: GoogleVideoAspectRatio;
   resolution?: GoogleVideoResolution;
@@ -514,7 +522,7 @@ export interface GoogleVideoOptions {
 
   // Video extension (Veo 3.1 only)
   extendVideoId?: string; // Operation ID from previous Veo generation
-  sourceVideo?: string; // Alias for extendVideoId (must be Veo operation ID, not file path)
+  sourceVideo?: string; // Base64/file:// video for AI Studio, or Veo operation ID in Vertex flows
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;

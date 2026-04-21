@@ -155,6 +155,11 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
         placement: 'header',
         keyName: 'X-API-Key',
       });
+    } else if (newType === 'file') {
+      updateCustomTarget('auth', {
+        type: 'file',
+        path: '',
+      });
     }
   };
 
@@ -212,6 +217,7 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
             <SelectItem value="api_key">API Key</SelectItem>
             <SelectItem value="basic">Basic</SelectItem>
             <SelectItem value="bearer">Bearer</SelectItem>
+            <SelectItem value="file">File</SelectItem>
             <SelectItem value="digital_signature">Digital Signature</SelectItem>
             <SelectItem value="oauth">OAuth 2.0</SelectItem>
           </SelectContent>
@@ -455,6 +461,41 @@ const AuthorizationTab: React.FC<AuthorizationTabProps> = ({
                 showValue={showApiKey}
                 onToggleVisibility={() => setShowApiKey(!showApiKey)}
               />
+            </div>
+          );
+        })()}
+
+      {/* File Auth Form */}
+      {getAuthType() === 'file' &&
+        (() => {
+          const auth = selectedTarget.config?.auth as { type: 'file'; path?: string } | undefined;
+          return (
+            <div className="mt-6 space-y-4">
+              <p className="font-medium">File-Based Authentication Configuration</p>
+
+              <div className="space-y-2">
+                <Label htmlFor="file-auth-path">
+                  Auth File Path <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="file-auth-path"
+                  value={auth?.path || ''}
+                  onChange={(e) => updateAuthField('path', e.target.value)}
+                  placeholder="./auth/get-token.ts"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Load a token from a JavaScript, TypeScript, or Python auth file. See{' '}
+                  <a
+                    href="https://www.promptfoo.dev/docs/providers/http/#file-based-authentication"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    docs
+                  </a>{' '}
+                  for details.
+                </p>
+              </div>
             </div>
           );
         })()}

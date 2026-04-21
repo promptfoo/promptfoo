@@ -443,7 +443,7 @@ export class WatsonXProvider implements ApiProvider {
     try {
       // Build parameters with conditional inclusion
       const parameters: TextGenRequestParametersModel = {
-        max_new_tokens: config.maxNewTokens || 100,
+        max_new_tokens: config.maxNewTokens ?? 100,
         ...(config.minNewTokens !== undefined && { min_new_tokens: config.minNewTokens }),
         ...(config.decodingMethod && { decoding_method: config.decodingMethod }),
         ...(config.lengthPenalty && {

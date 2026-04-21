@@ -27,6 +27,7 @@ This assertion will use a language model to grade the output based on the specif
 Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available:
 
 - **OpenAI API key**: `gpt-5`
+- **Codex/ChatGPT login**: `openai:codex-sdk` when the Codex SDK package is installed, Codex is signed in, and no higher-priority API credentials are set
 - **Anthropic API key**: `claude-sonnet-4-5-20250929`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
@@ -35,6 +36,8 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 - **Azure credentials**: Your configured Azure GPT deployment
 
 You can override this by setting the `provider` option (see below).
+
+Codex/ChatGPT login fallback is text-only. Assertions that need embeddings or moderation still require an API-key-backed provider override.
 
 It asks the model to output a JSON object that looks like this:
 
@@ -118,6 +121,8 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
            provider: openai:gpt-5-mini
            // highlight-end
    ```
+
+Custom `llm-rubric` providers can also return a `metadata` object in their `ProviderResponse`. promptfoo copies those keys onto the assertion's `GradingResult.metadata` alongside `renderedGradingPrompt`, which makes per-assertion fields such as upload IDs or trace IDs available in hooks like `afterEach`.
 
 ## Customizing the rubric prompt
 
@@ -248,7 +253,7 @@ For more details, see the [object template handling guide](/docs/usage/troublesh
 
 ## Threshold Support
 
-The `llm-rubric` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass. For example:
+The `llm-rubric` assertion type applies a score threshold when the grader returns a score. The default threshold is `0.5`; set `threshold` to override it. For example:
 
 ```yaml
 assert:
@@ -261,35 +266,31 @@ The threshold is applied to the score returned by the LLM (which ranges from 0.0
 
 ## Pass vs. Score Semantics
 
-- PASS is determined by the LLM's boolean `pass` field unless you set a `threshold`.
-- If the model omits `pass`, promptfoo assumes `pass: true` by default.
-- `score` is a numeric metric that does not affect PASS/FAIL unless you set `threshold`.
-- When `threshold` is set, both must be true for the assertion to pass:
+- PASS is determined by the LLM's boolean `pass` field and the score threshold.
+- If the model omits `pass` but returns `score`, promptfoo uses the score threshold.
+- If the model omits both `pass` and `score`, the assertion fails as malformed grader output.
+- Both must be true for the assertion to pass:
   - `pass === true`
   - `score >= threshold`
 
-This means that without a `threshold`, a result like `{ pass: true, score: 0 }` will pass. If you want the numeric score (e.g., 0/1 rubric) to drive PASS/FAIL, set a `threshold` accordingly or have the model return explicit `pass`.
-
-:::caution
-If the model omits `pass` and you don't set `threshold`, the assertion passes even with `score: 0`.
-:::
+This means a result like `{ pass: true, score: 0 }` fails by default because it does not meet the default threshold of `0.5`. If you want a different numeric cutoff, set `threshold` accordingly.
 
 ### Common misconfiguration
 
 ```yaml
-# ❌ Problem: Returns 0/1 scores but no threshold set
+# Problem: Returns 0/1 scores but needs a stricter cutoff
 assert:
   - type: llm-rubric
     value: |
       Return 0 if the response is incorrect
       Return 1 if the response is correct
-    # Missing threshold - always passes due to pass defaulting to true
+    # Defaults to threshold: 0.5
 ```
 
 **Fixes:**
 
 ```yaml
-# ✅ Option A: Add threshold
+# Option A: Add threshold
 assert:
   - type: llm-rubric
     value: |
@@ -297,7 +298,7 @@ assert:
       Return 1 if the response is correct
     threshold: 1
 
-# ✅ Option B: Control pass explicitly
+# Option B: Control pass explicitly
 assert:
   - type: llm-rubric
     value: |

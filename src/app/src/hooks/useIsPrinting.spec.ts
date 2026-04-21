@@ -1,3 +1,4 @@
+import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useIsPrinting } from './useIsPrinting';
@@ -17,17 +18,20 @@ describe('useIsPrinting', () => {
       removeEventListener: vi.fn(),
     };
 
-    // Mock window.matchMedia
-    window.matchMedia = vi.fn().mockImplementation((query: string) => {
-      if (query === 'print') {
-        return mockMediaQueryList;
-      }
-      return {
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      };
-    });
+    mockBrowserProperty(
+      window,
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => {
+        if (query === 'print') {
+          return mockMediaQueryList;
+        }
+        return {
+          matches: false,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        };
+      }) as typeof window.matchMedia,
+    );
   });
 
   it('should return false when not in print mode', () => {

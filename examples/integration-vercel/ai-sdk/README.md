@@ -117,3 +117,8 @@ return {
 
 - [Vercel AI SDK Documentation](https://ai-sdk.dev)
 - [promptfoo Custom Providers](https://promptfoo.dev/docs/providers/custom-api)
+- [Promptfoo tracing and trajectory assertions](https://promptfoo.dev/docs/tracing/)
+
+## Tool Telemetry
+
+If you enable Vercel AI SDK `experimental_telemetry` for tool-calling workflows, Promptfoo trajectory assertions can normalize the SDK's tool-call spans from `ai.toolCall.name` plus the matching `ai.toolCall.args`, `ai.toolCall.arguments`, or `ai.toolCall.input` attributes.

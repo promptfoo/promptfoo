@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
@@ -14,22 +14,22 @@ vi.mock('@app/hooks/useToast', () => ({
   }),
 }));
 
-vi.mock('prismjs/components/prism-core', () => ({
-  highlight: vi.fn((code: string) => code),
-  languages: {
-    javascript: {},
-    json: {},
-    http: {},
-    yaml: {},
-    text: {},
-    clike: {},
+vi.mock('@app/lib/prism', () => ({
+  default: {
+    highlight: vi.fn((code: string) => code),
+    languages: {
+      javascript: {},
+      json: {},
+      http: {},
+      yaml: {},
+      text: {},
+      clike: {},
+    },
   },
 }));
 vi.mock('prismjs/themes/prism.css', () => ({
   default: {},
 }));
-vi.mock('prismjs/components/prism-clike', () => ({}));
-vi.mock('prismjs/components/prism-javascript', () => ({}));
 
 vi.mock('../../utils/crypto', () => ({
   convertStringKeyToPem: vi.fn(),
@@ -300,9 +300,9 @@ describe('HttpAdvancedConfiguration', () => {
     await user.click(authorizationTab);
 
     const pfxPasswordInput = screen.getByLabelText('PFX Password') as HTMLInputElement;
-    // Use fireEvent.change instead of user.type for controlled inputs
-    // since the mock doesn't update selectedTarget between keystrokes
-    fireEvent.change(pfxPasswordInput, { target: { value: 'test-password' } });
+    await user.click(pfxPasswordInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('test-password');
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
@@ -337,10 +337,12 @@ describe('HttpAdvancedConfiguration', () => {
     const keystorePasswordInput = screen.getByLabelText('Keystore Password');
     const keyAliasInput = screen.getByLabelText('Key Alias');
 
-    // Use fireEvent.change instead of user.type for controlled inputs
-    // since the mock doesn't update selectedTarget between keystrokes
-    fireEvent.change(keystorePasswordInput, { target: { value: 'testPassword' } });
-    fireEvent.change(keyAliasInput, { target: { value: 'testAlias' } });
+    await user.click(keystorePasswordInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('testPassword');
+    await user.click(keyAliasInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('testAlias');
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
@@ -382,9 +384,9 @@ describe('HttpAdvancedConfiguration', () => {
     expect(keystorePasswordInput).toBeInTheDocument();
 
     const envVar = '${MY_PASSWORD}';
-    // Use fireEvent.change instead of user.type for controlled inputs
-    // since the mock doesn't update selectedTarget between keystrokes
-    fireEvent.change(keystorePasswordInput, { target: { value: envVar } });
+    await user.click(keystorePasswordInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(envVar);
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
@@ -504,6 +506,67 @@ describe('HttpAdvancedConfiguration', () => {
       keyPath: undefined,
       pfxMode: undefined,
       type: 'pfx',
+    });
+  });
+
+  it('should initialize file auth when File is selected in the authorization tab', async () => {
+    const user = userEvent.setup();
+    const selectedTarget: ProviderOptions = {
+      id: 'http-provider',
+      config: {},
+    };
+
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    await user.click(authorizationTab);
+
+    const authTypeSelect = screen.getByRole('combobox', { name: /Authentication Type/i });
+    await user.click(authTypeSelect);
+    await user.click(screen.getByRole('option', { name: 'File' }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', undefined);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('auth', {
+      type: 'file',
+      path: '',
+    });
+  });
+
+  it('should update the file auth path', async () => {
+    const user = userEvent.setup();
+    const selectedTarget: ProviderOptions = {
+      id: 'http-provider',
+      config: {
+        auth: {
+          type: 'file',
+          path: './auth/current.ts',
+        },
+      },
+    };
+
+    renderWithProviders(
+      <HttpAdvancedConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+      />,
+    );
+
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    await user.click(authorizationTab);
+
+    const input = screen.getByLabelText(/Auth File Path/i);
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('./auth/next.ts');
+
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('auth', {
+      type: 'file',
+      path: './auth/next.ts',
     });
   });
 });

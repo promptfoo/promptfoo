@@ -1,22 +1,13 @@
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-
 import { afterEach, describe, expect, it } from 'vitest';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
-
-function createTempDir(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+import { createTempDir, removeTempDir } from '../util/utils';
 
 describe('FilesystemBlobStorageProvider', () => {
   let tempDir: string | undefined;
 
   afterEach(() => {
-    if (tempDir) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-      tempDir = undefined;
-    }
+    removeTempDir(tempDir);
+    tempDir = undefined;
   });
 
   it('stores and retrieves blobs by hash', async () => {

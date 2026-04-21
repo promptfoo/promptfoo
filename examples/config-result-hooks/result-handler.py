@@ -9,8 +9,6 @@ Or in promptfooconfig.yaml:
       - file://result-handler.py:after_all
 """
 
-import json
-
 
 def after_all(context):
     """

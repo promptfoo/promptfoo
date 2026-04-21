@@ -8,6 +8,18 @@ import type { EvaluateOptions, TestCase, TestSuite } from '../types/index';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;
+const DEFAULT_OTLP_ACCEPT_FORMATS = ['json', 'protobuf'] as const;
+
+function normalizeOtlpAcceptFormats(
+  acceptFormats?: string[],
+): Array<(typeof DEFAULT_OTLP_ACCEPT_FORMATS)[number]> {
+  const normalized = (acceptFormats ?? []).filter(
+    (format): format is (typeof DEFAULT_OTLP_ACCEPT_FORMATS)[number] =>
+      format === 'json' || format === 'protobuf',
+  );
+
+  return normalized.length > 0 ? normalized : [...DEFAULT_OTLP_ACCEPT_FORMATS];
+}
 
 /**
  * Reset module state (for testing purposes).
@@ -76,8 +88,9 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       const { startOTLPReceiver } = await import('./otlpReceiver');
       const port = testSuite.tracing.otlp.http.port || 4318;
       const host = testSuite.tracing.otlp.http.host || '127.0.0.1';
+      const acceptFormats = normalizeOtlpAcceptFormats(testSuite.tracing.otlp.http.acceptFormats);
       logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
-      await startOTLPReceiver(port, host);
+      await startOTLPReceiver(port, host, acceptFormats);
       otlpReceiverStarted = true;
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
