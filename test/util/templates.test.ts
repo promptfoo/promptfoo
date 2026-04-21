@@ -8,6 +8,7 @@ import {
   getNunjucksEngine,
   templateReferencesVariable,
 } from '../../src/util/templates';
+import { mockProcessEnv } from './utils';
 
 describe('extractVariablesFromTemplate', () => {
   it('should extract simple variables', () => {
@@ -303,15 +304,15 @@ describe('analyzeTemplateReference', () => {
 });
 
 describe('getNunjucksEngine', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...originalEnv };
+    mockProcessEnv({ ...originalEnv }, { clear: true });
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
   });
 
   it('should return a nunjucks environment by default', () => {
@@ -321,20 +322,20 @@ describe('getNunjucksEngine', () => {
   });
 
   it('should return a simple render function when PROMPTFOO_DISABLE_TEMPLATING is set', () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     const engine = getNunjucksEngine();
     expect(engine.renderString('Hello {{ name }}', { name: 'World' })).toBe('Hello {{ name }}');
   });
 
   it('should return a nunjucks environment when isGrader is true, regardless of PROMPTFOO_DISABLE_TEMPLATING', () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     const engine = getNunjucksEngine({}, false, true);
     expect(engine).toBeInstanceOf(nunjucks.Environment);
     expect(engine.renderString('Hello {{ name }}', { name: 'Grader' })).toBe('Hello Grader');
   });
 
   it('should use nunjucks when isGrader is true, even if PROMPTFOO_DISABLE_TEMPLATING is set', () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     const engine = getNunjucksEngine({}, false, true);
     expect(engine).toBeInstanceOf(nunjucks.Environment);
     expect(engine.renderString('Hello {{ name }}', { name: 'Grader' })).toBe('Hello Grader');
@@ -372,7 +373,7 @@ describe('getNunjucksEngine', () => {
   });
 
   it('should add environment variables as globals under "env"', () => {
-    process.env.TEST_VAR = 'test_value';
+    mockProcessEnv({ TEST_VAR: 'test_value' });
     const engine = getNunjucksEngine();
     expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
   });
@@ -392,7 +393,7 @@ describe('getNunjucksEngine', () => {
   });
 
   it('should respect all parameters when provided', () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     const customFilters = {
       double: (n: number) => (n * 2).toString(),
     };
@@ -406,7 +407,7 @@ describe('getNunjucksEngine', () => {
 
   describe('environment variables as globals', () => {
     it('should add environment variables as globals by default', () => {
-      process.env.TEST_VAR = 'test_value';
+      mockProcessEnv({ TEST_VAR: 'test_value' });
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
     });
@@ -428,20 +429,20 @@ describe('getNunjucksEngine', () => {
     });
 
     it('should handle undefined cliState.config', () => {
-      process.env.TEST_VAR = 'test_value';
+      mockProcessEnv({ TEST_VAR: 'test_value' });
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
     });
 
     it('should handle undefined cliState.config.env', () => {
-      process.env.TEST_VAR = 'test_value';
+      mockProcessEnv({ TEST_VAR: 'test_value' });
       const engine = getNunjucksEngine();
       expect(engine.renderString('{{ env.TEST_VAR }}', {})).toBe('test_value');
     });
 
     it('should disable process.env but allow config env variables when PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS is true', () => {
-      process.env.TEST_VAR = 'test_value';
-      process.env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS = 'true';
+      mockProcessEnv({ TEST_VAR: 'test_value' });
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true' });
       const initialConfig = { ...cliState.config };
       cliState.config = {
         env: {
@@ -455,8 +456,8 @@ describe('getNunjucksEngine', () => {
     });
 
     it('should disable process.env but allow config env variables when PROMPTFOO_SELF_HOSTED is true', () => {
-      process.env.TEST_VAR = 'test_value';
-      process.env.PROMPTFOO_SELF_HOSTED = 'true';
+      mockProcessEnv({ TEST_VAR: 'test_value' });
+      mockProcessEnv({ PROMPTFOO_SELF_HOSTED: 'true' });
       const initialConfig = { ...cliState.config };
       cliState.config = {
         env: {
@@ -470,7 +471,7 @@ describe('getNunjucksEngine', () => {
     });
 
     it('should handle empty config env object', () => {
-      process.env.TEST_VAR = 'test_value';
+      mockProcessEnv({ TEST_VAR: 'test_value' });
       const initialConfig = { ...cliState.config };
       cliState.config = {
         env: {},
@@ -481,7 +482,7 @@ describe('getNunjucksEngine', () => {
     });
 
     it('should prioritize config env variables over process.env when both exist', () => {
-      process.env.SHARED_VAR = 'process_value';
+      mockProcessEnv({ SHARED_VAR: 'process_value' });
       const initialConfig = { ...cliState.config };
       cliState.config = {
         env: {

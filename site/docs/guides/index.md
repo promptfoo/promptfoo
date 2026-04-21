@@ -17,6 +17,7 @@ Learn how to measure specific aspects of LLM output quality.
 - [Evaluating JSON Outputs](/docs/guides/evaluate-json) — Validate structured LLM outputs against schemas
 - [Evaluating Coding Agents](/docs/guides/evaluate-coding-agents) — Test AI coding assistants
 - [Evaluating Factuality](/docs/guides/factuality-eval) — Score responses for factual accuracy
+- [LLM as a Judge](/docs/guides/llm-as-a-judge) — Build reliable model-graded evals with rubrics, calibration, and multi-judge checks
 - [Testing LLM Chains](/docs/configuration/testing-llm-chains) — Evaluate multi-step LLM pipelines
 - [Choosing the Right Temperature](/docs/guides/evaluate-llm-temperature) — Find the optimal temperature setting for your use case
 - [Evaluating Text-to-SQL](/docs/guides/text-to-sql-evaluation) — Measure SQL generation accuracy

@@ -479,7 +479,7 @@ describeEvaluator('evaluator grading concurrency', () => {
     expect(gradingProvider.callApi).toHaveBeenCalledTimes(4);
   });
 
-  it('serializes async assert-set judges so grouping survives PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', async () => {
+  it('serializes async assert-set judges when provider call queue is active', async () => {
     // Regression: without forcing assertion concurrency to 1 when the grouping
     // queue is active, async graders inside an assert-set would interleave
     // judges across rows (judge-one row1, judge-two row1, judge-one row2, ...)
@@ -495,8 +495,8 @@ describeEvaluator('evaluator grading concurrency', () => {
     const makeAsyncJudge = (id: string): ApiProvider => ({
       id: vi.fn().mockReturnValue(id),
       callApi: vi.fn(async () => {
-        // Yield to the event loop a few times to expose any interleaving that
-        // `async.forEachOfLimit(ASSERTIONS_MAX_CONCURRENCY)` would produce.
+        // Intentionally yield through both queues so this regression test can
+        // expose the cross-row interleaving that assertion concurrency caused.
         await Promise.resolve();
         await new Promise((resolve) => setTimeout(resolve, 0));
         callOrder.push(id);

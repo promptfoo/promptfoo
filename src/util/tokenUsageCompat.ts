@@ -99,7 +99,9 @@ export async function getTokenUsageFromTrace(traceId: string): Promise<TokenUsag
  */
 export async function getTokenUsageFromEvaluation(evalId: string): Promise<TokenUsage> {
   const store = getTraceStore();
-  const traces = await store.getTracesByEvaluation(evalId);
+  const traces = await store.getTracesByEvaluation(evalId, {
+    sanitizeAttributes: false, // We need raw attributes to read token counts
+  });
 
   const result = createEmptyTokenUsage();
 

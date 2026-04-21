@@ -15,6 +15,7 @@ import { AnthropicCompletionProvider } from '../../src/providers/anthropic/compl
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
+import { AIStudioEmbeddingProvider } from '../../src/providers/google/ai.studio';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import { GoogleVideoProvider } from '../../src/providers/google/video';
 import {
@@ -55,6 +56,7 @@ import RedteamImageIterativeProvider from '../../src/redteam/providers/iterative
 import RedteamIterativeTreeProvider from '../../src/redteam/providers/iterativeTree';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
@@ -185,15 +187,15 @@ beforeEach(() => {
 describe('call provider apis', () => {
   beforeEach(() => {
     // Set Azure environment variables for Azure provider tests
-    process.env.AZURE_API_HOST = 'test.openai.azure.com';
-    process.env.AZURE_API_KEY = 'test-api-key';
+    mockProcessEnv({ AZURE_API_HOST: 'test.openai.azure.com' });
+    mockProcessEnv({ AZURE_API_KEY: 'test-api-key' });
   });
 
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
-    delete process.env.AZURE_API_HOST;
-    delete process.env.AZURE_API_KEY;
+    mockProcessEnv({ AZURE_API_HOST: undefined });
+    mockProcessEnv({ AZURE_API_KEY: undefined });
   });
 
   it('AzureOpenAiCompletionProvider callApi', async () => {
@@ -528,7 +530,7 @@ describe('loadApiProvider', () => {
       'TEST_MISSING_VAR_7079',
     ];
     for (const key of keysToClean) {
-      delete process.env[key];
+      mockProcessEnv({ [key]: undefined });
     }
   });
 
@@ -682,10 +684,23 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with openrouter', async () => {
-    const provider = await loadApiProvider('openrouter:mistralai/mistral-medium');
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7');
     expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     // OpenRouter provider now returns id with prefix
-    expect(provider.id()).toBe('openrouter:mistralai/mistral-medium');
+    expect(provider.id()).toBe('openrouter:anthropic/claude-opus-4.7');
+  });
+
+  it('loadApiProvider with openrouter preserves a custom apiBaseUrl override', async () => {
+    const provider = await loadApiProvider('openrouter:anthropic/claude-opus-4.7', {
+      options: {
+        config: {
+          apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+        },
+      },
+    });
+
+    expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+    expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
   });
 
   it('loadApiProvider with github', async () => {
@@ -794,6 +809,18 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('vertex:embeddings:vertex-embedding-model');
     expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
     expect(provider.id()).toBe('vertex:vertex-embedding-model');
+  });
+
+  it('loadApiProvider with google:embedding', async () => {
+    const provider = await loadApiProvider('google:embedding:gemini-embedding-001');
+    expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
+  });
+
+  it('loadApiProvider with google:embeddings', async () => {
+    const provider = await loadApiProvider('google:embeddings:gemini-embedding-001');
+    expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
   });
 
   it('loadApiProvider with vertex:modelname', async () => {
@@ -923,18 +950,116 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProviders with ProviderFunction', async () => {
-    const providerFunction: ProviderFunction = async (prompt) => {
+    const providerFunction: ProviderFunction & { transform?: (output: string) => string } = async (
+      prompt,
+    ) => {
       return {
         output: `Output for ${prompt}`,
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       };
     };
+    providerFunction.transform = (output) => output.toUpperCase();
+
     const providers = await loadApiProviders(providerFunction);
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('custom-function');
+    expect(providers[0].transform).toBe(providerFunction.transform);
     const response = await providers[0].callApi('Test prompt');
     expect(response.output).toBe('Output for Test prompt');
     expect(response.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+  });
+
+  it('loadApiProviders with bare ProviderFunction leaves metadata properties unset', async () => {
+    const bareProviderFunction: ProviderFunction = async (prompt) => ({
+      output: `Output for ${prompt}`,
+    });
+
+    const providers = await loadApiProviders([bareProviderFunction] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('custom-function-0');
+    // Metadata fields should be absent on the resulting ApiProvider (not set to undefined)
+    // so downstream merges like `config ?? {}` aren't clobbered.
+    expect('label' in providers[0]).toBe(false);
+    expect('transform' in providers[0]).toBe(false);
+    expect('delay' in providers[0]).toBe(false);
+    expect('inputs' in providers[0]).toBe(false);
+    expect('config' in providers[0]).toBe(false);
+  });
+
+  it('loadApiProviders with ProviderFunction preserves metadata properties', async () => {
+    const providerFunction: ProviderFunction & {
+      label?: string;
+      transform?: (output: string) => string;
+      delay?: number;
+      inputs?: any;
+      config?: any;
+    } = async (prompt) => ({ output: `Output for ${prompt}` });
+    providerFunction.label = 'My Function';
+    providerFunction.transform = (output) => output.toUpperCase();
+    providerFunction.delay = 500;
+    providerFunction.inputs = [{ role: 'user', content: 'hi' }];
+    providerFunction.config = { custom: 'value' };
+
+    const providers = await loadApiProviders([providerFunction] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0].id()).toBe('My Function');
+    expect(providers[0].label).toBe('My Function');
+    expect(providers[0].transform).toBe(providerFunction.transform);
+    expect(providers[0].delay).toBe(500);
+    expect(providers[0].inputs).toBe(providerFunction.inputs);
+    expect(providers[0].config).toEqual({ custom: 'value' });
+  });
+
+  it('loadApiProviders and getProviderIds agree on the id of a labeled ProviderFunction in an array', async () => {
+    // Regression guard: the array-branch of loadApiProviders used to hardcode
+    // `custom-function-${idx}` regardless of `.label`, while getProviderIds and
+    // the single-function branch honored the label. They only agreed by accident
+    // (via the label fallback inside `createProviderFromFunction`). Use the
+    // descriptor-derived id so the two call sites can never drift again.
+    const providerFunction: ProviderFunction & { label?: string } = async (prompt) => ({
+      output: `Output for ${prompt}`,
+    });
+    providerFunction.label = 'Labeled Function';
+
+    const providers = await loadApiProviders([providerFunction, providerFunction] as any);
+    const providerIds = getProviderIds([providerFunction, providerFunction] as any);
+
+    expect(providers.map((p) => p.id())).toEqual(providerIds);
+    expect(providerIds).toEqual(['Labeled Function', 'Labeled Function']);
+  });
+
+  it('loadApiProviders with ApiProvider object preserves the provider instance', async () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async (prompt: string) => ({ output: `Output for ${prompt}` }),
+      transform: (output: string | object) => String(output).toUpperCase(),
+    };
+
+    const providers = await loadApiProviders([apiProvider] as any);
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBe(apiProvider);
+    expect(providers[0].id()).toBe('custom-api-provider');
+    expect(providers[0].transform).toBe(apiProvider.transform);
+    await expect(providers[0].callApi('Test prompt')).resolves.toEqual({
+      output: 'Output for Test prompt',
+    });
+  });
+
+  it('loadApiProviders with top-level ApiProvider object preserves the provider instance', async () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async (prompt: string) => ({ output: `Output for ${prompt}` }),
+    };
+
+    const providers = await loadApiProviders(apiProvider);
+    expect(providers).toHaveLength(1);
+    expect(providers[0]).toBe(apiProvider);
+  });
+
+  it('loadApiProviders rejects id-only objects instead of treating them as ApiProvider instances', async () => {
+    await expect(loadApiProviders([{ id: () => 'missing-call-api' }] as any)).rejects.toThrow(
+      'Invalid provider at index 0',
+    );
   });
 
   it('loadApiProviders with CustomApiProvider', async () => {
@@ -1057,8 +1182,8 @@ describe('loadApiProvider', () => {
   });
 
   it('supports templating in provider URL', async () => {
-    process.env.MY_HOST = 'api.example.com';
-    process.env.MY_PORT = '8080';
+    mockProcessEnv({ MY_HOST: 'api.example.com' });
+    mockProcessEnv({ MY_PORT: '8080' });
 
     const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
       options: {
@@ -1068,8 +1193,8 @@ describe('loadApiProvider', () => {
       },
     });
     expect(provider.id()).toBe('https://api.example.com:8080/query');
-    delete process.env.MY_HOST;
-    delete process.env.MY_PORT;
+    mockProcessEnv({ MY_HOST: undefined });
+    mockProcessEnv({ MY_PORT: undefined });
   });
 
   it('supports templating in provider URL with context env overrides', async () => {
@@ -1089,11 +1214,11 @@ describe('loadApiProvider', () => {
   });
 
   it('resolves env templates in provider IDs loaded from file references', async () => {
-    process.env.TEST_TENANT_7079 = 'tenant-a';
-    process.env.TEST_APPLICATION_7079 = 'myapp';
-    process.env.TEST_BASE_URL_7079 = 'example.com';
-    process.env.TEST_SERVICE_7079 = 'users';
-    process.env.TEST_VERSION_7079 = 'v3';
+    mockProcessEnv({ TEST_TENANT_7079: 'tenant-a' });
+    mockProcessEnv({ TEST_APPLICATION_7079: 'myapp' });
+    mockProcessEnv({ TEST_BASE_URL_7079: 'example.com' });
+    mockProcessEnv({ TEST_SERVICE_7079: 'users' });
+    mockProcessEnv({ TEST_VERSION_7079: 'v3' });
 
     const mockYamlContent = dedent`
       id: 'https://{{env.TEST_TENANT_7079}}-{{env.TEST_APPLICATION_7079}}.{{env.TEST_BASE_URL_7079}}/api/{{env.TEST_SERVICE_7079}}/{{env.TEST_VERSION_7079}}'
@@ -1106,16 +1231,16 @@ describe('loadApiProvider', () => {
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('https://tenant-a-myapp.example.com/api/users/v3');
 
-    delete process.env.TEST_TENANT_7079;
-    delete process.env.TEST_APPLICATION_7079;
-    delete process.env.TEST_BASE_URL_7079;
-    delete process.env.TEST_SERVICE_7079;
-    delete process.env.TEST_VERSION_7079;
+    mockProcessEnv({ TEST_TENANT_7079: undefined });
+    mockProcessEnv({ TEST_APPLICATION_7079: undefined });
+    mockProcessEnv({ TEST_BASE_URL_7079: undefined });
+    mockProcessEnv({ TEST_SERVICE_7079: undefined });
+    mockProcessEnv({ TEST_VERSION_7079: undefined });
   });
 
   it('preserves undefined env templates in provider IDs loaded from file references', async () => {
-    process.env.TEST_APPLICATION_7079 = 'myapp';
-    process.env.TEST_BASE_URL_7079 = 'example.com';
+    mockProcessEnv({ TEST_APPLICATION_7079: 'myapp' });
+    mockProcessEnv({ TEST_BASE_URL_7079: 'example.com' });
 
     const mockYamlContent = dedent`
       id: 'https://{{env.TEST_APPLICATION_7079}}-{{env.TEST_MISSING_VAR_7079}}.{{env.TEST_BASE_URL_7079}}/api'
@@ -1128,13 +1253,13 @@ describe('loadApiProvider', () => {
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('https://myapp-{{env.TEST_MISSING_VAR_7079}}.example.com/api');
 
-    delete process.env.TEST_APPLICATION_7079;
-    delete process.env.TEST_BASE_URL_7079;
+    mockProcessEnv({ TEST_APPLICATION_7079: undefined });
+    mockProcessEnv({ TEST_BASE_URL_7079: undefined });
   });
 
   it('resolves env templates when file:// providers are pre-resolved via resolveProviderConfigs', async () => {
-    process.env.TEST_APP_7079_RESOLVED = 'myapp';
-    process.env.TEST_URL_7079_RESOLVED = 'example.com';
+    mockProcessEnv({ TEST_APP_7079_RESOLVED: 'myapp' });
+    mockProcessEnv({ TEST_URL_7079_RESOLVED: 'example.com' });
 
     const mockYamlContent = dedent`
       id: 'https://{{env.TEST_APP_7079_RESOLVED}}.{{env.TEST_URL_7079_RESOLVED}}/api/v1'
@@ -1152,16 +1277,16 @@ describe('loadApiProvider', () => {
     expect(providers).toHaveLength(1);
     expect(providers[0].id()).toBe('https://myapp.example.com/api/v1');
 
-    delete process.env.TEST_APP_7079_RESOLVED;
-    delete process.env.TEST_URL_7079_RESOLVED;
+    mockProcessEnv({ TEST_APP_7079_RESOLVED: undefined });
+    mockProcessEnv({ TEST_URL_7079_RESOLVED: undefined });
   });
 
   it('resolves env templates in HTTP provider URL and config from file reference (#7079)', async () => {
-    process.env.TEST_APP_7079_HTTP = 'myapp';
-    process.env.TEST_BASE_7079_HTTP = 'example.com';
-    process.env.TEST_SVC_7079_HTTP = 'users';
-    process.env.TEST_VER_7079_HTTP = 'v3';
-    process.env.TEST_SESSION_7079_HTTP = 'abc123';
+    mockProcessEnv({ TEST_APP_7079_HTTP: 'myapp' });
+    mockProcessEnv({ TEST_BASE_7079_HTTP: 'example.com' });
+    mockProcessEnv({ TEST_SVC_7079_HTTP: 'users' });
+    mockProcessEnv({ TEST_VER_7079_HTTP: 'v3' });
+    mockProcessEnv({ TEST_SESSION_7079_HTTP: 'abc123' });
 
     const mockYamlContent = dedent`
       id: 'https://{{env.TEST_APP_7079_HTTP}}.{{env.TEST_BASE_7079_HTTP}}/api/{{env.TEST_SVC_7079_HTTP}}/{{env.TEST_VER_7079_HTTP}}'
@@ -1176,11 +1301,11 @@ describe('loadApiProvider', () => {
     expect(provider.id()).toBe('https://myapp.example.com/api/users/v3');
     expect(provider.config.headers?.Cookie).toBe('SESSION=abc123');
 
-    delete process.env.TEST_APP_7079_HTTP;
-    delete process.env.TEST_BASE_7079_HTTP;
-    delete process.env.TEST_SVC_7079_HTTP;
-    delete process.env.TEST_VER_7079_HTTP;
-    delete process.env.TEST_SESSION_7079_HTTP;
+    mockProcessEnv({ TEST_APP_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_BASE_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_SVC_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_VER_7079_HTTP: undefined });
+    mockProcessEnv({ TEST_SESSION_7079_HTTP: undefined });
   });
 
   it('lets explicit env overrides win for providers loaded from file references', async () => {
@@ -1243,8 +1368,8 @@ describe('loadApiProvider', () => {
   it('preserves merged env overrides for Abliteration providers', async () => {
     const originalAblitKey = process.env.ABLIT_KEY;
     const originalAblitApiBaseUrl = process.env.ABLIT_API_BASE_URL;
-    delete process.env.ABLIT_KEY;
-    delete process.env.ABLIT_API_BASE_URL;
+    mockProcessEnv({ ABLIT_KEY: undefined });
+    mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
 
     try {
       const provider = (await loadApiProvider('abliteration:abliterated-model', {
@@ -1264,15 +1389,15 @@ describe('loadApiProvider', () => {
       expect(provider.getApiKey()).toBe('provider-key');
     } finally {
       if (originalAblitKey === undefined) {
-        delete process.env.ABLIT_KEY;
+        mockProcessEnv({ ABLIT_KEY: undefined });
       } else {
-        process.env.ABLIT_KEY = originalAblitKey;
+        mockProcessEnv({ ABLIT_KEY: originalAblitKey });
       }
 
       if (originalAblitApiBaseUrl === undefined) {
-        delete process.env.ABLIT_API_BASE_URL;
+        mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
       } else {
-        process.env.ABLIT_API_BASE_URL = originalAblitApiBaseUrl;
+        mockProcessEnv({ ABLIT_API_BASE_URL: originalAblitApiBaseUrl });
       }
     }
   });
@@ -1303,8 +1428,8 @@ describe('loadApiProvider', () => {
   });
 
   it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.CLAUDE_CODE_USE_VERTEX;
+    mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
 
     const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
       options: {
@@ -1512,7 +1637,7 @@ describe('loadApiProvider', () => {
   });
 
   it('renders label using Nunjucks', async () => {
-    process.env.someVariable = 'foo';
+    mockProcessEnv({ someVariable: 'foo' });
     const providerOptions = {
       id: 'openai:chat:gpt-4o',
       config: {},
@@ -1523,9 +1648,9 @@ describe('loadApiProvider', () => {
   });
 
   it('renders environment variables in provider config while preserving runtime vars', async () => {
-    process.env.MY_DEPLOYMENT = 'test-deployment';
-    process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
-    process.env.API_VERSION = '2024-02-15';
+    mockProcessEnv({ MY_DEPLOYMENT: 'test-deployment' });
+    mockProcessEnv({ AZURE_ENDPOINT: 'test.openai.azure.com' });
+    mockProcessEnv({ API_VERSION: '2024-02-15' });
 
     const providerOptions = {
       config: {
@@ -1549,9 +1674,9 @@ describe('loadApiProvider', () => {
       message: '{{ vars.userMessage }}',
     });
 
-    delete process.env.MY_DEPLOYMENT;
-    delete process.env.AZURE_ENDPOINT;
-    delete process.env.API_VERSION;
+    mockProcessEnv({ MY_DEPLOYMENT: undefined });
+    mockProcessEnv({ AZURE_ENDPOINT: undefined });
+    mockProcessEnv({ API_VERSION: undefined });
   });
 
   it('loadApiProvider with xai', async () => {
@@ -1783,6 +1908,16 @@ describe('getProviderIds', () => {
     ]);
   });
 
+  it('calls id() for ApiProvider objects', () => {
+    const apiProvider = {
+      id: () => 'custom-api-provider',
+      callApi: async () => ({ output: 'test' }),
+    };
+
+    const providerIds = getProviderIds([apiProvider] as any);
+    expect(providerIds).toEqual(['custom-api-provider']);
+  });
+
   it('extracts id from ProviderOptionsMap objects', () => {
     const providerIds = getProviderIds([
       { 'openai:gpt-4o-mini': { config: { temperature: 0.5 } } },
@@ -1912,6 +2047,8 @@ describe('resolveProvider', () => {
       return { output: `Response for: ${prompt}` };
     });
     mockFunctionProvider.label = 'My Custom Provider';
+    mockFunctionProvider.transform = (output: string) => output.toUpperCase();
+    mockFunctionProvider.delay = 250;
 
     const result = await resolveProvider(mockFunctionProvider, mockProviderMap);
 
@@ -1919,6 +2056,8 @@ describe('resolveProvider', () => {
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('My Custom Provider');
     expect(result.callApi).toBe(mockFunctionProvider);
+    expect(result.transform).toBe(mockFunctionProvider.transform);
+    expect(result.delay).toBe(250);
   });
 
   it('should handle function provider without label', async () => {

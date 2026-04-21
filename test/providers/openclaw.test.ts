@@ -15,6 +15,7 @@ import {
   resolveGatewayUrl,
   resolveGatewayWsUrl,
 } from '../../src/providers/openclaw';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/envars', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/envars')>();
@@ -100,19 +101,19 @@ describe('OpenClaw Provider', () => {
       nonce: params.nonce,
     }));
     deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue(undefined);
-    process.env = { ...originalEnv };
-    delete process.env.CLAWDBOT_GATEWAY_PASSWORD;
-    delete process.env.CLAWDBOT_GATEWAY_TOKEN;
-    delete process.env.CLAWDBOT_GATEWAY_URL;
-    delete process.env.OPENCLAW_CONFIG_PATH;
-    delete process.env.OPENCLAW_GATEWAY_PASSWORD;
-    delete process.env.OPENCLAW_GATEWAY_PORT;
-    delete process.env.OPENCLAW_GATEWAY_URL;
-    delete process.env.OPENCLAW_GATEWAY_TOKEN;
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_PASSWORD: undefined });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_TOKEN: undefined });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_URL: undefined });
+    mockProcessEnv({ OPENCLAW_CONFIG_PATH: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_PASSWORD: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_PORT: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_URL: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: undefined });
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     vi.restoreAllMocks();
   });
 
@@ -123,7 +124,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should respect OPENCLAW_CONFIG_PATH when set', () => {
-      process.env.OPENCLAW_CONFIG_PATH = '/tmp/custom-openclaw.json';
+      mockProcessEnv({ OPENCLAW_CONFIG_PATH: '/tmp/custom-openclaw.json' });
       const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       readOpenClawConfig();
@@ -356,12 +357,12 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use environment variable second', () => {
-      process.env.OPENCLAW_GATEWAY_URL = 'http://env-host:8888';
+      mockProcessEnv({ OPENCLAW_GATEWAY_URL: 'http://env-host:8888' });
       expect(resolveGatewayUrl()).toBe('http://env-host:8888');
     });
 
     it('should fall back to legacy CLAWDBOT gateway URL environment variable', () => {
-      process.env.CLAWDBOT_GATEWAY_URL = 'http://legacy-host:8888';
+      mockProcessEnv({ CLAWDBOT_GATEWAY_URL: 'http://legacy-host:8888' });
       expect(resolveGatewayUrl()).toBe('http://legacy-host:8888');
     });
 
@@ -444,7 +445,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use OPENCLAW_GATEWAY_PORT for local auto-detection', () => {
-      process.env.OPENCLAW_GATEWAY_PORT = '19999';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10210 } as fs.Stats);
       vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ gateway: { port: 20000 } }));
@@ -453,14 +454,14 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use OPENCLAW_GATEWAY_PORT for default local URLs', () => {
-      process.env.OPENCLAW_GATEWAY_PORT = '19999';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:19999');
     });
 
     it('should ignore malformed OPENCLAW_GATEWAY_PORT values', () => {
-      process.env.OPENCLAW_GATEWAY_PORT = '19999x';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999x' });
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
@@ -489,7 +490,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should prefer per-provider env override over process env', () => {
-      process.env.OPENCLAW_GATEWAY_URL = 'http://process-env:8888';
+      mockProcessEnv({ OPENCLAW_GATEWAY_URL: 'http://process-env:8888' });
       expect(resolveGatewayUrl(undefined, { OPENCLAW_GATEWAY_URL: 'http://override:7777' })).toBe(
         'http://override:7777',
       );
@@ -538,7 +539,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use OPENCLAW_GATEWAY_PORT for default local websocket URLs', () => {
-      process.env.OPENCLAW_GATEWAY_PORT = '19999';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       expect(resolveGatewayWsUrl()).toBe('ws://127.0.0.1:19999');
@@ -566,12 +567,12 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use environment variable second', () => {
-      process.env.OPENCLAW_GATEWAY_TOKEN = 'env-token';
+      mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: 'env-token' });
       expect(resolveAuthToken()).toBe('env-token');
     });
 
     it('should use password environment variable when token is unset', () => {
-      process.env.OPENCLAW_GATEWAY_PASSWORD = 'env-password';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PASSWORD: 'env-password' });
       expect(resolveAuthToken()).toBe('env-password');
     });
 
@@ -646,7 +647,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should prefer per-provider env override over process env', () => {
-      process.env.OPENCLAW_GATEWAY_TOKEN = 'process-token';
+      mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: 'process-token' });
       expect(resolveAuthToken(undefined, { OPENCLAW_GATEWAY_TOKEN: 'override-token' })).toBe(
         'override-token',
       );
@@ -657,7 +658,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should fall back to legacy CLAWDBOT token environment variables', () => {
-      process.env.CLAWDBOT_GATEWAY_TOKEN = 'legacy-token';
+      mockProcessEnv({ CLAWDBOT_GATEWAY_TOKEN: 'legacy-token' });
       expect(resolveAuthToken()).toBe('legacy-token');
     });
 
@@ -748,13 +749,13 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should not fall back to OPENAI_API_KEY', () => {
-      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.getApiKey()).toBeUndefined();
     });
 
     it('should not fall back to OPENAI_BASE_URL', () => {
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      mockProcessEnv({ OPENAI_BASE_URL: 'https://api.openai.com/v1' });
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
     });
@@ -859,13 +860,13 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should not fall back to OPENAI_API_KEY', () => {
-      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
       const provider = new OpenClawResponsesProvider('main', {});
       expect(provider.getApiKey()).toBeUndefined();
     });
 
     it('should not fall back to OPENAI_BASE_URL', () => {
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      mockProcessEnv({ OPENAI_BASE_URL: 'https://api.openai.com/v1' });
       const provider = new OpenClawResponsesProvider('main', {});
       expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
     });
@@ -928,7 +929,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should not fall back to OPENAI_API_KEY', () => {
-      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
       const provider = new OpenClawEmbeddingProvider('main', {});
       expect(provider.getApiKey()).toBeUndefined();
     });

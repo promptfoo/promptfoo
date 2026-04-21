@@ -19,7 +19,6 @@ from agents.tracing.spans import Span
 from agents.tracing.traces import Trace
 
 TRACEPARENT_RE = re.compile(r"^[\da-f]{2}-([\da-f]{32})-([\da-f]{16})-[\da-f]{2}$")
-_CURRENT_PROCESSOR: "PromptfooTracingProcessor | None" = None
 
 
 @dataclass(frozen=True)
@@ -361,6 +360,14 @@ class PromptfooTracingProcessor(TracingProcessor):
                     )
 
 
+class _TracingState:
+    def __init__(self) -> None:
+        self.processor: PromptfooTracingProcessor | None = None
+
+
+_TRACING_STATE = _TracingState()
+
+
 def _parse_traceparent(traceparent: str | None) -> tuple[str, str] | None:
     if not traceparent:
         return None
@@ -392,17 +399,15 @@ def configure_promptfoo_tracing(
 ) -> PromptfooTraceContext | None:
     """Configure the SDK to emit spans into Promptfoo for the current eval case."""
 
-    global _CURRENT_PROCESSOR
-
-    if _CURRENT_PROCESSOR is not None:
+    if _TRACING_STATE.processor is not None:
         try:
-            _CURRENT_PROCESSOR.shutdown()
+            _TRACING_STATE.processor.shutdown()
         except Exception as exc:
             print(
                 f"[promptfoo_tracing] Failed to shut down previous processor: {exc}",
                 file=sys.stderr,
             )
-        _CURRENT_PROCESSOR = None
+        _TRACING_STATE.processor = None
 
     parsed = _active_otel_parent() or _parse_traceparent(context.get("traceparent"))
     if parsed is None:
@@ -424,7 +429,7 @@ def configure_promptfoo_tracing(
     )
     set_trace_processors([processor])
     set_tracing_disabled(False)
-    _CURRENT_PROCESSOR = processor
+    _TRACING_STATE.processor = processor
 
     return PromptfooTraceContext(
         trace_id=trace_id,

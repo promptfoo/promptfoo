@@ -4,7 +4,7 @@ import { getProviderType } from './helpers';
 describe('getProviderType', () => {
   it.each([
     {
-      providerId: 'openrouter:openai/gpt-4o',
+      providerId: 'openrouter:openai/gpt-5.4',
       expected: 'openrouter',
       description: 'a standard provider ID with a model',
     },

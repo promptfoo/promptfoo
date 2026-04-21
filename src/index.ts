@@ -7,6 +7,7 @@ import guardrails from './guardrails';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
+import { sanitizeProvider } from './models/evalResult';
 import { processPrompts, readProviderPromptMap } from './prompts/index';
 import { loadApiProvider, loadApiProviders, resolveProvider } from './providers/index';
 import { doGenerateRedteam } from './redteam/commands/generate';
@@ -20,9 +21,11 @@ import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
+import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
+import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
 import type {
   EvaluateOptions,
@@ -30,11 +33,15 @@ import type {
   Scenario,
   TestCase,
   TestSuite,
+  UnifiedConfig,
 } from './types/index';
 import type { ApiProvider } from './types/providers';
 
 export { generateTable } from './table';
 export * from './types/index';
+// Transform types and runtime guard for users passing inline transform functions
+// via the Node.js package.
+export { isTransformFunction } from './types/transform';
 
 // Extension hook context types for users writing custom extensions
 export type {
@@ -44,6 +51,7 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
 /**
  * Shallow-clone a test case so the caller can swap in resolved ApiProvider
@@ -68,6 +76,148 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
     cloned.assert = test.assert.map((assertion) => ({ ...assertion }));
   }
   return cloned;
+}
+
+function toSerializableProviderRef(provider: unknown): unknown {
+  if (isApiProvider(provider)) {
+    return sanitizeProvider(provider);
+  }
+  if (Array.isArray(provider)) {
+    return provider.map(toSerializableProviderRef);
+  }
+  return provider;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
+  if (!isApiProvider(record.provider)) {
+    return record;
+  }
+  return {
+    ...record,
+    provider: sanitizeProvider(record.provider),
+  };
+}
+
+/**
+ * Function-valued transforms are first-class at runtime but are silently dropped
+ * by `JSON.stringify`. Persisted eval configs (drizzle-stored) must never retain
+ * a function reference, so replace every `transform`-like field with a
+ * `[inline function]: name` marker. Non-function values pass through unchanged.
+ *
+ * `droppedRef.value` is flipped to `true` the first time a function is replaced
+ * so the caller can emit a single warning instead of logging per field.
+ */
+function replaceFunctionTransforms<T extends Record<string, unknown>>(
+  record: T,
+  droppedRef: { value: boolean },
+): T {
+  let result: T | undefined;
+  for (const key of TRANSFORM_KEYS) {
+    const value = record[key];
+    if (!isTransformFunction(value)) {
+      continue;
+    }
+    if (!result) {
+      result = { ...record };
+    }
+    (result as Record<string, unknown>)[key] = value.name
+      ? `${INLINE_FUNCTION_LABEL}: ${value.name}`
+      : INLINE_FUNCTION_LABEL;
+    droppedRef.value = true;
+  }
+  return result ?? record;
+}
+
+function toSerializableAssertion(assertion: unknown, droppedRef: { value: boolean }): unknown {
+  if (!isRecord(assertion)) {
+    return assertion;
+  }
+
+  let sanitizedAssertion = withSerializableProvider(assertion);
+  sanitizedAssertion = replaceFunctionTransforms(sanitizedAssertion, droppedRef);
+
+  if (Array.isArray(assertion.assert)) {
+    sanitizedAssertion = {
+      ...sanitizedAssertion,
+      assert: assertion.assert.map((a) => toSerializableAssertion(a, droppedRef)),
+    };
+  }
+
+  return sanitizedAssertion;
+}
+
+function toSerializableTestCase(test: unknown, droppedRef: { value: boolean }): unknown {
+  if (!isRecord(test)) {
+    return test;
+  }
+
+  let sanitizedTest = withSerializableProvider(test);
+
+  if (isRecord(test.options)) {
+    let options = withSerializableProvider(test.options);
+    options = replaceFunctionTransforms(options, droppedRef);
+    if (options !== test.options) {
+      sanitizedTest = {
+        ...sanitizedTest,
+        options,
+      };
+    }
+  }
+
+  if (Array.isArray(test.assert)) {
+    sanitizedTest = {
+      ...sanitizedTest,
+      assert: test.assert.map((a) => toSerializableAssertion(a, droppedRef)),
+    };
+  }
+
+  return sanitizedTest;
+}
+
+function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean }): unknown {
+  if (!isRecord(scenario)) {
+    return scenario;
+  }
+
+  if (!Array.isArray(scenario.tests)) {
+    return scenario;
+  }
+
+  return {
+    ...scenario,
+    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+  };
+}
+
+function createSerializableUnifiedConfig(
+  testSuite: EvaluateTestSuite,
+  prompts: TestSuite['prompts'],
+): Partial<UnifiedConfig> {
+  const droppedRef = { value: false };
+  const config = {
+    ...testSuite,
+    providers: toSerializableProviderRef(testSuite.providers),
+    defaultTest: toSerializableTestCase(testSuite.defaultTest, droppedRef),
+    tests: Array.isArray(testSuite.tests)
+      ? testSuite.tests.map((t) => toSerializableTestCase(t, droppedRef))
+      : testSuite.tests,
+    scenarios: Array.isArray(testSuite.scenarios)
+      ? testSuite.scenarios.map((s) => toSerializableScenario(s, droppedRef))
+      : testSuite.scenarios,
+    prompts,
+  } as Partial<UnifiedConfig>;
+
+  if (droppedRef.value && testSuite.writeLatestResults) {
+    logger.warn(
+      'Function-valued transform(s) in testSuite were replaced with "[inline function]" markers in the persisted config. Re-running the saved eval will not invoke them; use string expressions or file:// references if you need the config to round-trip.',
+    );
+  }
+
+  return config;
 }
 
 async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions = {}) {
@@ -173,7 +323,10 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
   // object mutated above with a resolved ApiProvider (see `cloneTestForResolve()`).
   // Live SDK clients hold circular refs and break drizzle JSON serialization on
   // `evalRecord.save()`. Fixes #8687.
-  const unifiedConfig = { ...testSuiteConfig, prompts: constructedTestSuite.prompts };
+  const unifiedConfig = createSerializableUnifiedConfig(
+    testSuiteConfig,
+    constructedTestSuite.prompts,
+  );
   const author = getAuthor(suiteAuthor);
   const evalRecord = testSuiteConfig.writeLatestResults
     ? await Eval.create(unifiedConfig, constructedTestSuite.prompts, { author })

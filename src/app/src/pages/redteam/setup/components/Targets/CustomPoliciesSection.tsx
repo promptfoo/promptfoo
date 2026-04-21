@@ -741,7 +741,6 @@ export const CustomPoliciesSection = () => {
             getRowId={(row) => row.id}
             toolbarActions={toolbarActions}
             showToolbar
-            showPagination={false}
             emptyMessage="No custom policies configured. Add your first policy using the 'Add Policy' button above."
           />
         </div>

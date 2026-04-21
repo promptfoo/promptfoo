@@ -461,9 +461,10 @@ It produces the following table, with Gemini models replacing the GPT models in 
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
+- Compare GPT-5.4 reasoning effort settings (see [GPT reasoning effort comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-reasoning-effort))
 - Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-temperature))
 - Compare open-source models (see [Comparing Open-Source Models](/docs/guides/compare-open-source-models))
-- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
+- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT (see [LangChain example](/docs/configuration/testing-llm-chains))
 
 ### RAG quality
 

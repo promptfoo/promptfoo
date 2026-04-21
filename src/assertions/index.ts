@@ -198,7 +198,7 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
   let latestTrace: TraceData | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    latestTrace = await traceStore.getTrace(traceId);
+    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
 
     const spanCount = latestTrace?.spans?.length ?? 0;
     if (spanCount > 0) {

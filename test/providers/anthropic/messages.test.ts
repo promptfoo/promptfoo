@@ -6,6 +6,7 @@ import logger from '../../../src/logger';
 import { AnthropicMessagesProvider } from '../../../src/providers/anthropic/messages';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
+import { mockProcessEnv } from '../../util/utils';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Mocked, MockedFunction } from 'vitest';
 
@@ -70,7 +71,7 @@ const mockMaybeLoadResponseFormatFromExternalFile =
   >;
 
 const TEST_API_KEY = 'test-api-key';
-const originalEnv = process.env;
+const originalEnv = { ...process.env };
 let mockMCPClient: Mocked<MCPClient> | undefined;
 
 const createProvider = (
@@ -91,7 +92,7 @@ describe('AnthropicMessagesProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    process.env = { ...originalEnv, ANTHROPIC_API_KEY: TEST_API_KEY };
+    mockProcessEnv({ ...originalEnv, ANTHROPIC_API_KEY: TEST_API_KEY }, { clear: true });
     mockMCPClient = undefined;
     mcpMocks.instances.length = 0;
     mcpMocks.initialize.mockReset();
@@ -104,7 +105,7 @@ describe('AnthropicMessagesProvider', () => {
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     mcpMocks.instances.length = 0;
   });
 
@@ -2158,7 +2159,7 @@ describe('AnthropicMessagesProvider', () => {
       }) as Anthropic.Messages.Message;
 
     it('throws with guidance when no API key and no Claude Code credential are available', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(null);
       const oauthProvider = createProvider('claude-sonnet-4-6');
 
@@ -2168,7 +2169,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('injects the Claude Code identity block and beta headers when constructed with apiKeyRequired: false', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
       const oauthProvider = createProvider('claude-sonnet-4-6', {
         config: { apiKeyRequired: false },
@@ -2196,7 +2197,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('adds the Claude Code identity block even when no user system prompt is provided', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
       const oauthProvider = createProvider('claude-sonnet-4-6', {
         config: { apiKeyRequired: false },
@@ -2215,7 +2216,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('does not inject the Claude Code identity block for API-key authenticated calls', async () => {
-      process.env.ANTHROPIC_API_KEY = TEST_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: TEST_API_KEY });
       const apiKeyProvider = createProvider('claude-sonnet-4-6');
       expect(apiKeyProvider.usingClaudeCodeOAuth).toBe(false);
 
@@ -2234,7 +2235,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('throws at request time when the Claude Code credential is expired', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue({
         accessToken: 'sk-ant-oat-expired',
         expiresAt: Date.now() - 1000,
@@ -2249,7 +2250,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('preserves user config.beta entries alongside the Claude Code beta features', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
       const oauthProvider = createProvider('claude-sonnet-4-6', {
         config: {
@@ -2272,7 +2273,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('merges user-supplied config.headers[anthropic-beta] with OAuth beta flags', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
       const oauthProvider = createProvider('claude-sonnet-4-6', {
         config: {
@@ -2296,7 +2297,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('deduplicates Claude Code beta features when the user also supplies them', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
       const oauthProvider = createProvider('claude-sonnet-4-6', {
         config: {
@@ -2318,7 +2319,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('forces the Claude Code user-agent even when config.headers tries to override it', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
       const oauthProvider = createProvider('claude-sonnet-4-6', {
         config: {
@@ -2340,7 +2341,7 @@ describe('AnthropicMessagesProvider', () => {
     });
 
     it('injects the Claude Code identity block and beta headers on the streaming path', async () => {
-      delete process.env.ANTHROPIC_API_KEY;
+      mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
       claudeCodeAuthMocks.loadClaudeCodeCredential.mockReturnValue(validCredential());
       const oauthProvider = createProvider('claude-sonnet-4-6', {
         config: { apiKeyRequired: false, stream: true },

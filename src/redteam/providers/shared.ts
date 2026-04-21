@@ -27,12 +27,13 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { type TransformContext, TransformInputType, transform } from '../../util/transform';
+import { TransformInputType, transform } from '../../util/transform';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
+import type { TransformContext, TransformFunction } from '../../types/transform';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -515,7 +516,7 @@ export async function createIterationContext({
   loggerTag = '[Redteam]',
 }: {
   originalVars: Record<string, VarValue>;
-  transformVarsConfig?: string;
+  transformVarsConfig?: string | TransformFunction;
   context?: CallApiContextParams;
   iterationNumber: number;
   loggerTag?: string;
@@ -547,7 +548,14 @@ export async function createIterationContext({
       });
     } catch (error) {
       logger.error(`${loggerTag} Error transforming vars`, { error });
-      // Continue with original vars if transform fails
+      // A user-supplied TransformFunction that throws is a programming error we
+      // must surface — continuing with the original vars would run the iteration
+      // against un-transformed inputs without any visible failure. Inline string
+      // transforms retain the legacy best-effort behavior to avoid breaking
+      // existing redteam configs that tolerated intermittent transform errors.
+      if (typeof transformVarsConfig === 'function') {
+        throw error;
+      }
     }
   }
 

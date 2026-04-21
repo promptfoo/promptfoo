@@ -17,8 +17,7 @@ vi.mock('../../../src/util/fetch/index', () => ({
 }));
 
 vi.mock('../../../src/evaluatorHelpers', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  renderPrompt: (...args: any[]) => mockRenderPrompt(...args),
+  renderPrompt: (...args: unknown[]) => mockRenderPrompt(...args),
 }));
 
 vi.mock('../../../src/globalConfig/accounts', () => ({
@@ -49,10 +48,16 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     vi.mocked(neverGenerateRemote).mockReset();
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     mockRenderPrompt.mockReset();
-    mockRenderPrompt.mockImplementation(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (_prompt: any, vars: any) => vars.input || 'rendered prompt',
-    );
+    mockRenderPrompt.mockImplementation((_prompt: unknown, vars: unknown) => {
+      const input =
+        typeof vars === 'object' &&
+        vars !== null &&
+        'input' in vars &&
+        typeof (vars as { input?: unknown }).input === 'string'
+          ? (vars as { input: string }).input
+          : undefined;
+      return input || 'rendered prompt';
+    });
 
     // Dynamic import after mocks are set up
     const module = await import('../../../src/redteam/providers/bestOfN');
@@ -140,6 +145,34 @@ describe('BestOfNProvider - Runtime Behavior', () => {
 
     // Non-AbortError should be caught and returned as an error response
     expect(result.error).toContain('Network error');
+  });
+
+  it.each([
+    42,
+    true,
+    null,
+    { prompt: 'candidate 0' },
+  ])('should skip non-string candidate prompt from remote generation: %j', async (invalidPrompt) => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+    });
+    const context = createMockContext(mockTargetProvider);
+
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({
+        modifiedPrompts: [invalidPrompt, 'candidate 2'],
+      }),
+    });
+
+    await provider.callApi('test prompt', context);
+
+    expect(mockRenderPrompt).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      'candidate 2',
+      expect.any(Object),
+      undefined,
+    );
   });
 
   it.each([
