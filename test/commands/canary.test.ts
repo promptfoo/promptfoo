@@ -35,6 +35,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe('canary command helpers', () => {
   beforeEach(() => {
+    fetchWithProxyMock.mockReset();
     vi.clearAllMocks();
   });
 
