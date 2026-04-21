@@ -26,27 +26,23 @@ The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-ma
 
 ### Cache Keys
 
-Cache entries are stored using composite keys that include:
+Cache entries are stored using provider-specific composite keys that include:
 
 - Provider identifier
-- Prompt content
+- Prompt or request content, often represented as a deterministic digest
 - Provider configuration
 - Context variables (when applicable)
 
-For example:
+Cache key formats are implementation details and may change between versions.
+Sensitive request payloads and headers are hashed where possible instead of
+being embedded directly in cache keys.
 
 ```js
-// OpenAI - model, messages, settings
-`gpt-5:${JSON.stringify({
-  "messages": [...],
-  "temperature": 0
-})}`
+// Provider-specific scope plus a digest of request material
+const providerCacheKey = `openai:gpt-5:<request-digest>`;
 
-// HTTP - URL and request details
-`fetch:v2:https://api.example.com/v1/chat:${JSON.stringify({
-  "method": "POST",
-  "body": {...}
-})}`
+// HTTP fetch cache entries include URL, method, headers, options, and body identity
+const fetchCacheKey = `fetch:v3:<request-digest>`;
 ```
 
 ### Cache Behavior

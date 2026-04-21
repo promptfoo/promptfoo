@@ -3314,6 +3314,112 @@ describe('runAssertion', () => {
     });
   });
 
+  describe('inline function transforms (Node.js package)', () => {
+    it('should support a function as assertion transform', async () => {
+      const output = 'hello world';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'HELLO WORLD',
+        transform: (output) => String(output).toUpperCase(),
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should pass context to inline function transform', async () => {
+      const output = 'raw output';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'search, calculate',
+        transform: (_output, context: any) => {
+          const tools = context.metadata?.toolCalls ?? [];
+          return tools.map((t: any) => t.name).join(', ');
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output,
+          metadata: { toolCalls: [{ name: 'search' }, { name: 'calculate' }] },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should support async function as assertion transform', async () => {
+      const output = 'hello';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'hello async',
+        transform: async (output) => output + ' async',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should surface synchronous errors thrown by an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: () => {
+          throw new Error('inline transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('inline transform boom');
+    });
+
+    it('should surface async rejections from an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: async () => {
+          throw new Error('async transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('async transform boom');
+    });
+  });
+
   describe('file references', () => {
     it('should handle file reference in string value', async () => {
       const assertion: Assertion = {

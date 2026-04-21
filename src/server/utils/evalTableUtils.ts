@@ -5,6 +5,7 @@ import type Eval from '../../models/eval';
 import type {
   CompletedPrompt,
   EvalResultsFilterMode,
+  EvalTableDTO,
   EvaluateTableRow,
   Prompt,
 } from '../../types/index';
@@ -71,6 +72,14 @@ export const REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES = {
 };
 
 const REDTEAM_METADATA_COLUMNS = Object.values(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
+
+export const STRIPPED_TABLE_CELL_PROMPT = '';
+
+export type EvalTableOutputPromptLocation = {
+  rowIndex: number;
+  outputIndex: number;
+  length: number;
+};
 
 /**
  * Get the status string for an output
@@ -241,6 +250,60 @@ export function evalTableToJson(table: {
   body: EvaluateTableRow[];
 }): unknown {
   return table;
+}
+
+export function getEvalTableOutputPromptLocationsBySize(
+  payload: EvalTableDTO,
+): EvalTableOutputPromptLocation[] {
+  return payload.table.body
+    .flatMap((row, rowIndex) =>
+      row.outputs.flatMap((output, outputIndex) =>
+        output?.prompt
+          ? [
+              {
+                rowIndex,
+                outputIndex,
+                length: output.prompt.length,
+              },
+            ]
+          : [],
+      ),
+    )
+    .sort((a, b) => b.length - a.length);
+}
+
+function stripEvalTableOutputPrompts(
+  payload: EvalTableDTO,
+  locationsToStrip: Set<string>,
+): EvalTableDTO {
+  return {
+    ...payload,
+    table: {
+      ...payload.table,
+      body: payload.table.body.map((row, rowIndex) => ({
+        ...row,
+        outputs: row.outputs.map((output, outputIndex) => {
+          if (!output || !locationsToStrip.has(`${rowIndex}:${outputIndex}`)) {
+            return output;
+          }
+          return { ...output, prompt: STRIPPED_TABLE_CELL_PROMPT };
+        }),
+      })),
+    },
+  } as EvalTableDTO;
+}
+
+export function getEvalTablePromptStrippedPayload(
+  payload: EvalTableDTO,
+  promptLocations: EvalTableOutputPromptLocation[],
+  promptCountToStrip: number,
+): EvalTableDTO {
+  const locationsToStrip = new Set(
+    promptLocations
+      .slice(0, promptCountToStrip)
+      .map(({ rowIndex, outputIndex }) => `${rowIndex}:${outputIndex}`),
+  );
+  return stripEvalTableOutputPrompts(payload, locationsToStrip);
 }
 
 /**

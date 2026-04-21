@@ -9,6 +9,9 @@ on:
         description: 'PR number to scan'
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   security-scan:
     runs-on: ubuntu-latest

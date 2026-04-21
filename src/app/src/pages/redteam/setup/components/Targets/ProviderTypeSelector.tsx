@@ -626,7 +626,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openrouter') {
       setProvider(
         {
-          id: 'openrouter:openai/gpt-4o',
+          id: 'openrouter:openai/gpt-5.4',
           config: {},
           label: currentLabel,
         },

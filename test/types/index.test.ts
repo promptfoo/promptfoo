@@ -587,6 +587,66 @@ describe('JSON Schema validation (AJV)', () => {
     }
     expect(valid).toBe(true);
   });
+
+  it('should validate assertionTemplates and $ref entries in assertion arrays', () => {
+    const schemaPath = path.join(__dirname, '../../site/static/config-schema.json');
+    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+
+    const ajv = new Ajv({ strict: false, allErrors: true });
+    const validate = ajv.compile(schema);
+
+    const config = {
+      prompts: ['test prompt'],
+      providers: ['echo'],
+      assertionTemplates: {
+        containsPirate: {
+          type: 'icontains',
+          value: 'arrr',
+        },
+      },
+      tests: [
+        {
+          vars: { input: 'test' },
+          assert: [{ $ref: '#/assertionTemplates/containsPirate' }],
+        },
+      ],
+    };
+
+    expect(validate(config)).toBe(true);
+  });
+
+  it('should only add JSON reference alternatives to assertion arrays', () => {
+    const schemaPath = path.join(__dirname, '../../site/static/config-schema.json');
+    const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+    const refAlternativePaths: string[] = [];
+
+    function walk(node: unknown, pathParts: string[]) {
+      if (!node || typeof node !== 'object') {
+        return;
+      }
+
+      if (
+        Array.isArray((node as { anyOf?: unknown }).anyOf) &&
+        ((node as { anyOf: unknown[] }).anyOf as unknown[]).some(
+          (option) =>
+            option &&
+            typeof option === 'object' &&
+            Array.isArray((option as { required?: unknown }).required) &&
+            ((option as { required: unknown[] }).required as unknown[]).includes('$ref'),
+        )
+      ) {
+        refAlternativePaths.push(pathParts.join('.'));
+      }
+
+      for (const [key, value] of Object.entries(node)) {
+        walk(value, [...pathParts, key]);
+      }
+    }
+
+    walk(schema, []);
+
+    expect(refAlternativePaths).toEqual(['definitions.__schema18.items']);
+  });
 });
 
 describe('CommandLineOptionsSchema', () => {

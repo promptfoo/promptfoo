@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import logger from '../logger';
+import { isApiProvider } from '../types/providers';
 import {
   getCloudDatabaseId,
   getProviderFromCloud,
@@ -24,10 +25,42 @@ import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type {
   ApiProvider,
+  ProviderConfig,
   ProviderFunction,
   ProviderOptions,
-  ProviderOptionsMap,
+  ProvidersConfig,
 } from '../types/providers';
+
+type ProviderFunctionWithMetadata = ProviderFunction &
+  Pick<ApiProvider, 'label' | 'transform' | 'delay' | 'inputs' | 'config'>;
+
+const FORWARDED_PROVIDER_METADATA_KEYS = [
+  'label',
+  'transform',
+  'delay',
+  'inputs',
+  'config',
+] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
+
+function createProviderFromFunction(
+  provider: ProviderFunctionWithMetadata,
+  id: string,
+): ApiProvider {
+  const apiProvider: ApiProvider = {
+    id: () => provider.label ?? id,
+    callApi: provider,
+  };
+  // Only forward defined metadata so we don't overwrite downstream defaults
+  // (e.g. a `config ?? {}` merge) with an explicit `undefined` key.
+  const target = apiProvider as unknown as Record<string, unknown>;
+  for (const key of FORWARDED_PROVIDER_METADATA_KEYS) {
+    const value = provider[key];
+    if (value !== undefined) {
+      target[key] = value;
+    }
+  }
+  return apiProvider;
+}
 
 function describeInvalidProvider(provider: unknown): string {
   try {
@@ -196,6 +229,17 @@ interface LoadApiProviderOptions {
   basePath?: string;
 }
 
+function loadOptionsFromResolveContext(
+  context: { env?: any; basePath?: string },
+  options?: ProviderOptions,
+): LoadApiProviderOptions {
+  return {
+    ...(options && { options }),
+    ...(context.env && { env: context.env }),
+    ...(context.basePath && { basePath: context.basePath }),
+  };
+}
+
 /**
  * Helper function to resolve provider from various formats (string, object, function).
  * Checks the resolved provider cache first and falls back to loadApiProvider for uncached providers.
@@ -214,35 +258,20 @@ export async function resolveProvider(
     if (resolvedProviders[provider]) {
       return resolvedProviders[provider];
     }
-    const loadOptions: LoadApiProviderOptions = {};
-    if (context.env) {
-      loadOptions.env = context.env;
-    }
-    if (context.basePath) {
-      loadOptions.basePath = context.basePath;
-    }
-    return await loadApiProvider(provider, loadOptions);
+    return await loadApiProvider(provider, loadOptionsFromResolveContext(context));
   } else if (typeof provider === 'object') {
     const descriptor = normalizeProviderRef(provider);
     invariant(
       descriptor.kind === 'options' || descriptor.kind === 'map',
       `Provider object must have an 'id' field or be a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
     );
-    const loadOptions: LoadApiProviderOptions = { options: descriptor.loadOptions };
-    if (context.env) {
-      loadOptions.env = context.env;
-    }
-    if (context.basePath) {
-      loadOptions.basePath = context.basePath;
-    }
-    return await loadApiProvider(descriptor.loadProviderPath, loadOptions);
+    return await loadApiProvider(
+      descriptor.loadProviderPath,
+      loadOptionsFromResolveContext(context, descriptor.loadOptions),
+    );
   } else if (typeof provider === 'function') {
     const descriptor = normalizeProviderRef(provider);
-    // Handle function providers directly instead of passing to loadApiProvider
-    return {
-      id: () => descriptor.id,
-      callApi: provider,
-    };
+    return createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id);
   } else {
     throw new Error('Invalid provider type');
   }
@@ -260,8 +289,16 @@ export async function resolveProvider(
  */
 export function resolveProviderConfigs(
   providerPaths: TestSuiteConfig['providers'],
+  options?: { basePath?: string },
+): TestSuiteConfig['providers'];
+export function resolveProviderConfigs(
+  providerPaths: ProvidersConfig,
+  options?: { basePath?: string },
+): ProvidersConfig;
+export function resolveProviderConfigs(
+  providerPaths: ProvidersConfig,
   options: { basePath?: string } = {},
-): TestSuiteConfig['providers'] {
+): ProvidersConfig {
   const { basePath } = options;
 
   if (typeof providerPaths === 'string') {
@@ -277,11 +314,15 @@ export function resolveProviderConfigs(
     return providerPaths;
   }
 
+  if (isApiProvider(providerPaths)) {
+    return providerPaths;
+  }
+
   if (!Array.isArray(providerPaths)) {
     return providerPaths;
   }
 
-  const results: (string | ProviderFunction | ProviderOptions | ProviderOptionsMap)[] = [];
+  const results: ProviderConfig[] = [];
 
   for (const provider of providerPaths) {
     const descriptor = normalizeProviderRef(provider);
@@ -325,7 +366,7 @@ async function loadProvidersFromFile(
 }
 
 export async function loadApiProviders(
-  providerPaths: TestSuiteConfig['providers'],
+  providerPaths: ProvidersConfig,
   options: {
     basePath?: string;
     env?: EnvOverrides;
@@ -345,15 +386,20 @@ export async function loadApiProviders(
     }
     return [await loadApiProvider(providerPaths, { basePath, env })];
   } else if (typeof providerPaths === 'function') {
+    // Reuse `normalizeProviderRef` so a function with `.label = 'foo'` gets a
+    // label-derived id here too, matching the array-element branch below.
+    const descriptor = normalizeProviderRef(providerPaths);
     return [
-      {
-        id: () => 'custom-function',
-        callApi: providerPaths,
-      },
+      createProviderFromFunction(providerPaths as ProviderFunctionWithMetadata, descriptor.id),
     ];
+  } else if (isApiProvider(providerPaths)) {
+    return [providerPaths];
   } else if (Array.isArray(providerPaths)) {
     const providersArrays = await Promise.all(
       providerPaths.map(async (provider, idx) => {
+        if (isApiProvider(provider)) {
+          return [provider];
+        }
         const descriptor = normalizeProviderRef(provider, { index: idx });
         switch (descriptor.kind) {
           case 'file':
@@ -361,11 +407,12 @@ export async function loadApiProviders(
           case 'named':
             return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
           case 'function':
+            // Use the descriptor-derived id (which honors `.label`) instead of a
+            // hardcoded `custom-function-${idx}` fallback so this branch stays
+            // symmetric with the single-function branch above and with the
+            // `getProviderIds` array branch below.
             return [
-              {
-                id: () => descriptor.id,
-                callApi: provider as ProviderFunction,
-              },
+              createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id),
             ];
           case 'options':
           case 'map':
@@ -411,16 +458,21 @@ function getProviderIdsFromFile(providerPath: string): string[] {
  * Handles strings, functions, and arrays of mixed provider types.
  * For file:// references, reads the config file to extract IDs.
  */
-export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
+export function getProviderIds(providerPaths: ProvidersConfig): string[] {
   if (typeof providerPaths === 'string') {
     if (isProviderConfigFileReference(providerPaths)) {
       return getProviderIdsFromFile(providerPaths);
     }
     return [providerPaths];
   } else if (typeof providerPaths === 'function') {
-    return ['custom-function'];
+    return [normalizeProviderRef(providerPaths).id];
+  } else if (isApiProvider(providerPaths)) {
+    return [providerPaths.id()];
   } else if (Array.isArray(providerPaths)) {
     return providerPaths.flatMap((provider, idx) => {
+      if (isApiProvider(provider)) {
+        return provider.id();
+      }
       const descriptor = normalizeProviderRef(provider, { index: idx });
       if (descriptor.kind === 'file') {
         return getProviderIdsFromFile(descriptor.loadProviderPath);

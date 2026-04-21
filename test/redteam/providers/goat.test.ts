@@ -102,6 +102,11 @@ describe('RedteamGoatProvider', () => {
   };
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetGraderById.mockReset();
+    mockGetGraderById.mockReturnValue(mockGrader);
+    mockGrader.getResult.mockReset();
+
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-goat-provider-'));
     mockFetch = vi.fn().mockImplementation(async function () {
       return {
@@ -112,14 +117,12 @@ describe('RedteamGoatProvider', () => {
         ok: true,
       };
     });
-    global.fetch = mockFetch as unknown as typeof fetch;
-
-    // Reset mocks
-    vi.clearAllMocks();
+    vi.stubGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
     fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

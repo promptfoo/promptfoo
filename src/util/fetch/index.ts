@@ -121,21 +121,57 @@ function resolveTransientRetryDisabled(explicit?: boolean): boolean {
   return getFetchRetryContextMaxRetries() === 0;
 }
 
+function headersInitToRecord(headers: HeadersInit | undefined): Record<string, string> {
+  if (!headers) {
+    return {};
+  }
+
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries());
+  }
+
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(new Headers(headers).entries());
+  }
+
+  return { ...headers };
+}
+
+export function getFetchWithProxyHeaders(
+  url: RequestInfo,
+  options: FetchOptions,
+): Record<string, string> {
+  const requestHeaders =
+    url instanceof Request && options.headers === undefined ? headersInitToRecord(url.headers) : {};
+  const optionHeaders = headersInitToRecord(options.headers);
+
+  return {
+    ...requestHeaders,
+    ...optionHeaders,
+    'x-promptfoo-version': VERSION,
+  };
+}
+
+function getFetchUrlString(url: RequestInfo): string | undefined {
+  if (typeof url === 'string') {
+    return url;
+  }
+  if (url instanceof URL) {
+    return url.toString();
+  }
+  if (url instanceof Request) {
+    return url.url;
+  }
+  return undefined;
+}
+
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
   abortSignal?: AbortSignal,
 ): Promise<Response> {
   let finalUrl = url;
-  let finalUrlString: string | undefined;
-
-  if (typeof url === 'string') {
-    finalUrlString = url;
-  } else if (url instanceof URL) {
-    finalUrlString = url.toString();
-  } else if (url instanceof Request) {
-    finalUrlString = url.url;
-  }
+  let finalUrlString = getFetchUrlString(url);
 
   if (!finalUrlString) {
     throw new Error('Invalid URL');
@@ -151,10 +187,7 @@ export async function fetchWithProxy(
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...options,
-    headers: {
-      ...(options.headers as Record<string, string>),
-      'x-promptfoo-version': VERSION,
-    },
+    headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
 

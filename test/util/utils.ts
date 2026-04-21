@@ -87,7 +87,7 @@ export function mockConsole(
 
 function replaceProcessEnv(nextEnv: Record<string, string | undefined>): void {
   for (const key of Object.keys(process.env)) {
-    delete process.env[key];
+    Reflect.deleteProperty(process.env, key);
   }
   Object.assign(process.env, nextEnv);
 }
@@ -104,9 +104,9 @@ export function mockProcessEnv(
 
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) {
-      delete process.env[key];
+      Reflect.deleteProperty(process.env, key);
     } else {
-      process.env[key] = value;
+      Object.assign(process.env, { [key]: value });
     }
   }
 
@@ -134,7 +134,7 @@ export const PROXY_ENV_KEYS = [
 
 export function clearProxyEnv(): void {
   for (const key of PROXY_ENV_KEYS) {
-    delete process.env[key];
+    Reflect.deleteProperty(process.env, key);
   }
 }
 
