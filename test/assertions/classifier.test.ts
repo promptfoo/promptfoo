@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleClassifier } from '../../src/assertions/classifier';
 import { matchesClassification } from '../../src/matchers/classification';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 vi.mock('../../src/matchers/classification', () => ({
   matchesClassification: vi.fn(),
@@ -10,10 +11,10 @@ vi.mock('../../src/matchers/classification', () => ({
 
 const mockedMatchesClassification = vi.mocked(matchesClassification);
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams {
   return {

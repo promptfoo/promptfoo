@@ -10,11 +10,13 @@ import { loadApiProvider, loadApiProviders } from '../src/providers/index';
 import { OpenAiChatCompletionProvider } from '../src/providers/openai/chat';
 import { OpenAICodexSDKProvider } from '../src/providers/openai/codex-sdk';
 import { OpenAiEmbeddingProvider } from '../src/providers/openai/embedding';
+import { OpenAiResponsesProvider } from '../src/providers/openai/responses';
 import { PythonProvider } from '../src/providers/pythonCompletion';
 import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 import * as fileUtil from '../src/util/file';
+import { mockProcessEnv } from './util/utils';
 
 import type { ProviderOptions } from '../src/types/index';
 
@@ -24,6 +26,7 @@ vi.mock('../src/util/fetch/index.ts');
 vi.mock('../src/providers/http');
 vi.mock('../src/providers/openai/chat');
 vi.mock('../src/providers/openai/embedding');
+vi.mock('../src/providers/openai/responses');
 vi.mock('../src/providers/pythonCompletion');
 vi.mock('../src/providers/scriptCompletion');
 vi.mock('../src/providers/websocket');
@@ -566,6 +569,22 @@ describe('loadApiProvider', () => {
     }
   });
 
+  it('should auto-route OpenAI GPT-5.4 Pro shorthand to responses', async () => {
+    const originalChatModelNames = (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES;
+    const originalResponsesModelNames = (OpenAiResponsesProvider as any)
+      .OPENAI_RESPONSES_MODEL_NAMES;
+    (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = [];
+    (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = ['gpt-5.4-pro'];
+    try {
+      const provider = await loadApiProvider('openai:gpt-5.4-pro');
+      expect(OpenAiResponsesProvider).toHaveBeenCalledWith('gpt-5.4-pro', expect.any(Object));
+      expect(provider).toBeDefined();
+    } finally {
+      (OpenAiChatCompletionProvider as any).OPENAI_CHAT_MODEL_NAMES = originalChatModelNames;
+      (OpenAiResponsesProvider as any).OPENAI_RESPONSES_MODEL_NAMES = originalResponsesModelNames;
+    }
+  });
+
   it('should load OpenAI GPT-5.4 nano chat provider', async () => {
     const provider = await loadApiProvider('openai:chat:gpt-5.4-nano');
     expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.4-nano', expect.any(Object));
@@ -770,14 +789,14 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle provider with custom label template', async () => {
-    process.env.CUSTOM_LABEL = 'my-label';
+    mockProcessEnv({ CUSTOM_LABEL: 'my-label' });
     const provider = await loadApiProvider('echo', {
       options: {
         label: '{{ env.CUSTOM_LABEL }}',
       },
     });
     expect(provider.label).toBe('my-label');
-    delete process.env.CUSTOM_LABEL;
+    mockProcessEnv({ CUSTOM_LABEL: undefined });
   });
 
   it('should throw error when file provider array is loaded with loadApiProvider', async () => {
@@ -800,7 +819,7 @@ describe('loadApiProvider', () => {
   });
 
   it('should handle file provider with environment variables', async () => {
-    process.env.OPENAI_API_KEY = 'test-key-from-env';
+    mockProcessEnv({ OPENAI_API_KEY: 'test-key-from-env' });
     const yamlContent: ProviderOptions = {
       id: 'openai:chat:gpt-4',
       config: {
@@ -830,7 +849,7 @@ describe('loadApiProvider', () => {
         }),
       }),
     );
-    delete process.env.OPENAI_API_KEY;
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
   });
 
   it('should load multiple providers from yaml file using loadApiProviders', async () => {

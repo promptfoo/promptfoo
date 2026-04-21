@@ -1,18 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderEnvOnlyInObject, renderVarsInObject } from '../../src/util/render';
+import { mockProcessEnv } from './utils';
 
 describe('renderVarsInObject', () => {
   beforeEach(() => {
-    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
   });
 
   afterEach(() => {
-    delete process.env.TEST_ENV_VAR;
-    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+    mockProcessEnv({ TEST_ENV_VAR: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
   });
 
   it('should render environment variables in objects', async () => {
-    process.env.TEST_ENV_VAR = 'env_value';
+    mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
     const obj = { text: '{{ env.TEST_ENV_VAR }}' };
     const rendered = renderVarsInObject(obj, {});
     expect(rendered).toEqual({ text: 'env_value' });
@@ -32,7 +33,7 @@ describe('renderVarsInObject', () => {
   });
 
   it('should return object unchanged when PROMPTFOO_DISABLE_TEMPLATING is true', async () => {
-    process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     const obj = { text: '{{ variable }}' };
     const vars = { variable: 'test_value' };
     const rendered = renderVarsInObject(obj, vars);
@@ -182,47 +183,47 @@ describe('renderVarsInObject', () => {
 
 describe('renderEnvOnlyInObject', () => {
   beforeEach(() => {
-    delete process.env.TEST_ENV_VAR;
-    delete process.env.AZURE_ENDPOINT;
-    delete process.env.API_VERSION;
-    delete process.env.PORT;
-    delete process.env.API_HOST;
-    delete process.env.BASE_URL;
-    delete process.env.EMPTY_VAR;
-    delete process.env.SPECIAL_CHARS;
-    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+    mockProcessEnv({ TEST_ENV_VAR: undefined });
+    mockProcessEnv({ AZURE_ENDPOINT: undefined });
+    mockProcessEnv({ API_VERSION: undefined });
+    mockProcessEnv({ PORT: undefined });
+    mockProcessEnv({ API_HOST: undefined });
+    mockProcessEnv({ BASE_URL: undefined });
+    mockProcessEnv({ EMPTY_VAR: undefined });
+    mockProcessEnv({ SPECIAL_CHARS: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
   });
 
   afterEach(() => {
-    delete process.env.TEST_ENV_VAR;
-    delete process.env.AZURE_ENDPOINT;
-    delete process.env.API_VERSION;
-    delete process.env.PORT;
-    delete process.env.API_HOST;
-    delete process.env.BASE_URL;
-    delete process.env.EMPTY_VAR;
-    delete process.env.SPECIAL_CHARS;
-    delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+    mockProcessEnv({ TEST_ENV_VAR: undefined });
+    mockProcessEnv({ AZURE_ENDPOINT: undefined });
+    mockProcessEnv({ API_VERSION: undefined });
+    mockProcessEnv({ PORT: undefined });
+    mockProcessEnv({ API_HOST: undefined });
+    mockProcessEnv({ BASE_URL: undefined });
+    mockProcessEnv({ EMPTY_VAR: undefined });
+    mockProcessEnv({ SPECIAL_CHARS: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
   });
 
   describe('Basic rendering', () => {
     it('should render simple dot notation env vars', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       expect(renderEnvOnlyInObject('{{ env.TEST_ENV_VAR }}')).toBe('env_value');
     });
 
     it('should render bracket notation with single quotes', async () => {
-      process.env['VAR-WITH-DASH'] = 'dash_value';
+      mockProcessEnv({ ['VAR-WITH-DASH']: 'dash_value' });
       expect(renderEnvOnlyInObject("{{ env['VAR-WITH-DASH'] }}")).toBe('dash_value');
     });
 
     it('should render bracket notation with double quotes', async () => {
-      process.env['VAR_NAME'] = 'value';
+      mockProcessEnv({ ['VAR_NAME']: 'value' });
       expect(renderEnvOnlyInObject('{{ env["VAR_NAME"] }}')).toBe('value');
     });
 
     it('should handle whitespace variations', async () => {
-      process.env.TEST = 'value';
+      mockProcessEnv({ TEST: 'value' });
       expect(renderEnvOnlyInObject('{{env.TEST}}')).toBe('value');
       expect(renderEnvOnlyInObject('{{  env.TEST  }}')).toBe('value');
       expect(renderEnvOnlyInObject('{{ env.TEST}}')).toBe('value');
@@ -230,12 +231,12 @@ describe('renderEnvOnlyInObject', () => {
     });
 
     it('should render empty string env vars', async () => {
-      process.env.EMPTY_VAR = '';
+      mockProcessEnv({ EMPTY_VAR: '' });
       expect(renderEnvOnlyInObject('{{ env.EMPTY_VAR }}')).toBe('');
     });
 
     it('should render env vars with special characters in value', async () => {
-      process.env.SPECIAL_CHARS = 'value with spaces & $pecial chars!';
+      mockProcessEnv({ SPECIAL_CHARS: 'value with spaces & $pecial chars!' });
       expect(renderEnvOnlyInObject('{{ env.SPECIAL_CHARS }}')).toBe(
         'value with spaces & $pecial chars!',
       );
@@ -244,34 +245,34 @@ describe('renderEnvOnlyInObject', () => {
 
   describe('Filters and expressions (NEW functionality)', () => {
     it('should support default filter with fallback', async () => {
-      process.env.EXISTING = 'exists';
+      mockProcessEnv({ EXISTING: 'exists' });
       expect(renderEnvOnlyInObject("{{ env.EXISTING | default('fallback') }}")).toBe('exists');
       // NEW: When env var doesn't exist but has default filter, Nunjucks renders it
       expect(renderEnvOnlyInObject("{{ env.NONEXISTENT | default('fallback') }}")).toBe('fallback');
     });
 
     it('should support upper filter', async () => {
-      process.env.LOWERCASE = 'lowercase';
+      mockProcessEnv({ LOWERCASE: 'lowercase' });
       expect(renderEnvOnlyInObject('{{ env.LOWERCASE | upper }}')).toBe('LOWERCASE');
     });
 
     it('should support lower filter', async () => {
-      process.env.UPPERCASE = 'UPPERCASE';
+      mockProcessEnv({ UPPERCASE: 'UPPERCASE' });
       expect(renderEnvOnlyInObject('{{ env.UPPERCASE | lower }}')).toBe('uppercase');
     });
 
     it('should support chained filters', async () => {
-      process.env.TEST = 'test';
+      mockProcessEnv({ TEST: 'test' });
       expect(renderEnvOnlyInObject("{{ env.TEST | default('x') | upper }}")).toBe('TEST');
     });
 
     it('should support complex filter expressions', async () => {
-      process.env.PORT = '8080';
+      mockProcessEnv({ PORT: '8080' });
       expect(renderEnvOnlyInObject('{{ env.PORT | int }}')).toBe('8080');
     });
 
     it('should handle filter with closing brace in argument', async () => {
-      process.env.VAR = 'value';
+      mockProcessEnv({ VAR: 'value' });
       // This is a tricky case: the default value contains }
       expect(renderEnvOnlyInObject("{{ env.VAR | default('}') }}")).toBe('value');
     });
@@ -279,21 +280,21 @@ describe('renderEnvOnlyInObject', () => {
 
   describe('Preservation of non-env templates', () => {
     it('should preserve vars templates', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       expect(renderEnvOnlyInObject('{{ env.TEST_ENV_VAR }}, {{ vars.myVar }}')).toBe(
         'env_value, {{ vars.myVar }}',
       );
     });
 
     it('should preserve prompt templates', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       expect(renderEnvOnlyInObject('{{ env.TEST_ENV_VAR }}, {{ prompt }}')).toBe(
         'env_value, {{ prompt }}',
       );
     });
 
     it('should preserve multiple non-env templates', async () => {
-      process.env.API_HOST = 'api.example.com';
+      mockProcessEnv({ API_HOST: 'api.example.com' });
       const template =
         'Host: {{ env.API_HOST }}, Message: {{ vars.msg }}, Context: {{ context }}, Prompt: {{ prompt }}';
       const expected =
@@ -308,7 +309,7 @@ describe('renderEnvOnlyInObject', () => {
     });
 
     it('should preserve env templates in _conversation runtime vars', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       const config = {
         tests: [
           {
@@ -355,8 +356,8 @@ describe('renderEnvOnlyInObject', () => {
 
   describe('Complex data structures', () => {
     it('should work with nested objects', async () => {
-      process.env.LEVEL1 = 'value1';
-      process.env.LEVEL2 = 'value2';
+      mockProcessEnv({ LEVEL1: 'value1' });
+      mockProcessEnv({ LEVEL2: 'value2' });
       const obj = {
         level1: {
           level2: {
@@ -378,14 +379,14 @@ describe('renderEnvOnlyInObject', () => {
     });
 
     it('should work with arrays', async () => {
-      process.env.ENV1 = 'value1';
-      process.env.ENV2 = 'value2';
+      mockProcessEnv({ ENV1: 'value1' });
+      mockProcessEnv({ ENV2: 'value2' });
       const arr = ['{{ env.ENV1 }}', '{{ vars.test }}', '{{ env.ENV2 }}', 42];
       expect(renderEnvOnlyInObject(arr)).toEqual(['value1', '{{ vars.test }}', 'value2', 42]);
     });
 
     it('should work with mixed nested structures', async () => {
-      process.env.API_KEY = 'secret123';
+      mockProcessEnv({ API_KEY: 'secret123' });
       const config = {
         api: {
           key: '{{ env.API_KEY }}',
@@ -431,7 +432,7 @@ describe('renderEnvOnlyInObject', () => {
 
   describe('Error handling', () => {
     it('should preserve template on Nunjucks render error', async () => {
-      process.env.TEST = 'value';
+      mockProcessEnv({ TEST: 'value' });
       // Malformed filter that would cause Nunjucks error
       const template = '{{ env.TEST | nonexistent_filter }}';
       const rendered = renderEnvOnlyInObject(template);
@@ -442,14 +443,14 @@ describe('renderEnvOnlyInObject', () => {
 
   describe('PROMPTFOO_DISABLE_TEMPLATING flag', () => {
     it('should return unchanged when flag is set', async () => {
-      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       expect(renderEnvOnlyInObject('{{ env.TEST_ENV_VAR }}')).toBe('{{ env.TEST_ENV_VAR }}');
     });
 
     it('should return unchanged objects when flag is set', async () => {
-      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
-      process.env.TEST = 'value';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+      mockProcessEnv({ TEST: 'value' });
       const obj = { key: '{{ env.TEST }}' };
       expect(renderEnvOnlyInObject(obj)).toEqual({ key: '{{ env.TEST }}' });
     });
@@ -457,8 +458,8 @@ describe('renderEnvOnlyInObject', () => {
 
   describe('Real-world scenarios', () => {
     it('should handle Azure provider config with mixed templates', async () => {
-      process.env.AZURE_ENDPOINT = 'test.openai.azure.com';
-      process.env.API_VERSION = '2024-02-15';
+      mockProcessEnv({ AZURE_ENDPOINT: 'test.openai.azure.com' });
+      mockProcessEnv({ API_VERSION: '2024-02-15' });
       const config = {
         apiHost: '{{ env.AZURE_ENDPOINT }}',
         apiVersion: '{{ env.API_VERSION }}',
@@ -478,7 +479,7 @@ describe('renderEnvOnlyInObject', () => {
     });
 
     it('should handle HTTP provider with runtime vars', async () => {
-      process.env.BASE_URL = 'https://api.example.com';
+      mockProcessEnv({ BASE_URL: 'https://api.example.com' });
       const config = {
         url: '{{ env.BASE_URL }}/query',
         method: 'POST',
@@ -507,8 +508,8 @@ describe('renderEnvOnlyInObject', () => {
     });
 
     it('should handle complex provider config with filters', async () => {
-      process.env.API_HOST = 'api.example.com';
-      process.env.PORT = '8080';
+      mockProcessEnv({ API_HOST: 'api.example.com' });
+      mockProcessEnv({ PORT: '8080' });
       const config = {
         baseUrl: "{{ env.API_HOST | default('localhost') }}:{{ env.PORT }}",
         timeout: '{{ env.TIMEOUT | default(30000) }}',
@@ -529,18 +530,18 @@ describe('renderEnvOnlyInObject', () => {
 
   describe('Edge cases', () => {
     it('should handle multiple env vars in same string', async () => {
-      process.env.HOST = 'example.com';
-      process.env.PORT = '8080';
+      mockProcessEnv({ HOST: 'example.com' });
+      mockProcessEnv({ PORT: '8080' });
       expect(renderEnvOnlyInObject('{{ env.HOST }}:{{ env.PORT }}')).toBe('example.com:8080');
     });
 
     it('should handle env vars in middle of text', async () => {
-      process.env.NAME = 'World';
+      mockProcessEnv({ NAME: 'World' });
       expect(renderEnvOnlyInObject('Hello {{ env.NAME }}!')).toBe('Hello World!');
     });
 
     it('should handle templates with newlines', async () => {
-      process.env.VAR = 'value';
+      mockProcessEnv({ VAR: 'value' });
       expect(
         renderEnvOnlyInObject(`Line 1: {{ env.VAR }}
 Line 2: {{ vars.test }}`),
@@ -549,7 +550,7 @@ Line 2: {{ vars.test }}`);
     });
 
     it('should render env vars in strings longer than 50000 chars', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       const padding = 'x'.repeat(60000);
       const template = `${padding} {{ env.TEST_ENV_VAR }} ${padding}`;
       expect(template.length).toBeGreaterThan(50000);
@@ -563,7 +564,7 @@ Line 2: {{ vars.test }}`);
     });
 
     it('should handle long strings with mixed env and non-env templates', async () => {
-      process.env.HOST = 'example.com';
+      mockProcessEnv({ HOST: 'example.com' });
       const padding = 'x'.repeat(60000);
       const template = `${padding} {{ env.HOST }} {{ vars.test }} ${padding}`;
       expect(renderEnvOnlyInObject(template)).toBe(
@@ -577,7 +578,7 @@ Line 2: {{ vars.test }}`);
     });
 
     it('should not confuse env in other contexts', async () => {
-      process.env.TEST = 'value';
+      mockProcessEnv({ TEST: 'value' });
       // Should not match "environment" or other words containing "env"
       expect(renderEnvOnlyInObject('environment {{ vars.test }}')).toBe(
         'environment {{ vars.test }}',

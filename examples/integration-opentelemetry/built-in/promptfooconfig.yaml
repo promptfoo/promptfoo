@@ -36,7 +36,7 @@ providers:
 
   # OpenRouter (Category A - Direct instrumentation with OpenAI inheritance)
   # Uncomment if you have OpenRouter API key
-  # - id: openrouter:openai/gpt-4o-mini
+  # - id: openrouter:openai/gpt-5.4
   #   config:
   #     temperature: 0.1
 

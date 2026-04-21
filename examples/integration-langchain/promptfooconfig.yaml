@@ -4,7 +4,7 @@ description: LangChain Python integration for prompt evaluation
 prompts:
   - file://prompt.txt
 providers:
-  - openai:chat:gpt-5
+  - openai:chat:gpt-5.4
   - exec:python langchain_example.py
 tests:
   - vars:

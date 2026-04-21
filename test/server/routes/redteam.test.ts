@@ -11,6 +11,7 @@ vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
 
 // Import after mocking
+import logger from '../../../src/logger';
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
@@ -28,6 +29,7 @@ const mockedExtractGeneratedPrompt = vi.mocked(extractGeneratedPrompt);
 const mockedDoRedteamRun = vi.mocked(doRedteamRun);
 const mockedGetRemoteGenerationUrl = vi.mocked(getRemoteGenerationUrl);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
+const debugSpy = vi.spyOn(logger, 'debug');
 
 describe('Redteam Routes', () => {
   describe('POST /redteam/generate-test', () => {
@@ -523,6 +525,7 @@ describe('Redteam Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
+      debugSpy.mockClear();
       app = createApp();
       mockedGetRemoteGenerationUrl.mockReturnValue('https://api.example.com/task');
     });
@@ -546,6 +549,31 @@ describe('Redteam Routes', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ data: 'test', task: 'my-task' }),
+        }),
+      );
+    });
+
+    it('should log task metadata without stringifying the body', async () => {
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ result: 'success' }),
+      } as any);
+
+      const response = await request(app).post('/api/redteam/my-task').send({
+        data: 'test',
+        secret: 'value',
+      });
+
+      expect(response.status).toBe(200);
+      expect(debugSpy).toHaveBeenCalledWith(
+        'Received my-task task request',
+        expect.objectContaining({
+          method: 'POST',
+          url: '/my-task',
+          body: expect.objectContaining({
+            data: 'test',
+            secret: '[REDACTED]',
+          }),
         }),
       );
     });

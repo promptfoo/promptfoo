@@ -6,8 +6,9 @@ import {
   synthesize,
 } from '../../src/assertions/synthesis';
 import { loadApiProvider } from '../../src/providers/index';
+import { createMockProvider } from '../factories/provider';
 
-import type { TestCase } from '../../src/types/index';
+import type { ApiProvider, TestCase } from '../../src/types/index';
 
 vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
@@ -16,9 +17,9 @@ vi.mock('../../src/providers', () => ({
 describe('synthesize', () => {
   it('should generate assertions based on config prompts and existing assertions', async () => {
     let i = 0;
-    const mockProvider = {
-      id: () => 'mock-provider',
-      callApi: vi.fn(() => {
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
         if (i === 0) {
           i++;
           return Promise.resolve({
@@ -28,7 +29,7 @@ describe('synthesize', () => {
         }
         return Promise.resolve({ output: 'None' });
       }),
-    };
+    });
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
     const result = await synthesize({
       provider: 'mock-provider',

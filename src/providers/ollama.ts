@@ -192,21 +192,18 @@ export class OllamaCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt,
       stream: false,
-      options: Object.keys(this.config).reduce(
-        (options, key) => {
-          const optionName = key as keyof OllamaCompletionOptions;
-          if (
-            OllamaCompletionOptionKeys.has(optionName) &&
-            optionName !== 'think' &&
-            optionName !== 'tools' &&
-            optionName !== 'passthrough'
-          ) {
-            options[optionName] = this.config[optionName];
-          }
-          return options;
-        },
-        {} as Record<string, any>,
-      ),
+      options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
+        const optionName = key as keyof OllamaCompletionOptions;
+        if (
+          OllamaCompletionOptionKeys.has(optionName) &&
+          optionName !== 'think' &&
+          optionName !== 'tools' &&
+          optionName !== 'passthrough'
+        ) {
+          options[optionName] = this.config[optionName];
+        }
+        return options;
+      }, {}),
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
@@ -352,16 +349,13 @@ export class OllamaChatProvider implements ApiProvider {
     const params: any = {
       model: this.modelName,
       messages,
-      options: Object.keys(this.config).reduce(
-        (options, key) => {
-          const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
-            options[optionName] = this.config[optionName];
-          }
-          return options;
-        },
-        {} as Record<string, any>,
-      ),
+      options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
+        const optionName = key as keyof OllamaCompletionOptions;
+        if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
+          options[optionName] = this.config[optionName];
+        }
+        return options;
+      }, {}),
       ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
 
@@ -114,28 +115,20 @@ describe('MemorySystem', () => {
 
 describe('CustomProvider', () => {
   let customProvider: CustomProvider;
-  let mockRedTeamProvider: any;
-  let mockScoringProvider: any;
-  let mockTargetProvider: any;
+  let mockRedTeamProvider: MockApiProvider;
+  let mockScoringProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Create fresh mocks for each test
-    mockRedTeamProvider = {
-      id: () => 'mock-redteam',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockScoringProvider = {
-      id: () => 'mock-scoring',
-      callApi: vi.fn(),
-      delay: 0,
-    };
-    mockTargetProvider = {
-      id: () => 'mock-target',
-      callApi: vi.fn(),
-    };
+    mockRedTeamProvider = createMockProvider({ id: 'mock-redteam', delay: 0 });
+    mockRedTeamProvider.callApi.mockReset();
+    mockScoringProvider = createMockProvider({ id: 'mock-scoring', delay: 0 });
+    mockScoringProvider.callApi.mockReset();
+    mockTargetProvider = createMockProvider({ id: 'mock-target' });
+    mockTargetProvider.callApi.mockReset();
 
     customProvider = new CustomProvider({
       injectVar: 'objective',
@@ -150,7 +143,11 @@ describe('CustomProvider', () => {
     vi.spyOn(redteamProviderManager, 'getProvider').mockImplementation(async function (options) {
       // When the provider is already an object (not a string), return it for jsonOnly requests
       // For non-jsonOnly requests (scoring), return the scoring provider
-      if (options.provider && typeof options.provider === 'object') {
+      if (
+        options.provider &&
+        typeof options.provider === 'object' &&
+        'callApi' in options.provider
+      ) {
         return options.jsonOnly ? options.provider : mockScoringProvider;
       }
       return options.jsonOnly ? mockRedTeamProvider : mockScoringProvider;

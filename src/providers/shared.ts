@@ -19,6 +19,11 @@ interface ModelCost {
   output: number;
   audioInput?: number;
   audioOutput?: number;
+  longContext?: {
+    input: number;
+    output: number;
+    threshold: number;
+  };
 }
 
 interface ProviderModel {
@@ -28,7 +33,11 @@ interface ProviderModel {
 
 export interface ProviderConfig {
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
   audioCost?: number;
+  audioInputCost?: number;
+  audioOutputCost?: number;
 }
 
 /**
@@ -62,8 +71,13 @@ export function calculateCost(
     return undefined;
   }
 
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  const longContextCost =
+    model.cost.longContext && promptTokens > model.cost.longContext.threshold
+      ? model.cost.longContext
+      : undefined;
+  const inputCost = config.inputCost ?? config.cost ?? longContextCost?.input ?? model.cost.input;
+  const outputCost =
+    config.outputCost ?? config.cost ?? longContextCost?.output ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens;
 }
 

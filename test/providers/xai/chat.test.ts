@@ -499,9 +499,7 @@ describe('xAI Chat Provider', () => {
       // Unknown model
       expect(calculateXAICost('invalid-model', {}, 600, 400)).toBe(undefined);
       // Missing token counts
-      expect(calculateXAICost('grok-2-1212', {}, undefined as any, undefined as any)).toBe(
-        undefined,
-      );
+      expect(calculateXAICost('grok-2-1212', {})).toBe(undefined);
       expect(calculateXAICost('grok-2-1212', {}, 0, 0)).toBe(undefined);
     });
 
@@ -511,6 +509,26 @@ describe('xAI Chat Provider', () => {
       expect(cost).toBeDefined();
       // Expected: (2.0/1e6 * 1000000) + (10.0/1e6 * 1000000) = 2.0 + 10.0 = 12.0
       expect(cost).toBeCloseTo(12.0, 2);
+    });
+
+    it('uses separate custom input and output costs from config', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
+
+    it('prefers separate custom costs over custom cost', () => {
+      const cost = calculateXAICost(
+        'grok-2-1212',
+        { cost: 0.02, inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
     });
 
     it('handles reasoning tokens correctly', () => {
