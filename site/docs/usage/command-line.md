@@ -123,6 +123,8 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-v, --vars <path>`                 | Path to CSV with test cases (alias for --tests)                                                          |
 | `-w, --watch`                       | Watch for changes in config and re-run                                                                   |
 
+When using `--repeat` with `--pass-power` or `--pass-power-threshold`, run with `--no-cache` if you need each repeat to be an independent model attempt. Cached repeats can reuse earlier responses and inflate the consistency score.
+
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 
 ### Pause and Resume

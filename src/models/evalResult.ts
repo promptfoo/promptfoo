@@ -126,6 +126,14 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
   }) as T;
 }
 
+function sanitizeStoredMetadata(result: Pick<EvaluateResult, 'metadata' | 'repeatIndex'>) {
+  return sanitizeForDb(
+    result.repeatIndex == null
+      ? result.metadata
+      : { ...(result.metadata || {}), repeatIndex: result.repeatIndex },
+  );
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -143,7 +151,6 @@ export default class EvalResult {
       gradingResult,
       namedScores,
       cost,
-      metadata,
       failureReason,
       testCase,
     } = result;
@@ -186,11 +193,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(
-        result.repeatIndex != null
-          ? { ...(metadata || {}), repeatIndex: result.repeatIndex }
-          : metadata,
-      ),
+      metadata: sanitizeStoredMetadata(result),
       failureReason,
     };
     if (persist) {
@@ -229,7 +232,7 @@ export default class EvalResult {
           response: sanitizeForDb(result.response),
           gradingResult: sanitizeForDb(result.gradingResult),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeForDb(result.metadata),
+          metadata: sanitizeStoredMetadata(result),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = db

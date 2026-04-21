@@ -106,6 +106,41 @@ export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
+function parseEvalResultsMetadata(results: unknown): {
+  durationMs?: number;
+  generationDurationMs?: number;
+  evaluationDurationMs?: number;
+  passPowerOfN?: EvaluateStats['passPowerOfN'];
+} {
+  const resultsObj =
+    results != null && typeof results === 'object' && !Array.isArray(results)
+      ? (results as Record<string, unknown>)
+      : undefined;
+
+  const validateDuration = (raw: unknown): number | undefined =>
+    typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+
+  const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
+  const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
+  const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
+  const durationMs =
+    rawDurationMs ??
+    (generationDurationMs != null || evaluationDurationMs != null
+      ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
+      : undefined);
+
+  const rawPassPowerOfN = resultsObj?.['passPowerOfN'];
+  const passPowerOfN =
+    rawPassPowerOfN != null &&
+    typeof rawPassPowerOfN === 'object' &&
+    'n' in rawPassPowerOfN &&
+    'overallScore' in rawPassPowerOfN
+      ? (rawPassPowerOfN as EvaluateStats['passPowerOfN'])
+      : undefined;
+
+  return { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN };
+}
+
 /** Result from queries extracting variable keys with eval IDs */
 export interface VarKeyWithEvalIdResult {
   key: string;
@@ -385,32 +420,8 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
-    // Extract duration fields from results column (for V4 evals)
-    // Validate that values are finite non-negative numbers to guard against corrupted data
-    const resultsObj = eval_.results as Record<string, unknown> | undefined;
-
-    const validateDuration = (raw: unknown): number | undefined =>
-      typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
-
-    const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
-    const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
-    const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
-    // Recompute total if only split fields exist (defensive against partial writes)
-    const durationMs =
-      rawDurationMs ??
-      (generationDurationMs != null || evaluationDurationMs != null
-        ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
-        : undefined);
-
-    // Extract pass^N results from the results column (persisted by save())
-    const rawPassPowerOfN = resultsObj?.['passPowerOfN'];
-    const passPowerOfN =
-      rawPassPowerOfN != null &&
-      typeof rawPassPowerOfN === 'object' &&
-      'n' in rawPassPowerOfN &&
-      'overallScore' in rawPassPowerOfN
-        ? (rawPassPowerOfN as EvaluateStats['passPowerOfN'])
-        : undefined;
+    const { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN } =
+      parseEvalResultsMetadata(eval_.results);
 
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
@@ -449,17 +460,24 @@ export default class Eval {
       .limit(limit)
       .orderBy(desc(evalsTable.createdAt))
       .all();
-    return evals.map(
-      (e) =>
-        new Eval(e.config, {
-          id: e.id,
-          createdAt: new Date(e.createdAt),
-          author: e.author,
-          description: e.description || undefined,
-          prompts: e.prompts || [],
-          persisted: true,
-        }),
-    );
+    return evals.map((e) => {
+      const { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN } =
+        parseEvalResultsMetadata(e.results);
+      return new Eval(e.config, {
+        id: e.id,
+        createdAt: new Date(e.createdAt),
+        author: e.author,
+        description: e.description || undefined,
+        prompts: e.prompts || [],
+        persisted: true,
+        vars: e.vars || [],
+        runtimeOptions: e.runtimeOptions ?? undefined,
+        passPowerOfN,
+        durationMs,
+        generationDurationMs,
+        evaluationDurationMs,
+      });
+    });
   }
 
   /**
@@ -479,17 +497,24 @@ export default class Eval {
       .limit(limit)
       .offset(offset)
       .all();
-    return evals.map(
-      (e) =>
-        new Eval(e.config, {
-          id: e.id,
-          createdAt: new Date(e.createdAt),
-          author: e.author,
-          description: e.description || undefined,
-          prompts: e.prompts || [],
-          persisted: true,
-        }),
-    );
+    return evals.map((e) => {
+      const { durationMs, generationDurationMs, evaluationDurationMs, passPowerOfN } =
+        parseEvalResultsMetadata(e.results);
+      return new Eval(e.config, {
+        id: e.id,
+        createdAt: new Date(e.createdAt),
+        author: e.author,
+        description: e.description || undefined,
+        prompts: e.prompts || [],
+        persisted: true,
+        vars: e.vars || [],
+        runtimeOptions: e.runtimeOptions ?? undefined,
+        passPowerOfN,
+        durationMs,
+        generationDurationMs,
+        evaluationDurationMs,
+      });
+    });
   }
 
   /**

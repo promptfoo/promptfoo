@@ -25,24 +25,64 @@ export interface PassPowerResult {
   groups: PassPowerGroup[];
 }
 
-/**
- * Creates a stable grouping key from vars by sorting keys alphabetically.
- * This ensures consistent grouping regardless of object key insertion order.
- */
+function stableStringify(value: unknown): string {
+  const seen = new WeakSet<object>();
+
+  const normalize = (input: unknown): unknown => {
+    if (typeof input === 'bigint') {
+      return input.toString();
+    }
+    if (typeof input === 'function') {
+      return `[Function ${(input as { name?: string }).name || 'anonymous'}]`;
+    }
+    if (input === undefined) {
+      return '[undefined]';
+    }
+    if (input == null || typeof input !== 'object') {
+      return input;
+    }
+    if (seen.has(input)) {
+      return '[Circular]';
+    }
+
+    seen.add(input);
+    if (Array.isArray(input)) {
+      const normalizedArray = input.map(normalize);
+      seen.delete(input);
+      return normalizedArray;
+    }
+
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(input).sort()) {
+      sorted[key] = normalize((input as Record<string, unknown>)[key]);
+    }
+    seen.delete(input);
+    return sorted;
+  };
+
+  return JSON.stringify(normalize(value)) ?? '[undefined]';
+}
+
 function stableVarsKey(vars: Record<string, unknown>): string {
-  const sortedKeys = Object.keys(vars).sort();
-  const sorted: Record<string, unknown> = {};
-  for (const key of sortedKeys) {
-    sorted[key] = vars[key];
+  return stableStringify(vars);
+}
+
+function stableTestCaseKey(
+  testCase: (Record<string, unknown> & { vars?: Record<string, unknown> }) | undefined,
+  vars: Record<string, unknown>,
+): string {
+  if (testCase == null) {
+    return stableStringify({ vars });
   }
-  return JSON.stringify(sorted);
+
+  return stableStringify({ ...testCase, vars: testCase.vars || vars });
 }
 
 interface PassPowerInput {
   promptIdx: number;
   testIdx: number;
   vars?: Record<string, unknown>;
-  testCase?: {
+  testCase?: Record<string, unknown> & {
     vars?: Record<string, unknown>;
   };
   success: boolean;
@@ -53,6 +93,7 @@ export function calculatePassPowerOfN(
     promptIdx: number;
     testIdx: number;
     vars: Record<string, unknown>;
+    testCaseKey?: string;
     success: boolean;
   }>,
   n: number,
@@ -61,9 +102,10 @@ export function calculatePassPowerOfN(
     return { n, overallScore: 100, groups: [] };
   }
 
-  // Group results by promptIdx + vars content. testIdx is excluded because the
-  // evaluator assigns a unique testIdx to each repetition, so including it
-  // would create one group per repetition and reduce pass^N to raw pass rate.
+  // Group results by prompt and stable test-case identity. testIdx is excluded
+  // because the evaluator assigns a unique testIdx to each repetition, so
+  // including it would create one group per repetition and reduce pass^N to raw
+  // pass rate.
   const groups = new Map<
     string,
     { testIdx: number; promptIdx: number; varsKey: string; total: number; passed: number }
@@ -71,7 +113,7 @@ export function calculatePassPowerOfN(
 
   for (const result of results) {
     const varsKey = stableVarsKey(result.vars);
-    const groupKey = `${result.promptIdx}:${varsKey}`;
+    const groupKey = `${result.promptIdx}:${result.testCaseKey || varsKey}`;
 
     let group = groups.get(groupKey);
     if (!group) {
@@ -119,12 +161,16 @@ export function calculatePassPowerOfNFromResults(
   n: number,
 ): PassPowerResult {
   return calculatePassPowerOfN(
-    results.map((result) => ({
-      promptIdx: result.promptIdx,
-      testIdx: result.testIdx,
-      vars: result.testCase?.vars || result.vars || {},
-      success: result.success,
-    })),
+    results.map((result) => {
+      const vars = result.testCase?.vars || result.vars || {};
+      return {
+        promptIdx: result.promptIdx,
+        testIdx: result.testIdx,
+        vars,
+        testCaseKey: stableTestCaseKey(result.testCase, vars),
+        success: result.success,
+      };
+    }),
     n,
   );
 }
