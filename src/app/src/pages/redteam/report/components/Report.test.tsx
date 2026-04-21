@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { mockWindowLocation } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
 
@@ -258,31 +259,30 @@ describe('Report filtering logic', () => {
           const prompts = evalData.prompts || [];
           const selectedPrompt = prompts[0];
 
-          return evalData.results.results.reduce(
-            (acc, row) => {
-              if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
-                return acc;
-              }
-
-              const pluginId = row.metadata?.pluginId;
-              if (!pluginId) {
-                return acc;
-              }
-
-              if (!acc[pluginId]) {
-                acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-              }
-
-              if (row.success && row.gradingResult?.pass) {
-                acc[pluginId].pass++;
-              } else {
-                acc[pluginId].fail++;
-              }
-
+          return evalData.results.results.reduce<
+            Record<string, { pass: number; fail: number; error: number }>
+          >((acc, row) => {
+            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 0) {
               return acc;
-            },
-            {} as Record<string, { pass: number; fail: number; error: number }>,
-          );
+            }
+
+            const pluginId = row.metadata?.pluginId;
+            if (!pluginId) {
+              return acc;
+            }
+
+            if (!acc[pluginId]) {
+              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
+            }
+
+            if (row.success && row.gradingResult?.pass) {
+              acc[pluginId].pass++;
+            } else {
+              acc[pluginId].fail++;
+            }
+
+            return acc;
+          }, {});
         }, [evalData]),
       );
 
@@ -305,31 +305,30 @@ describe('Report filtering logic', () => {
           const prompts = evalData.prompts || [];
           const selectedPrompt = prompts[1];
 
-          return evalData.results.results.reduce(
-            (acc, row) => {
-              if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
-                return acc;
-              }
-
-              const pluginId = row.metadata?.pluginId;
-              if (!pluginId) {
-                return acc;
-              }
-
-              if (!acc[pluginId]) {
-                acc[pluginId] = { pass: 0, fail: 0, error: 0 };
-              }
-
-              if (row.success && row.gradingResult?.pass) {
-                acc[pluginId].pass++;
-              } else {
-                acc[pluginId].fail++;
-              }
-
+          return evalData.results.results.reduce<
+            Record<string, { pass: number; fail: number; error: number }>
+          >((acc, row) => {
+            if (prompts.length > 1 && selectedPrompt && row.promptIdx !== 1) {
               return acc;
-            },
-            {} as Record<string, { pass: number; fail: number; error: number }>,
-          );
+            }
+
+            const pluginId = row.metadata?.pluginId;
+            if (!pluginId) {
+              return acc;
+            }
+
+            if (!acc[pluginId]) {
+              acc[pluginId] = { pass: 0, fail: 0, error: 0 };
+            }
+
+            if (row.success && row.gradingResult?.pass) {
+              acc[pluginId].pass++;
+            } else {
+              acc[pluginId].fail++;
+            }
+
+            return acc;
+          }, {});
         }, [evalData]),
       );
 
@@ -594,25 +593,10 @@ const createComponentMockEvalData = (numPrompts: number, results: EvaluateResult
 
 describe('App component target selection', () => {
   const mockCallApi = callApi as Mock;
-  let originalWindowLocation: Location;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    originalWindowLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        ...originalWindowLocation,
-        search: '?evalId=test-eval-id',
-      },
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
   });
 
   it('should handle evalData with empty prompts array and non-zero selectedPromptIndex gracefully', async () => {
@@ -676,25 +660,10 @@ describe('App component target selection', () => {
 
 describe('App component target selector rendering', () => {
   const mockCallApi = callApi as Mock;
-  let originalWindowLocation: Location;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    originalWindowLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        ...originalWindowLocation,
-        search: '?evalId=test-eval-id',
-      },
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
   });
 
   it('should render the target selector dropdown when there are multiple prompts', async () => {
@@ -732,25 +701,10 @@ describe('App component target selector rendering', () => {
 
 describe('App component categoryStats calculation with moderation', () => {
   const mockCallApi = callApi as Mock;
-  let originalWindowLocation: Location;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    originalWindowLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        ...originalWindowLocation,
-        search: '?evalId=test-eval-id',
-      },
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
   });
 
   it('should correctly increment passWithFilter but not pass when moderation tests fail but other tests pass', async () => {
@@ -795,25 +749,10 @@ describe('App component categoryStats calculation with moderation', () => {
 
 describe('Filter panel regression tests', () => {
   const mockCallApi = callApi as Mock;
-  let originalWindowLocation: Location;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    originalWindowLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        ...originalWindowLocation,
-        search: '?evalId=test-eval-id',
-      },
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
-    });
+    mockWindowLocation({ search: '?evalId=test-eval-id' });
   });
 
   it('should open filter panel without errors when filter button is clicked', async () => {

@@ -1,5 +1,5 @@
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
-import type { EvaluateTableOutput } from '@promptfoo/types';
+import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
 /**
  * Creates a deterministic hash from a list of variable names.
@@ -42,4 +42,26 @@ export function getHumanRating(output: EvaluateTableOutput | null | undefined) {
   return output.gradingResult.componentResults.find(
     (result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE,
   );
+}
+
+type NamedMetricTotalsSource = Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>;
+
+export function getNamedMetricTotal(
+  metrics: NamedMetricTotalsSource | null | undefined,
+  metric: string,
+): number {
+  return metrics?.namedScoreWeights?.[metric] ?? metrics?.namedScoresCount?.[metric] ?? 0;
+}
+
+export function getNamedMetricTotals(
+  metrics: NamedMetricTotalsSource | null | undefined,
+): Record<string, number> | undefined {
+  if (!metrics?.namedScoresCount && !metrics?.namedScoreWeights) {
+    return undefined;
+  }
+
+  return {
+    ...(metrics.namedScoresCount ?? {}),
+    ...(metrics.namedScoreWeights ?? {}),
+  };
 }

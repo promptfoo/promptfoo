@@ -104,7 +104,7 @@ export function RunOptionsSection({
       </Card>
 
       <p className="text-sm text-muted-foreground">
-        These settings apply to all providers in this evaluation. Note: Delay and max concurrency
+        These settings apply to all providers in this evaluation. Note: delay and max concurrency
         are mutually exclusive.
       </p>
 
