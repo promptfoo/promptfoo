@@ -36,7 +36,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { customTargetOption, predefinedTargets } from './components/constants';
+import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
@@ -52,7 +52,7 @@ import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
+import type { Config } from './types';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };
@@ -329,7 +329,7 @@ export default function RedTeamSetupPage() {
 
       // Convert string targets to objects
       if (typeof target === 'string') {
-        const targetType = predefinedTargets.find((t: RedteamUITarget) => t.value === target);
+        const targetType = findPredefinedTarget(target);
 
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,

@@ -31,6 +31,36 @@ The skill encodes these patterns so the agent gets them right the first time.
 /plugin install promptfoo-evals@promptfoo
 ```
 
+### Via Codex plugin bundle
+
+For repo-local Codex usage, this repo also includes a plugin bundle at
+`plugins/promptfoo`, exposed by `.agents/plugins/marketplace.json`. It contains
+four focused skills: `promptfoo-evals`, `promptfoo-provider-setup`,
+`promptfoo-redteam-setup`, and `promptfoo-redteam-run`.
+
+| Skill                      | Use it for                                                                 |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `promptfoo-evals`          | Non-redteam eval suites, assertions, test cases, and result inspection     |
+| `promptfoo-provider-setup` | HTTP targets plus JavaScript or Python `file://` providers and wrappers    |
+| `promptfoo-redteam-setup`  | Focused redteam configs from live endpoints, OpenAPI specs, or static code |
+| `promptfoo-redteam-run`    | Running generated scans, triaging failures, and filtered reruns            |
+
+There is intentionally no meta selector skill. Codex routes from each skill's
+description and default prompt, keeping the bundle small and each workflow
+directly invokable.
+
+Python providers are first-class in the Codex bundle. The provider and redteam
+skills cover Promptfoo's `file://provider.py` and
+`file://provider.py:function_name` syntax for eval providers, redteam targets,
+local graders, and local redteam generators, including `workers`, `timeout`, and
+`PROMPTFOO_PYTHON` configuration.
+
+Use the Claude marketplace command above when you want the portable single
+`promptfoo-evals` skill. Use the Codex bundle when working in this repo and you
+want separate eval, provider setup, redteam setup, and redteam run workflows.
+To reuse the bundle elsewhere, copy `plugins/promptfoo` and its
+`.agents/plugins/marketplace.json` entry together.
+
 ### Manual install
 
 Download the [skill directory](https://github.com/promptfoo/promptfoo/tree/main/.claude/skills/promptfoo-evals) and copy it to the correct location for your tool:

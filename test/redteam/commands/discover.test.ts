@@ -5,6 +5,7 @@ import {
   normalizeTargetPurposeDiscoveryResult,
 } from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
+import { createMockProvider } from '../../factories/provider';
 
 vi.mock('../../../src/util/fetch');
 
@@ -144,10 +145,10 @@ describe('doTargetPurposeDiscovery', () => {
       );
     });
 
-    const target = {
-      id: () => 'test',
-      callApi: vi.fn().mockResolvedValue({ output: 'I am a test assistant' }),
-    };
+    const target = createMockProvider({
+      id: 'test',
+      response: { output: 'I am a test assistant' },
+    });
 
     const discoveredPurpose = await doTargetPurposeDiscovery(target);
 
@@ -213,10 +214,10 @@ describe('doTargetPurposeDiscovery', () => {
       );
     });
 
-    const target = {
-      id: () => 'test',
-      callApi: vi.fn().mockResolvedValue({ output: 'I am a test assistant' }),
-    };
+    const target = createMockProvider({
+      id: 'test',
+      response: { output: 'I am a test assistant' },
+    });
     const prompt = {
       raw: 'This is a test prompt {{prompt}}',
       label: 'Test Prompt',
@@ -292,6 +293,96 @@ describe('doTargetPurposeDiscovery', () => {
       tools: [],
       user: null,
     });
+  });
+
+  it('should throw immediately on non-OK HTTP response with an actionable hint', async () => {
+    const errorBody = JSON.stringify({
+      error: 'Invalid task',
+      message: 'Unknown task: target-purpose-discovery',
+    });
+
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(errorBody, {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: vi.fn(),
+    };
+
+    const error = await doTargetPurposeDiscovery(target, undefined, false).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain(
+      'Remote server returned HTTP 400: Unknown task: target-purpose-discovery',
+    );
+    expect(error.message).toContain('promptfoo@latest');
+    // Should not retry — fetch should only be called once
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should surface an auth hint on 401 responses', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: vi.fn(),
+    };
+
+    const error = await doTargetPurposeDiscovery(target, undefined, false).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('Remote server returned HTTP 401: Unauthorized');
+    expect(error.message).toContain('promptfoo auth login');
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should throw with raw text on non-OK response with non-JSON body', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response('Service Unavailable', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain' },
+      }),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: vi.fn(),
+    };
+
+    await expect(doTargetPurposeDiscovery(target, undefined, false)).rejects.toThrow(
+      'Remote server returned HTTP 503: Service Unavailable',
+    );
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(target.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should fall back to status text on non-OK response with empty body', async () => {
+    mockedFetchWithProxy.mockResolvedValue(
+      new Response('', {
+        status: 418,
+        statusText: "I'm a teapot",
+      }),
+    );
+
+    const target = {
+      id: () => 'test',
+      callApi: vi.fn(),
+    };
+
+    await expect(doTargetPurposeDiscovery(target, undefined, false)).rejects.toThrow(
+      "Remote server returned HTTP 418: I'm a teapot",
+    );
+    expect(mockedFetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(target.callApi).not.toHaveBeenCalled();
   });
 
   it('should handle mixed valid/invalid tools from server', async () => {

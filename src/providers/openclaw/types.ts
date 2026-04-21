@@ -9,8 +9,8 @@ export interface OpenClawGatewayConfig {
     customBindHost?: string;
     remote?: {
       enabled?: boolean;
-      password?: string;
-      token?: string;
+      password?: unknown;
+      token?: unknown;
       url?: string;
     };
     tls?: {
@@ -18,8 +18,8 @@ export interface OpenClawGatewayConfig {
     };
     auth?: {
       mode?: string;
-      password?: string;
-      token?: string;
+      password?: unknown;
+      token?: unknown;
     };
     http?: {
       endpoints?: {
