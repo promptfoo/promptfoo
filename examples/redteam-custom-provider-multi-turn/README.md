@@ -19,4 +19,4 @@ promptfoo redteam run
 - The `intent` plugin keeps the example self-contained. Add broader plugins such as `harmful` when you want a larger remote-generation scan.
 - The strategy configs use small `maxTurns` values so the example stays quick while still exercising multi-turn behavior.
 
-Set `CUSTOMER_SERVICE_URL` to an endpoint that accepts JSON requests with `message`, `messages`, and `conversationId` fields.
+Set `CUSTOMER_SERVICE_URL` to an endpoint that accepts JSON requests with `message`, `messages`, and `conversationId` fields. The example provider accepts either a JSON response with a `response` or `message` field, or a plain text response body.

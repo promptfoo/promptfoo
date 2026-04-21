@@ -14,12 +14,30 @@ def parse_prompt(prompt):
 
     if isinstance(messages, list):
         latest = messages[-1] if messages else {}
+        if not isinstance(latest, dict):
+            return {"message": str(latest), "messages": messages}
+
         return {
             "message": latest.get("content") or latest.get("message") or "",
             "messages": messages,
         }
 
     return {"message": prompt}
+
+
+def parse_response(response):
+    if not response.content:
+        return ""
+
+    try:
+        data = response.json()
+    except ValueError:
+        return response.text
+
+    if isinstance(data, dict):
+        return data.get("response") or data.get("message") or json.dumps(data)
+
+    return data
 
 
 def call_api(prompt, options, context):
@@ -35,20 +53,11 @@ def call_api(prompt, options, context):
     try:
         response = requests.post(TARGET_URL, json=payload, timeout=30)
         response.raise_for_status()
-        response_data = response.json() if response.content else {}
     except requests.exceptions.RequestException as error:
         return {"error": str(error)}
 
-    output = response_data
-    if isinstance(response_data, dict):
-        output = (
-            response_data.get("response")
-            or response_data.get("message")
-            or json.dumps(response_data)
-        )
-
     return {
-        "output": output,
+        "output": parse_response(response),
         "metadata": {
             "sessionId": session_id,
             "config": options.get("config", {}),
