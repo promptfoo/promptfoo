@@ -22,26 +22,25 @@ export function getConfigHash(configPath: string): string {
  * The hash includes:
  * - Cloud config ID (scan template identifier)
  * - Cloud target ID
- * - Purpose/application description
- * - Plugins configuration
- * - Strategies configuration
- * - Number of tests
- * - Language settings
- * - Entities
- * - InjectVar
+ * - Redteam generation settings
+ * - Target/provider configuration and prompt inputs that influence generated tests
  *
  * @param cloudConfigId - The UUID of the cloud config (scan template)
  * @param targetId - The UUID of the cloud target (optional)
- * @param redteamConfig - The redteam configuration from the cloud config
+ * @param cloudConfig - The full cloud configuration, or a redteam config for legacy callers
  * @returns A hash string representing the full configuration
  */
 export function computeTargetHash(
   cloudConfigId: string,
   targetId: string | undefined,
-  redteamConfig: Record<string, unknown> | undefined,
+  cloudConfig: Record<string, unknown> | undefined,
 ): string {
-  // Extract and normalize the relevant fields from redteam config
-  const normalizedConfig = redteamConfig
+  const redteamConfig =
+    cloudConfig?.redteam && typeof cloudConfig.redteam === 'object'
+      ? (cloudConfig.redteam as Record<string, unknown>)
+      : cloudConfig;
+
+  const normalizedRedteamConfig = redteamConfig
     ? {
         purpose: redteamConfig.purpose || '',
         plugins: redteamConfig.plugins || [],
@@ -52,6 +51,13 @@ export function computeTargetHash(
         injectVar: redteamConfig.injectVar,
       }
     : {};
+
+  const normalizedConfig = {
+    redteam: normalizedRedteamConfig,
+    prompts: cloudConfig?.prompts || [],
+    providers: cloudConfig?.providers || [],
+    targets: cloudConfig?.targets || [],
+  };
 
   const hashInput = JSON.stringify({
     version: VERSION,

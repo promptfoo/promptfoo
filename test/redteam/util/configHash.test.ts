@@ -1,7 +1,6 @@
 import * as fs from 'fs';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { VERSION } from '../../../src/constants';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeTargetHash, getConfigHash } from '../../../src/redteam/util/configHash';
 
 vi.mock('fs');
@@ -27,9 +26,7 @@ describe('configHash', () => {
     });
 
     it('should return different hashes for different file contents', () => {
-      vi.mocked(fs.readFileSync)
-        .mockReturnValueOnce('content1')
-        .mockReturnValueOnce('content2');
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('content1').mockReturnValueOnce('content2');
 
       const hash1 = getConfigHash('/path/to/config1.yaml');
       const hash2 = getConfigHash('/path/to/config2.yaml');
@@ -162,6 +159,22 @@ describe('configHash', () => {
     it('should return different hashes when injectVar changes', () => {
       const config1 = { injectVar: 'prompt' };
       const config2 = { injectVar: 'input' };
+
+      const hash1 = computeTargetHash('config-1', 'target-1', config1);
+      const hash2 = computeTargetHash('config-1', 'target-1', config2);
+
+      expect(hash1).not.toBe(hash2);
+    });
+
+    it('should return different hashes when target provider config changes', () => {
+      const config1 = {
+        redteam: { purpose: 'Test chatbot' },
+        providers: [{ id: 'promptfoo:redteam:target-1', config: { url: 'https://old.example' } }],
+      };
+      const config2 = {
+        redteam: { purpose: 'Test chatbot' },
+        providers: [{ id: 'promptfoo:redteam:target-1', config: { url: 'https://new.example' } }],
+      };
 
       const hash1 = computeTargetHash('config-1', 'target-1', config1);
       const hash2 = computeTargetHash('config-1', 'target-1', config2);

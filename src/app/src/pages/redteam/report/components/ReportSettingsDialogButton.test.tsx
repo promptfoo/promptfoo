@@ -1,6 +1,7 @@
-import { render, screen, within, waitForElementToBeRemoved } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import { useReportStore } from './store';
 
@@ -8,14 +9,14 @@ vi.mock('./store');
 const mockUseReportStore = vi.mocked(useReportStore);
 
 describe('ReportSettingsDialogButton', () => {
-  const mockSetShowPercentagesOnRiskCards = vi.fn();
+  const mockSetShowUntestedPlugins = vi.fn();
   const mockSetPluginPassRateThreshold = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
@@ -23,7 +24,7 @@ describe('ReportSettingsDialogButton', () => {
 
   it("should open the settings dialog with the title 'Report Settings' when the icon button is clicked", async () => {
     const user = userEvent.setup();
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
@@ -39,20 +40,23 @@ describe('ReportSettingsDialogButton', () => {
   it('should call setPluginPassRateThreshold with the new value when the slider is moved', async () => {
     const user = userEvent.setup();
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: 0.5,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
     const slider = screen.getByRole('slider');
 
-    await user.click(slider);
-    await user.keyboard('{ArrowRight}{ArrowRight}{ArrowRight}');
+    slider.focus();
+    // jsdom does not apply native range keyboard defaults, so set the DOM value directly.
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(slider, '0.75');
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    slider.dispatchEvent(new Event('change', { bubbles: true }));
 
     expect(mockSetPluginPassRateThreshold).toHaveBeenCalled();
     const calls = mockSetPluginPassRateThreshold.mock.calls;
@@ -66,18 +70,20 @@ describe('ReportSettingsDialogButton', () => {
 
   it('should close the settings dialog when the Close button is clicked', async () => {
     const user = userEvent.setup();
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
-    const dialog = screen.getByRole('dialog');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
 
-    const closeButton = screen.getByRole('button', { name: 'Close' });
-    await user.click(closeButton);
+    // Get the Close button in the dialog footer (there's also an X close button)
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
+    // The footer Close button is the one with text, not the X icon
+    const closeButton = closeButtons.find((btn) => btn.textContent === 'Close');
+    await user.click(closeButton!);
 
-    await waitForElementToBeRemoved(dialog);
-
+    // Dialog should be closed after clicking Close
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
@@ -85,13 +91,13 @@ describe('ReportSettingsDialogButton', () => {
     const user = userEvent.setup();
     const threshold = 0.75;
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: threshold,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
 
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
@@ -99,22 +105,21 @@ describe('ReportSettingsDialogButton', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
 
-    const label = within(dialog).getByText(
-      `Plugin Pass Rate Threshold: ${(threshold * 100).toFixed(0)}%`,
-    );
-    expect(label).toBeInTheDocument();
+    // Label and value are now in separate elements
+    expect(within(dialog).getByText('Plugin Pass Rate Threshold')).toBeInTheDocument();
+    expect(within(dialog).getByText(`${(threshold * 100).toFixed(0)}%`)).toBeInTheDocument();
   });
 
   it('should display "NaN%" when pluginPassRateThreshold is NaN', async () => {
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: NaN,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
 
     const user = userEvent.setup();
-    render(<ReportSettingsDialogButton />);
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
@@ -122,41 +127,50 @@ describe('ReportSettingsDialogButton', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog).toBeInTheDocument();
 
-    const label = within(dialog).getByText(/Plugin Pass Rate Threshold/);
-    expect(label).toHaveTextContent('Plugin Pass Rate Threshold: NaN%');
+    // Label and value are now in separate elements
+    expect(within(dialog).getByText('Plugin Pass Rate Threshold')).toBeInTheDocument();
+    expect(within(dialog).getByText('NaN%')).toBeInTheDocument();
   });
 
-  it('should render the "Show percentages on risk cards" checkbox based on the store value (unchecked)', async () => {
+  it('should render the "Show untested plugins" checkbox based on the store value (unchecked)', async () => {
     const user = userEvent.setup();
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
+      showUntestedPlugins: false,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
-    render(<ReportSettingsDialogButton />);
+
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
-    const checkbox = screen.getByLabelText('Show percentages on risk cards') as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Show untested plugins',
+    });
+    expect(checkbox).toHaveAttribute('data-state', 'unchecked');
   });
 
-  it('should render the "Show percentages on risk cards" checkbox based on the store value (checked)', async () => {
+  it('should call setShowUntestedPlugins when the "Show untested plugins" checkbox is toggled', async () => {
     const user = userEvent.setup();
     mockUseReportStore.mockReturnValue({
-      showPercentagesOnRiskCards: true,
-      setShowPercentagesOnRiskCards: mockSetShowPercentagesOnRiskCards,
+      showUntestedPlugins: false,
+      setShowUntestedPlugins: mockSetShowUntestedPlugins,
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: mockSetPluginPassRateThreshold,
     });
-    render(<ReportSettingsDialogButton />);
+
+    renderWithProviders(<ReportSettingsDialogButton />);
 
     const settingsButton = screen.getByLabelText('settings');
     await user.click(settingsButton);
 
-    const checkbox = screen.getByLabelText('Show percentages on risk cards') as HTMLInputElement;
-    expect(checkbox.checked).toBe(true);
+    const checkbox = screen.getByRole('checkbox', {
+      name: 'Show untested plugins',
+    });
+    await user.click(checkbox);
+
+    expect(mockSetShowUntestedPlugins).toHaveBeenCalledWith(true);
   });
 });

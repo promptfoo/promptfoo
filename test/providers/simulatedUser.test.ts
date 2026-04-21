@@ -1,6 +1,12 @@
+import dedent from 'dedent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import * as timeUtils from '../../src/util/time';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../factories/provider';
 
 import type { ApiProvider } from '../../src/types/index';
 
@@ -31,21 +37,21 @@ vi.mock('../../src/providers/promptfoo', async (importOriginal) => {
 
 describe('SimulatedUser', () => {
   let simulatedUser: SimulatedUser;
-  let originalProvider: ApiProvider;
+  let originalProvider: MockApiProvider;
 
   beforeEach(() => {
     mockUserProviderCallApi.mockClear();
     mockUserProviderCallApi.mockResolvedValue({ output: 'user response' });
 
-    originalProvider = {
-      id: () => 'test-agent',
-      callApi: vi.fn().mockImplementation(async function () {
+    originalProvider = createMockProvider({
+      id: 'test-agent',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function () {
         return {
           output: 'agent response',
           tokenUsage: { numRequests: 1 },
         };
       }),
-    };
+    });
 
     simulatedUser = new SimulatedUser({
       id: 'test-agent',
@@ -107,19 +113,17 @@ describe('SimulatedUser', () => {
         });
 
       // Agent provider returns token usage
-      const agentWithTokenUsage = {
-        id: () => 'test-agent',
-        callApi: vi
-          .fn()
-          .mockResolvedValueOnce({
-            output: 'agent response 1',
-            tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
-          })
-          .mockResolvedValueOnce({
-            output: 'agent response 2',
-            tokenUsage: { prompt: 25, completion: 15, total: 40, numRequests: 1 },
-          }),
-      };
+      const agentWithTokenUsage = createMockProvider({ id: 'test-agent' });
+      agentWithTokenUsage.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: 'agent response 1',
+          tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'agent response 2',
+          tokenUsage: { prompt: 25, completion: 15, total: 40, numRequests: 1 },
+        });
 
       const result = await simulatedUser.callApi('test prompt', {
         originalProvider: agentWithTokenUsage,
@@ -185,6 +189,26 @@ describe('SimulatedUser', () => {
       expect(timeUtils.sleep).not.toHaveBeenCalled();
     });
 
+    it('should handle ###STOP### on first turn without crashing (agentResponse undefined)', async () => {
+      // This tests the edge case from GitHub issue #7101
+      // When the simulated user returns ###STOP### on the very first turn,
+      // agentResponse is never set and would be undefined
+      mockUserProviderCallApi.mockResolvedValueOnce({ output: '###STOP###' });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      // Should complete without crashing
+      expect(result.output).toBeDefined();
+      // The target provider should never have been called
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(0);
+      // guardrails should be undefined but not crash
+      expect(result.guardrails).toBeUndefined();
+    });
+
     it('should throw error if originalProvider is not provided', async () => {
       await expect(
         simulatedUser.callApi('test', {
@@ -222,6 +246,28 @@ describe('SimulatedUser', () => {
       );
     });
 
+    it('should keep using the original provider when target calls mutate context', async () => {
+      const mutatingProvider = createMockProvider({
+        id: 'mutating-provider',
+        callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
+          delete context?.originalProvider;
+          return {
+            output: 'agent response',
+            tokenUsage: { numRequests: 1 },
+          };
+        }),
+      });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: mutatingProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.output).toBeDefined();
+      expect(mutatingProvider.callApi).toHaveBeenCalledTimes(2);
+    });
+
     it('should handle provider delay', async () => {
       const providerWithDelay = {
         ...originalProvider,
@@ -244,16 +290,16 @@ describe('SimulatedUser', () => {
     });
 
     it('should include sessionId from agentResponse in metadata', async () => {
-      const providerWithSessionId = {
-        id: () => 'test-agent',
-        callApi: vi.fn().mockImplementation(async function () {
+      const providerWithSessionId = createMockProvider({
+        id: 'test-agent',
+        callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function () {
           return {
             output: 'agent response',
             sessionId: 'test-session-123',
             tokenUsage: { numRequests: 1 },
           };
         }),
-      };
+      });
 
       const result = await simulatedUser.callApi('test prompt', {
         originalProvider: providerWithSessionId,
@@ -277,16 +323,16 @@ describe('SimulatedUser', () => {
     });
 
     it('should prioritize agentResponse.sessionId over context.vars.sessionId', async () => {
-      const providerWithSessionId = {
-        id: () => 'test-agent',
-        callApi: vi.fn().mockImplementation(async function () {
+      const providerWithSessionId = createMockProvider({
+        id: 'test-agent',
+        callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function () {
           return {
             output: 'agent response',
             sessionId: 'response-session-priority',
             tokenUsage: { numRequests: 1 },
           };
         }),
-      };
+      });
 
       const result = await simulatedUser.callApi('test prompt', {
         originalProvider: providerWithSessionId,
@@ -329,6 +375,33 @@ describe('SimulatedUser', () => {
   });
 
   describe('prompt handling', () => {
+    it('should use the rendered prompt for prompt functions', async () => {
+      const renderedPrompt = 'Always respond in 10 words or less';
+      const sourcePrompt = dedent`
+        from system_prompt import my_prompt
+
+        def create_prompt(context):
+            return my_prompt
+      `;
+
+      await simulatedUser.callApi(renderedPrompt, {
+        originalProvider,
+        vars: { instructions: 'test user instructions' },
+        prompt: {
+          raw: sourcePrompt,
+          display: sourcePrompt,
+          label: 'generate_prompt.py:create_prompt',
+          function: async () => renderedPrompt,
+        },
+      });
+
+      const firstCall = vi.mocked(originalProvider.callApi).mock.calls[0];
+      const promptArg = firstCall[0] as string;
+
+      expect(promptArg).toContain(renderedPrompt);
+      expect(promptArg).not.toContain('from system_prompt import my_prompt');
+    });
+
     it('should include the assistant prompt/instructions when calling the agent', async () => {
       const assistantPrompt =
         'You are a helpful assistant. You must follow these specific instructions.';
@@ -351,25 +424,23 @@ describe('SimulatedUser', () => {
     });
 
     it('should include system prompt on first turn only for stateful providers', async () => {
-      const providerWithSessionId = {
-        id: () => 'test-agent',
-        callApi: vi
-          .fn()
-          .mockImplementationOnce(async function () {
-            return {
-              output: 'first response',
-              sessionId: 'session-123',
-              tokenUsage: { numRequests: 1 },
-            };
-          })
-          .mockImplementationOnce(async function () {
-            return {
-              output: 'second response',
-              sessionId: 'session-123',
-              tokenUsage: { numRequests: 1 },
-            };
-          }),
-      };
+      const providerWithSessionId = createMockProvider({ id: 'test-agent' });
+      providerWithSessionId.callApi
+        .mockReset()
+        .mockImplementationOnce(async function () {
+          return {
+            output: 'first response',
+            sessionId: 'session-123',
+            tokenUsage: { numRequests: 1 },
+          };
+        })
+        .mockImplementationOnce(async function () {
+          return {
+            output: 'second response',
+            sessionId: 'session-123',
+            tokenUsage: { numRequests: 1 },
+          };
+        });
 
       const statefulUser = new SimulatedUser({
         id: 'stateful-agent',
@@ -1037,13 +1108,13 @@ describe('SimulatedUser', () => {
 
   describe('error handling', () => {
     it('should return error when agent provider returns error in main loop', async () => {
-      const errorProvider = {
-        id: () => 'error-agent',
-        callApi: vi.fn().mockResolvedValue({
+      const errorProvider = createMockProvider({
+        id: 'error-agent',
+        response: createProviderResponse({
           error: 'Model not found: invalid-model',
           output: undefined,
         }),
-      };
+      });
 
       const result = await simulatedUser.callApi('test prompt', {
         originalProvider: errorProvider,
@@ -1056,13 +1127,13 @@ describe('SimulatedUser', () => {
     });
 
     it('should return error when agent provider returns error with initial messages ending in user', async () => {
-      const errorProvider = {
-        id: () => 'error-agent',
-        callApi: vi.fn().mockResolvedValue({
+      const errorProvider = createMockProvider({
+        id: 'error-agent',
+        response: createProviderResponse({
           error: 'API rate limit exceeded',
           output: undefined,
         }),
-      };
+      });
 
       const initialMessages = [{ role: 'user' as const, content: 'Hello' }];
 
@@ -1080,13 +1151,13 @@ describe('SimulatedUser', () => {
     });
 
     it('should return error on first turn failure and not continue conversation', async () => {
-      const errorProvider = {
-        id: () => 'error-agent',
-        callApi: vi.fn().mockResolvedValue({
+      const errorProvider = createMockProvider({
+        id: 'error-agent',
+        response: createProviderResponse({
           error: 'Connection timeout',
           output: undefined,
         }),
-      };
+      });
 
       const userWithMultipleTurns = new SimulatedUser({
         config: {
@@ -1107,19 +1178,17 @@ describe('SimulatedUser', () => {
     });
 
     it('should return error on second turn when first succeeds but second fails', async () => {
-      const partialErrorProvider = {
-        id: () => 'partial-error-agent',
-        callApi: vi
-          .fn()
-          .mockResolvedValueOnce({
-            output: 'first response',
-            tokenUsage: { numRequests: 1 },
-          })
-          .mockResolvedValueOnce({
-            error: 'Rate limit exceeded',
-            output: undefined,
-          }),
-      };
+      const partialErrorProvider = createMockProvider({ id: 'partial-error-agent' });
+      partialErrorProvider.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: 'first response',
+          tokenUsage: { numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          error: 'Rate limit exceeded',
+          output: undefined,
+        });
 
       const result = await simulatedUser.callApi('test prompt', {
         originalProvider: partialErrorProvider,

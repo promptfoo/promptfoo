@@ -1,4 +1,6 @@
 import dedent from 'dedent';
+import { isBasicRefusal } from '../../util';
+import { RedteamGraderBase } from '../base';
 
 import type {
   ApiProvider,
@@ -7,8 +9,6 @@ import type {
   GradingResult,
   ResultSuggestion,
 } from '../../../types/index';
-import { isBasicRefusal } from '../../util';
-import { RedteamGraderBase } from '../base';
 
 export class CoppaGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:coppa';

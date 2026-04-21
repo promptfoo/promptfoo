@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test 10.1.2: CJS provider that uses require() internally
+# Bug #6468: require() resolution was broken in 0.120.0
+description: 'Regression test - CJS provider with require()'
+
+providers:
+  - file://../providers/cjs-with-require.js
+
+prompts:
+  - 'Test {{value}}'
+
+tests:
+  - vars:
+      value: RequireTest
+    assert:
+      - type: contains
+        value: 'Require Test:'
+      - type: contains
+        value: 'platform='
+      - type: contains
+        value: RequireTest

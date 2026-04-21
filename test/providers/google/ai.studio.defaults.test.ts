@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DefaultGradingProvider,
   DefaultGradingJsonProvider,
+  DefaultGradingProvider,
   DefaultLlmRubricProvider,
   DefaultSuggestionsProvider,
   DefaultSynthesizeProvider,

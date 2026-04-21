@@ -1,6 +1,37 @@
-import type { AzureModelCost } from './types';
+import type { AzureModelCost, AzureVideoSize } from './types';
 
 export const DEFAULT_AZURE_API_VERSION = '2024-12-01-preview';
+
+// =============================================================================
+// Video Generation Constants (Sora)
+// =============================================================================
+
+/**
+ * Default API version for Azure video generation
+ */
+export const DEFAULT_AZURE_VIDEO_API_VERSION = 'preview';
+
+/**
+ * Valid Azure Sora video dimensions (width x height)
+ */
+export const AZURE_VIDEO_DIMENSIONS: Record<AzureVideoSize, { width: number; height: number }> = {
+  '480x480': { width: 480, height: 480 },
+  '854x480': { width: 854, height: 480 },
+  '720x720': { width: 720, height: 720 },
+  '1280x720': { width: 1280, height: 720 },
+  '1080x1080': { width: 1080, height: 1080 },
+  '1920x1080': { width: 1920, height: 1080 },
+};
+
+/**
+ * Valid Azure Sora durations in seconds
+ */
+export const AZURE_VIDEO_DURATIONS = [5, 10, 15, 20] as const;
+
+/**
+ * Azure Sora cost per second (estimate - actual pricing from Azure documentation)
+ */
+export const AZURE_SORA_COST_PER_SECOND = 0.1;
 
 export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
@@ -22,6 +53,38 @@ export const AZURE_MODELS: AzureModelCost[] = [
   {
     id: 'gpt-5-pro-2025-10-06',
     cost: { input: 5 / 1000000, output: 20 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-2026-03-05',
+    cost: { input: 2.5 / 1000000, output: 10 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-pro',
+    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-pro-2026-03-05',
+    cost: { input: 5 / 1000000, output: 20 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-mini',
+    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-mini-2026-03-17',
+    cost: { input: 0.4 / 1000000, output: 1.6 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-nano',
+    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
+  },
+  {
+    id: 'gpt-5.4-nano-2026-03-17',
+    cost: { input: 0.1 / 1000000, output: 0.4 / 1000000 },
   },
   {
     id: 'gpt-5-mini',
@@ -418,6 +481,14 @@ export const AZURE_MODELS: AzureModelCost[] = [
     cost: { input: 1.25 / 1000000, output: 10 / 1000000 },
   },
   {
+    id: 'gpt-image-1.5',
+    cost: { input: 8 / 1000000, output: 32 / 1000000 },
+  },
+  {
+    id: 'gpt-image-1.5-2025-12-16',
+    cost: { input: 8 / 1000000, output: 32 / 1000000 },
+  },
+  {
     id: 'dall-e-3',
     cost: { input: 40 / 1000000, output: 40 / 1000000 },
   },
@@ -465,6 +536,22 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   // Anthropic Claude Models (via Azure AI Foundry)
   // =============================================================================
+  {
+    id: 'claude-opus-4-7',
+    cost: { input: 5 / 1000000, output: 25 / 1000000 },
+  },
+  {
+    id: 'claude-sonnet-4-6',
+    cost: { input: 3 / 1000000, output: 15 / 1000000 },
+  },
+  {
+    id: 'claude-opus-4-6',
+    cost: { input: 5 / 1000000, output: 25 / 1000000 },
+  },
+  {
+    id: 'claude-opus-4-6-20260205',
+    cost: { input: 5 / 1000000, output: 25 / 1000000 },
+  },
   {
     id: 'claude-opus-4-5',
     cost: { input: 5 / 1000000, output: 25 / 1000000 },
@@ -645,6 +732,10 @@ export const AZURE_MODELS: AzureModelCost[] = [
   // =============================================================================
   // Mistral Models (via Azure AI Foundry)
   // =============================================================================
+  {
+    id: 'Mistral-Large-3',
+    cost: { input: 0.5 / 1000000, output: 1.5 / 1000000 },
+  },
   {
     id: 'Mistral-Large-2411',
     cost: { input: 2 / 1000000, output: 6 / 1000000 },

@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ValidationError,
-  NotFoundError,
-  ConfigurationError,
-  ProviderError,
-  TimeoutError,
-  ServiceUnavailableError,
   AuthenticationError,
-  SharingError,
-  RateLimitError,
+  ConfigurationError,
   FileOperationError,
-  toMcpError,
   isMcpError,
+  NotFoundError,
+  ProviderError,
+  RateLimitError,
+  ServiceUnavailableError,
+  SharingError,
+  TimeoutError,
+  toMcpError,
+  ValidationError,
 } from '../../../../src/commands/mcp/lib/errors';
 
 describe('MCP Errors', () => {

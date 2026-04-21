@@ -7,14 +7,14 @@
  * both values (e.g., "15 passing (100 total)"). When no filters are active, filtered will be null.
  */
 
-import { useMemo, useCallback } from 'react';
-import type { PromptMetrics } from '@promptfoo/types';
+import { useCallback, useMemo } from 'react';
 
-import { useTableStore } from './store';
 import {
   deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
+import { useTableStore } from './store';
+import type { PromptMetrics } from '@promptfoo/types';
 
 export interface MetricValue {
   total: number;

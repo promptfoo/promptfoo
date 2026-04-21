@@ -22,7 +22,7 @@ keywords:
   ]
 date: 2025-10-06
 authors: [ian]
-tags: [safety, benchmarks, best-practices, evaluation]
+tags: [ai-safety, best-practices, evaluation]
 ---
 
 # Top 10 Open Datasets for LLM Safety, Toxicity & Bias Evaluation
@@ -197,7 +197,7 @@ Another important open resource is the Anthropic red-teaming dialogues dataset (
 
 **Relevance:** For LLM safety, ProsocialDialog fills the need for data on how a model should respond when the user is producing unsafe content. It's complementary to toxicity datasets—instead of detecting toxic output, it helps the model produce safer replies. This is crucial for chatbots that might face hate or extremist user inputs and need to answer responsibly.
 
-**Notable:** Developed by Allen Institute for AI; first large-scale multi-turn "problematic content" dialogue set (EMNLP 2022). It has also been used in the REALY benchmark and to train models like OpenAI's ChatGPT and others indirectly via public fine-tuning.
+**Notable:** Developed by Allen Institute for AI; first large-scale multi-turn "problematic content" dialogue set (EMNLP 2022). It has also been used in the REALLY benchmark and to train models like OpenAI's ChatGPT and others indirectly via public fine-tuning.
 
 **Licensing:** The data is open for use under a CC BY 4.0 license. You can download it from [Hugging Face](https://huggingface.co/datasets/allenai/prosocial-dialog) (hosted by AI2) or the authors' GitHub. By including explicit prosocial responses, this dataset is a go-to resource for making AI assistants not just safe by avoidance, but safe by positive engagement.
 

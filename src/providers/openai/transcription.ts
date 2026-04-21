@@ -1,17 +1,18 @@
 import fs from 'fs';
 import path from 'path';
+
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TRANSCRIPTION_MODELS } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 
 export interface OpenAiTranscriptionOptions {
   apiKey?: string;
@@ -66,9 +67,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     const config = {
@@ -239,9 +238,9 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           duration: durationSeconds,
           language: data.language,
           segments: data.segments?.length || 0,
-          ...(avgLogprob !== undefined ? { avgLogprob } : {}),
-          ...(avgCompressionRatio !== undefined ? { avgCompressionRatio } : {}),
-          ...(avgNoSpeechProb !== undefined ? { avgNoSpeechProb } : {}),
+          ...(avgLogprob === undefined ? {} : { avgLogprob }),
+          ...(avgCompressionRatio === undefined ? {} : { avgCompressionRatio }),
+          ...(avgNoSpeechProb === undefined ? {} : { avgNoSpeechProb }),
           ...(this.modelName.includes('diarize') && data.speakers
             ? { speakers: data.speakers }
             : {}),

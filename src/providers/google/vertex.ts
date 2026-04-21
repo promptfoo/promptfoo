@@ -1,39 +1,48 @@
-import path from 'path';
-
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { isJavascriptFile } from '../../util/fileExtensions';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
-import { isValidJson } from '../../util/json';
-import { MCPClient } from '../mcp/client';
-import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import { fetchWithProxy } from '../../util/fetch/index';
+import { maybeLoadFromExternalFile } from '../../util/file';
+import { renderVarsInObject } from '../../util/index';
+import { isValidJson } from '../../util/json';
+import {
+  calculateAnthropicCost,
+  getTokenUsage,
+  isClaudeOpus47Model,
+  outputFromMessage,
+  parseMessages,
+} from '../anthropic/util';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import {
+  calculateGoogleCost,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
   loadCredentials,
   mergeParts,
-  normalizeTools,
+  normalizeSafetySettings,
+  parseConfigSystemInstruction,
   resolveProjectId,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
-  ApiProvider,
   CallApiContextParams,
   GuardrailResponse,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
+import type { ClaudeRequest, ClaudeResponse, ClaudeThinkingConfig } from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -58,68 +67,39 @@ function getVertexApiHost(
   );
 }
 
-class VertexGenericProvider implements ApiProvider {
-  modelName: string;
-
-  config: CompletionOptions;
-  env?: EnvOverrides;
-
-  constructor(
-    modelName: string,
-    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
-    const { config, id, env } = options;
-    this.env = env;
-    this.modelName = modelName;
-    this.config = config || {};
-    this.id = id ? () => id : this.id;
+/**
+ * Vertex AI provider for Gemini, Claude, Llama, and Palm2 models.
+ *
+ * Extends GoogleGenericProvider for shared functionality like MCP integration,
+ * authentication management, and resource cleanup.
+ */
+export class VertexChatProvider extends GoogleGenericProvider {
+  constructor(modelName: string, options: GoogleProviderOptions = {}) {
+    // Force vertex mode for Vertex AI provider
+    super(modelName, {
+      ...options,
+      config: { ...options.config, vertexai: true },
+    });
   }
 
-  id(): string {
-    return `vertex:${this.modelName}`;
-  }
-
-  toString(): string {
-    return `[Google Vertex Provider ${this.modelName}]`;
-  }
-
+  /**
+   * Get the Vertex AI API host based on region.
+   * Public for use by integrations like Adaline Gateway.
+   */
   getApiHost(): string {
-    return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
-  }
-
-  async getProjectId(): Promise<string> {
-    return await resolveProjectId(this.config, this.env);
-  }
-
-  getApiKey(): string | undefined {
+    const region = this.getRegion();
     return (
-      this.config.apiKey ||
-      this.env?.GEMINI_API_KEY ||
-      this.env?.VERTEX_API_KEY ||
-      getEnvString('GEMINI_API_KEY') ||
-      getEnvString('VERTEX_API_KEY')
+      this.config.apiHost ||
+      this.env?.VERTEX_API_HOST ||
+      getEnvString('VERTEX_API_HOST') ||
+      (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
     );
   }
 
-  getRegion(): string {
-    return (
-      this.config.region ||
-      this.env?.VERTEX_REGION ||
-      getEnvString('VERTEX_REGION') ||
-      'us-central1'
-    );
-  }
-
-  getPublisher(): string | undefined {
-    return (
-      this.config.publisher ||
-      this.env?.VERTEX_PUBLISHER ||
-      getEnvString('VERTEX_PUBLISHER') ||
-      'google'
-    );
-  }
-
-  getApiVersion(): string {
+  /**
+   * Get the API version for Vertex AI.
+   */
+  private getApiVersion(): string {
     return (
       this.config.apiVersion ||
       this.env?.VERTEX_API_VERSION ||
@@ -129,41 +109,109 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   /**
-   * Helper method to get Google client with credentials support
+   * Get the publisher for the model.
+   */
+  private getPublisher(): string {
+    return (
+      this.config.publisher ||
+      this.env?.VERTEX_PUBLISHER ||
+      getEnvString('VERTEX_PUBLISHER') ||
+      'google'
+    );
+  }
+
+  /**
+   * Get the API endpoint URL for Vertex AI.
+   * Note: For Gemini, the actual endpoint is constructed dynamically based on mode.
+   */
+  getApiEndpoint(action?: string): string {
+    // This provides a default endpoint - actual endpoints are model-specific
+    const actionSuffix = action ? `:${action}` : '';
+    return `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}${actionSuffix}`;
+  }
+
+  /**
+   * Get authentication headers for Vertex AI.
+   * For OAuth mode, this returns minimal headers; the client handles auth.
+   * For express mode, the API key is passed via x-goog-api-key header for improved security.
+   */
+  async getAuthHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...this.config.headers,
+    };
+
+    // In express mode, add the API key to headers
+    if (this.isExpressMode()) {
+      const apiKey = this.getApiKey();
+      if (apiKey) {
+        headers['x-goog-api-key'] = apiKey;
+      }
+    }
+
+    return headers;
+  }
+
+  /**
+   * Helper method to get Google client with credentials support.
+   * Public for use by integrations like Adaline Gateway.
    */
   async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({ credentials });
+    const { client } = await getGoogleClient({
+      credentials,
+      googleAuthOptions: this.config.googleAuthOptions,
+      scopes: this.config.scopes,
+      keyFilename: this.config.keyFilename,
+    });
     return client;
   }
 
-  // @ts-ignore: Prompt is not used in this implementation
-  async callApi(_prompt: string): Promise<ProviderResponse> {
-    throw new Error('Not implemented');
-  }
-}
-
-export class VertexChatProvider extends VertexGenericProvider {
-  private mcpClient: MCPClient | null = null;
-  private initializationPromise: Promise<void> | null = null;
-  private loadedFunctionCallbacks: Record<string, Function> = {};
-
-  constructor(
-    modelName: string,
-    options: { config?: CompletionOptions; id?: string; env?: EnvOverrides } = {},
-  ) {
-    super(modelName, options);
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-    }
-  }
-
-  private async initializeMCP(): Promise<void> {
-    this.mcpClient = new MCPClient(this.config.mcp!);
-    await this.mcpClient.initialize();
-  }
-
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Determine the system based on model name
+    const system = this.modelName.includes('claude')
+      ? 'vertex:anthropic'
+      : this.modelName.includes('gemini')
+        ? 'vertex:gemini'
+        : this.modelName.includes('llama')
+          ? 'vertex:llama'
+          : 'vertex:palm2';
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system,
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.topP,
+      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
       return this.callClaudeApi(prompt, context);
     } else if (this.modelName.includes('gemini')) {
@@ -174,32 +222,81 @@ export class VertexChatProvider extends VertexGenericProvider {
     return this.callPalm2Api(prompt);
   }
 
-  async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: prompt,
-          },
-        ],
-      },
-    ]);
+  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Support YAML chat prompts (legacy format used by parseChatPrompt)
+    let normalizedPrompt = prompt;
+    if (prompt.trim().startsWith('- role:')) {
+      try {
+        const yaml = await import('js-yaml');
+        const parsed = yaml.default.load(prompt);
+        normalizedPrompt = JSON.stringify(parsed);
+      } catch (err) {
+        return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };
+      }
+    }
+
+    const { system, extractedMessages, thinking } = parseMessages(normalizedPrompt);
+
+    // Merge config.systemInstruction (if set) with the system instruction extracted from the prompt.
+    let mergedSystem = system;
+    const parsedConfigInstruction = parseConfigSystemInstruction(
+      this.config.systemInstruction,
+      context?.vars,
+    );
+    if (parsedConfigInstruction) {
+      const configSystemBlocks: Array<{ type: 'text'; text: string }> = [];
+      for (const part of parsedConfigInstruction.parts) {
+        if (part.text) {
+          configSystemBlocks.push({ type: 'text', text: part.text });
+        }
+      }
+      if (configSystemBlocks.length > 0) {
+        mergedSystem = [...configSystemBlocks, ...(mergedSystem || [])];
+      }
+    }
+
+    const thinkingConfig: ClaudeThinkingConfig | undefined =
+      this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
+    const isThinkingEnabled = thinkingConfig?.type === 'enabled';
+
+    let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
+    if (!maxTokens) {
+      maxTokens = isThinkingEnabled ? 2048 : 512;
+    }
+    // Claude requires max_tokens >= budget_tokens when thinking is enabled
+    if (
+      isThinkingEnabled &&
+      thinkingConfig?.budget_tokens &&
+      maxTokens < thinkingConfig.budget_tokens
+    ) {
+      maxTokens = thinkingConfig.budget_tokens + 1024;
+    }
+
+    // Claude Opus 4.7 deprecates `temperature` at the model level — the
+    // underlying Anthropic API returns 400 for any request that includes it.
+    // Vertex forwards the request body verbatim to rawPredict, so suppress
+    // the field here too.
+    const resolvedTemperature = isClaudeOpus47Model(this.modelName)
+      ? undefined
+      : this.config.temperature;
 
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
-      max_tokens: this.config.max_tokens || this.config.maxOutputTokens || 512,
-      temperature: this.config.temperature,
+      max_tokens: maxTokens,
+      temperature: resolvedTemperature,
       top_p: this.config.top_p || this.config.topP,
       top_k: this.config.top_k || this.config.topK,
-      messages,
+      ...(mergedSystem ? { system: mergedSystem } : {}),
+      ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
+      messages: extractedMessages as ClaudeRequest['messages'],
     };
 
+    const showThinking = this.config.showThinking ?? isThinkingEnabled;
+
     const cache = await getCache();
-    const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
+    const cacheKey = `vertex:claude:${this.modelName}:showThinking=${showThinking}:${JSON.stringify(body)}`;
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -247,15 +344,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
 
     try {
-      // Extract the text from the response
-      let output = '';
-      if (data.content && data.content.length > 0) {
-        for (const part of data.content) {
-          if (part.type === 'text') {
-            output += part.text;
-          }
-        }
-      }
+      const output = outputFromMessage(data as any, showThinking);
 
       if (!output) {
         return {
@@ -263,18 +352,24 @@ export class VertexChatProvider extends VertexGenericProvider {
         };
       }
 
-      // Extract token usage information
       const tokenUsage: TokenUsage = {
-        total: data.usage.input_tokens + data.usage.output_tokens || 0,
-        prompt: data.usage.input_tokens || 0,
-        completion: data.usage.output_tokens || 0,
+        ...getTokenUsage(data, false),
         numRequests: 1,
       };
+
+      // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
+      const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
 
       const response = {
         cached: false,
         output,
         tokenUsage,
+        cost: calculateAnthropicCost(
+          normalizedModelName,
+          this.config,
+          data.usage?.input_tokens,
+          data.usage?.output_tokens,
+        ),
       };
 
       if (isCacheEnabled()) {
@@ -289,8 +384,37 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
+  /**
+   * Check if express mode should be used (API key without OAuth).
+   * Express mode uses a simplified endpoint format without project/location.
+   *
+   * Express mode is automatic when an API key is available - users don't need
+   * to think about it. Just provide an API key and it works.
+   *
+   * Express mode is used when:
+   * 1. API key is available (VERTEX_API_KEY, GOOGLE_API_KEY, or config.apiKey)
+   * 2. User hasn't explicitly disabled it with `expressMode: false`
+   * 3. No OAuth/ADC credentials are configured (OAuth takes priority)
+   */
+  private isExpressMode(): boolean {
+    const hasApiKey = Boolean(this.getApiKey());
+    const explicitlyDisabled = this.config.expressMode === false;
+
+    // Check if OAuth/ADC credentials are explicitly configured - they take priority
+    const hasOAuthConfig = Boolean(
+      this.config.credentials ||
+        this.config.keyFilename ||
+        this.config.googleAuthOptions?.keyFilename ||
+        this.config.googleAuthOptions?.credentials,
+    );
+
+    // Auto-enable express mode when API key is available AND no OAuth config
+    // OAuth credentials take priority over express mode
+    return hasApiKey && !explicitlyDisabled && !hasOAuthConfig;
+  }
+
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       await this.initializationPromise;
     }
 
@@ -307,16 +431,9 @@ export class VertexChatProvider extends VertexGenericProvider {
       config.systemInstruction,
       { useAssistantRole: config.useAssistantRole },
     );
-    // --- MCP tool injection logic ---
-    const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const fileTools = config.tools
-      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
-      : [];
-    const allTools = [
-      ...mcpTools,
-      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
-    ];
-    // --- End MCP tool injection logic ---
+
+    // Get all tools (MCP + config tools) using base class method
+    const allTools = await this.getAllTools(context);
     // https://ai.google.dev/api/rest/v1/models/streamGenerateContent
     const body = {
       contents: contents as GeminiFormat,
@@ -330,7 +447,9 @@ export class VertexChatProvider extends VertexGenericProvider {
         topK: config.topK,
         ...config.generationConfig,
       },
-      ...(config.safetySettings ? { safetySettings: config.safetySettings } : {}),
+      ...(config.safetySettings
+        ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
+        : {}),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
@@ -396,23 +515,48 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (response === undefined) {
       let data;
       try {
-        const client = await this.getClientWithCredentials();
-        const projectId = await this.getProjectId();
         // Default to non-streaming (generateContent) since:
         // 1. Model Armor floor settings only work with non-streaming endpoint
         // 2. Promptfoo collects full responses for evaluation anyway
         // Set streaming: true to use streamGenerateContent if needed
         const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-          this.modelName
-        }:${endpoint}`;
-        const res = await client.request({
-          url,
-          method: 'POST',
-          data: body,
-          timeout: REQUEST_TIMEOUT_MS,
-        });
-        data = res.data as GeminiApiResponse;
+
+        // Check if we should use express mode (API key without OAuth)
+        if (this.isExpressMode()) {
+          // Express mode: use simplified endpoint with API key in header
+          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+
+          const res = await fetchWithProxy(url, {
+            method: 'POST',
+            headers: await this.getAuthHeaders(),
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
+            return {
+              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+            };
+          }
+
+          data = (await res.json()) as GeminiApiResponse;
+        } else {
+          // Standard mode: use OAuth and full endpoint
+          const client = await this.getClientWithCredentials();
+          const projectId = await this.getProjectId();
+          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+            this.modelName
+          }:${endpoint}`;
+          const res = await client.request({
+            url,
+            method: 'POST',
+            data: body,
+            timeout: REQUEST_TIMEOUT_MS,
+          });
+          data = res.data as GeminiApiResponse;
+        }
       } catch (err) {
         const geminiError = err as GaxiosError;
         if (
@@ -522,25 +666,17 @@ export class VertexChatProvider extends VertexGenericProvider {
             }
             return { error: finishReason, guardrails };
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
-            // Concatenate the text generated so far before returning
+            // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
               output = mergeParts(output, formatCandidateContents(candidate));
             }
             const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
-            const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
-            const truncatedOutput =
-              outputStr && outputStr.length > 500
-                ? `${outputStr.slice(0, 500)}... (truncated)`
-                : outputStr || '';
-            logger.error(`Gemini API: MAX_TOKENS reached`, {
+            logger.debug(`Gemini API: MAX_TOKENS reached`, {
               finishReason: candidate.finishReason,
               outputTokens,
               totalTokens: datum.usageMetadata?.totalTokenCount || 0,
             });
-            return {
-              // Prompt and thinking tokens are not included in the token limit
-              error: `Gemini API error due to reaching maximum token limit. ${outputTokens} output tokens used. Output generated: ${truncatedOutput}`,
-            };
+            // Continue processing - do not return error
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
             logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);
             // e.g. MALFORMED_FUNCTION_CALL
@@ -557,22 +693,39 @@ export class VertexChatProvider extends VertexGenericProvider {
         }
 
         const lastData = dataWithResponse[dataWithResponse.length - 1];
+        const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
+        const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
+        const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: lastData.usageMetadata?.promptTokenCount || 0,
-          completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-          ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+          prompt: promptTokenCount || 0,
+          completion: completionTokenCount || 0,
+          ...(thoughtsTokenCount !== undefined && {
             completionDetails: {
-              reasoning: lastData.usageMetadata.thoughtsTokenCount,
+              reasoning: thoughtsTokenCount,
               acceptedPrediction: 0,
               rejectedPrediction: 0,
             },
           }),
         };
+        // Include thinking tokens in output cost - Google bills them as output tokens
+        const completionForCost =
+          completionTokenCount == null
+            ? undefined
+            : completionTokenCount + (thoughtsTokenCount ?? 0);
+        const cost = calculateGoogleCost(
+          this.modelName,
+          config,
+          promptTokenCount,
+          completionForCost,
+          true,
+        );
+
         response = {
           cached: false,
           output,
           tokenUsage,
+          cost,
           metadata: {},
         };
 
@@ -638,9 +791,8 @@ export class VertexChatProvider extends VertexGenericProvider {
           }
           if (results.length > 0) {
             response = {
-              cached: response.cached,
+              ...response,
               output: results.join('\n'),
-              tokenUsage: response.tokenUsage,
             };
           }
         }
@@ -670,7 +822,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       parameters: {
         context: this.config.context,
         examples: this.config.examples,
-        safetySettings: this.config.safetySettings,
+        safetySettings: normalizeSafetySettings(this.config.safetySettings),
         stopSequences: this.config.stopSequences,
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxOutputTokens,
@@ -703,7 +855,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
         this.modelName
       }:predict`;
-      const res = await client.request<Palm2ApiResponse>({
+      const res = await client.request({
         url,
         method: 'POST',
         headers: {
@@ -712,7 +864,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         data: body,
         timeout: REQUEST_TIMEOUT_MS,
       });
-      data = res.data;
+      data = res.data as Palm2ApiResponse;
     } catch (err) {
       return {
         error: `API call error: ${JSON.stringify(err)}`,
@@ -725,7 +877,13 @@ export class VertexChatProvider extends VertexGenericProvider {
           error: `Error ${data.error.code}: ${data.error.message}`,
         };
       }
-      const output = data.predictions?.[0].candidates[0].content;
+      const prediction = data.predictions?.[0];
+      if (!prediction?.candidates?.length) {
+        return {
+          error: `No valid predictions returned from API: ${JSON.stringify(data)}`,
+        };
+      }
+      const output = prediction.candidates[0].content;
 
       const response = {
         output,
@@ -840,7 +998,7 @@ export class VertexChatProvider extends VertexGenericProvider {
       // Llama models use a different endpoint format
       const url = `https://${this.getRegion()}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${this.getRegion()}/endpoints/openapi/chat/completions`;
 
-      const res = await client.request<LlamaResponse>({
+      const res = await client.request({
         url,
         method: 'POST',
         headers: {
@@ -850,7 +1008,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         timeout: REQUEST_TIMEOUT_MS,
       });
 
-      data = res.data;
+      data = res.data as LlamaResponse;
       logger.debug(`Llama API response: ${JSON.stringify(data)}`);
     } catch (err) {
       const error = err as GaxiosError;
@@ -905,110 +1063,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
-  async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
-    }
-  }
-
-  /**
-   * Loads a function from an external file
-   * @param fileRef The file reference in the format 'file://path/to/file:functionName'
-   * @returns The loaded function
-   */
-  private async loadExternalFunction(fileRef: string): Promise<Function> {
-    let filePath = fileRef.slice('file://'.length);
-    let functionName: string | undefined;
-
-    if (filePath.includes(':')) {
-      const splits = filePath.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filePath, functionName] = splits;
-      }
-    }
-
-    try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      logger.debug(
-        `Loading function from ${resolvedPath}${functionName ? `:${functionName}` : ''}`,
-      );
-
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
-      } else if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
-    }
-  }
-
-  /**
-   * Executes a function callback with proper error handling
-   */
-  private async executeFunctionCallback(
-    functionName: string,
-    args: string,
-    config: any,
-  ): Promise<any> {
-    try {
-      // Check if we've already loaded this function
-      let callback = this.loadedFunctionCallbacks[functionName];
-
-      // If not loaded yet, try to load it now
-      if (!callback) {
-        const callbackRef = config.functionToolCallbacks?.[functionName];
-
-        if (callbackRef && typeof callbackRef === 'string') {
-          const callbackStr: string = callbackRef;
-          if (callbackStr.startsWith('file://')) {
-            callback = await this.loadExternalFunction(callbackStr);
-          } else {
-            callback = new Function('return ' + callbackStr)();
-          }
-
-          // Cache for future use
-          this.loadedFunctionCallbacks[functionName] = callback;
-        } else if (typeof callbackRef === 'function') {
-          callback = callbackRef;
-          this.loadedFunctionCallbacks[functionName] = callback;
-        }
-      }
-
-      if (!callback) {
-        throw new Error(`No callback found for function '${functionName}'`);
-      }
-
-      // Execute the callback
-      logger.debug(`Executing function '${functionName}' with args: ${args}`);
-      const result = await callback(args);
-
-      return result;
-    } catch (error: any) {
-      logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
-      throw error; // Re-throw so caller can handle fallback behavior
-    }
-  }
+  // cleanup() is inherited from GoogleGenericProvider
 }
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
@@ -1027,7 +1082,12 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
    */
   async getClientWithCredentials() {
     const credentials = loadCredentials(this.config.credentials);
-    const { client } = await getGoogleClient({ credentials });
+    const { client } = await getGoogleClient({
+      credentials,
+      googleAuthOptions: this.config.googleAuthOptions,
+      scopes: this.config.scopes,
+      keyFilename: this.config.keyFilename,
+    });
     return client;
   }
 
@@ -1071,7 +1131,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;
-      const res = await client.request<any>({
+      const res = await client.request({
         url,
         method: 'POST',
         data: body,
@@ -1084,22 +1144,23 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
     logger.debug(`Vertex embeddings API response: ${JSON.stringify(data)}`);
 
-    try {
-      const embedding = data.predictions[0].embeddings.values;
-      const tokenCount = data.predictions[0].embeddings.statistics.token_count;
-      return {
-        embedding,
-        tokenUsage: {
-          total: tokenCount,
-          numRequests: 1,
-        },
-      };
-    } catch (err) {
-      logger.error(`Error parsing Vertex embeddings API response: ${err}`);
-      throw err;
+    const prediction = data.predictions?.[0];
+    const embeddingData = prediction?.embeddings;
+    if (!embeddingData?.values) {
+      const errorMsg = `No valid embeddings returned from API: ${JSON.stringify(data)}`;
+      logger.error(errorMsg);
+      throw new Error(errorMsg);
     }
+
+    return {
+      embedding: embeddingData.values,
+      tokenUsage: {
+        total: embeddingData.statistics?.token_count ?? 0,
+        numRequests: 1,
+      },
+    };
   }
 }
 
 export const DefaultGradingProvider = new VertexChatProvider('gemini-2.5-pro');
-export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');
+export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('gemini-embedding-001');

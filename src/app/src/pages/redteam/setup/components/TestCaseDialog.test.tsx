@@ -1,10 +1,18 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
-import { TestCaseGenerateButton, TestCaseDialog } from './TestCaseDialog';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { TestCaseDialog, TestCaseGenerateButton } from './TestCaseDialog';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
+
+// Helper to render with TooltipProvider
+const renderWithTooltipProvider = (ui: React.ReactElement) => {
+  return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
+};
+
+// Alias for tests that use renderWithTheme
+const renderWithTheme = renderWithTooltipProvider;
 
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn(
@@ -21,12 +29,6 @@ import { useApiHealth } from '@app/hooks/useApiHealth';
 
 const mockUseApiHealth = useApiHealth as unknown as Mock;
 
-// Helper function to render with theme
-const renderWithTheme = (component: React.ReactNode) => {
-  const theme = createTheme();
-  return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
-};
-
 describe('TestCaseGenerateButton', () => {
   const mockOnClick = vi.fn();
 
@@ -41,7 +43,9 @@ describe('TestCaseGenerateButton', () => {
 
   describe('Controlled tooltip functionality', () => {
     it('should not render tooltip initially', () => {
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />);
+      renderWithTooltipProvider(
+        <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
+      );
 
       const tooltip = screen.queryByRole('tooltip');
       expect(tooltip).not.toBeInTheDocument();
@@ -49,69 +53,56 @@ describe('TestCaseGenerateButton', () => {
 
     it('should show tooltip on mouse enter', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />);
+      renderWithTooltipProvider(
+        <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
+      );
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
 
-      await waitFor(() => {
-        const tooltip = screen.getByRole('tooltip');
-        expect(tooltip).toBeInTheDocument();
-        expect(tooltip).toHaveTextContent('Test tooltip');
-      });
+      const tooltip = screen.getByRole('tooltip');
+      expect(tooltip).toBeInTheDocument();
+      expect(tooltip).toHaveTextContent('Test tooltip');
     });
 
     it('should hide tooltip on mouse leave', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />);
+      renderWithTooltipProvider(
+        <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
+      );
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       await user.unhover(iconButton);
-
-      await waitFor(() => {
-        const tooltip = screen.queryByRole('tooltip');
-        expect(tooltip).not.toBeInTheDocument();
-      });
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
 
     it('should hide tooltip when button is clicked', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />);
+      renderWithTooltipProvider(
+        <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
+      );
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       await user.click(iconButton);
-
-      await waitFor(() => {
-        const tooltip = screen.queryByRole('tooltip');
-        expect(tooltip).not.toBeInTheDocument();
-      });
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
       expect(mockOnClick).toHaveBeenCalledTimes(1);
     });
 
     it('should display default tooltip title when tooltipTitle prop is not provided', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} />);
+      renderWithTooltipProvider(<TestCaseGenerateButton onClick={mockOnClick} />);
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
 
-      await waitFor(() => {
-        const tooltip = screen.getByRole('tooltip');
-        expect(tooltip).toHaveTextContent('Generate test case');
-      });
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Generate test case');
     });
 
     it('should display "Requires Promptfoo Cloud connection" tooltip when API is not connected', async () => {
@@ -122,58 +113,46 @@ describe('TestCaseGenerateButton', () => {
         isLoading: false,
       });
 
-      renderWithTheme(
+      renderWithTooltipProvider(
         <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Custom tooltip" />,
       );
 
       const iconButton = screen.getByRole('button');
       expect(iconButton).toBeDisabled();
 
-      // The button is wrapped in a span, so we can hover over the span to trigger the tooltip
-      const spanWrapper = iconButton.parentElement;
-      expect(spanWrapper).toBeInTheDocument();
-      expect(spanWrapper?.tagName).toBe('SPAN');
-
-      await user.hover(spanWrapper!);
+      await user.hover(iconButton);
 
       await waitFor(() => {
-        const tooltip = screen.getByRole('tooltip');
-        expect(tooltip).toHaveTextContent('Requires Promptfoo Cloud connection');
+        expect(screen.getByRole('tooltip')).toHaveTextContent(
+          'Requires Promptfoo Cloud connection',
+        );
       });
     });
 
     it('should maintain tooltip state independently across multiple hover/unhover cycles', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />);
+      renderWithTooltipProvider(
+        <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />,
+      );
 
       const iconButton = screen.getByRole('button');
 
-      // First hover cycle
       await user.hover(iconButton);
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       await user.unhover(iconButton);
-      await waitFor(() => {
-        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-      });
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
-      // Second hover cycle
       await user.hover(iconButton);
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       await user.unhover(iconButton);
-      await waitFor(() => {
-        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-      });
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
 
     it('should close tooltip via onClose handler when clicking outside', async () => {
       const user = userEvent.setup();
-      renderWithTheme(
+      renderWithTooltipProvider(
         <div>
           <div data-testid="outside-element">Outside element</div>
           <TestCaseGenerateButton onClick={mockOnClick} tooltipTitle="Test tooltip" />
@@ -182,10 +161,7 @@ describe('TestCaseGenerateButton', () => {
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       // Click outside the button, which should trigger Tooltip's onClose handler
       const outsideElement = screen.getByTestId('outside-element');
@@ -200,7 +176,7 @@ describe('TestCaseGenerateButton', () => {
   describe('Button interactions', () => {
     it('should call onClick handler when button is clicked', async () => {
       const user = userEvent.setup();
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} />);
+      renderWithTooltipProvider(<TestCaseGenerateButton onClick={mockOnClick} />);
 
       const iconButton = screen.getByRole('button');
       await user.click(iconButton);
@@ -209,7 +185,7 @@ describe('TestCaseGenerateButton', () => {
     });
 
     it('should be disabled when disabled prop is true', () => {
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} disabled={true} />);
+      renderWithTooltipProvider(<TestCaseGenerateButton onClick={mockOnClick} disabled={true} />);
 
       const iconButton = screen.getByRole('button');
       expect(iconButton).toBeDisabled();
@@ -222,7 +198,7 @@ describe('TestCaseGenerateButton', () => {
         isLoading: false,
       });
 
-      renderWithTheme(<TestCaseGenerateButton onClick={mockOnClick} />);
+      renderWithTooltipProvider(<TestCaseGenerateButton onClick={mockOnClick} />);
 
       const iconButton = screen.getByRole('button');
       expect(iconButton).toBeDisabled();
@@ -287,7 +263,6 @@ describe('TestCaseDialog', () => {
 
       // Plugin dropdown should be directly visible (not behind a popover)
       expect(screen.getByTestId('plugin-dropdown')).toBeInTheDocument();
-      expect(screen.getByLabelText('Plugin')).toBeInTheDocument();
     });
 
     it('should NOT show plugin dropdown when allowPluginChange is false', () => {
