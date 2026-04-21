@@ -1,0 +1,2 @@
+id: '{{env.SMOKE_PROVIDER_PART1}}{{env.SMOKE_PROVIDER_PART2}}'
+label: '{{env.SMOKE_PROVIDER_LABEL}}'

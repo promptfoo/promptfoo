@@ -1,6 +1,4 @@
-export const SITE_CONSTANTS = {
-  USER_COUNT_DISPLAY: '300,000',
-  USER_COUNT_SHORT: '300k',
-  FORTUNE_500_COUNT: 127,
-  GITHUB_STARS_DISPLAY: '9.9k',
-};
+import generatedStats from './.generated-stats.json';
+import siteStats from './site-stats.json';
+
+export const SITE_CONSTANTS = { ...siteStats, ...generatedStats };

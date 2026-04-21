@@ -95,8 +95,8 @@ assert:
   - type: is-json # Independent (always runs)
 ```
 
-- **Independent assertions**: Run in parallel (concurrency=3)
-- **Fallback chains**: Run sequentially within chain, but parallel with other chains
+- **Independent assertions**: Run normally and always contribute to the score
+- **Fallback chains**: Run sequentially within the chain and contribute only the final executed assertion
 
 ### Validation Rules
 
@@ -150,8 +150,8 @@ For a typical evaluation with 100 test cases:
 1. **Order by cost**: Put cheapest checks first
 2. **Order by specificity**: Put most specific checks first
 3. **Use weights wisely**: Fallback assertion weight is used, not primary weight
-4. **Test both paths**: Ensure both primary and fallback work correctly
-5. **Monitor bypassed assertions**: Check logs to see how often fallbacks trigger
+4. **Test both paths**: Include fixtures where the primary assertion passes and where the fallback runs
+5. **Keep final fallbacks broad**: Use model-graded judges as the last step when deterministic checks are too strict
 
 ## Related Features
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../src/assertions';
 
-import type { Assertion, AtomicTestCase, ProviderResponse } from '../../src/types';
+import type { Assertion, AssertionOrSet, AtomicTestCase, ProviderResponse } from '../../src/types';
 
 // Mock dependencies
 vi.mock('../../src/cliState', () => ({
@@ -24,14 +24,14 @@ describe('Assertion Fallback Mechanism', () => {
     tokenUsage: { total: 10, prompt: 5, completion: 5 },
   };
 
-  const createTestCase = (assertions: Assertion[]): AtomicTestCase => ({
+  const createTestCase = (assertions: AssertionOrSet[]): AtomicTestCase => ({
     assert: assertions,
     vars: {},
   });
 
   describe('Basic Fallback Chain', () => {
     it('should skip fallback when primary passes', async () => {
-      const assertions: Assertion[] = [
+      const assertions: AssertionOrSet[] = [
         {
           type: 'contains',
           value: 'test',
@@ -50,6 +50,8 @@ describe('Assertion Fallback Mechanism', () => {
 
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1.0);
+      expect(result.componentResults).toHaveLength(1);
+      expect(result.componentResults?.[0]?.assertion?.value).toBe('test');
     });
 
     it('should execute fallback when primary fails', async () => {
@@ -72,6 +74,8 @@ describe('Assertion Fallback Mechanism', () => {
 
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1.0);
+      expect(result.componentResults).toHaveLength(1);
+      expect(result.componentResults?.[0]?.assertion?.value).toBe('test output');
     });
 
     it('should use fallback: true as equivalent to fallback: next', async () => {
@@ -178,15 +182,15 @@ describe('Assertion Fallback Mechanism', () => {
         providerResponse: mockProviderResponse,
       });
 
-      // First independent passes, fallback chain passes (2nd fails, 3rd passes), 4th fails
-      // Score should reflect this
-      expect(result.score).toBeGreaterThan(0);
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(2 / 3);
+      expect(result.componentResults).toHaveLength(3);
     });
   });
 
   describe('Validation', () => {
     it('should throw error if fallback points to nothing', async () => {
-      const assertions: Assertion[] = [
+      const assertions: AssertionOrSet[] = [
         {
           type: 'equals',
           value: 'wrong',
@@ -203,7 +207,7 @@ describe('Assertion Fallback Mechanism', () => {
     });
 
     it('should throw error if fallback points to assert-set', async () => {
-      const assertions: Assertion[] = [
+      const assertions: AssertionOrSet[] = [
         {
           type: 'equals',
           value: 'wrong',
@@ -217,7 +221,7 @@ describe('Assertion Fallback Mechanism', () => {
               value: 'test',
             },
           ],
-        } as any,
+        },
       ];
 
       await expect(async () => {
@@ -247,6 +251,27 @@ describe('Assertion Fallback Mechanism', () => {
           providerResponse: mockProviderResponse,
         });
       }).rejects.toThrow('select-best (not supported as fallback target)');
+    });
+
+    it('should throw error if select-best starts a fallback chain', async () => {
+      const assertions: Assertion[] = [
+        {
+          type: 'select-best',
+          value: 'Choose the best output',
+          fallback: 'next',
+        },
+        {
+          type: 'contains',
+          value: 'test',
+        },
+      ];
+
+      await expect(async () => {
+        await runAssertions({
+          test: createTestCase(assertions),
+          providerResponse: mockProviderResponse,
+        });
+      }).rejects.toThrow('select-best assertions cannot be fallback chain sources');
     });
   });
 

@@ -7,6 +7,8 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import './CustomMetrics.css';
 
+import { useState } from 'react';
+
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { ExternalLink } from 'lucide-react';
@@ -77,9 +79,10 @@ const CustomMetrics = ({
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
+  const [showAllMetrics, setShowAllMetrics] = useState(false);
 
   const metrics = Object.entries(lookup);
-  const displayMetrics = metrics.slice(0, truncationCount);
+  const displayMetrics = showAllMetrics ? metrics : metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
 
@@ -146,13 +149,15 @@ const CustomMetrics = ({
           ) : null;
         })}
       {metrics.length > truncationCount && (
-        <div
-          className="show-more-toggle clickable"
+        <button
+          type="button"
+          className="show-more-toggle"
           data-testid="toggle-show-more"
-          onClick={onShowMore}
+          onClick={onShowMore ?? (() => setShowAllMetrics(!showAllMetrics))}
+          aria-expanded={showAllMetrics}
         >
-          Show more...
-        </div>
+          {showAllMetrics ? 'Show less...' : 'Show more...'}
+        </button>
       )}
     </div>
   );

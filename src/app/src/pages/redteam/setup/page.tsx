@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
-import PylonChat from '@app/components/PylonChat';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -37,7 +36,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { customTargetOption, predefinedTargets } from './components/constants';
+import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
@@ -53,7 +52,7 @@ import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
+import type { Config } from './types';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };
@@ -330,7 +329,7 @@ export default function RedTeamSetupPage() {
 
       // Convert string targets to objects
       if (typeof target === 'string') {
-        const targetType = predefinedTargets.find((t: RedteamUITarget) => t.value === target);
+        const targetType = findPredefinedTarget(target);
 
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
@@ -341,7 +340,6 @@ export default function RedTeamSetupPage() {
       const hasAnyStatefulStrategies = strategies.some(
         (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
       );
-      console.log({ hasAnyStatefulStrategies, strategies });
       if (hasAnyStatefulStrategies) {
         if (typeof target === 'string') {
           target = { id: target, config: { stateful: true } };
@@ -364,6 +362,7 @@ export default function RedTeamSetupPage() {
         plugins: yamlConfig.redteam?.plugins || ['default'],
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
+        provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
@@ -427,12 +426,15 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  // Calculate active strategy count (excluding 'basic' with enabled: false)
+  // Calculate active strategy count shown in the sidebar.
+  // Exclude hidden basic strategy and explicitly disabled entries.
   const activeStrategyCount = useMemo(() => {
     return config.strategies.filter((strategy) => {
       const id = typeof strategy === 'string' ? strategy : strategy.id;
-      // Skip 'basic' strategy if it has enabled: false
-      if (id === 'basic' && typeof strategy === 'object' && strategy.config?.enabled === false) {
+      if (id === 'basic') {
+        return false;
+      }
+      if (typeof strategy === 'object' && strategy.config?.enabled === false) {
         return false;
       }
       return true;
@@ -608,7 +610,6 @@ export default function RedTeamSetupPage() {
         </div>
 
         {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
-        <PylonChat />
 
         {/* Save Dialog */}
         <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>

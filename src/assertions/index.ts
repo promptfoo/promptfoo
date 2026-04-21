@@ -8,36 +8,39 @@ import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
+import { matchesClassification } from '../matchers/classification';
+import { matchesSelectBest } from '../matchers/comparison';
+import { matchesClosedQa, matchesFactuality, matchesLlmRubric } from '../matchers/llmGrading';
+import { matchesModeration } from '../matchers/moderation';
 import {
   matchesAnswerRelevance,
-  matchesClassification,
-  matchesClosedQa,
   matchesContextFaithfulness,
   matchesContextRecall,
   matchesContextRelevance,
-  matchesFactuality,
-  matchesLlmRubric,
-  matchesModeration,
-  matchesSelectBest,
-  matchesSimilarity,
-} from '../matchers';
+} from '../matchers/rag';
+import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
+  type AssertionOrSet,
   type AssertionSet,
   type AssertionType,
   type AssertionValue,
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  type TraceData,
+  type VarValue,
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -81,12 +84,20 @@ import { handleRougeScore } from './rouge';
 import { handleRuby } from './ruby';
 import { handleSearchRubric } from './searchRubric';
 import { handleSimilar } from './similar';
+import { handleSkillUsed } from './skill';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
 import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
+import {
+  handleTrajectoryGoalSuccess,
+  handleTrajectoryStepCount,
+  handleTrajectoryToolArgsMatch,
+  handleTrajectoryToolSequence,
+  handleTrajectoryToolUsed,
+} from './trajectory';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
@@ -101,6 +112,12 @@ import type {
 } from '../types/index';
 
 const ASSERTIONS_MAX_CONCURRENCY = getEnvInt('PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY', 3);
+const DEFAULT_TRACE_FETCH_MAX_ATTEMPTS = 6;
+const DEFAULT_TRACE_FETCH_RETRY_DELAY_MS = 250;
+const DEFAULT_TRACE_FETCH_STABLE_POLLS = 2;
+const MAX_TRACE_FETCH_MAX_ATTEMPTS = 30;
+const MAX_TRACE_FETCH_RETRY_DELAY_MS = 5000;
+const MAX_TRACE_FETCH_STABLE_POLLS = 10;
 
 export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
@@ -112,7 +129,98 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-closedqa',
   'model-graded-factuality',
   'search-rubric',
+  'trajectory:goal-success',
 ]);
+
+const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
+  'javascript',
+  'python',
+  'ruby',
+  'trace-error-spans',
+  'trace-span-count',
+  'trace-span-duration',
+  'trajectory:goal-success',
+  'trajectory:step-count',
+  'trajectory:tool-args-match',
+  'trajectory:tool-sequence',
+  'trajectory:tool-used',
+]);
+
+export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionUsesTrace);
+  }
+
+  return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
+}
+
+function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+  if (assertionUsesTrace(assertion)) {
+    return true;
+  }
+
+  if (assertion.type === 'assert-set') {
+    return assertion.assert.some(assertionMayNeedTraceContext);
+  }
+
+  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+    return true;
+  }
+
+  return typeof assertion.value === 'string'
+    ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
+    : false;
+}
+
+export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
+  return Boolean(assertions?.some(assertionMayNeedTraceContext));
+}
+
+async function loadTraceData(traceId: string): Promise<TraceData | null> {
+  const traceStore = getTraceStore();
+  const maxAttempts = Math.min(
+    MAX_TRACE_FETCH_MAX_ATTEMPTS,
+    Math.max(1, getEnvInt('PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS', DEFAULT_TRACE_FETCH_MAX_ATTEMPTS)),
+  );
+  const retryDelayMs = Math.min(
+    MAX_TRACE_FETCH_RETRY_DELAY_MS,
+    Math.max(
+      0,
+      getEnvInt('PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS', DEFAULT_TRACE_FETCH_RETRY_DELAY_MS),
+    ),
+  );
+  const stablePolls = Math.min(
+    MAX_TRACE_FETCH_STABLE_POLLS,
+    Math.max(1, getEnvInt('PROMPTFOO_TRACE_FETCH_STABLE_POLLS', DEFAULT_TRACE_FETCH_STABLE_POLLS)),
+  );
+
+  let lastSpanCount = -1;
+  let stableObservations = 0;
+  let latestTrace: TraceData | null = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
+
+    const spanCount = latestTrace?.spans?.length ?? 0;
+    if (spanCount > 0) {
+      stableObservations = spanCount === lastSpanCount ? stableObservations + 1 : 1;
+      lastSpanCount = spanCount;
+
+      if (stableObservations >= stablePolls || attempt === maxAttempts - 1) {
+        return latestTrace;
+      }
+    } else {
+      stableObservations = 0;
+      lastSpanCount = spanCount;
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await sleep(retryDelayMs);
+    }
+  }
+
+  return latestTrace;
+}
 
 const ASSERTION_HANDLERS: Record<
   BaseAssertionTypes,
@@ -186,12 +294,18 @@ const ASSERTION_HANDLERS: Record<
   ruby: handleRuby,
   'rouge-n': handleRougeScore,
   'search-rubric': handleSearchRubric,
+  'skill-used': handleSkillUsed,
   similar: handleSimilar,
   'similar:cosine': handleSimilar,
   'similar:dot': handleSimilar,
   'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
   'tool-call-f1': handleToolCallF1,
+  'trajectory:goal-success': handleTrajectoryGoalSuccess,
+  'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
+  'trajectory:step-count': handleTrajectoryStepCount,
+  'trajectory:tool-sequence': handleTrajectoryToolSequence,
+  'trajectory:tool-used': handleTrajectoryToolUsed,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
@@ -254,19 +368,26 @@ export async function runAssertion({
   provider,
   assertion,
   test,
+  vars,
   latencyMs,
   providerResponse,
   traceId,
+  traceData,
 }: {
   prompt?: string;
   provider?: ApiProvider;
   assertion: Assertion;
   test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
   latencyMs?: number;
   assertIndex?: number;
   traceId?: string;
+  traceData?: TraceData | null;
 }): Promise<GradingResult> {
+  // Use resolved vars if provided, otherwise fall back to test.vars
+  const resolvedVars = vars || test.vars || {};
+
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
@@ -274,7 +395,7 @@ export async function runAssertion({
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
-      vars: test.vars,
+      vars: resolvedVars,
       prompt: { label: prompt },
       ...(providerResponse && providerResponse.metadata && { metadata: providerResponse.metadata }),
     });
@@ -282,7 +403,7 @@ export async function runAssertion({
 
   const context: AssertionValueFunctionContext = {
     prompt,
-    vars: test.vars || {},
+    vars: resolvedVars,
     test,
     logProbs,
     provider,
@@ -291,17 +412,16 @@ export async function runAssertion({
   };
 
   // Add trace data if traceId is available
-  if (traceId) {
+  if (traceId && assertionMayNeedTraceContext(assertion)) {
     try {
-      const traceStore = getTraceStore();
-      const traceData = await traceStore.getTrace(traceId);
-      if (traceData) {
+      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      if (resolvedTraceData) {
         context.trace = {
-          traceId: traceData.traceId,
-          evaluationId: traceData.evaluationId,
-          testCaseId: traceData.testCaseId,
-          metadata: traceData.metadata,
-          spans: traceData.spans || [],
+          traceId: resolvedTraceData.traceId,
+          evaluationId: resolvedTraceData.evaluationId,
+          testCaseId: resolvedTraceData.testCaseId,
+          metadata: resolvedTraceData.metadata,
+          spans: resolvedTraceData.spans || [],
         };
       }
     } catch (error) {
@@ -321,9 +441,9 @@ export async function runAssertion({
       let functionName: string | undefined;
 
       if (fileRef.includes(':')) {
-        const [pathPart, funcPart] = fileRef.split(':');
-        filePath = pathPart;
-        functionName = funcPart;
+        const colonIndex = fileRef.indexOf(':');
+        filePath = fileRef.slice(0, colonIndex);
+        functionName = fileRef.slice(colonIndex + 1);
       }
 
       filePath = path.resolve(basePath, filePath);
@@ -381,7 +501,7 @@ export async function runAssertion({
       valueFromScript = await Promise.resolve(requiredModule(output, context));
     } else {
       // It's a normal string value
-      renderedValue = nunjucks.renderString(renderedValue, test.vars || {});
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
@@ -390,7 +510,7 @@ export async function runAssertion({
         if (v.startsWith('file://')) {
           return processFileReference(v);
         }
-        return nunjucks.renderString(v, test.vars || {});
+        return nunjucks.renderString(v, resolvedVars);
       }
       return v;
     });
@@ -448,7 +568,7 @@ export async function runAssertion({
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
-        vars: test.vars || {},
+        vars: resolvedVars,
         ...(graderTraceparent && { traceparent: graderTraceparent }),
       }
     : undefined;
@@ -506,47 +626,63 @@ export async function runAssertion({
   throw new Error(`Unknown assertion type: ${assertion.type}`);
 }
 
+function hasFallback(assertion: Assertion): boolean {
+  return assertion.fallback === 'next' || assertion.fallback === true;
+}
+
+function isAssertionSet(assertion: AssertionOrSet): assertion is AssertionSet {
+  return assertion.type === 'assert-set';
+}
+
+function isSpecialCompareAssertion(assertion: Assertion): boolean {
+  return assertion.type.startsWith('select-') || assertion.type === 'max-score';
+}
+
 /**
  * Validates that assertions with fallback are properly configured.
  * Operates on the original assertion array before flattening.
  * Recursively validates assertions inside assert-sets.
  * Throws an error if validation fails.
  */
-function validateFallbackChains(assertions: Array<Assertion | AssertionSet>): void {
+function validateFallbackChains(assertions: AssertionOrSet[]): void {
   for (let i = 0; i < assertions.length; i++) {
     const assertion = assertions[i];
 
     // Handle assert-set types - validate inner assertions recursively
-    if ('assert' in assertion && Array.isArray(assertion.assert)) {
+    if (isAssertionSet(assertion)) {
       validateFallbackChains(assertion.assert);
       continue;
     }
 
-    // Type guard: at this point assertion is Assertion, not AssertionSet
-    const typedAssertion = assertion as Assertion;
-    const hasFallback = typedAssertion.fallback === 'next' || typedAssertion.fallback === true;
+    const assertionHasFallback = hasFallback(assertion);
 
-    if (hasFallback) {
+    if (assertionHasFallback) {
+      if (isSpecialCompareAssertion(assertion)) {
+        throw new Error(
+          `Assertion at index ${i} (type: ${assertion.type}) has fallback: next but ${assertion.type} assertions cannot be fallback chain sources`,
+        );
+      }
+
       // Rule 1: Must have next assertion
       if (i === assertions.length - 1) {
         throw new Error(
-          `Assertion at index ${i} (type: ${typedAssertion.type}) has fallback: next but is the last assertion in the list`,
+          `Assertion at index ${i} (type: ${assertion.type}) has fallback: next but is the last assertion in the list`,
         );
       }
 
       const nextAssertion = assertions[i + 1];
 
       // Rule 2: Next assertion cannot be assert-set
-      if ('assert' in nextAssertion && Array.isArray(nextAssertion.assert)) {
+      if (isAssertionSet(nextAssertion)) {
         throw new Error(
-          `Assertion at index ${i} (type: ${typedAssertion.type}) has fallback: next but next assertion is assert-set (not supported as fallback target)`,
+          `Assertion at index ${i} (type: ${assertion.type}) has fallback: next but next assertion is assert-set (not supported as fallback target)`,
         );
       }
 
       // Rule 3: Next assertion cannot be select-* or max-score
-      if (nextAssertion.type.startsWith('select-') || nextAssertion.type === 'max-score') {
+      if (isSpecialCompareAssertion(nextAssertion)) {
         throw new Error(
-          `Assertion at index ${i} (type: ${typedAssertion.type}) has fallback: next but next assertion is ${nextAssertion.type} (not supported as fallback target)`,
+          `Assertion at index ${i} (type: ${assertion.type}) has fallback: next but next assertion is ${nextAssertion.type} (not supported as fallback target)`,
         );
       }
     }
@@ -565,7 +701,6 @@ function categorizeAssertions(
 ): {
   independent: number[];
   primaryInChains: number[];
-  fallbackTargets: Set<number>;
 } {
   const independent: number[] = [];
   const primaryInChains: number[] = [];
@@ -574,9 +709,9 @@ function categorizeAssertions(
   let i = 0;
   while (i < assertions.length) {
     const { assertion } = assertions[i];
-    const hasFallback = assertion.fallback === 'next' || assertion.fallback === true;
+    const assertionHasFallback = hasFallback(assertion);
 
-    if (hasFallback) {
+    if (assertionHasFallback) {
       // This is the start of a fallback chain
       primaryInChains.push(i);
 
@@ -586,8 +721,7 @@ function categorizeAssertions(
         fallbackTargets.add(chainIndex);
 
         const { assertion: nextAssertion } = assertions[chainIndex];
-        const nextHasFallback =
-          nextAssertion.fallback === 'next' || nextAssertion.fallback === true;
+        const nextHasFallback = hasFallback(nextAssertion);
 
         if (nextHasFallback) {
           // Chain continues
@@ -610,12 +744,12 @@ function categorizeAssertions(
     }
   }
 
-  return { independent, primaryInChains, fallbackTargets };
+  return { independent, primaryInChains };
 }
 
 /**
  * Executes a fallback chain sequentially until an assertion passes or the chain ends.
- * Returns the final result and tracks bypassed assertions.
+ * Returns only the assertion result that contributes to scoring.
  */
 async function executeFallbackChain(
   asserts: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
@@ -625,19 +759,19 @@ async function executeFallbackChain(
     provider?: ApiProvider;
     providerResponse: ProviderResponse;
     test: AtomicTestCase;
+    vars?: Record<string, VarValue>;
     latencyMs?: number;
     traceId?: string;
+    traceData?: TraceData | null;
   },
 ): Promise<{
   result: GradingResult;
   finalIndex: number;
-  bypassed: Array<{ index: number; assertion: Assertion; result: GradingResult }>;
 }> {
-  const bypassed: Array<{ index: number; assertion: Assertion; result: GradingResult }> = [];
   let currentIndex = startIndex;
 
   while (currentIndex < asserts.length) {
-    const { assertion } = asserts[currentIndex];
+    const { assertion, index } = asserts[currentIndex];
 
     // Execute current assertion in the chain
     const result = await runAssertion({
@@ -646,42 +780,27 @@ async function executeFallbackChain(
       providerResponse: context.providerResponse,
       assertion,
       test: context.test,
+      vars: context.vars,
       latencyMs: context.latencyMs,
-      assertIndex: currentIndex,
+      assertIndex: index,
       traceId: context.traceId,
+      traceData: context.traceData,
     });
 
-    const hasFallback = assertion.fallback === 'next' || assertion.fallback === true;
+    const assertionHasFallback = hasFallback(assertion);
 
     if (result.pass) {
       // Success - chain ends here
-      return { result, finalIndex: currentIndex, bypassed };
+      return { result, finalIndex: currentIndex };
     }
 
-    if (!hasFallback) {
+    if (!assertionHasFallback) {
       // Failed and no fallback - chain ends here with failure
-      return { result, finalIndex: currentIndex, bypassed };
+      return { result, finalIndex: currentIndex };
     }
 
-    // Failed and has fallback - add to bypassed and continue
-    bypassed.push({
-      index: currentIndex,
-      assertion,
-      result,
-    });
-
+    // Failed and has fallback - continue to the next assertion in the chain
     currentIndex++;
-
-    // Validate next assertion exists
-    if (currentIndex >= asserts.length) {
-      // No next assertion available - return the last result as final
-      const lastBypassed = bypassed.pop()!;
-      return {
-        result: lastBypassed.result,
-        finalIndex: lastBypassed.index,
-        bypassed,
-      };
-    }
   }
 
   throw new Error('Unexpected end of fallback chain');
@@ -694,6 +813,7 @@ export async function runAssertions({
   provider,
   providerResponse,
   test,
+  vars,
   traceId,
 }: {
   assertScoringFunction?: ScoringFunction;
@@ -702,6 +822,7 @@ export async function runAssertions({
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
   test: AtomicTestCase;
+  vars?: Record<string, VarValue>;
   traceId?: string;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
@@ -712,6 +833,10 @@ export async function runAssertions({
     threshold: test.threshold,
   });
   const subAssertResults: AssertionsResult[] = [];
+
+  // Validate fallback chain configuration before flattening assertion sets.
+  validateFallbackChains(test.assert);
+
   const asserts: {
     assertion: Assertion;
     assertResult: AssertionsResult;
@@ -742,76 +867,81 @@ export async function runAssertions({
     })
     .flat();
 
-  // Validate fallback chain configuration (before flattening)
-  validateFallbackChains(test.assert);
-
   // Categorize assertions into independent and fallback chains
   const categorized = categorizeAssertions(asserts);
 
-  // Phase 1: Execute independent assertions in parallel
-  const independentAsserts = categorized.independent
-    .map((i) => asserts[i])
-    .filter(({ assertion }) => {
-      // Filter out select-type and max-score assertions (handled separately)
-      return !assertion.type.startsWith('select-') && assertion.type !== 'max-score';
-    });
+  const shouldPreloadTrace =
+    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+  let preloadedTraceData: TraceData | null | undefined;
+  if (shouldPreloadTrace && traceId) {
+    try {
+      preloadedTraceData = await loadTraceData(traceId);
+    } catch (error) {
+      logger.debug(`Failed to preload trace data for assertions: ${error}`);
+      preloadedTraceData = null;
+    }
+  }
 
-  await async.forEachOfLimit(
-    independentAsserts,
-    ASSERTIONS_MAX_CONCURRENCY,
-    async ({ assertion, assertResult, index }) => {
-      const result = await runAssertion({
-        prompt,
-        provider,
-        providerResponse,
-        assertion,
-        test,
-        latencyMs,
-        assertIndex: index,
-        traceId,
-      });
+  // Serialize when the grouping queue is active: concurrent dispatch can
+  // reorder provider enqueues and split same-judge groups.
+  const concurrency = getProviderCallExecutionContext()?.providerCallQueue
+    ? 1
+    : ASSERTIONS_MAX_CONCURRENCY;
 
-      assertResult.addResult({
-        index,
-        result,
-        metric: renderMetricName(assertion.metric, test.vars || {}),
-        weight: assertion.weight,
-      });
-    },
+  const chainStartIndexes = new Set(categorized.primaryInChains);
+  const assertionJobs = [...categorized.independent, ...categorized.primaryInChains].sort(
+    (a, b) => a - b,
   );
 
-  // Phase 2: Execute fallback chains
-  // Chains can run in parallel with each other, but are sequential internally
-  await async.forEachOfLimit(
-    categorized.primaryInChains,
-    ASSERTIONS_MAX_CONCURRENCY,
-    async (primaryIndex) => {
-      const { assertion } = asserts[primaryIndex];
+  await async.forEachOfLimit(assertionJobs, concurrency, async (assertionIndex) => {
+    const { assertion, assertResult, index } = asserts[assertionIndex];
+    if (isSpecialCompareAssertion(assertion)) {
+      // Select-type and max-score assertions are handled separately because they depend on multiple outputs.
+      return;
+    }
 
-      // Skip select-type and max-score assertions
-      if (assertion.type.startsWith('select-') || assertion.type === 'max-score') {
-        return;
-      }
-
-      const chainResult = await executeFallbackChain(asserts, primaryIndex, {
+    if (chainStartIndexes.has(assertionIndex)) {
+      const chainResult = await executeFallbackChain(asserts, assertionIndex, {
         prompt,
         provider,
         providerResponse,
         test,
+        vars,
         latencyMs,
         traceId,
+        traceData: preloadedTraceData,
       });
 
-      // Add only the final result to the score
       const finalAssert = asserts[chainResult.finalIndex];
       finalAssert.assertResult.addResult({
-        index: chainResult.finalIndex,
+        index: finalAssert.index,
         result: chainResult.result,
-        metric: renderMetricName(finalAssert.assertion.metric, test.vars || {}),
+        metric: renderMetricName(finalAssert.assertion.metric, vars || test.vars || {}),
         weight: finalAssert.assertion.weight,
       });
-    },
-  );
+      return;
+    }
+
+    const result = await runAssertion({
+      prompt,
+      provider,
+      providerResponse,
+      assertion,
+      test,
+      vars,
+      latencyMs,
+      assertIndex: index,
+      traceId,
+      traceData: preloadedTraceData,
+    });
+
+    assertResult.addResult({
+      index,
+      result,
+      metric: renderMetricName(assertion.metric, vars || test.vars || {}),
+      weight: assertion.weight,
+    });
+  });
 
   await async.forEach(subAssertResults, async (subAssertResult) => {
     const result = await subAssertResult.testResult();
@@ -823,7 +953,7 @@ export async function runAssertions({
     mainAssertResult.addResult({
       index,
       result,
-      metric: renderMetricName(metric, test.vars || {}),
+      metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
     });
   });

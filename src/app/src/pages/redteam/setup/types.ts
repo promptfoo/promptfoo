@@ -72,12 +72,15 @@ export interface Config {
   strategies: RedteamStrategy[];
   purpose?: string;
   numTests?: number;
+  maxCharsPerMessage?: number;
   maxConcurrency?: number;
   applicationDefinition: ApplicationDefinition;
   entities: string[];
   defaultTest?: TestCase;
   extensions?: string[];
   language?: string | string[]; // Global language configuration
+  // Provider used for generating adversarial inputs (redteam provider)
+  provider?: string | CoreProviderOptions;
 }
 
 export interface ProviderOptions {
