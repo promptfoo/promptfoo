@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { REQUEST_TIMEOUT_MS } from '../shared';
-import { resolveAuthToken, resolveGatewayUrl } from './shared';
+import { buildOpenClawContextHeaders, resolveAuthToken, resolveGatewayUrl } from './shared';
 
 import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../types/providers';
 import type { OpenClawConfig } from './types';
@@ -10,14 +10,19 @@ import type { OpenClawConfig } from './types';
  * OpenClaw Tool Invoke Provider
  *
  * Simple HTTP provider for direct tool invocation via POST /tools/invoke.
- * The tool name is extracted from the provider path: openclaw:tools:bash → tool="bash"
+ * The tool name is extracted from the provider path:
+ * openclaw:tools:sessions_list → tool="sessions_list"
  *
  * The prompt is parsed as JSON for tool arguments. If it's not valid JSON,
  * it's passed as a single `input` argument.
  *
  * Usage:
- *   openclaw:tools:bash        - invoke the bash tool
- *   openclaw:tools:agents_list - invoke the agents_list tool
+ *   openclaw:tools:sessions_list - invoke the sessions_list tool
+ *   openclaw:tools:session_status - invoke the session_status tool
+ *
+ * Optional config:
+ *   action  - tool sub-action, forwarded as body.action
+ *   dry_run - dry-run hint, forwarded as body.dryRun
  */
 export class OpenClawToolInvokeProvider implements ApiProvider {
   private toolName: string;
@@ -58,6 +63,8 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
     const url = `${this.gatewayUrl}/tools/invoke`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      ...(this.openclawConfig.headers || {}),
+      ...buildOpenClawContextHeaders(this.openclawConfig),
     };
     if (this.authToken) {
       headers['Authorization'] = `Bearer ${this.authToken}`;
@@ -65,7 +72,11 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
 
     const body = {
       tool: this.toolName,
+      ...(this.openclawConfig.action && { action: this.openclawConfig.action }),
       args,
+      ...(typeof this.openclawConfig.dry_run === 'boolean' && {
+        dryRun: this.openclawConfig.dry_run,
+      }),
       ...(this.openclawConfig.session_key && { sessionKey: this.openclawConfig.session_key }),
     };
 
@@ -88,14 +99,23 @@ export class OpenClawToolInvokeProvider implements ApiProvider {
         };
       }
 
-      const data = (await response.json()) as { ok: boolean; result?: unknown; error?: string };
+      const data = (await response.json()) as {
+        ok: boolean;
+        result?: unknown;
+        error?: string | { message?: string; type?: string; code?: string };
+      };
 
       if (data.ok) {
         const output = typeof data.result === 'string' ? data.result : JSON.stringify(data.result);
         return { output };
       }
 
-      return { error: data.error || 'Unknown tool error' };
+      if (typeof data.error === 'string') {
+        return { error: data.error };
+      }
+      return {
+        error: data.error?.message || data.error?.type || data.error?.code || 'Unknown tool error',
+      };
     } catch (err) {
       return {
         error: `OpenClaw tool invoke error: ${err instanceof Error ? err.message : String(err)}`,

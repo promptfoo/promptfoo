@@ -16,15 +16,15 @@ export default function PresetCard({ name, description, isSelected, onClick }: P
       data-testid={testId}
       onClick={onClick}
       className={cn(
-        'group flex h-full cursor-pointer flex-col items-start justify-start overflow-hidden p-5 transition-all',
+        'group flex h-full cursor-pointer flex-col items-start justify-start overflow-hidden p-3 transition-all',
         isSelected ? 'border-primary bg-primary/[0.04]' : 'border-border bg-background',
-        'hover:-translate-y-0.5 hover:shadow-lg',
+        'hover:-translate-y-0.5 hover:shadow-md',
         isSelected ? 'hover:bg-primary/[0.08]' : 'hover:bg-muted/30',
       )}
     >
       <h3
         className={cn(
-          'mb-3 text-lg font-medium transition-colors',
+          'mb-1 text-sm font-medium transition-colors',
           isSelected ? 'text-primary' : 'text-foreground',
           'group-hover:text-primary',
         )}
@@ -32,7 +32,9 @@ export default function PresetCard({ name, description, isSelected, onClick }: P
         {name}
       </h3>
 
-      <p className="text-sm leading-relaxed text-muted-foreground opacity-80">{description}</p>
+      <p className="line-clamp-2 text-xs leading-snug text-muted-foreground opacity-80">
+        {description}
+      </p>
     </Card>
   );
 }

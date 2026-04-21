@@ -423,6 +423,7 @@ describe('exportToFile utils', () => {
     it('should strip prompt content', () => {
       const trimmed = trimTableCellForApi(makeCell());
       expect(trimmed.prompt).toBe('');
+      expect(trimmed.isTruncated).toBe(true);
     });
 
     it('should preserve essential cell fields', () => {

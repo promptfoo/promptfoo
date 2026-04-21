@@ -1,0 +1,4 @@
+- vars:
+    myVar: 'hello world'
+- vars:
+    myVar: 'goodbye moon'

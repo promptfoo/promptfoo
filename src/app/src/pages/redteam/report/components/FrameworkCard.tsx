@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { cn } from '@app/lib/utils';
 import {
   ALIASED_PLUGIN_MAPPINGS,
+  DOD_AI_ETHICS_PRINCIPLE_NAMES,
   FRAMEWORK_NAMES,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
@@ -51,6 +52,115 @@ const severityBadgeVariants: Record<
   },
 };
 
+type PluginResultType = 'failed' | 'passed' | 'untested';
+
+const severitySortOrder: Record<Severity, number> = {
+  [Severity.Critical]: 0,
+  [Severity.High]: 1,
+  [Severity.Medium]: 2,
+  [Severity.Low]: 3,
+  [Severity.Informational]: 4,
+};
+
+const categoryNamesByFramework: Partial<Record<string, string[]>> = {
+  'owasp:llm': OWASP_LLM_TOP_10_NAMES,
+  'owasp:api': OWASP_API_TOP_10_NAMES,
+  'dod:ai:ethics': DOD_AI_ETHICS_PRINCIPLE_NAMES,
+};
+
+const getPluginSeverity = (plugin: string): Severity => {
+  return riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+};
+
+const sortPluginsBySeverity = (plugins: string[]): string[] => {
+  return [...plugins].sort((a, b) => {
+    return severitySortOrder[getPluginSeverity(a)] - severitySortOrder[getPluginSeverity(b)];
+  });
+};
+
+const getCategoryDisplay = (
+  framework: string,
+  categoryId: string,
+): { categoryNumber: string; categoryName: string } => {
+  const categoryNumber = categoryId.split(':').pop() ?? categoryId;
+  const categoryNameList = categoryNamesByFramework[framework];
+  const categoryIndex = Number.parseInt(categoryNumber, 10) - 1;
+  const categoryName = categoryNameList?.[categoryIndex] ?? `Category ${categoryNumber}`;
+  return { categoryNumber, categoryName };
+};
+
+type CategoryBadgeVariant = 'success' | 'secondary' | 'destructive';
+
+const getCategoryBadgeData = (
+  testedCount: number,
+  nonCompliantCount: number,
+  visibleUntestedCount: number,
+): { variant: CategoryBadgeVariant; label: string } => {
+  if (testedCount === 0 && visibleUntestedCount === 0) {
+    return {
+      variant: nonCompliantCount === 0 ? 'success' : 'secondary',
+      label: 'No Plugins',
+    };
+  }
+
+  if (testedCount > 0) {
+    return {
+      variant: nonCompliantCount === 0 ? 'success' : 'destructive',
+      label: `${nonCompliantCount} / ${testedCount} plugins failed`,
+    };
+  }
+
+  return {
+    variant: 'secondary',
+    label: `${visibleUntestedCount} Untested`,
+  };
+};
+
+interface FrameworkPluginSectionProps {
+  title: string;
+  titleClassName: string;
+  containerClassName: string;
+  plugins: string[];
+  evalId: string;
+  framework: string;
+  categoryId: string;
+  getPluginASR: (plugin: string) => { asr: number; total: number; failCount: number };
+  type: PluginResultType;
+}
+
+const FrameworkPluginSection = ({
+  title,
+  titleClassName,
+  containerClassName,
+  plugins,
+  evalId,
+  framework,
+  categoryId,
+  getPluginASR,
+  type,
+}: FrameworkPluginSectionProps) => {
+  if (plugins.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <div className={containerClassName}>
+        <span className={titleClassName}>{title}</span>
+      </div>
+      {plugins.map((plugin, index) => (
+        <FrameworkPluginResult
+          key={`${plugin}-${framework}-${categoryId}-${index}`}
+          evalId={evalId}
+          plugin={plugin}
+          getPluginASR={getPluginASR}
+          type={type}
+        />
+      ))}
+    </>
+  );
+};
+
 interface FrameworkCardProps {
   evalId: string;
   framework: string;
@@ -59,6 +169,7 @@ interface FrameworkCardProps {
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
   nonCompliantPlugins: string[];
+  showUntestedPlugins: boolean;
   idx: number;
 }
 
@@ -70,6 +181,7 @@ const FrameworkCard = ({
   categoryStats,
   pluginPassRateThreshold,
   nonCompliantPlugins,
+  showUntestedPlugins,
   idx,
 }: FrameworkCardProps) => {
   /**
@@ -150,158 +262,94 @@ const FrameworkCard = ({
         </div>
         {/* Always expanded */}
         <div className="mt-4">
-          {(framework === 'owasp:api' || framework === 'owasp:llm') &&
+          {(framework === 'owasp:api' ||
+            framework === 'owasp:llm' ||
+            framework === 'dod:ai:ethics') &&
           Object.keys(ALIASED_PLUGIN_MAPPINGS[framework]).length > 0 ? (
-            // Show categorized plugins for OWASP frameworks
+            // Show categorized plugins for frameworks with named categories
             <div className="space-y-4">
               {Object.entries(ALIASED_PLUGIN_MAPPINGS[framework]).map(
                 ([categoryId, { plugins: categoryPlugins }]) => {
-                  const categoryNumber = categoryId.split(':').pop();
-                  const categoryName =
-                    categoryNumber && framework === 'owasp:llm'
-                      ? OWASP_LLM_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
-                      : categoryNumber && framework === 'owasp:api'
-                        ? OWASP_API_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
-                        : `Category ${categoryNumber}`;
+                  const { categoryNumber, categoryName } = getCategoryDisplay(
+                    framework,
+                    categoryId,
+                  );
 
-                  // Expand harmful if present
                   const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
-
-                  // Categorize all plugins: tested-compliant, tested-non-compliant, and not-tested
                   const {
                     compliant: compliantCategoryPlugins,
                     nonCompliant: nonCompliantCategoryPlugins,
                     untested: untestedPlugins,
                   } = categorizePlugins(expandedPlugins, categoryStats, pluginPassRateThreshold);
 
-                  // Sort all sets appropriately
                   const sortedNonCompliantItems = sortPluginsByASR(nonCompliantCategoryPlugins);
                   const sortedCompliantItems = sortPluginsByASR(compliantCategoryPlugins);
-                  const sortedUntestedItems = [...untestedPlugins].sort((a, b) => {
-                    // Sort untested plugins by severity since they have no pass rates
-                    const severityA =
-                      riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
-                    const severityB =
-                      riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
-
-                    const severityOrder: Record<Severity, number> = {
-                      [Severity.Critical]: 0,
-                      [Severity.High]: 1,
-                      [Severity.Medium]: 2,
-                      [Severity.Low]: 3,
-                      [Severity.Informational]: 4,
-                    };
-
-                    return severityOrder[severityA] - severityOrder[severityB];
-                  });
-
-                  // Get all tested plugins
-                  const testedPlugins = [
-                    ...compliantCategoryPlugins,
-                    ...nonCompliantCategoryPlugins,
-                  ];
-
-                  // Are all plugins compliant or are there no tested plugins?
-                  const allCompliant =
-                    testedPlugins.length > 0 && nonCompliantCategoryPlugins.length === 0;
-                  const noTestedPlugins = testedPlugins.length === 0;
+                  const visibleUntestedItems = showUntestedPlugins
+                    ? sortPluginsBySeverity(untestedPlugins)
+                    : [];
+                  const testedCount =
+                    compliantCategoryPlugins.length + nonCompliantCategoryPlugins.length;
+                  const showHeaderBorder =
+                    testedCount > 0 && nonCompliantCategoryPlugins.length > 0;
+                  const categoryBadge = getCategoryBadgeData(
+                    testedCount,
+                    nonCompliantCategoryPlugins.length,
+                    visibleUntestedItems.length,
+                  );
 
                   return (
                     <div key={categoryId} className="overflow-hidden rounded border border-border">
                       <div
                         className={cn(
                           'flex items-center justify-between bg-black/5 p-2 dark:bg-white/5',
-                          !(allCompliant || noTestedPlugins) && 'border-b border-border',
+                          showHeaderBorder && 'border-b border-border',
                         )}
                       >
                         <span className="text-sm font-medium">
                           {categoryNumber}. {categoryName}
                         </span>
-                        {testedPlugins.length === 0 && untestedPlugins.length === 0 ? (
-                          <Badge
-                            variant={
-                              nonCompliantCategoryPlugins.length === 0 ? 'success' : 'secondary'
-                            }
-                            className="h-5 whitespace-nowrap text-[0.7rem]"
-                          >
-                            No Plugins
-                          </Badge>
-                        ) : testedPlugins.length > 0 ? (
-                          <Badge
-                            variant={
-                              nonCompliantCategoryPlugins.length === 0 ? 'success' : 'destructive'
-                            }
-                            className="h-5 whitespace-nowrap text-[0.7rem]"
-                          >
-                            {nonCompliantCategoryPlugins.length} / {testedPlugins.length} plugins
-                            failed
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="secondary"
-                            className="h-5 whitespace-nowrap text-[0.7rem]"
-                          >
-                            {untestedPlugins.length} Untested
-                          </Badge>
-                        )}
+                        <Badge
+                          variant={categoryBadge.variant}
+                          className="h-5 whitespace-nowrap text-[0.7rem]"
+                        >
+                          {categoryBadge.label}
+                        </Badge>
                       </div>
 
                       <div>
-                        {/* Failed plugins first */}
-                        {sortedNonCompliantItems.length > 0 && (
-                          <div className="bg-red-50/50 px-2 py-1 dark:bg-red-950/20">
-                            <span className="text-xs font-bold text-destructive">Failed:</span>
-                          </div>
-                        )}
-                        {sortedNonCompliantItems.map((plugin, index) => (
-                          <FrameworkPluginResult
-                            key={`${plugin}-${framework}-${categoryId}-${index}`}
-                            evalId={evalId}
-                            plugin={plugin}
-                            getPluginASR={getPluginASR}
-                            type="failed"
-                          />
-                        ))}
-
-                        {/* Passing plugins */}
-                        {sortedCompliantItems.length > 0 && (
-                          <div className="mt-2 bg-emerald-50/50 px-2 py-1 dark:bg-emerald-950/20">
-                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-500">
-                              Passed:
-                            </span>
-                          </div>
-                        )}
-                        {sortedCompliantItems.map((plugin, index) => (
-                          <FrameworkPluginResult
-                            key={`${plugin}-${framework}-${categoryId}-${index}`}
-                            evalId={evalId}
-                            plugin={plugin}
-                            getPluginASR={getPluginASR}
-                            type="passed"
-                          />
-                        ))}
-
-                        {/* Untested plugins */}
-                        {sortedUntestedItems.length > 0 && (
-                          <>
-                            <div className="mt-2 bg-gray-100/50 px-2 py-1 dark:bg-gray-800/20">
-                              <span className="text-xs font-bold text-muted-foreground">
-                                Not Tested:
-                              </span>
-                            </div>
-                            {sortedUntestedItems.map((plugin, index) => (
-                              <FrameworkPluginResult
-                                key={`${plugin}-${framework}-${categoryId}-${index}`}
-                                evalId={evalId}
-                                plugin={plugin}
-                                getPluginASR={getPluginASR}
-                                type="untested"
-                              />
-                            ))}
-                          </>
-                        )}
+                        <FrameworkPluginSection
+                          title="Failed:"
+                          titleClassName="text-xs font-bold text-destructive"
+                          containerClassName="bg-red-50/50 px-2 py-1 dark:bg-red-950/20"
+                          plugins={sortedNonCompliantItems}
+                          evalId={evalId}
+                          framework={framework}
+                          categoryId={categoryId}
+                          getPluginASR={getPluginASR}
+                          type="failed"
+                        />
+                        <FrameworkPluginSection
+                          title="Passed:"
+                          titleClassName="text-xs font-bold text-emerald-600 dark:text-emerald-500"
+                          containerClassName="mt-2 bg-emerald-50/50 px-2 py-1 dark:bg-emerald-950/20"
+                          plugins={sortedCompliantItems}
+                          evalId={evalId}
+                          framework={framework}
+                          categoryId={categoryId}
+                          getPluginASR={getPluginASR}
+                          type="passed"
+                        />
+                        <FrameworkPluginSection
+                          title="Not Tested:"
+                          titleClassName="text-xs font-bold text-muted-foreground"
+                          containerClassName="mt-2 bg-gray-100/50 px-2 py-1 dark:bg-gray-800/20"
+                          plugins={visibleUntestedItems}
+                          evalId={evalId}
+                          framework={framework}
+                          categoryId={categoryId}
+                          getPluginASR={getPluginASR}
+                          type="untested"
+                        />
                       </div>
                     </div>
                   );
@@ -377,43 +425,44 @@ const FrameworkCard = ({
                 ))}
 
                 {/* Untested plugins for this framework */}
-                {Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {})
-                  .flatMap((categoryId) => {
-                    // Get all plugins from this category
-                    const categoryPlugins =
-                      ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
-                    // Expand plugins using the utility function
-                    return Array.from(expandPluginCollections(categoryPlugins, categoryStats));
-                  })
-                  .filter((plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0)
-                  .sort((a, b) => {
-                    // Sort by severity first
-                    const severityA =
-                      riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
-                    const severityB =
-                      riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
+                {showUntestedPlugins &&
+                  Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {})
+                    .flatMap((categoryId) => {
+                      // Get all plugins from this category
+                      const categoryPlugins =
+                        ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
+                      // Expand plugins using the utility function
+                      return Array.from(expandPluginCollections(categoryPlugins, categoryStats));
+                    })
+                    .filter((plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0)
+                    .sort((a, b) => {
+                      // Sort by severity first
+                      const severityA =
+                        riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
+                        Severity.Low;
+                      const severityB =
+                        riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
+                        Severity.Low;
 
-                    const severityOrder: Record<Severity, number> = {
-                      [Severity.Critical]: 0,
-                      [Severity.High]: 1,
-                      [Severity.Medium]: 2,
-                      [Severity.Low]: 3,
-                      [Severity.Informational]: 4,
-                    };
+                      const severityOrder: Record<Severity, number> = {
+                        [Severity.Critical]: 0,
+                        [Severity.High]: 1,
+                        [Severity.Medium]: 2,
+                        [Severity.Low]: 3,
+                        [Severity.Informational]: 4,
+                      };
 
-                    return severityOrder[severityA] - severityOrder[severityB];
-                  })
-                  .map((plugin, index) => (
-                    <FrameworkPluginResult
-                      key={`${plugin}-${framework}-${index}`}
-                      evalId={evalId}
-                      plugin={plugin}
-                      getPluginASR={getPluginASR}
-                      type="untested"
-                    />
-                  ))}
+                      return severityOrder[severityA] - severityOrder[severityB];
+                    })
+                    .map((plugin, index) => (
+                      <FrameworkPluginResult
+                        key={`${plugin}-${framework}-${index}`}
+                        evalId={evalId}
+                        plugin={plugin}
+                        getPluginASR={getPluginASR}
+                        type="untested"
+                      />
+                    ))}
               </div>
             </div>
           )}

@@ -66,6 +66,11 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           resolution: result.response.video.resolution,
         }
       : undefined,
+    images: result.response?.images?.map((img) => ({
+      data: img.data,
+      blobRef: img.blobRef,
+      mimeType: img.mimeType,
+    })),
   };
 }
 
@@ -94,13 +99,10 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
     };
   }
 
-  // Preserve evalId from the ...result spread in convertEvalResultToTableCell.
-  // The frontend needs this for the detail endpoint, especially in comparison
-  // mode where cells from different evals share the same table.
-  const evalId = (cell as unknown as Record<string, unknown>).evalId as string | undefined;
-
   const trimmed: EvaluateTableOutput = {
     id: cell.id,
+    ...(cell.evalId === undefined ? {} : { evalId: cell.evalId }),
+    isTruncated: true,
     text: cell.text,
     prompt: '', // Stripped — fetch on demand via /results/:id/detail
     provider: cell.provider,
@@ -123,10 +125,6 @@ export function trimTableCellForApi(cell: EvaluateTableOutput): EvaluateTableOut
     audio: cell.audio,
     video: cell.video,
   };
-
-  if (evalId) {
-    (trimmed as unknown as Record<string, unknown>).evalId = evalId;
-  }
 
   return trimmed;
 }

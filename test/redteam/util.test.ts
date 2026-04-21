@@ -13,6 +13,7 @@ import {
   normalizeApostrophes,
   removePrefix,
 } from '../../src/redteam/util';
+import { mockProcessEnv } from '../util/utils';
 
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
 
@@ -242,20 +243,14 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should skip remote call when remote generation is disabled', async () => {
-    // Preserve original environment setting
-    const originalValue = process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
+    try {
+      const result = await extractGoalFromPrompt('test prompt', 'test purpose');
 
-    const result = await extractGoalFromPrompt('test prompt', 'test purpose');
-
-    expect(result).toBeNull();
-    expect(fetchWithCache).not.toHaveBeenCalled();
-
-    // Cleanup: restore or delete the env var to avoid leaking into other tests
-    if (originalValue === undefined) {
-      delete process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION;
-    } else {
-      process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = originalValue;
+      expect(result).toBeNull();
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
     }
   });
 

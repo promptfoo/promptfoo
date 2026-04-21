@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OpenAI gpt-realtime model demonstration
+description: OpenAI gpt-realtime-1.5 model demonstration
 prompts:
   - file://realtime-input.json
 
 providers:
-  - id: openai:realtime:gpt-realtime
+  - id: openai:realtime:gpt-realtime-1.5
     config:
       modalities: ['text', 'audio']
-      voice: 'cedar' # New voice available with gpt-realtime
+      voice: 'cedar' # Voice available with gpt-realtime-1.5
       instructions: 'You are a helpful assistant. Keep your responses concise and informative.'
       temperature: 0.7
       # Increase WebSocket timeout to handle potential slow connections

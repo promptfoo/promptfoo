@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Human feedback via Slack
+
+# Prerequisites:
+# 1. Install the Slack Web API: npm install @slack/web-api
+# 2. Set SLACK_BOT_TOKEN environment variable
+# 3. Replace C_YOUR_CHANNEL_ID with your actual Slack channel ID
+
+prompts:
+  - 'Write a haiku about {{topic}}'
+  - 'Explain {{concept}} in simple terms'
+
+providers:
+  # AI model for comparison
+  - openai:chat:gpt-5.4-nano
+
+  # Human feedback via Slack
+  - slack:C_YOUR_CHANNEL_ID # Replace with your channel ID
+
+tests:
+  - vars:
+      topic: coffee
+  - vars:
+      topic: programming
+  - vars:
+      concept: machine learning
+  - vars:
+      concept: quantum computing

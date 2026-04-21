@@ -1,5 +1,5 @@
 import useApiConfig from '@app/stores/apiConfig';
-import type { UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
+import type { ResultDetailResponse, UpdateEvalAuthorResponse } from '@promptfoo/types/api/eval';
 import type { GetUserIdResponse, GetUserResponse } from '@promptfoo/types/api/user';
 
 export function getApiBaseUrl(): string {
@@ -51,16 +51,11 @@ export async function fetchUserId(): Promise<string | null> {
   }
 }
 
-export interface CellDetailResponse {
-  prompt: string;
-  response?: Record<string, unknown>;
-  testCase?: Record<string, unknown>;
-}
-
+/** Fetches the full prompt, response, and test case for a trimmed eval table cell. */
 export async function fetchCellDetail(
   evalId: string,
   resultId: string,
-): Promise<CellDetailResponse | null> {
+): Promise<ResultDetailResponse | null> {
   try {
     const response = await callApi(`/eval/${evalId}/results/${resultId}/detail`);
     if (!response.ok) {
