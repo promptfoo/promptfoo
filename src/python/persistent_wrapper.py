@@ -66,11 +66,6 @@ def _init_tracing():
         _tracer = trace.get_tracer("promptfoo.python.provider")
         _tracing_enabled = True
 
-        print(
-            f"[PythonProvider] OpenTelemetry tracing enabled, endpoint: {endpoint}",
-            file=sys.stderr,
-            flush=True,
-        )
     except ImportError:
         print(
             "[PythonProvider] OpenTelemetry packages not installed, tracing disabled. "
@@ -218,6 +213,8 @@ def _traced_call(method_callable, args, function_name):
     if not traceparent:
         return call_method(method_callable, args)
 
+    user_error = None
+
     try:
         from opentelemetry.propagate import extract
         from opentelemetry.trace import SpanKind, Status, StatusCode
@@ -354,6 +351,7 @@ def _traced_call(method_callable, args, function_name):
                 return result
 
             except Exception as e:
+                user_error = e
                 # Record exception and set error status
                 span.record_exception(e)
                 span.set_status(Status(StatusCode.ERROR, str(e)))
@@ -361,6 +359,9 @@ def _traced_call(method_callable, args, function_name):
                 raise
 
     except Exception as tracing_error:
+        if user_error is not None:
+            raise user_error
+
         # If tracing itself fails, log and fall back to untraced call
         print(
             f"[PythonProvider] Tracing error (continuing without trace): {tracing_error}",

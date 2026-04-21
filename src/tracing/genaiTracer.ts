@@ -10,6 +10,7 @@ import {
   trace,
 } from '@opentelemetry/api';
 import { ATTR_ERROR_TYPE, ERROR_TYPE_VALUE_OTHER } from '@opentelemetry/semantic-conventions';
+import { getEnvString } from '../envars';
 
 import type { TokenUsage } from '../types/shared';
 
@@ -50,6 +51,8 @@ export const GenAIAttributes = {
   USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
   USAGE_ACCEPTED_PREDICTION_TOKENS: 'gen_ai.usage.accepted_prediction_tokens',
   USAGE_REJECTED_PREDICTION_TOKENS: 'gen_ai.usage.rejected_prediction_tokens',
+  USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read_input_tokens',
+  USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation_input_tokens',
 } as const;
 
 /** OTEL Gen AI operation names (spec well-known values) */
@@ -73,7 +76,7 @@ const LEGACY_TO_CANONICAL: Record<LegacyOperationName, GenAIOperationName> = {
 
 /**
  * Normalize an operation name, mapping legacy values to canonical spec names.
- * e.g. 'completion' → 'text_completion', 'embedding' → 'embeddings'
+ * e.g. 'completion' -> 'text_completion', 'embedding' -> 'embeddings'
  */
 export function normalizeOperationName(
   name: GenAIOperationName | LegacyOperationName,
@@ -92,7 +95,7 @@ const GEN_AI_LATEST_OPT_IN = 'gen_ai_latest_experimental';
  * gen_ai.system and gen_ai.provider.name for backward compatibility.
  */
 export function useGenAILatestExperimental(): boolean {
-  const val = process.env.OTEL_SEMCONV_STABILITY_OPT_IN;
+  const val = getEnvString('OTEL_SEMCONV_STABILITY_OPT_IN');
   if (!val || typeof val !== 'string') {
     return false;
   }
@@ -333,7 +336,7 @@ export async function withGenAISpan<T>(
 ): Promise<T> {
   const tracer = getGenAITracer();
 
-  // Normalize legacy operation names (completion → text_completion, embedding → embeddings)
+  // Normalize legacy operation names (completion -> text_completion, embedding -> embeddings)
   const canonicalOperation = normalizeOperationName(ctx.operationName);
 
   // Span name follows GenAI convention: "{operation} {model}"
@@ -555,6 +558,18 @@ export function setGenAIResponseAttributes(
         span.setAttribute(
           GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
           usage.completionDetails.rejectedPrediction,
+        );
+      }
+      if (usage.completionDetails.cacheReadInputTokens !== undefined) {
+        span.setAttribute(
+          GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+          usage.completionDetails.cacheReadInputTokens,
+        );
+      }
+      if (usage.completionDetails.cacheCreationInputTokens !== undefined) {
+        span.setAttribute(
+          GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
+          usage.completionDetails.cacheCreationInputTokens,
         );
       }
     }

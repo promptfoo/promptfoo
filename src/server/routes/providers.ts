@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { defaultProviders } from '../../constants/defaultProviders';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
@@ -20,38 +19,6 @@ import type { Request, Response } from 'express';
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
 export const providersRouter = Router();
-
-/**
- * GET /api/providers
- *
- * Returns the list of providers available in the eval creator UI.
- * If ui-providers.yaml exists in .promptfoo directory, returns those providers.
- * Otherwise returns the default list of ~600 providers.
- *
- * Response:
- * - providers: Array of provider options (can be string IDs or full config objects)
- * - hasCustomConfig: Boolean indicating if custom config exists
- */
-providersRouter.get('/', (_req: Request, res: Response): void => {
-  try {
-    const serverProviders = getAvailableProviders();
-
-    // If server has custom providers, use those; otherwise use defaults
-    const providers = serverProviders.length > 0 ? serverProviders : defaultProviders;
-    const hasCustomConfig = serverProviders.length > 0;
-
-    res.json({
-      success: true,
-      data: { providers, hasCustomConfig },
-    });
-  } catch (error) {
-    logger.error('[GET /api/providers] Error loading providers', { error });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to load providers',
-    });
-  }
-});
 
 /**
  * GET /api/providers/config-status

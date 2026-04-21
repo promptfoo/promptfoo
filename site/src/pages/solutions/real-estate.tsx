@@ -2,11 +2,9 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import BalanceIcon from '@mui/icons-material/Balance';
-import CampaignIcon from '@mui/icons-material/Campaign';
 import GavelIcon from '@mui/icons-material/Gavel';
 import HomeIcon from '@mui/icons-material/Home';
 import LockIcon from '@mui/icons-material/Lock';

@@ -12,6 +12,7 @@ import {
   setGenAIResponseAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
+import { mockProcessEnv } from '../util/utils';
 
 // Mock @opentelemetry/api
 const mockSpan = {
@@ -275,6 +276,28 @@ describe('genaiTracer', () => {
       );
     });
 
+    it('should set cache token completion details attributes', () => {
+      const result: GenAISpanResult = {
+        tokenUsage: {
+          completionDetails: {
+            cacheReadInputTokens: 150,
+            cacheCreationInputTokens: 40,
+          },
+        },
+      };
+
+      setGenAIResponseAttributes(mockSpan as any, result);
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
+        40,
+      );
+    });
+
     it('should set response metadata attributes', () => {
       const result: GenAISpanResult = {
         responseModel: 'gpt-4-0613',
@@ -356,23 +379,29 @@ describe('genaiTracer', () => {
     });
 
     it('should normalize legacy names in withGenAISpan', async () => {
-      await withGenAISpan(
-        { system: 'openai', operationName: 'completion', model: 'davinci', providerId: 'test' },
-        async () => ({ output: 'test' }),
-      );
+      const restoreEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
 
-      // Span name should use emitted operation name (legacy by default since env not set)
-      expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
-        'completion davinci',
-        expect.any(Object),
-        expect.anything(),
-        expect.any(Function),
-      );
+      try {
+        await withGenAISpan(
+          { system: 'openai', operationName: 'completion', model: 'davinci', providerId: 'test' },
+          async () => ({ output: 'test' }),
+        );
 
-      // The attribute should also be the emitted (legacy) name
-      const callArgs = mockTracer.startActiveSpan.mock.calls[0];
-      const options = callArgs[1];
-      expect(options.attributes['gen_ai.operation.name']).toBe('completion');
+        // Span name should use emitted operation name (legacy by default since env not set)
+        expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
+          'completion davinci',
+          expect.any(Object),
+          expect.anything(),
+          expect.any(Function),
+        );
+
+        // The attribute should also be the emitted (legacy) name
+        const callArgs = mockTracer.startActiveSpan.mock.calls[0];
+        const options = callArgs[1];
+        expect(options.attributes['gen_ai.operation.name']).toBe('completion');
+      } finally {
+        restoreEnv();
+      }
     });
   });
 

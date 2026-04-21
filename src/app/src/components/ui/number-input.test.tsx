@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { NumberInput } from './number-input';
@@ -165,7 +165,7 @@ describe('NumberInput', () => {
     input.focus();
     expect(document.activeElement).toBe(input);
 
-    fireEvent.wheel(input);
+    input.dispatchEvent(new WheelEvent('wheel', { bubbles: true }));
     expect(document.activeElement).not.toBe(input);
   });
 
@@ -188,6 +188,12 @@ describe('NumberInput', () => {
 
   it('handles undefined value as empty string', () => {
     render(<NumberInput value={undefined} onChange={vi.fn()} />);
+    const input = screen.getByRole('spinbutton') as HTMLInputElement;
+    expect(input.value).toBe('');
+  });
+
+  it('handles NaN value as empty string', () => {
+    render(<NumberInput value={Number.NaN} onChange={vi.fn()} />);
     const input = screen.getByRole('spinbutton') as HTMLInputElement;
     expect(input.value).toBe('');
   });

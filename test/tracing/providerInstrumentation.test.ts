@@ -24,6 +24,7 @@ import {
   useGenAILatestExperimental,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
+import { mockProcessEnv } from '../util/utils';
 
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
@@ -46,7 +47,7 @@ vi.mock('../../src/logger', () => ({
 describe('Phase 5: Provider Instrumentation Validation', () => {
   let tracerProvider: NodeTracerProvider;
   let memoryExporter: InMemorySpanExporter;
-  let savedOtelSemconvOptIn: string | undefined;
+  let restoreDefaultEnv: (() => void) | undefined;
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
@@ -54,12 +55,13 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
     });
     tracerProvider.register();
-    savedOtelSemconvOptIn = process.env.OTEL_SEMCONV_STABILITY_OPT_IN;
-    process.env.OTEL_SEMCONV_STABILITY_OPT_IN = 'gen_ai_latest_experimental';
+    restoreDefaultEnv = mockProcessEnv({
+      OTEL_SEMCONV_STABILITY_OPT_IN: 'gen_ai_latest_experimental',
+    });
   });
 
   afterAll(async () => {
-    process.env.OTEL_SEMCONV_STABILITY_OPT_IN = savedOtelSemconvOptIn;
+    restoreDefaultEnv?.();
     await tracerProvider.shutdown();
   });
 
@@ -240,11 +242,14 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
     });
 
     describe('when OTEL_SEMCONV_STABILITY_OPT_IN is not set (legacy emission)', () => {
+      let restoreLegacyEnv: (() => void) | undefined;
+
       beforeEach(() => {
-        delete process.env.OTEL_SEMCONV_STABILITY_OPT_IN;
+        restoreLegacyEnv = mockProcessEnv({ OTEL_SEMCONV_STABILITY_OPT_IN: undefined });
       });
       afterEach(() => {
-        process.env.OTEL_SEMCONV_STABILITY_OPT_IN = 'gen_ai_latest_experimental';
+        restoreLegacyEnv?.();
+        restoreLegacyEnv = undefined;
       });
 
       it('should emit legacy operation names and span names for backward compatibility', async () => {
@@ -433,7 +438,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       await withGenAISpan(
         { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
         async () => {
-          // Nested call (e.g., embedding for RAG) — uses legacy name
+          // Nested call (e.g., embedding for RAG) uses legacy name
           await withGenAISpan(
             {
               system: 'openai',

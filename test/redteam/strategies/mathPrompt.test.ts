@@ -10,8 +10,7 @@ import {
   encodeMathPrompt,
   generateMathPrompt,
 } from '../../../src/redteam/strategies/mathPrompt';
-
-import type { ApiProvider } from '../../../src/types/providers';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 vi.mock('cli-progress');
 vi.mock('../../../src/redteam/providers/shared');
@@ -80,12 +79,12 @@ describe('mathPrompt', () => {
 
   describe('encodeMathPrompt', () => {
     it('should encode text using math concepts', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'mock',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
           output: JSON.stringify({ encodedPrompt: 'encoded math text' }),
         }),
-      } as any;
+      });
 
       vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
 
@@ -96,12 +95,10 @@ describe('mathPrompt', () => {
     });
 
     it('should handle JSON parsing errors', async () => {
-      const mockProvider: ApiProvider = {
-        id: () => 'mock',
-        callApi: vi.fn().mockResolvedValue({
-          output: 'invalid json',
-        }),
-      } as any;
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({ output: 'invalid json' }),
+      });
 
       vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
 
@@ -122,12 +119,12 @@ describe('mathPrompt', () => {
       });
       const customConcepts = ['topology', 'calculus'];
 
-      const mockProvider: ApiProvider = {
-        id: () => 'mock',
-        callApi: vi.fn().mockResolvedValue({
+      const mockProvider = createMockProvider({
+        id: 'mock',
+        response: createProviderResponse({
           output: JSON.stringify({ encodedPrompt: 'encoded' }),
         }),
-      } as any;
+      });
 
       vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider);
       (SingleBar as any).mockImplementation(function () {
