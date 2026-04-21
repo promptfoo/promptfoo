@@ -136,6 +136,18 @@ The factuality checker will parse either format:
 - A single letter response like "A" or "(A)"
 - A JSON object: `{"category": "A", "reason": "Detailed explanation..."}`
 
+## Using Factuality with CSV
+
+Use the `factuality:` prefix in `__expected` columns:
+
+```csv title="tests.csv"
+question,__expected
+"What does GPT stand for?","factuality:Generative Pre-trained Transformer"
+"What is photosynthesis?","factuality:Plants convert sunlight into chemical energy"
+```
+
+To apply factuality to all rows, see [CSV with defaultTest](/docs/configuration/test-cases#csv-with-defaulttest).
+
 ## See Also
 
 - [Model-graded metrics](/docs/configuration/expected-outputs/model-graded) for more options

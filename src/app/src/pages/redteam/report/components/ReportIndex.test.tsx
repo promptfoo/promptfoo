@@ -1,11 +1,11 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { EvalSummary } from '@promptfoo/types';
-
-import { callApi } from '@app/utils/api';
+import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { formatDataGridDate } from '@app/utils/date';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
+import type { EvalSummary } from '@promptfoo/types';
 
 vi.mock('@app/utils/api');
 
@@ -16,6 +16,65 @@ vi.mock('react-router-dom', async () => {
     useNavigate: vi.fn(),
   };
 });
+
+// Mock the DataTable component to simplify testing
+vi.mock('@app/components/data-table/data-table', () => ({
+  DataTable: ({
+    data,
+    isLoading,
+    error,
+    onRowClick,
+    columns,
+  }: {
+    data: EvalSummary[];
+    isLoading: boolean;
+    error: string | null;
+    onRowClick: (row: EvalSummary) => void;
+    columns: {
+      accessorKey: string;
+      header: string;
+      cell: (props: { row: { original: EvalSummary }; getValue: () => unknown }) => React.ReactNode;
+    }[];
+  }) => {
+    if (isLoading) {
+      return <div data-testid="loading">Loading...</div>;
+    }
+
+    if (error) {
+      return <div data-testid="error">{error}</div>;
+    }
+
+    if (data.length === 0) {
+      return <div data-testid="empty">No data</div>;
+    }
+
+    return (
+      <div data-testid="data-table" role="grid">
+        {/* Render toolbar button for test */}
+        <button>Select columns</button>
+        {data.map((row) => (
+          <div key={row.evalId} data-testid={`row-${row.evalId}`} role="row">
+            {columns.map((col) => {
+              const value = row[col.accessorKey as keyof EvalSummary];
+              const cellContent = col.cell({
+                row: { original: row },
+                getValue: () => value,
+              });
+              return (
+                <div key={col.accessorKey} role="gridcell" aria-label={String(value)}>
+                  {cellContent}
+                </div>
+              );
+            })}
+            <button data-testid={`click-${row.evalId}`} onClick={() => onRowClick?.(row)}>
+              Click row
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  },
+}));
 
 const mockData: EvalSummary[] = [
   {
@@ -46,15 +105,13 @@ const mockData: EvalSummary[] = [
 
 describe('ReportIndex', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetCallApiMock();
+    vi.mocked(useNavigate).mockReturnValue(vi.fn());
   });
 
-  describe('ReportsDataGrid rendering', () => {
-    it('should render all rows and columns with correct values and formatting for a given EvalSummary[] data and isLoading=false', async () => {
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: async () => ({ data: mockData }),
-      } as Response);
+  describe('ReportsTable rendering', () => {
+    it('should render all rows and columns with correct values for a given EvalSummary[] data', async () => {
+      mockCallApiResponse({ data: mockData });
 
       render(
         <MemoryRouter>
@@ -69,24 +126,19 @@ describe('ReportIndex', () => {
       expect(screen.getByText('GPT-4')).toBeInTheDocument();
       expect(screen.getByText(formatDataGridDate(mockData[0].createdAt))).toBeInTheDocument();
       expect(screen.getByText('25.00%')).toBeInTheDocument();
-      const numTestsCell1 = screen.getAllByRole('gridcell', { name: '100' });
-      expect(numTestsCell1.length).toBeGreaterThan(0);
+      expect(screen.getByText('100')).toBeInTheDocument();
       expect(screen.getByText('eval-1')).toBeInTheDocument();
 
       expect(screen.getByRole('link', { name: 'Another Security Scan' })).toBeInTheDocument();
       expect(screen.getByText('anthropic:claude-2')).toBeInTheDocument();
       expect(screen.getByText(formatDataGridDate(mockData[1].createdAt))).toBeInTheDocument();
       expect(screen.getByText('50.00%')).toBeInTheDocument();
-      const numTestsCell2 = screen.getAllByRole('gridcell', { name: '50' });
-      expect(numTestsCell2.length).toBeGreaterThan(0);
+      expect(screen.getByText('50')).toBeInTheDocument();
       expect(screen.getByText('eval-2')).toBeInTheDocument();
     });
 
-    it('should render the CustomToolbar in the DataGrid toolbar slot', async () => {
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: async () => ({ data: mockData }),
-      } as Response);
+    it('should render the toolbar', async () => {
+      mockCallApiResponse({ data: mockData });
 
       render(
         <MemoryRouter>
@@ -100,7 +152,7 @@ describe('ReportIndex', () => {
     });
 
     it('should render "No target" when providers array is empty', async () => {
-      const mockData: EvalSummary[] = [
+      const mockDataNoProviders: EvalSummary[] = [
         {
           evalId: 'eval-1',
           datasetId: 'dataset-1',
@@ -115,10 +167,7 @@ describe('ReportIndex', () => {
         },
       ];
 
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: async () => ({ data: mockData }),
-      } as Response);
+      mockCallApiResponse({ data: mockDataNoProviders });
 
       render(
         <MemoryRouter>
@@ -132,7 +181,7 @@ describe('ReportIndex', () => {
     });
 
     it('should display "Untitled Evaluation" in the description column when description is missing', async () => {
-      const mockData: EvalSummary[] = [
+      const mockDataNoDescription: EvalSummary[] = [
         {
           evalId: 'eval-3',
           datasetId: 'dataset-3',
@@ -146,10 +195,7 @@ describe('ReportIndex', () => {
           description: '',
         },
       ];
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: async () => ({ data: mockData }),
-      } as Response);
+      mockCallApiResponse({ data: mockDataNoDescription });
 
       render(
         <MemoryRouter>
@@ -163,12 +209,10 @@ describe('ReportIndex', () => {
     });
   });
 
-  describe('ReportsDataGrid navigation', () => {
-    it('should navigate to /reports?evalId={evalId} when a cell in a row is clicked and that row has a valid evalId', async () => {
-      vi.mocked(callApi).mockResolvedValue({
-        ok: true,
-        json: async () => ({ data: mockData }),
-      } as Response);
+  describe('ReportsTable navigation', () => {
+    it('should navigate to /reports?evalId={evalId} when a row is clicked', async () => {
+      const user = userEvent.setup();
+      mockCallApiResponse({ data: mockData });
 
       const navigate = vi.fn();
       vi.mocked(useNavigate).mockReturnValue(navigate);
@@ -184,7 +228,7 @@ describe('ReportIndex', () => {
       });
 
       const linkElement = screen.getByRole('link', { name: 'My First Redteam Report' });
-      fireEvent.click(linkElement);
+      await user.click(linkElement);
 
       expect(navigate).toHaveBeenCalledWith('/reports?evalId=eval-1');
     });

@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider setup redteam multi-input target smoke
+
+targets:
+  - id: https
+    label: provider-setup-redteam-target
+    inputs:
+      user_id: Signed-in user identifier.
+      invoice_id: Invoice identifier being discussed.
+      message: User message to the assistant.
+    config:
+      url: '{{env.PROVIDER_SETUP_REDTEAM_URL}}'
+      method: POST
+      stateful: false
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.PROVIDER_SETUP_REDTEAM_TOKEN}}'
+      body:
+        user_id: '{{user_id}}'
+        invoice_id: '{{invoice_id}}'
+        message: '{{message}}'
+      transformResponse: json.output
+
+redteam:
+  purpose: >-
+    Invoice support assistant that answers invoice questions only for the
+    signed-in user and must not reveal or modify other users' invoices.
+  numTests: 1
+  plugins:
+    - id: bola
+      numTests: 1
+    - id: rbac
+      numTests: 1
+  strategies:
+    - basic

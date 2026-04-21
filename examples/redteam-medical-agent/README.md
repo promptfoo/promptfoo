@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-medical-agent
+cd redteam-medical-agent
 ```
 
 ## Features
@@ -20,7 +21,7 @@ npx promptfoo@latest init --example redteam-medical-agent
 
 ## Prerequisites
 
-- Node.js 20 or higher
+- Node.js 20+
 - npm or yarn
 - OpenAI API key for the agent
 
@@ -87,7 +88,7 @@ This agent is vulnerable to various attack vectors that can be tested using prom
 2. Unauthorized access to medical records
 3. Prescription fraud
 4. Insurance information exposure
-5. HIPAA compliance bypasses
+5. Patient privacy control bypasses
 6. Medical misinformation vulnerabilities
 7. Social engineering attacks
 

@@ -8,6 +8,8 @@ export function createEmptyCompletionDetails(): Required<CompletionTokenDetails>
     reasoning: 0,
     acceptedPrediction: 0,
     rejectedPrediction: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
   };
 }
 
@@ -62,6 +64,11 @@ function accumulateCompletionDetails(
     reasoning: addNumbers(target?.reasoning, update.reasoning),
     acceptedPrediction: addNumbers(target?.acceptedPrediction, update.acceptedPrediction),
     rejectedPrediction: addNumbers(target?.rejectedPrediction, update.rejectedPrediction),
+    cacheReadInputTokens: addNumbers(target?.cacheReadInputTokens, update.cacheReadInputTokens),
+    cacheCreationInputTokens: addNumbers(
+      target?.cacheCreationInputTokens,
+      update.cacheCreationInputTokens,
+    ),
   };
 }
 
@@ -174,15 +181,47 @@ export function accumulateAssertionTokenUsage(
 export function accumulateResponseTokenUsage(
   target: TokenUsage,
   response: { tokenUsage?: Partial<TokenUsage> } | undefined,
+  options?: { countAsRequest?: boolean },
 ): void {
+  const countAsRequest = options?.countAsRequest ?? true;
+
   if (response?.tokenUsage) {
-    accumulateTokenUsage(target, response.tokenUsage);
-    // Increment numRequests if not already present in tokenUsage
-    if (response.tokenUsage.numRequests === undefined) {
-      target.numRequests = (target.numRequests ?? 0) + 1;
+    if (countAsRequest) {
+      accumulateTokenUsage(target, response.tokenUsage);
+      // Increment numRequests if not already present in tokenUsage
+      if (response.tokenUsage.numRequests === undefined) {
+        target.numRequests = (target.numRequests ?? 0) + 1;
+      }
+    } else {
+      // Preserve token totals while explicitly excluding request counting.
+      const tokenUsageWithoutRequests: Partial<TokenUsage> = {
+        ...response.tokenUsage,
+        numRequests: undefined,
+      };
+      accumulateTokenUsage(target, tokenUsageWithoutRequests);
     }
-  } else if (response) {
+  } else if (response && countAsRequest) {
     // Only increment numRequests if we got a response but no token usage
     target.numRequests = (target.numRequests ?? 0) + 1;
   }
+}
+
+/**
+ * Normalize token usage from a provider response into a standard TokenUsage object.
+ * Provides default values for all fields if not present in the response.
+ * @param tokenUsage Token usage from provider response (may be partial or undefined)
+ * @returns Fully populated TokenUsage object with defaults
+ */
+export function normalizeTokenUsage(
+  tokenUsage: Partial<TokenUsage> | undefined,
+): Required<TokenUsage> {
+  return {
+    total: tokenUsage?.total || 0,
+    prompt: tokenUsage?.prompt || 0,
+    completion: tokenUsage?.completion || 0,
+    cached: tokenUsage?.cached || 0,
+    numRequests: tokenUsage?.numRequests || 0,
+    completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
+    assertions: tokenUsage?.assertions || createEmptyAssertions(),
+  };
 }

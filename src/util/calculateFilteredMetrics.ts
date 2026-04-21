@@ -6,6 +6,10 @@
  * ALL prompts at once, achieving significant performance improvements over
  * the naive approach of querying each prompt separately.
  *
+ * SECURITY: This module uses Drizzle's sql template strings for parameterized queries
+ * to prevent SQL injection. The whereSql parameter is a SQL fragment, not a string,
+ * ensuring all user-provided values are properly escaped.
+ *
  * Performance targets:
  * - Simple eval (2 prompts, 100 results): <50ms
  * - Complex eval (10 prompts, 1000 results): <150ms
@@ -18,7 +22,7 @@
  * 4. OOM protection with MAX_RESULTS_FOR_METRICS limit
  */
 
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
@@ -28,8 +32,8 @@ import type { PromptMetrics } from '../types/index';
 export interface FilteredMetricsOptions {
   evalId: string;
   numPrompts: number;
-  whereSql: string;
-  whereParams: any[];
+  /** SQL fragment for WHERE clause (not a raw string - prevents SQL injection) */
+  whereSql: SQL<unknown>;
 }
 
 /**
@@ -42,6 +46,10 @@ const MAX_RESULTS_FOR_METRICS = 50000;
  * Calculates metrics for filtered results using optimized SQL aggregation.
  * Uses a SINGLE GROUP BY query to aggregate all prompts at once.
  *
+ * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
+ * The whereSql parameter is a SQL fragment, not a raw string, ensuring all
+ * user-provided values are properly escaped.
+ *
  * This is the core performance optimization - instead of making 2-3 queries
  * per prompt (which would be 30 queries for 10 prompts), we make 3-4 total queries:
  * 1. Count check (OOM protection)
@@ -49,17 +57,17 @@ const MAX_RESULTS_FOR_METRICS = 50000;
  * 3. Named scores (GROUP BY prompt_idx, metric_name)
  * 4. Assertions (GROUP BY prompt_idx)
  *
- * @param opts - Options including WHERE clause and parameters
+ * @param opts - Options including WHERE clause SQL fragment
  * @returns Array of PromptMetrics, one per prompt
  */
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
 ): Promise<PromptMetrics[]> {
-  const { numPrompts, whereSql, whereParams } = opts;
+  const { numPrompts, whereSql } = opts;
 
   try {
     // Check result count first (protect against OOM)
-    const countResult = await getResultCount(whereSql, whereParams);
+    const countResult = await getResultCount(whereSql);
     if (countResult > MAX_RESULTS_FOR_METRICS) {
       logger.warn(`Filtered result count ${countResult} exceeds limit ${MAX_RESULTS_FOR_METRICS}`, {
         evalId: opts.evalId,
@@ -79,14 +87,16 @@ export async function calculateFilteredMetrics(
 
 /**
  * Get count of filtered results (for OOM protection)
+ *
+ * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
  */
-async function getResultCount(whereSql: string, _params: any[]): Promise<number> {
+async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
   const db = getDb();
-  const query = sql.raw(`
+  const query = sql`
     SELECT COUNT(*) as count
     FROM eval_results
     WHERE ${whereSql}
-  `);
+  `;
 
   const result = (await db.get(query)) as { count: number } | undefined;
   return result?.count || 0;
@@ -95,16 +105,18 @@ async function getResultCount(whereSql: string, _params: any[]): Promise<number>
 /**
  * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
  * This is the key performance improvement from the audit.
+ *
+ * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
  */
 async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
-  const { numPrompts, whereSql, whereParams } = opts;
+  const { numPrompts, whereSql } = opts;
   const db = getDb();
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
 
   // ===== QUERY 1: Basic metrics + token usage (ALL PROMPTS) =====
-  const basicMetricsQuery = sql.raw(`
+  const basicMetricsQuery = sql`
     SELECT
       prompt_idx,
       COUNT(DISTINCT test_idx) as total_count,
@@ -124,7 +136,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     WHERE ${whereSql}
     GROUP BY prompt_idx
     ORDER BY prompt_idx
-  `);
+  `;
 
   const basicResults = (await db.all(basicMetricsQuery)) as Array<{
     prompt_idx: number;
@@ -166,16 +178,17 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       },
       namedScores: {},
       namedScoresCount: {},
+      namedScoreWeights: {},
       assertPassCount: 0,
       assertFailCount: 0,
     };
   }
 
   // ===== QUERY 2: Named scores (SQL JSON aggregation) =====
-  await aggregateNamedScores(metrics, whereSql, whereParams);
+  await aggregateNamedScores(metrics, whereSql);
 
   // ===== QUERY 3: Assertion counts (SQL JSON aggregation) =====
-  await aggregateAssertions(metrics, whereSql, whereParams);
+  await aggregateAssertions(metrics, whereSql);
 
   logger.debug('Filtered metrics calculated', {
     numPrompts,
@@ -189,36 +202,62 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
  * Aggregate named scores using SQL json_each().
  * This is MUCH more efficient than fetching all results and parsing in JavaScript.
  *
+ * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
+ *
  * Uses SQLite's json_each() to parse JSON in the database, avoiding the need
  * to fetch potentially thousands of rows into memory.
  */
 async function aggregateNamedScores(
   metrics: PromptMetrics[],
-  whereSql: string,
-  _params: any[],
+  whereSql: SQL<unknown>,
 ): Promise<void> {
   const db = getDb();
 
-  // Use SQLite's json_each to parse JSON in database
-  const query = sql.raw(`
+  // Use SQLite's json_each to parse JSON in database. When newer results include
+  // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
+  // multiply them back into weighted totals before aggregating prompt metrics.
+  const query = sql`
     SELECT
       prompt_idx,
-      json_each.key as metric_name,
-      SUM(CAST(json_each.value AS REAL)) as metric_sum,
-      COUNT(*) as metric_count
-    FROM eval_results,
-      json_each(eval_results.named_scores)
+      score_entries.key as metric_name,
+      SUM(
+        CASE
+          WHEN weight_entries.value IS NOT NULL THEN
+            CAST(score_entries.value AS REAL) * CAST(weight_entries.value AS REAL)
+          ELSE CAST(score_entries.value AS REAL)
+        END
+      ) as metric_sum,
+      COUNT(*) as metric_count,
+      SUM(
+        CASE
+          WHEN weight_entries.value IS NOT NULL THEN CAST(weight_entries.value AS REAL)
+          ELSE 1
+        END
+      ) as metric_weight_total
+    FROM eval_results
+    JOIN json_each(eval_results.named_scores) as score_entries
+    LEFT JOIN json_each(
+      CASE
+        WHEN grading_result IS NOT NULL
+          AND json_valid(grading_result)
+          AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
+        THEN json_extract(grading_result, '$.namedScoreWeights')
+        ELSE json('{}')
+      END
+    ) as weight_entries
+      ON weight_entries.key = score_entries.key
     WHERE ${whereSql}
       AND named_scores IS NOT NULL
       AND json_valid(named_scores)
-    GROUP BY prompt_idx, json_each.key
-  `);
+    GROUP BY prompt_idx, score_entries.key
+  `;
 
   const results = (await db.all(query)) as Array<{
     prompt_idx: number;
     metric_name: string;
     metric_sum: number;
     metric_count: number;
+    metric_weight_total: number;
   }>;
 
   // Populate named scores
@@ -227,6 +266,8 @@ async function aggregateNamedScores(
     if (idx >= 0 && idx < metrics.length && metrics[idx]) {
       metrics[idx].namedScores[row.metric_name] = row.metric_sum;
       metrics[idx].namedScoresCount[row.metric_name] = row.metric_count;
+      metrics[idx].namedScoreWeights ||= {};
+      metrics[idx].namedScoreWeights[row.metric_name] = row.metric_weight_total;
     }
   }
 }
@@ -234,6 +275,8 @@ async function aggregateNamedScores(
 /**
  * Aggregate assertion counts using SQL json_each().
  * This requires nested JSON extraction for componentResults.
+ *
+ * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
  *
  * The grading_result structure is:
  * {
@@ -247,14 +290,13 @@ async function aggregateNamedScores(
  */
 async function aggregateAssertions(
   metrics: PromptMetrics[],
-  whereSql: string,
-  _params: any[],
+  whereSql: SQL<unknown>,
 ): Promise<void> {
   const db = getDb();
 
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory
-  const query = sql.raw(`
+  const query = sql`
     SELECT
       prompt_idx,
       SUM(
@@ -283,7 +325,7 @@ async function aggregateAssertions(
     WHERE ${whereSql}
       AND grading_result IS NOT NULL
     GROUP BY prompt_idx
-  `);
+  `;
 
   const results = (await db.all(query)) as Array<{
     prompt_idx: number;
@@ -323,6 +365,7 @@ function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
     },
     namedScores: {},
     namedScoresCount: {},
+    namedScoreWeights: {},
     cost: 0,
   }));
 }

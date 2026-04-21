@@ -1,22 +1,26 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../../src/cache';
+import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
 import {
   AWS_BEDROCK_MODELS,
   AwsBedrockCompletionProvider,
   addConfigParam,
   BEDROCK_MODEL,
   coerceStrToNum,
+  extractTextAndImages,
+  extractTextContent,
   formatPromptLlama2Chat,
   formatPromptLlama3Instruct,
   formatPromptLlama4,
+  formatPromptLlama32Vision,
   getLlamaModelHandler,
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
-import { AwsBedrockGenericProvider } from '../../../src/providers/bedrock/base';
-import { getCache, isCacheEnabled } from '../../../src/cache';
+import { mockProcessEnv } from '../../util/utils';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -52,7 +56,7 @@ const nodeHttpHandlerFactory = vi.hoisted(() => {
 });
 
 const credentialProviderSsoFactory = vi.hoisted(() => ({
-  mockSSOProvider: vi.fn(),
+  fromSSO: vi.fn(() => 'sso-provider'),
 }));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
@@ -71,6 +75,10 @@ vi.mock('@smithy/node-http-handler', () => ({
 }));
 
 const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
+
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: credentialProviderSsoFactory.fromSSO,
+}));
 
 // Preserve proxy variables so they can be restored after each test. These are
 // set in the container environment and can influence proxy-related logic in the
@@ -115,14 +123,16 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
 describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.AWS_BEDROCK_MAX_RETRIES;
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    credentialProviderSsoFactory.fromSSO.mockReset();
+    credentialProviderSsoFactory.fromSSO.mockReturnValue('sso-provider');
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     // Ensure proxy environment variables do not force proxy-specific code paths
     // when running tests. The container sets HTTP_PROXY by default which causes
     // getBedrockInstance to require optional dependencies that are not
     // installed in the test environment.
-    process.env.HTTP_PROXY = '';
-    process.env.HTTPS_PROXY = '';
+    mockProcessEnv({ HTTP_PROXY: '' });
+    mockProcessEnv({ HTTPS_PROXY: '' });
 
     nodeHttpHandlerFactory.setHandlerFactory(function () {
       return { handle: vi.fn() };
@@ -131,9 +141,17 @@ describe('AwsBedrockGenericProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
-    process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
-    process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    if (ORIGINAL_HTTP_PROXY === undefined) {
+      mockProcessEnv({ HTTP_PROXY: undefined });
+    } else {
+      mockProcessEnv({ HTTP_PROXY: ORIGINAL_HTTP_PROXY });
+    }
+    if (ORIGINAL_HTTPS_PROXY === undefined) {
+      mockProcessEnv({ HTTPS_PROXY: undefined });
+    } else {
+      mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
+    }
   });
 
   it('should create Bedrock instance without proxy settings', async () => {
@@ -144,10 +162,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
   });
 
@@ -165,10 +186,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -184,10 +208,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
     expect(BedrockRuntimeMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
@@ -195,7 +222,7 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
-    process.env.AWS_BEDROCK_MAX_RETRIES = '10';
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '10' });
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
         super('test-model', { config: { region: 'us-east-1' } });
@@ -203,10 +230,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
   });
 
@@ -232,16 +262,17 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
   });
 
   it('should create custom request handler when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
-    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
     const mockHandler = {
       handle: vi.fn(),
     };
@@ -258,14 +289,15 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
 
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
   });
 
   it('should add Authorization header with Bearer token to requests when using API key', async () => {
@@ -373,6 +405,17 @@ describe('AwsBedrockGenericProvider', () => {
 
       expect(provider.modelName).toBe(arnModelName);
       expect((provider.config as any).inferenceModelType).toBe('nova');
+    });
+
+    it('should handle inference profile ARN with nova2 model type', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/nova2-inference';
+      const config: any = { inferenceModelType: 'nova2' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('nova2');
     });
 
     it('should handle inference profile ARN with llama model type', async () => {
@@ -580,6 +623,35 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.system).toBe('You are a helpful assistant.');
     });
 
+    it('omits temperature for Claude Opus 4.7 on Bedrock invokeModel path', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0.5,
+      };
+      // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-7',
+      );
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('still forwards temperature for Claude Opus 4.6 on Bedrock invokeModel (regression)', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0,
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+      expect(params.temperature).toBe(0);
+    });
+
     it('should convert lone system message to user message', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -727,24 +799,14 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return SSO credential provider when profile is specified', async () => {
-      vi.mock('@aws-sdk/credential-provider-sso', async (importOriginal) => {
-        return {
-          ...(await importOriginal()),
-
-          fromSSO: (config: any) => {
-            credentialProviderSsoFactory.mockSSOProvider();
-            expect(config).toEqual({ profile: 'test-profile' });
-            return 'sso-provider';
-          },
-        };
-      });
-
       const provider = new TestBedrockProvider({
         profile: 'test-profile',
       });
 
       const credentials = await provider.getCredentials();
-      expect(credentialProviderSsoFactory.mockSSOProvider).toHaveBeenCalledWith();
+      expect(credentialProviderSsoFactory.fromSSO).toHaveBeenCalledWith({
+        profile: 'test-profile',
+      });
       expect(credentials).toBe('sso-provider');
     });
 
@@ -763,21 +825,21 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
       const provider = new TestBedrockProvider({});
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
-      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     });
 
     it('should prioritize config apiKey over environment variable', async () => {
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
       const provider = new TestBedrockProvider({
         apiKey: 'test-config-api-key',
       });
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
-      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     });
 
     it('should prioritize explicit credentials over API key', async () => {
@@ -814,10 +876,10 @@ describe('addConfigParam', () => {
 
   it('should add env value if config value is not provided', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY);
     expect(params.key).toBe('envValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should add default value if neither config nor env value is provided', async () => {
@@ -828,26 +890,26 @@ describe('addConfigParam', () => {
 
   it('should prioritize config value over env and default values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', 'configValue', process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('configValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should prioritize env value over default value if config value is not provided', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('envValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should parse env value if default value is a number', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '42';
+    mockProcessEnv({ TEST_ENV_KEY: '42' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(42);
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should handle undefined config, env, and default values gracefully', async () => {
@@ -858,18 +920,18 @@ describe('addConfigParam', () => {
 
   it('should correctly parse non-number string values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'nonNumberString';
+    mockProcessEnv({ TEST_ENV_KEY: 'nonNumberString' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(0);
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should correctly parse empty string values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '';
+    mockProcessEnv({ TEST_ENV_KEY: '' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should handle env value not set', async () => {
@@ -894,10 +956,10 @@ describe('addConfigParam', () => {
 
   it('should handle special characters in env values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '!@#$%^&*()_+';
+    mockProcessEnv({ TEST_ENV_KEY: '!@#$%^&*()_+' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('!@#$%^&*()_+');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 });
 
@@ -1320,6 +1382,320 @@ You are a helpful assistant.<|eot|><|header_start|>user<|header_end|>
 
 Hello<|eot|><|header_start|>assistant<|header_end|>`;
       expect(formatPromptLlama4(messages)).toBe(expected);
+    });
+  });
+
+  describe('extractTextContent', () => {
+    it('should return trimmed string when content is a string', () => {
+      expect(extractTextContent('  Hello world  ')).toBe('Hello world');
+    });
+
+    it('should extract text from array with text type blocks', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: 'world' },
+      ];
+      expect(extractTextContent(content)).toBe('Hello world');
+    });
+
+    it('should extract text from array without type field', () => {
+      const content = [{ text: 'Hello' }, { text: 'world' }];
+      expect(extractTextContent(content)).toBe('Hello world');
+    });
+
+    it('should handle string items in array', () => {
+      const content = ['Hello', 'world'] as any;
+      expect(extractTextContent(content)).toBe('Hello world');
+    });
+
+    it('should throw error when content contains images', () => {
+      const content = [
+        { type: 'text', text: 'Describe this image' },
+        { type: 'image', image: { format: 'jpeg', source: { bytes: 'base64data' } } },
+      ];
+      expect(() => extractTextContent(content, 'meta.llama3-2-11b')).toThrow(
+        /Multimodal content \(images\) detected/,
+      );
+      expect(() => extractTextContent(content, 'meta.llama3-2-11b')).toThrow(
+        /bedrock:converse:meta\.llama3-2-11b/,
+      );
+    });
+
+    it('should throw error when content contains image_url', () => {
+      const content = [
+        { type: 'text', text: 'Describe this' },
+        { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,abc' } },
+      ];
+      expect(() => extractTextContent(content)).toThrow(/Multimodal content \(images\) detected/);
+    });
+
+    it('should throw error when content has image property without type', () => {
+      const content = [{ text: 'Hello' }, { image: { format: 'png', source: { data: 'base64' } } }];
+      expect(() => extractTextContent(content)).toThrow(/Multimodal content \(images\) detected/);
+    });
+
+    it('should include model name in error message when provided', () => {
+      const content = [{ type: 'image', image: {} }];
+      expect(() => extractTextContent(content, 'us.meta.llama3-2-90b-instruct-v1:0')).toThrow(
+        /us\.meta\.llama3-2-90b-instruct-v1:0/,
+      );
+    });
+  });
+
+  describe('extractTextAndImages', () => {
+    it('should return text and empty images array for string content', () => {
+      const result = extractTextAndImages('Hello world');
+      expect(result).toEqual({ text: 'Hello world', images: [] });
+    });
+
+    it('should extract text from array with text blocks', () => {
+      const content = [
+        { type: 'text', text: 'Hello' },
+        { type: 'text', text: ' world' },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result).toEqual({ text: 'Hello world', images: [] });
+    });
+
+    it('should extract image data and insert <|image|> token from source.bytes format', () => {
+      const content = [
+        { type: 'text', text: 'Describe this: ' },
+        { type: 'image', source: { bytes: 'base64ImageData' } },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('Describe this: <|image|>');
+      expect(result.images).toEqual(['base64ImageData']);
+    });
+
+    it('should extract image data from source.data (Anthropic format)', () => {
+      const content = [
+        { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'base64Data' } },
+        { type: 'text', text: ' What is this?' },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|> What is this?');
+      expect(result.images).toEqual(['base64Data']);
+    });
+
+    it('should extract image data from image_url format (OpenAI compatible)', () => {
+      const content = [
+        { type: 'text', text: 'Look at this: ' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,pngBase64Data' } },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('Look at this: <|image|>');
+      expect(result.images).toEqual(['pngBase64Data']);
+    });
+
+    it('should extract image from data URL in source.bytes', () => {
+      const content = [{ type: 'image', source: { bytes: 'data:image/jpeg;base64,jpegDataHere' } }];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|>');
+      expect(result.images).toEqual(['jpegDataHere']);
+    });
+
+    it('should handle multiple images in correct order', () => {
+      const content = [
+        { type: 'text', text: 'Image 1: ' },
+        { type: 'image', source: { bytes: 'image1data' } },
+        { type: 'text', text: ' Image 2: ' },
+        { type: 'image', source: { bytes: 'image2data' } },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('Image 1: <|image|> Image 2: <|image|>');
+      expect(result.images).toEqual(['image1data', 'image2data']);
+    });
+
+    it('should handle block.image with source.data', () => {
+      const content = [{ type: 'image', image: { source: { data: 'nestedImageData' } } }];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|>');
+      expect(result.images).toEqual(['nestedImageData']);
+    });
+
+    it('should handle Buffer source.bytes', () => {
+      const content = [{ type: 'image', source: { bytes: Buffer.from('hello') } }];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|>');
+      expect(result.images).toEqual([Buffer.from('hello').toString('base64')]);
+    });
+
+    it('should extract base64 from data URL in source.data', () => {
+      const content = [
+        { type: 'image', source: { data: 'data:image/jpeg;base64,actualBase64Data' } },
+      ];
+      const result = extractTextAndImages(content);
+      expect(result.text).toBe('<|image|>');
+      expect(result.images).toEqual(['actualBase64Data']);
+    });
+  });
+
+  describe('formatPromptLlama32Vision', () => {
+    it('should format text-only message correctly', () => {
+      const messages: LlamaMessage[] = [{ role: 'user', content: 'Hello' }];
+      const result = formatPromptLlama32Vision(messages);
+      expect(result.prompt).toContain('<|begin_of_text|>');
+      expect(result.prompt).toContain('Hello');
+      expect(result.prompt).toContain('<|start_header_id|>assistant<|end_header_id|>');
+      expect(result.images).toEqual([]);
+    });
+
+    it('should format message with image and return images array', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { bytes: 'imageBase64' } },
+            { type: 'text', text: 'What is this?' },
+          ],
+        },
+      ];
+      const result = formatPromptLlama32Vision(messages);
+      expect(result.prompt).toContain('<|image|>');
+      expect(result.prompt).toContain('What is this?');
+      expect(result.images).toEqual(['imageBase64']);
+    });
+
+    it('should collect images from multiple messages', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { data: 'img1' } },
+            { type: 'text', text: 'First image' },
+          ],
+        },
+        { role: 'assistant', content: 'I see a cat' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'And this: ' },
+            { type: 'image', source: { data: 'img2' } },
+          ],
+        },
+      ];
+      const result = formatPromptLlama32Vision(messages);
+      expect(result.images).toEqual(['img1', 'img2']);
+      expect(result.prompt).toContain('First image');
+      expect(result.prompt).toContain('I see a cat');
+      expect(result.prompt).toContain('And this:');
+    });
+  });
+
+  describe('getLlamaModelHandler LLAMA3_2 with images', () => {
+    it('should include images array in params when multimodal content provided (11B)', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { bytes: 'testImageData' } },
+            { type: 'text', text: 'What is in this image?' },
+          ],
+        },
+      ]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-11b-instruct-v1:0',
+      );
+      expect(params.images).toEqual(['testImageData']);
+      expect(params.prompt).toContain('<|image|>');
+      expect(params.prompt).toContain('What is in this image?');
+    });
+
+    it('should not include images array when no images in content', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([{ role: 'user', content: 'Just text' }]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-11b-instruct-v1:0',
+      );
+      expect(params.images).toBeUndefined();
+      expect(params.prompt).toContain('Just text');
+    });
+
+    it('should handle image_url format in LLAMA3_2 (90B)', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Describe: ' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,pngData' } },
+          ],
+        },
+      ]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-90b-instruct-v1:0',
+      );
+      expect(params.images).toEqual(['pngData']);
+      expect(params.prompt).toContain('<|image|>');
+    });
+
+    it('should use text-only formatting for 1B and 3B models', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([{ role: 'user', content: 'Just text' }]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-3b-instruct-v1:0',
+      );
+      expect(params.images).toBeUndefined();
+      expect(params.prompt).toContain('Just text');
+      // Should use Llama 3 formatting, not vision formatting
+      expect(params.prompt).not.toContain('<|image|>');
+    });
+
+    it('should throw error when images are provided to 1B/3B text-only models', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { bytes: 'testImageData' } },
+            { type: 'text', text: 'What is in this image?' },
+          ],
+        },
+      ]);
+      await expect(
+        handler.params({}, prompt, undefined, 'us.meta.llama3-2-3b-instruct-v1:0'),
+      ).rejects.toThrow(/Multimodal content \(images\) detected/);
+    });
+  });
+
+  describe('formatPromptLlama3Instruct with multimodal content', () => {
+    it('should throw helpful error when message contains images', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', image: { format: 'jpeg', source: { bytes: 'data' } } },
+            { type: 'text', text: 'Describe this image' },
+          ],
+        },
+      ];
+      expect(() => formatPromptLlama3Instruct(messages, 'meta.llama3-2-11b')).toThrow(
+        /Multimodal content \(images\) detected/,
+      );
+    });
+
+    it('should work with text-only array content', () => {
+      const messages: LlamaMessage[] = [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'Hello world' }],
+        },
+      ];
+      const result = formatPromptLlama3Instruct(messages);
+      expect(result).toContain('Hello world');
     });
   });
 });
@@ -1927,9 +2303,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
     });
 
     it('should respect environment variables', async () => {
-      process.env.AWS_BEDROCK_MAX_TOKENS = '2000';
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
-      process.env.AWS_BEDROCK_TOP_P = '0.9';
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: '2000' });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.5' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.9' });
 
       const config = {};
       const prompt = 'Test with env vars';
@@ -1943,9 +2319,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
         top_p: 0.9,
       });
 
-      delete process.env.AWS_BEDROCK_MAX_TOKENS;
-      delete process.env.AWS_BEDROCK_TEMPERATURE;
-      delete process.env.AWS_BEDROCK_TOP_P;
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
     });
   });
 
@@ -2106,6 +2482,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('should prefer API-reported total_tokens when it differs from prompt + completion', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 50,
+          total_tokens: 99,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 50,
+        total: 99,
+        numRequests: 1,
+      });
+    });
+
     it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         outputs: [{ text: 'This is a generated response' }],
@@ -2162,6 +2556,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         prompt: 30,
         completion: 45,
         total: 75, // 30 + 45 = 75, not "3045"
+        numRequests: 1,
+      });
+    });
+
+    it('should prefer API-reported total_tokens when chat completion totals differ', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 45,
+          total_tokens: 101,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 45,
+        total: 101,
         numRequests: 1,
       });
     });
@@ -2543,12 +2955,46 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
   });
+
+  it('should map Claude Opus 4.7 models correctly', async () => {
+    // Base model ID (no -v1 suffix for 4.7+ — verified via `aws bedrock list-foundation-models`)
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+
+    // Cross-region inference profiles (verified via `aws bedrock list-inference-profiles`).
+    // Opus 4.7 uses the newer `jp.`/`global.` scheme instead of the older `apac.` prefix.
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-7']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+
+    // Sanity check: the -v1 suffix variant (which Anthropic/AWS docs do not publish) is NOT
+    // registered. Regressing this would silently route requests through the generic fallback.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7-v1']).toBeUndefined();
+  });
+
+  it('should map Nova 2 models correctly', async () => {
+    // Base model ID
+    expect(AWS_BEDROCK_MODELS['amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Regional model IDs
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Global cross-region inference
+    expect(AWS_BEDROCK_MODELS['global.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Note: Nova 2 Sonic uses bidirectional streaming API like Nova Sonic v1,
+    // so it's handled separately via NovaSonicProvider in registry.ts
+  });
 });
 
 describe('AwsBedrockCompletionProvider', () => {
   const mockInvokeModel = vi.fn();
   let originalModelHandler: IBedrockModel;
-  let mockCache;
+  let mockCache: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -2620,6 +3066,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      undefined, // vars not provided when context is undefined
     );
   });
 
@@ -2660,6 +3107,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {}, // vars from context
     );
   });
 
@@ -2703,7 +3151,35 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {}, // vars from context
     );
+  });
+
+  it('should set cached flag when returning cached response', async () => {
+    const mockCachedResponseData = { completion: 'cached response' };
+
+    mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponseData));
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const provider = new (class extends AwsBedrockCompletionProvider {
+      constructor() {
+        super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
+          config: {
+            region: 'us-east-1',
+          } as BedrockClaudeMessagesCompletionOptions,
+        });
+      }
+    })();
+
+    const result = await provider.callApi('test prompt');
+
+    expect(result.cached).toBe(true);
+    expect(result.output).toBe('processed output');
+    expect(mockCache.get).toHaveBeenCalled();
+    // Verify invokeModel was not called because cache was used
+    expect(mockInvokeModel).not.toHaveBeenCalled();
   });
 });
 
@@ -2765,8 +3241,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
     });
 
     it('should use environment variables for defaults', async () => {
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
-      process.env.AWS_BEDROCK_TOP_P = '0.8';
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.5' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.8' });
 
       const config = {};
       const prompt = 'Test prompt';
@@ -2776,8 +3252,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
       expect(result.temperature).toBe(0.5);
       expect(result.top_p).toBe(0.8);
 
-      delete process.env.AWS_BEDROCK_TEMPERATURE;
-      delete process.env.AWS_BEDROCK_TOP_P;
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
     });
   });
 

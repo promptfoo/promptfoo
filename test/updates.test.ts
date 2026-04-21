@@ -1,4 +1,5 @@
-import { vi, beforeEach, describe, it, expect, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from './util/utils';
 
 // Create mock for exec - using vi.hoisted to ensure it's available in vi.mock factory
 const { mockExecAsync } = vi.hoisted(() => {
@@ -28,7 +29,7 @@ vi.mock('../src/version', () => ({
   ENGINES: { node: '>=20.0.0' },
 }));
 
-import { fetchWithTimeout } from '../src/util/fetch/index';
+import logger from '../src/logger';
 import {
   checkForUpdates,
   checkModelAuditUpdates,
@@ -36,6 +37,7 @@ import {
   getModelAuditCurrentVersion,
   getModelAuditLatestVersion,
 } from '../src/updates';
+import { fetchWithTimeout } from '../src/util/fetch/index';
 import { VERSION } from '../src/version';
 
 beforeEach(() => {
@@ -70,12 +72,19 @@ describe('getLatestVersion', () => {
 });
 
 describe('checkForUpdates', () => {
+  let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    // Reset fetchWithTimeout to clear any queued mockResolvedValueOnce from other tests
+    vi.mocked(fetchWithTimeout).mockReset();
+    restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
   });
 
   afterEach(() => {
-    vi.mocked(console.log).mockRestore();
+    loggerInfoSpy.mockRestore();
+    restoreEnv();
   });
 
   it('should log an update message if a newer version is available - minor ver', async () => {
@@ -172,13 +181,17 @@ describe('getModelAuditCurrentVersion', () => {
 });
 
 describe('checkModelAuditUpdates', () => {
+  let loggerInfoSpy: ReturnType<typeof vi.spyOn>;
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    delete process.env.PROMPTFOO_DISABLE_UPDATE;
+    loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+    restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: undefined });
   });
 
   afterEach(() => {
-    vi.mocked(console.log).mockRestore();
+    loggerInfoSpy.mockRestore();
+    restoreEnv();
   });
 
   it('should return true and log message when update is available', async () => {
@@ -227,13 +240,16 @@ describe('checkModelAuditUpdates', () => {
   });
 
   it('should return false when PROMPTFOO_DISABLE_UPDATE is set', async () => {
-    process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
+    const restoreDisableUpdate = mockProcessEnv({ PROMPTFOO_DISABLE_UPDATE: 'true' });
+    try {
+      vi.mocked(fetchWithTimeout).mockReset();
 
-    vi.mocked(fetchWithTimeout).mockReset();
-
-    const result = await checkModelAuditUpdates();
-    expect(result).toBeFalsy();
-    expect(fetchWithTimeout).not.toHaveBeenCalled();
+      const result = await checkModelAuditUpdates();
+      expect(result).toBeFalsy();
+      expect(fetchWithTimeout).not.toHaveBeenCalled();
+    } finally {
+      restoreDisableUpdate();
+    }
   });
 
   it('should return false when current version cannot be determined', async () => {

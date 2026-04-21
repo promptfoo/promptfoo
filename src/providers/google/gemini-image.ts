@@ -1,16 +1,25 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { toDataUri } from '../../util/dataUrl';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import {
+  createAuthCacheDiscriminator,
   geminiFormatAndSystemInstructions,
   getGoogleClient,
   loadCredentials,
+  normalizeSafetySettings,
+  normalizeTools,
   resolveProjectId,
 } from './util';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ImageOutput,
+  ProviderResponse,
+} from '../../types/index';
 import type { CompletionOptions } from './types';
 
 interface GeminiImageOptions {
@@ -26,8 +35,9 @@ interface GeminiImageOptions {
  * This is different from Imagen models which use the :predict endpoint.
  *
  * Supported models:
- * - gemini-2.5-flash-preview-image-generation
+ * - gemini-2.5-flash-image
  * - gemini-3-pro-image-preview (Nano Banana Pro)
+ * - gemini-3.1-flash-image-preview (Nano Banana 2)
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
@@ -60,6 +70,21 @@ export class GeminiImageProvider implements ApiProvider {
     );
   }
 
+  /**
+   * Gemini 3.x image models use the global Vertex endpoint.
+   * Older models (e.g. gemini-2.5) use regional endpoints.
+   */
+  private usesGlobalVertexEndpoint(): boolean {
+    return this.modelName.startsWith('gemini-3');
+  }
+
+  /**
+   * imageSize is supported across Gemini 3.x image models.
+   */
+  private supportsImageSize(): boolean {
+    return this.modelName.startsWith('gemini-3');
+  }
+
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!prompt) {
       return {
@@ -69,7 +94,11 @@ export class GeminiImageProvider implements ApiProvider {
 
     // Check if we should use Vertex AI (when projectId is provided)
     const projectId =
-      this.config.projectId || getEnvString('GOOGLE_PROJECT_ID') || this.env?.GOOGLE_PROJECT_ID;
+      this.config.projectId ||
+      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      this.env?.GOOGLE_CLOUD_PROJECT ||
+      this.env?.GOOGLE_PROJECT_ID;
 
     if (projectId) {
       return this.callVertexApi(prompt, context);
@@ -85,7 +114,7 @@ export class GeminiImageProvider implements ApiProvider {
       error:
         'Gemini image models require either:\n' +
         '1. Google AI Studio: Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable\n' +
-        '2. Vertex AI: Set GOOGLE_PROJECT_ID environment variable or provide projectId in config, and run "gcloud auth application-default login"',
+        '2. Vertex AI: Set GOOGLE_CLOUD_PROJECT environment variable or provide projectId in config, and run "gcloud auth application-default login"',
     };
   }
 
@@ -102,24 +131,30 @@ export class GeminiImageProvider implements ApiProvider {
     }
 
     const apiHost = this.config.apiHost || 'generativelanguage.googleapis.com';
-    const apiVersion = this.modelName.startsWith('gemini-3-') ? 'v1alpha' : 'v1beta';
-    const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent?key=${apiKey}`;
+    // Gemini image generation models use v1beta in AI Studio.
+    const apiVersion = 'v1beta';
+    // Use header-based auth instead of query param to avoid API key in logs
+    const endpoint = `https://${apiHost}/${apiVersion}/models/${this.modelName}:generateContent`;
 
     const { contents } = geminiFormatAndSystemInstructions(prompt, context?.vars);
     const body = this.buildRequestBody(contents);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+        ...(this.config.headers || {}),
+      };
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
       const startTime = Date.now();
       const { data, cached } = (await fetchWithCache(
         endpoint,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.config.headers || {}),
-          },
+          headers,
           body: JSON.stringify(body),
-        },
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
         REQUEST_TIMEOUT_MS,
         'json',
         false,
@@ -139,8 +174,8 @@ export class GeminiImageProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     // Gemini 3 models require the global endpoint
-    const isGemini3 = this.modelName.startsWith('gemini-3-');
-    const location = isGemini3
+    const usesGlobalVertexEndpoint = this.usesGlobalVertexEndpoint();
+    const location = usesGlobalVertexEndpoint
       ? 'global'
       : this.config.region ||
         getEnvString('GOOGLE_LOCATION') ||
@@ -159,10 +194,9 @@ export class GeminiImageProvider implements ApiProvider {
         };
       }
 
-      // Gemini 3 uses v1, older models use v1beta1
-      const apiVersion = isGemini3 ? 'v1' : 'v1beta1';
+      const apiVersion = 'v1';
       // Global endpoint uses a different URL format (no region prefix)
-      const baseUrl = isGemini3
+      const baseUrl = usesGlobalVertexEndpoint
         ? 'https://aiplatform.googleapis.com'
         : `https://${location}-aiplatform.googleapis.com`;
       const endpoint = `${baseUrl}/${apiVersion}/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:generateContent`;
@@ -214,19 +248,28 @@ export class GeminiImageProvider implements ApiProvider {
       },
     };
 
-    // Add image-specific configuration if provided
-    // Note: imageSize is only supported for Gemini 3 models (v1alpha API)
-    const isGemini3 = this.modelName.startsWith('gemini-3-');
-    if (this.config.imageAspectRatio || (this.config.imageSize && isGemini3)) {
+    // Add image-specific configuration if provided.
+    // imageSize is supported on Gemini 3.x image models.
+    const supportsImageSize = this.supportsImageSize();
+    if (this.config.imageAspectRatio || (this.config.imageSize && supportsImageSize)) {
       body.generationConfig.imageConfig = {
         ...(this.config.imageAspectRatio && { aspectRatio: this.config.imageAspectRatio }),
-        ...(this.config.imageSize && isGemini3 && { imageSize: this.config.imageSize }),
+        ...(this.config.imageSize && supportsImageSize && { imageSize: this.config.imageSize }),
       };
     }
 
     // Add safety settings if provided
     if (this.config.safetySettings) {
-      body.safetySettings = this.config.safetySettings;
+      body.safetySettings = normalizeSafetySettings(this.config.safetySettings);
+    }
+
+    // Add tool configuration if provided (e.g. Google Search grounding)
+    if (this.config.toolConfig) {
+      body.toolConfig = this.config.toolConfig;
+    }
+
+    if (Array.isArray(this.config.tools) && this.config.tools.length > 0) {
+      body.tools = normalizeTools(this.config.tools);
     }
 
     return body;
@@ -280,23 +323,25 @@ export class GeminiImageProvider implements ApiProvider {
       };
     }
 
-    // Extract text and images from the response
-    const outputParts: string[] = [];
+    // Extract text and images from the response separately.
+    // Images are returned in a structured `images` field so the UI can render
+    // them natively without parsing markdown.
+    const textParts: string[] = [];
+    const imageParts: { mimeType: string; base64Data: string }[] = [];
     let totalCost = 0;
 
     for (const part of candidate.content.parts) {
       if (part.text) {
-        outputParts.push(part.text);
+        textParts.push(part.text);
       } else if (part.inlineData) {
-        // Convert inline image data to markdown format
         const mimeType = part.inlineData.mimeType || 'image/png';
         const base64Data = part.inlineData.data;
-        outputParts.push(`![Generated Image](data:${mimeType};base64,${base64Data})`);
+        imageParts.push({ mimeType, base64Data });
         totalCost += this.getCostPerImage();
       }
     }
 
-    if (outputParts.length === 0) {
+    if (imageParts.length === 0 && textParts.length === 0) {
       return {
         error: 'No valid content generated',
       };
@@ -316,8 +361,23 @@ export class GeminiImageProvider implements ApiProvider {
           numRequests: 1,
         };
 
+    // Build structured images array (shared by image-only and text+image cases)
+    const images: ImageOutput[] | undefined =
+      imageParts.length > 0
+        ? imageParts.map((img) => ({
+            data: toDataUri(img.mimeType, img.base64Data),
+            mimeType: img.mimeType,
+          }))
+        : undefined;
+
+    // Image-only: use first image data URI as output for blob externalization
+    // Text (with or without images): use joined text as output
+    const output =
+      imageParts.length > 0 && textParts.length === 0 ? images![0].data : textParts.join('\n\n');
+
     return {
-      output: outputParts.join('\n\n'),
+      output,
+      images,
       cached,
       latencyMs,
       cost: totalCost > 0 ? totalCost : undefined,
@@ -329,10 +389,12 @@ export class GeminiImageProvider implements ApiProvider {
   private getCostPerImage(): number {
     // Pricing for Gemini native image generation
     // Gemini 2.5 Flash Image: $0.039/image (1290 output tokens * $30/1M tokens)
+    // Gemini 3.1 Flash Image Preview: $0.067/image at 1K resolution
     // Gemini 3 Pro Image: Pricing TBD, using estimate
     const costMap: Record<string, number> = {
       'gemini-2.5-flash-image': 0.039,
       'gemini-2.5-flash-preview-image-generation': 0.039, // Deprecated alias
+      'gemini-3.1-flash-image-preview': 0.067,
       'gemini-3-pro-image-preview': 0.05, // Estimated
     };
 
