@@ -656,6 +656,11 @@ export const AssertionSetSchema = z.object({
 
 export type AssertionSet = z.infer<typeof AssertionSetSchema>;
 
+const METRIC_ONLY_ASSERTION_LABELS: Record<string, string> = {
+  cost: 'Cost',
+  latency: 'Latency',
+};
+
 function validateMetricOnlyNumericAssertion(
   assertion: { type: AssertionType; threshold?: number; metric?: string },
   ctx: z.RefinementCtx,
@@ -666,7 +671,7 @@ function validateMetricOnlyNumericAssertion(
 
   const inverse = assertion.type.startsWith('not-');
   const baseType = inverse ? assertion.type.slice(4) : assertion.type;
-  const label = baseType === 'cost' ? 'Cost' : baseType === 'latency' ? 'Latency' : undefined;
+  const label = METRIC_ONLY_ASSERTION_LABELS[baseType];
 
   if (!label || assertion.threshold !== undefined) {
     return;
