@@ -2723,6 +2723,61 @@ function createTimeoutMetrics(timeoutMs: number): PromptMetrics {
   };
 }
 
+function configureEvaluationTimeout({
+  combinedAbortSignal,
+  concurrency,
+  options,
+  runEvalOptions,
+  testSuite,
+}: {
+  combinedAbortSignal: AbortSignal;
+  concurrency: number;
+  options: EvaluateOptions;
+  runEvalOptions: RunEvalOptions[];
+  testSuite: TestSuite;
+}): {
+  combinedAbortSignal: AbortSignal;
+  globalTimeout?: NodeJS.Timeout;
+  isEvalTimedOut: () => boolean;
+  maxEvalTimeMs: number;
+} {
+  const testCaseTimeoutMs =
+    options.timeoutMs === undefined ? getEvalTimeoutMs() : options.timeoutMs;
+  const isRedteamEval = options.isRedteam ?? Boolean(testSuite.redteam);
+  const maxEvalTimeMs =
+    options.maxEvalTimeMs ??
+    getDefaultMaxEvalTimeMs(runEvalOptions.length, concurrency, testCaseTimeoutMs, isRedteamEval);
+
+  let evalTimedOut = false;
+  let globalTimeout: NodeJS.Timeout | undefined;
+  let configuredAbortSignal = combinedAbortSignal;
+
+  if (maxEvalTimeMs > 0) {
+    const globalAbortController = new AbortController();
+    for (const evalOption of runEvalOptions) {
+      evalOption.abortSignal = evalOption.abortSignal
+        ? AbortSignal.any([evalOption.abortSignal, globalAbortController.signal])
+        : globalAbortController.signal;
+    }
+    configuredAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
+    globalTimeout = setTimeout(() => {
+      evalTimedOut = true;
+      globalAbortController.abort();
+    }, maxEvalTimeMs);
+  }
+
+  logger.debug(
+    `Evaluation timeout settings: per-test=${testCaseTimeoutMs}ms, max=${maxEvalTimeMs}ms, steps=${runEvalOptions.length}, concurrency=${concurrency}`,
+  );
+
+  return {
+    combinedAbortSignal: configuredAbortSignal,
+    globalTimeout,
+    isEvalTimedOut: () => evalTimedOut,
+    maxEvalTimeMs,
+  };
+}
+
 function cleanupProgressAfterError(
   progressBarManager: ProgressBarManager | null,
   ciProgressReporter: CIProgressReporter | null,
@@ -4174,10 +4229,6 @@ class Evaluator {
     let { testSuite } = this;
 
     const startTime = Date.now();
-    let maxEvalTimeMs = 0;
-    let evalTimedOut = false;
-    let globalTimeout: NodeJS.Timeout | undefined;
-    let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
     const targetErrorAbortController = new AbortController();
@@ -4259,31 +4310,15 @@ class Evaluator {
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
-    const testCaseTimeoutMs =
-      options.timeoutMs === undefined ? getEvalTimeoutMs() : options.timeoutMs;
-    const isRedteamEval = options.isRedteam ?? Boolean(testSuite.redteam);
-    maxEvalTimeMs =
-      options.maxEvalTimeMs ??
-      getDefaultMaxEvalTimeMs(runEvalOptions.length, concurrency, testCaseTimeoutMs, isRedteamEval);
-
-    if (maxEvalTimeMs > 0) {
-      globalAbortController = new AbortController();
-      // Providers need timeout signal to cancel long-running requests.
-      for (const evalOption of runEvalOptions) {
-        evalOption.abortSignal = evalOption.abortSignal
-          ? AbortSignal.any([evalOption.abortSignal, globalAbortController.signal])
-          : globalAbortController.signal;
-      }
-      // Internal signal includes all abort sources
-      combinedAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
-      globalTimeout = setTimeout(() => {
-        evalTimedOut = true;
-        globalAbortController?.abort();
-      }, maxEvalTimeMs);
-    }
-    logger.debug(
-      `Evaluation timeout settings: per-test=${testCaseTimeoutMs}ms, max=${maxEvalTimeMs}ms, steps=${runEvalOptions.length}, concurrency=${concurrency}`,
-    );
+    const timeoutConfig = configureEvaluationTimeout({
+      combinedAbortSignal,
+      concurrency,
+      options,
+      runEvalOptions,
+      testSuite,
+    });
+    combinedAbortSignal = timeoutConfig.combinedAbortSignal;
+    const { globalTimeout, maxEvalTimeMs } = timeoutConfig;
 
     const processingContext: EvalProcessingContext = {
       assertionTypes,
@@ -4400,7 +4435,7 @@ class Evaluator {
       evalStepIndexMap,
       globalTimeout,
       groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-      isEvalTimedOut: () => evalTimedOut,
+      isEvalTimedOut: timeoutConfig.isEvalTimedOut,
       isWebUI,
       maxEvalTimeMs,
       processingContext,
@@ -4430,7 +4465,7 @@ class Evaluator {
       assertionTypes,
       ciProgressReporter,
       concurrency,
-      evalTimedOut,
+      evalTimedOut: timeoutConfig.isEvalTimedOut(),
       globalTimeout,
       maxEvalTimeMs,
       options,
