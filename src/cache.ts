@@ -347,7 +347,12 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
 }
 
 function hashFetchCacheKey(identity: unknown) {
-  return sha256(JSON.stringify(identity));
+  return crypto
+    .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
+    .update(`${FETCH_CACHE_SECRET_HMAC_CONTEXT}:identity`)
+    .update('\0')
+    .update(JSON.stringify(identity))
+    .digest('hex');
 }
 
 function hashBytesForCacheKey(bytes: ArrayBuffer | ArrayBufferView) {
