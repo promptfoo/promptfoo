@@ -4,7 +4,7 @@ import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders, ProviderResponse } from '../../types/index';
 
 // Default model to use for all default providers
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-5-20250929';
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 
 /**
  * Helper function to create a lazy-loaded provider. This allows the .env file to be

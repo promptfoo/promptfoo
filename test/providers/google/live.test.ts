@@ -7,6 +7,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
 import * as fetchModule from '../../../src/util/fetch/index';
+import { mockProcessEnv } from '../../util/utils';
 
 const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
 
@@ -411,18 +412,18 @@ describe('GoogleLiveProvider', () => {
 
     const originalGoogleApiKey = process.env.GOOGLE_API_KEY;
     const originalGeminiApiKey = process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
 
     await expect(providerWithoutKey.callApi('test prompt')).rejects.toThrow(
       'Google authentication is not configured',
     );
 
     if (originalGoogleApiKey) {
-      process.env.GOOGLE_API_KEY = originalGoogleApiKey;
+      mockProcessEnv({ GOOGLE_API_KEY: originalGoogleApiKey });
     }
     if (originalGeminiApiKey) {
-      process.env.GEMINI_API_KEY = originalGeminiApiKey;
+      mockProcessEnv({ GEMINI_API_KEY: originalGeminiApiKey });
     }
   });
 
@@ -851,7 +852,7 @@ describe('GoogleLiveProvider', () => {
 
     it('should use the PROMPTFOO_PYTHON env variable when available', async () => {
       const originalEnv = process.env.PROMPTFOO_PYTHON;
-      process.env.PROMPTFOO_PYTHON = '/env/python3';
+      mockProcessEnv({ PROMPTFOO_PYTHON: '/env/python3' });
 
       const mockSpawn = vi.mocked((await import('child_process')).spawn);
       const validatePythonPathMock = vi.mocked(
@@ -893,9 +894,9 @@ describe('GoogleLiveProvider', () => {
         ]);
       } finally {
         if (originalEnv) {
-          process.env.PROMPTFOO_PYTHON = originalEnv;
+          mockProcessEnv({ PROMPTFOO_PYTHON: originalEnv });
         } else {
-          delete process.env.PROMPTFOO_PYTHON;
+          mockProcessEnv({ PROMPTFOO_PYTHON: undefined });
         }
       }
     });

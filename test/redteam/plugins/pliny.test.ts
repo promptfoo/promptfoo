@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type { AtomicTestCase } from '../../../src/types/index';
 
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
@@ -29,7 +34,7 @@ vi.mock('../../../src/redteam/util', async (importOriginal) => {
 });
 
 describe('PlinyPlugin', () => {
-  let provider: ApiProvider;
+  let provider: MockApiProvider;
   let plugin: PlinyPlugin;
   const mockFetchResponse = `
 # Test L1B3RT4S Header
@@ -44,12 +49,9 @@ With some content.
   `;
 
   beforeEach(() => {
-    provider = {
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test output',
-      }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    provider = createMockProvider({
+      response: createProviderResponse({ output: 'Test output' }),
+    });
     plugin = new PlinyPlugin(provider, 'test purpose', 'testVar');
 
     // Mock the fetch response

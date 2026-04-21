@@ -24,14 +24,12 @@ import {
   Tooltip,
   type TooltipItem,
 } from 'chart.js';
-import { X } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
-  handleHideCharts: () => void;
   scores: number[];
 }
 
@@ -527,7 +525,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
     }
 
     // Group evaluations by createdAt and assign evaluation numbers
-    const evaluationGroups = progressData.reduce(
+    const evaluationGroups = progressData.reduce<Record<string, ProgressData[]>>(
       (groups, eval_) => {
         const date = new Date(eval_.createdAt).toISOString();
         if (!groups[date]) {
@@ -536,7 +534,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
         groups[date].push(eval_);
         return groups;
       },
-      {} as Record<string, ProgressData[]>,
+      {},
     );
 
     const evaluations = Object.values(evaluationGroups).flatMap((group, groupIndex) =>
@@ -546,25 +544,24 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       })),
     );
 
-    const datasets = evaluations.reduce(
-      (acc, eval_) => {
-        const passRate =
-          (eval_.metrics.testPassCount /
-            (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
-          100;
+    const datasets = evaluations.reduce<
+      Record<number, { x: number; y: number; evalData: ProgressData }[]>
+    >((acc, eval_) => {
+      const passRate =
+        (eval_.metrics.testPassCount /
+          (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
+        100;
 
-        if (!acc[eval_.evaluationNumber]) {
-          acc[eval_.evaluationNumber] = [];
-        }
-        acc[eval_.evaluationNumber].push({
-          x: eval_.evaluationNumber,
-          y: passRate,
-          evalData: eval_,
-        });
-        return acc;
-      },
-      {} as Record<number, { x: number; y: number; evalData: ProgressData }[]>,
-    );
+      if (!acc[eval_.evaluationNumber]) {
+        acc[eval_.evaluationNumber] = [];
+      }
+      acc[eval_.evaluationNumber].push({
+        x: eval_.evaluationNumber,
+        y: passRate,
+        evalData: eval_,
+      });
+      return acc;
+    }, {});
 
     const chartData = Object.values(datasets).flat();
 
@@ -658,7 +655,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
+function ResultsCharts({ scores }: ResultsChartsProps) {
   const [
     showPerformanceOverTimeChart,
     //setShowPerformanceOverTimeChart
@@ -715,14 +712,6 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   return (
     <ErrorBoundary fallback={null}>
       <div className="relative p-6 mt-2 bg-card rounded-lg border border-border shadow-sm">
-        <button
-          type="button"
-          className="absolute right-2 top-2 p-1 rounded hover:bg-muted transition-colors"
-          onClick={() => handleHideCharts()}
-          aria-label="Hide charts"
-        >
-          <X className="size-5" />
-        </button>
         <div className="flex justify-between w-full">
           <div style={{ width: chartWidth }}>
             <PassRateChart table={table!} />
