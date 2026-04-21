@@ -1,0 +1,40 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT model tiers MMLU-Pro comparison
+
+prompts:
+  - |
+    You are an expert test taker. Solve the following multiple-choice question, then end with the final answer in the exact format requested.
+
+    Question: {{question}}
+
+    Options:
+    {% for option in options -%}
+    {{ "ABCDEFGHIJ"[loop.index0] }}) {{ option }}
+    {% endfor %}
+
+    Think through the problem briefly, then provide your final answer in the format "Therefore, the answer is A."
+
+providers:
+  - id: openai:chat:gpt-5.4
+    config:
+      max_completion_tokens: 1200
+  - id: openai:chat:gpt-5.4-mini
+    config:
+      max_completion_tokens: 1200
+  - id: openai:chat:gpt-5.4-nano
+    config:
+      max_completion_tokens: 1200
+
+defaultTest:
+  assert:
+    - type: latency
+      threshold: 60000
+    - type: regex
+      value: 'Therefore, the answer is [A-J]'
+    - type: javascript
+      value: |
+        const match = String(output).match(/Therefore,\s*the\s*answer\s*is\s*([A-J])/i);
+        return match?.[1]?.toUpperCase() === String(context.vars.answer).trim().toUpperCase();
+
+tests:
+  - huggingface://datasets/TIGER-Lab/MMLU-Pro?split=test&config=default&limit=100

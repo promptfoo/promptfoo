@@ -21,6 +21,10 @@ import {
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
 } from '../../src/redteam/constants';
+import {
+  CODING_AGENT_CORE_PLUGINS,
+  CODING_AGENT_PLUGINS,
+} from '../../src/redteam/constants/codingAgents';
 import { InputsSchema } from '../../src/redteam/types';
 import {
   RedteamConfigSchema,
@@ -1054,6 +1058,28 @@ describe('RedteamConfigSchema transform', () => {
       true,
     );
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it('should expand coding-agent collections correctly', () => {
+    const coreResult = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: ['coding-agent:core'],
+    });
+    expect(coreResult.plugins?.map((plugin) => plugin.id)).toEqual(
+      expect.arrayContaining([...CODING_AGENT_CORE_PLUGINS]),
+    );
+    expect(coreResult.plugins).toHaveLength(CODING_AGENT_CORE_PLUGINS.length);
+    expect(coreResult.plugins?.every((plugin) => plugin.numTests === 5)).toBe(true);
+
+    const allResult = RedteamConfigSchema.parse({
+      numTests: 10,
+      plugins: ['coding-agent:all'],
+    });
+    expect(allResult.plugins?.map((plugin) => plugin.id)).toEqual(
+      expect.arrayContaining([...CODING_AGENT_PLUGINS]),
+    );
+    expect(allResult.plugins).toHaveLength(CODING_AGENT_PLUGINS.length);
+    expect(allResult.plugins?.every((plugin) => plugin.numTests === 10)).toBe(true);
   });
 
   it('should handle plugin aliases and their associated strategies', () => {

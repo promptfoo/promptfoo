@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding';
+import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache');
@@ -85,9 +86,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should validate API key', async () => {
-      // Clear any environment variables that might provide an API key
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const providerNoKey = new OpenAiEmbeddingProvider('text-embedding-3-large', {
@@ -98,12 +97,7 @@ describe('OpenAI Provider', () => {
         expect(result.error).toBe(getOpenAiMissingApiKeyMessage());
         expect(result.embedding).toBeUndefined();
       } finally {
-        // Always restore original environment state
-        if (originalEnv === undefined) {
-          delete process.env.OPENAI_API_KEY;
-        } else {
-          process.env.OPENAI_API_KEY = originalEnv;
-        }
+        restoreEnv();
       }
     });
   });

@@ -1,6 +1,9 @@
+import { createHmac } from 'crypto';
+
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
+import { sha256 } from '../util/createHash';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvOverrides } from '../types/env';
@@ -157,6 +160,30 @@ function pickGenerateOptions(config: VercelAiConfig) {
   );
 }
 
+function fingerprintGatewayIdentity(value: string) {
+  return createHmac('sha256', value)
+    .update('promptfoo:vercel-gateway-cache-identity')
+    .digest('hex');
+}
+
+function getGatewayCacheConfig(config: VercelAiConfig, env?: EnvOverrides) {
+  const headers = config.headers
+    ? Object.fromEntries(
+        Object.entries(config.headers)
+          .map(([key, value]) => [key.toLowerCase(), fingerprintGatewayIdentity(value)] as const)
+          .sort(([left], [right]) => left.localeCompare(right)),
+      )
+    : undefined;
+  const apiKey = resolveApiKey(config, env);
+  const baseUrl = resolveBaseUrl(config, env);
+
+  return {
+    apiKeyFingerprint: apiKey ? fingerprintGatewayIdentity(apiKey) : undefined,
+    baseUrlFingerprint: baseUrl === undefined ? undefined : fingerprintGatewayIdentity(baseUrl),
+    headers,
+  };
+}
+
 /**
  * Creates an AbortController with timeout and returns cleanup function.
  */
@@ -217,20 +244,23 @@ export class VercelAiProvider implements ApiProvider {
   }
 
   private getCacheKey(prompt: string): string {
-    return `vercel:${this.modelName}:${JSON.stringify({
-      prompt,
-      config: {
-        temperature: this.config.temperature,
-        maxTokens: this.config.maxTokens,
-        topP: this.config.topP,
-        topK: this.config.topK,
-        frequencyPenalty: this.config.frequencyPenalty,
-        presencePenalty: this.config.presencePenalty,
-        stopSequences: this.config.stopSequences,
-        streaming: this.config.streaming,
-        responseSchema: this.config.responseSchema,
-      },
-    })}`;
+    return `vercel:${this.modelName}:${sha256(
+      JSON.stringify({
+        prompt,
+        gateway: getGatewayCacheConfig(this.config, this.env),
+        config: {
+          temperature: this.config.temperature,
+          maxTokens: this.config.maxTokens,
+          topP: this.config.topP,
+          topK: this.config.topK,
+          frequencyPenalty: this.config.frequencyPenalty,
+          presencePenalty: this.config.presencePenalty,
+          stopSequences: this.config.stopSequences,
+          streaming: this.config.streaming,
+          responseSchema: this.config.responseSchema,
+        },
+      }),
+    )}`;
   }
 
   /**
@@ -456,7 +486,12 @@ export class VercelAiEmbeddingProvider implements ApiEmbeddingProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderEmbeddingResponse> {
     const cache = await getCache();
-    const cacheKey = `vercel:embedding:${this.modelName}:${input}`;
+    const cacheKey = `vercel:embedding:${this.modelName}:${sha256(
+      JSON.stringify({
+        input,
+        gateway: getGatewayCacheConfig(this.config, this.env),
+      }),
+    )}`;
 
     // Check cache first
     if (isCacheEnabled() && !(context?.bustCache ?? context?.debug)) {

@@ -38,6 +38,8 @@ interface AI21ChatCompletionOptions {
   max_tokens?: number;
   response_format?: { type: 'json_object' | 'text' };
   cost?: number;
+  inputCost?: number;
+  outputCost?: number;
 }
 
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {

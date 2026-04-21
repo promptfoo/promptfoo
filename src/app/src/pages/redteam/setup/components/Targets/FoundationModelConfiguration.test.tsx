@@ -126,7 +126,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-5.4, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
+      'openai:gpt-5.4, openai:gpt-5.4-mini, openai:gpt-5.4-nano',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
@@ -187,6 +187,28 @@ describe('FoundationModelConfiguration', () => {
     expect(modelIdInput).toHaveAttribute('placeholder', 'azure:chat:your-deployment-name');
   });
 
+  it('should display the correct placeholder and documentation link for the openrouter provider', () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={initialTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="openrouter"
+      />,
+    );
+
+    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    expect(modelIdInput).toHaveAttribute(
+      'placeholder',
+      'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-4.7',
+    );
+
+    const documentationLink = screen.getByRole('link', { name: /OpenRouter documentation/ });
+    expect(documentationLink).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/openrouter',
+    );
+  });
+
   it('should update the Model ID input value when selectedTarget.id prop changes', () => {
     const { rerender } = render(
       <FoundationModelConfiguration
@@ -229,7 +251,7 @@ describe('FoundationModelConfiguration', () => {
     let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-5.4, openai:gpt-5.3-chat-latest, openai:gpt-5-mini',
+      'openai:gpt-5.4, openai:gpt-5.4-mini, openai:gpt-5.4-nano',
     );
     let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
     expect(documentationLink).toHaveAttribute(

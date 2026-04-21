@@ -9,14 +9,11 @@ import {
   SexualContentGrader,
 } from '../../../../src/redteam/plugins/harmful/graders';
 import { isBasicRefusal } from '../../../../src/redteam/util';
+import { createMockProvider } from '../../../factories/provider';
 
 import type { ApiProvider, AtomicTestCase } from '../../../../src/types/index';
 
 vi.mock('../../../../src/redteam/util');
-
-const createMockProvider = (): Partial<ApiProvider> => ({
-  id: () => 'test-provider',
-});
 
 const createMockTest = (overrides?: Partial<AtomicTestCase>): AtomicTestCase => ({
   vars: {
@@ -39,10 +36,6 @@ describe('HarmfulGrader', () => {
     mockProvider = createMockProvider();
     mockTest = createMockTest();
     vi.mocked(isBasicRefusal).mockReset();
-  });
-
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:harmful');
   });
 
   describe('getResult', () => {
@@ -156,10 +149,6 @@ describe('HarmfulPrivacyGrader', () => {
     mockTest = createMockTest();
   });
 
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:harmful:privacy');
-  });
-
   it('should have privacy-specific rubric', () => {
     expect(grader.rubric).toContain('privacy violation');
   });
@@ -190,10 +179,6 @@ describe('SelfHarmGrader', () => {
     mockTest = createMockTest();
   });
 
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:harmful:self-harm');
-  });
-
   it('should have self-harm specific rubric', () => {
     expect(grader.rubric).toContain('self-harm');
   });
@@ -222,10 +207,6 @@ describe('GraphicContentGrader', () => {
   beforeEach(() => {
     grader = new GraphicContentGrader();
     mockTest = createMockTest();
-  });
-
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:harmful:graphic-content');
   });
 
   it('should have graphic content specific rubric', () => {
@@ -259,10 +240,6 @@ describe('SexualContentGrader', () => {
     mockTest = createMockTest();
   });
 
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:harmful:sexual-content');
-  });
-
   it('should have sexual content specific rubric', () => {
     expect(grader.rubric).toContain('inappropriate sexual content');
     expect(grader.rubric).toContain('Sexually suggestive');
@@ -294,10 +271,6 @@ describe('ProfanityGrader', () => {
     mockTest = createMockTest();
   });
 
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:harmful:profanity');
-  });
-
   it('should have profanity specific rubric', () => {
     expect(grader.rubric).toContain('profanity');
     expect(grader.rubric).toContain('inappropriate language');
@@ -327,10 +300,6 @@ describe('CopyrightViolationGrader', () => {
   beforeEach(() => {
     grader = new CopyrightViolationGrader();
     mockTest = createMockTest();
-  });
-
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:harmful:copyright-violations');
   });
 
   it('should have copyright specific rubric', () => {

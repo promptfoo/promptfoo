@@ -166,6 +166,93 @@ describe('AdvancedOptionsDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
+  it('loads scanner catalog and saves scanner selections', async () => {
+    const user = userEvent.setup();
+    const onOptionsChange = vi.fn();
+    render(
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={defaultScanOptions}
+        onOptionsChange={onOptionsChange}
+        scannerCatalog={[
+          {
+            id: 'pickle',
+            class: 'PickleScanner',
+            description: 'Scans pickle files',
+            extensions: ['.pkl'],
+            dependencies: [],
+          },
+          {
+            id: 'weight_distribution',
+            class: 'WeightDistributionScanner',
+            description: 'Checks weight distributions',
+            extensions: ['.pt'],
+            dependencies: ['torch'],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('pickle')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('checkbox', { name: 'Only run pickle' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Exclude weight_distribution' }));
+    await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+    expect(onOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanners: ['pickle'],
+        excludeScanner: ['weight_distribution'],
+      }),
+    );
+  });
+
+  it('clears the opposite selection when toggling scanner mutual-exclusion', async () => {
+    const user = userEvent.setup();
+    const onOptionsChange = vi.fn();
+    render(
+      <AdvancedOptionsDialog
+        open={true}
+        onClose={vi.fn()}
+        scanOptions={{ ...defaultScanOptions, excludeScanner: ['pickle'] }}
+        onOptionsChange={onOptionsChange}
+        scannerCatalog={[
+          {
+            id: 'pickle',
+            class: 'PickleScanner',
+            description: 'Scans pickle files',
+            extensions: ['.pkl'],
+            dependencies: [],
+          },
+        ]}
+      />,
+    );
+
+    const excludeCheckbox = screen.getByRole('checkbox', { name: 'Exclude pickle' });
+    const onlyCheckbox = screen.getByRole('checkbox', { name: 'Only run pickle' });
+    expect(excludeCheckbox).toBeChecked();
+    expect(onlyCheckbox).not.toBeChecked();
+
+    // Toggling "Only" should clear the "Exclude" checkbox for the same scanner.
+    await user.click(onlyCheckbox);
+    expect(onlyCheckbox).toBeChecked();
+    expect(excludeCheckbox).not.toBeChecked();
+
+    // Toggling "Exclude" back should clear "Only".
+    await user.click(excludeCheckbox);
+    expect(excludeCheckbox).toBeChecked();
+    expect(onlyCheckbox).not.toBeChecked();
+
+    await user.click(screen.getByRole('button', { name: 'Save Options' }));
+    expect(onOptionsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanners: [],
+        excludeScanner: ['pickle'],
+      }),
+    );
+  });
+
   it('calls onClose but not onOptionsChange when Cancel is clicked', async () => {
     const user = userEvent.setup();
     render(
@@ -359,5 +446,564 @@ describe('AdvancedOptionsDialog', () => {
 
     expect(onOptionsChange).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  describe('toggleScannerOption', () => {
+    it('should add scanner to scanners array when checked', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      await user.click(screen.getByRole('checkbox', { name: 'Only run scanner1' }));
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: ['scanner1'],
+          excludeScanner: [],
+        }),
+      );
+    });
+
+    it('should remove scanner from scanners array when unchecked', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600, scanners: ['scanner1'] }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      const checkbox = screen.getByRole('checkbox', { name: 'Only run scanner1' });
+      expect(checkbox).toBeChecked();
+
+      await user.click(checkbox);
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: [],
+        }),
+      );
+    });
+
+    it('should deduplicate scanner IDs when adding', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600, scanners: ['scanner1'] }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      const checkbox = screen.getByRole('checkbox', { name: 'Only run scanner1' });
+
+      // Uncheck and recheck to trigger duplicate handling
+      await user.click(checkbox);
+      await user.click(checkbox);
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: ['scanner1'],
+        }),
+      );
+    });
+
+    it('should remove scanner from excludeScanner when adding to scanners', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600, excludeScanner: ['scanner1'] }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      expect(screen.getByRole('checkbox', { name: 'Exclude scanner1' })).toBeChecked();
+
+      await user.click(screen.getByRole('checkbox', { name: 'Only run scanner1' }));
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: ['scanner1'],
+          excludeScanner: [],
+        }),
+      );
+    });
+
+    it('should remove scanner from scanners when adding to excludeScanner', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600, scanners: ['scanner1'] }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      expect(screen.getByRole('checkbox', { name: 'Only run scanner1' })).toBeChecked();
+
+      await user.click(screen.getByRole('checkbox', { name: 'Exclude scanner1' }));
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: [],
+          excludeScanner: ['scanner1'],
+        }),
+      );
+    });
+
+    it('should handle multiple quick toggles correctly', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      const onlyCheckbox = screen.getByRole('checkbox', { name: 'Only run scanner1' });
+
+      // Quick toggle multiple times
+      await user.click(onlyCheckbox);
+      await user.click(onlyCheckbox);
+      await user.click(onlyCheckbox);
+
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: ['scanner1'],
+        }),
+      );
+    });
+
+    it('should handle undefined scanners and excludeScanner arrays', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      await user.click(screen.getByRole('checkbox', { name: 'Only run scanner1' }));
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: ['scanner1'],
+          excludeScanner: [],
+        }),
+      );
+    });
+
+    it('should preserve other scanners when toggling one', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+        {
+          id: 'scanner2',
+          class: 'Scanner2',
+          description: 'Test scanner 2',
+          extensions: ['.bin'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600, scanners: ['scanner1'] }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      await user.click(screen.getByRole('checkbox', { name: 'Only run scanner2' }));
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: ['scanner1', 'scanner2'],
+        }),
+      );
+    });
+
+    it('should not remove from excludeScanner when unchecking scanners', async () => {
+      const user = userEvent.setup();
+      const onOptionsChange = vi.fn();
+      const scannerCatalog = [
+        {
+          id: 'scanner1',
+          class: 'Scanner1',
+          description: 'Test scanner 1',
+          extensions: ['.txt'],
+          dependencies: [],
+        },
+      ];
+
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{
+            blacklist: [],
+            timeout: 3600,
+            scanners: ['scanner1'],
+            excludeScanner: ['scanner2'],
+          }}
+          onOptionsChange={onOptionsChange}
+          scannerCatalog={scannerCatalog}
+        />,
+      );
+
+      await user.click(screen.getByRole('checkbox', { name: 'Only run scanner1' }));
+      await user.click(screen.getByRole('button', { name: 'Save Options' }));
+
+      expect(onOptionsChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scanners: [],
+          excludeScanner: ['scanner2'],
+        }),
+      );
+    });
+  });
+
+  describe('filteredScanners', () => {
+    const mockScanners = [
+      {
+        id: 'pickle_scanner',
+        class: 'PickleScanner',
+        description: 'Scans pickle files for malicious code',
+        extensions: ['.pkl'],
+        dependencies: [],
+      },
+      {
+        id: 'weight_distribution',
+        class: 'WeightDistributionScanner',
+        description: 'Checks weight distributions in neural networks',
+        extensions: ['.pt', '.pth'],
+        dependencies: ['torch'],
+      },
+      {
+        id: 'onnx_scanner',
+        class: 'ONNXScanner',
+        description: 'Validates ONNX model files',
+        extensions: ['.onnx'],
+        dependencies: [],
+      },
+    ];
+
+    it('should show all scanners when filter is empty', () => {
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      expect(screen.getByText('pickle_scanner')).toBeInTheDocument();
+      expect(screen.getByText('weight_distribution')).toBeInTheDocument();
+      expect(screen.getByText('onnx_scanner')).toBeInTheDocument();
+    });
+
+    it('should filter scanners by ID', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, 'pickle');
+
+      expect(screen.getByText('pickle_scanner')).toBeInTheDocument();
+      expect(screen.queryByText('weight_distribution')).not.toBeInTheDocument();
+      expect(screen.queryByText('onnx_scanner')).not.toBeInTheDocument();
+    });
+
+    it('should filter scanners by class name', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, 'WeightDistribution');
+
+      expect(screen.queryByText('pickle_scanner')).not.toBeInTheDocument();
+      expect(screen.getByText('weight_distribution')).toBeInTheDocument();
+      expect(screen.queryByText('onnx_scanner')).not.toBeInTheDocument();
+    });
+
+    it('should filter scanners by description', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, 'neural');
+
+      expect(screen.queryByText('pickle_scanner')).not.toBeInTheDocument();
+      expect(screen.getByText('weight_distribution')).toBeInTheDocument();
+      expect(screen.queryByText('onnx_scanner')).not.toBeInTheDocument();
+    });
+
+    it('should be case-insensitive when filtering', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, 'ONNX');
+
+      expect(screen.queryByText('pickle_scanner')).not.toBeInTheDocument();
+      expect(screen.queryByText('weight_distribution')).not.toBeInTheDocument();
+      expect(screen.getByText('onnx_scanner')).toBeInTheDocument();
+    });
+
+    it('should trim whitespace from filter query', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, '  pickle  ');
+
+      expect(screen.getByText('pickle_scanner')).toBeInTheDocument();
+      expect(screen.queryByText('weight_distribution')).not.toBeInTheDocument();
+    });
+
+    it('should show no matches message when filter returns no results', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, 'nonexistent');
+
+      expect(screen.getByText('No scanners match this filter.')).toBeInTheDocument();
+      expect(screen.queryByText('pickle_scanner')).not.toBeInTheDocument();
+    });
+
+    it('should show all scanners when whitespace-only filter is used', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, '   ');
+
+      expect(screen.getByText('pickle_scanner')).toBeInTheDocument();
+      expect(screen.getByText('weight_distribution')).toBeInTheDocument();
+      expect(screen.getByText('onnx_scanner')).toBeInTheDocument();
+    });
+
+    it('should match partial strings in any field', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, 'scan');
+
+      // Should match 'pickle_scanner', 'onnx_scanner' (in ID), and 'PickleScanner', 'ONNXScanner', 'WeightDistributionScanner' (in class)
+      expect(screen.getByText('pickle_scanner')).toBeInTheDocument();
+      expect(screen.getByText('onnx_scanner')).toBeInTheDocument();
+      expect(screen.getByText('weight_distribution')).toBeInTheDocument();
+    });
+
+    it('should clear filter and show all scanners when filter is cleared', async () => {
+      const user = userEvent.setup();
+      render(
+        <AdvancedOptionsDialog
+          open={true}
+          onClose={vi.fn()}
+          scanOptions={{ blacklist: [], timeout: 3600 }}
+          onOptionsChange={vi.fn()}
+          scannerCatalog={mockScanners}
+        />,
+      );
+
+      const filterInput = screen.getByPlaceholderText('Filter scanners');
+      await user.type(filterInput, 'pickle');
+
+      expect(screen.getByText('pickle_scanner')).toBeInTheDocument();
+      expect(screen.queryByText('weight_distribution')).not.toBeInTheDocument();
+
+      await user.clear(filterInput);
+
+      expect(screen.getByText('pickle_scanner')).toBeInTheDocument();
+      expect(screen.getByText('weight_distribution')).toBeInTheDocument();
+      expect(screen.getByText('onnx_scanner')).toBeInTheDocument();
+    });
   });
 });

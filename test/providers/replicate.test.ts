@@ -13,6 +13,7 @@ import {
   ReplicateProvider,
 } from '../../src/providers/replicate';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache');
 
@@ -66,8 +67,8 @@ describe('ReplicateProvider', () => {
   it('should preserve explicit zero-valued config instead of replacing it with env defaults', async () => {
     const originalTemperature = process.env.REPLICATE_TEMPERATURE;
     const originalSeed = process.env.REPLICATE_SEED;
-    process.env.REPLICATE_TEMPERATURE = '0.9';
-    process.env.REPLICATE_SEED = '123';
+    mockProcessEnv({ REPLICATE_TEMPERATURE: '0.9' });
+    mockProcessEnv({ REPLICATE_SEED: '123' });
 
     mockedFetchWithCache.mockResolvedValue({
       data: {
@@ -98,15 +99,15 @@ describe('ReplicateProvider', () => {
       expect(body.input.seed).toBe(0);
     } finally {
       if (originalTemperature === undefined) {
-        delete process.env.REPLICATE_TEMPERATURE;
+        mockProcessEnv({ REPLICATE_TEMPERATURE: undefined });
       } else {
-        process.env.REPLICATE_TEMPERATURE = originalTemperature;
+        mockProcessEnv({ REPLICATE_TEMPERATURE: originalTemperature });
       }
 
       if (originalSeed === undefined) {
-        delete process.env.REPLICATE_SEED;
+        mockProcessEnv({ REPLICATE_SEED: undefined });
       } else {
-        process.env.REPLICATE_SEED = originalSeed;
+        mockProcessEnv({ REPLICATE_SEED: originalSeed });
       }
     }
   });
