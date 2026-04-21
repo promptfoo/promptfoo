@@ -55,7 +55,7 @@ This application includes configurable vulnerabilities based on the [OWASP API S
 
 ## Architecture
 
-```
+```text
 ┌─────────────────┐     ┌──────────────────────┐
 │   Web Chat UI   │────▶│    FastAPI Server    │
 └─────────────────┘     └──────────┬───────────┘

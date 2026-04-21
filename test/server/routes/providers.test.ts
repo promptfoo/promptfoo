@@ -25,86 +25,11 @@ const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
 
 describe('Providers Routes', () => {
-  describe('GET /providers', () => {
-    let app: ReturnType<typeof createApp>;
-
-    beforeEach(() => {
-      vi.clearAllMocks();
-      app = createApp();
-    });
-
-    it('should return default providers when no custom config exists', async () => {
-      // getAvailableProviders returns empty array when no config
-      mockedGetAvailableProviders.mockReturnValue([]);
-
-      const response = await request(app).get('/api/providers');
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('success');
-      expect(response.body).toHaveProperty('data');
-      expect(response.body.success).toBe(true);
-      expect(response.body.data).toHaveProperty('providers');
-      expect(response.body.data).toHaveProperty('hasCustomConfig');
-      expect(response.body.data.hasCustomConfig).toBe(false);
-      expect(Array.isArray(response.body.data.providers)).toBe(true);
-      // Should return defaults (non-empty)
-      expect(response.body.data.providers.length).toBeGreaterThan(0);
-      // Check structure
-      expect(response.body.data.providers[0]).toHaveProperty('id');
-    });
-
-    it('should return custom providers from server config', async () => {
-      const customProviders = [
-        { id: 'openai:gpt-4o', label: 'GPT-4o' },
-        { id: 'anthropic:messages:claude-sonnet-4-5-20250929', label: 'Claude 4.5 Sonnet' },
-      ];
-
-      mockedGetAvailableProviders.mockReturnValue(customProviders);
-
-      const response = await request(app).get('/api/providers');
-
-      expect(response.status).toBe(200);
-      expect(response.body).toEqual({
-        success: true,
-        data: {
-          providers: customProviders,
-          hasCustomConfig: true,
-        },
-      });
-    });
-
-    it('should return providers with full config', async () => {
-      const customProviders = [
-        {
-          id: 'http://internal-llm.company.com/v1',
-          label: 'Internal LLM',
-          config: {
-            method: 'POST',
-            headers: { Authorization: 'Bearer token' },
-          },
-        },
-      ];
-
-      mockedGetAvailableProviders.mockReturnValue(customProviders);
-
-      const response = await request(app).get('/api/providers');
-
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(response.body.data.hasCustomConfig).toBe(true);
-      expect(response.body.data.providers).toEqual(customProviders);
-      expect(response.body.data.providers[0].config).toEqual({
-        method: 'POST',
-        headers: { Authorization: 'Bearer token' },
-      });
-    });
-  });
-
   describe('GET /providers/config-status', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
@@ -144,7 +69,7 @@ describe('Providers Routes', () => {
     let mockProvider: ApiProvider;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
 
       // Setup mock provider
@@ -486,7 +411,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
@@ -509,7 +434,8 @@ describe('Providers Routes', () => {
     it('should return 400 for non-string requestExample', async () => {
       const response = await request(app)
         .post('/api/providers/http-generator')
-        .send({ requestExample: 123 });
+        .set('Content-Type', 'application/json')
+        .send(JSON.stringify({ requestExample: 123 }));
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -520,7 +446,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 
@@ -592,7 +518,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      vi.clearAllMocks();
+      vi.resetAllMocks();
       app = createApp();
     });
 

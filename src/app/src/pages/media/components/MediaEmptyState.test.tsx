@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { MediaEmptyState } from './MediaEmptyState';
 
@@ -60,12 +61,13 @@ describe('MediaEmptyState', () => {
       expect(button).toBeInTheDocument();
     });
 
-    it('calls onClearFilters when button is clicked', () => {
+    it('calls onClearFilters when button is clicked', async () => {
+      const user = userEvent.setup();
       const handleClearFilters = vi.fn();
       render(<MediaEmptyState hasFilters={true} onClearFilters={handleClearFilters} />);
 
       const button = screen.getByRole('button', { name: /Clear Filters/i });
-      fireEvent.click(button);
+      await user.click(button);
 
       expect(handleClearFilters).toHaveBeenCalledTimes(1);
     });

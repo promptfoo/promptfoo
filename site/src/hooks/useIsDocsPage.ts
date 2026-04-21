@@ -10,3 +10,8 @@ export function useIsEventDetailPage(): boolean {
   // Match /events/<slug> but not /events/ or /events (index page)
   return /^\/events\/[^/]+/.test(pathname);
 }
+
+export function useIsStorePage(): boolean {
+  const { pathname } = useLocation();
+  return pathname === '/store' || pathname === '/store/';
+}

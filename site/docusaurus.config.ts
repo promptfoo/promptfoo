@@ -1,12 +1,24 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { promises as fsPromises } from 'fs';
+import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
-import type { Config } from '@docusaurus/types';
+import type { Config, Plugin } from '@docusaurus/types';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
+
+function webpackProgressCompatibilityPlugin(): Plugin {
+  return {
+    name: 'webpack-progress-compatibility-plugin',
+    configureWebpack(config) {
+      config.plugins = config.plugins?.filter(
+        (plugin) => plugin?.constructor?.name !== 'WebpackBarPlugin',
+      );
+      return {};
+    },
+  };
+}
 
 const config: Config = {
   title: 'Promptfoo',
@@ -28,7 +40,7 @@ const config: Config = {
 
   onBrokenLinks: 'throw',
   onBrokenAnchors: 'throw',
-  // Even if you don't use internalization, you can use this field to set useful
+  // Even if you don't use internationalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
   // to replace "en" with "zh-Hans".
   i18n: {
@@ -51,8 +63,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: require.resolve('./sidebars.js'),
-          // Remove this to remove the "edit this page" links.
-          editUrl: 'https://github.com/promptfoo/promptfoo/tree/main/site',
+          editUrl: undefined,
           sidebarCollapsed: false,
           showLastUpdateAuthor: true,
           showLastUpdateTime: true,
@@ -79,6 +90,14 @@ const config: Config = {
   ],
 
   themeConfig: {
+    announcementBar: {
+      id: 'joined-openai',
+      content:
+        '<strong>Promptfoo is now part of OpenAI.</strong> <a href="/blog/promptfoo-joining-openai">Read the update →</a>',
+      backgroundColor: '#dc2626',
+      textColor: '#ffffff',
+      isCloseable: false,
+    },
     image: 'img/thumbnail.png',
     colorMode: {
       defaultMode: 'light',
@@ -139,11 +158,6 @@ const config: Config = {
               label: 'By Industry',
             },
             {
-              to: '/solutions/healthcare/',
-              label: 'Healthcare',
-              description: 'HIPAA-compliant medical AI security',
-            },
-            {
               to: '/solutions/finance/',
               label: 'Financial Services',
               description: 'FINRA-aligned security testing',
@@ -151,7 +165,7 @@ const config: Config = {
             {
               to: '/solutions/insurance/',
               label: 'Insurance',
-              description: 'PHI protection & compliance',
+              description: 'Policyholder data & coverage accuracy',
             },
             {
               to: '/solutions/telecom/',
@@ -184,11 +198,6 @@ const config: Config = {
               href: '/events/',
               label: 'Events',
               description: 'Meet the team at conferences and events',
-            },
-            {
-              href: '/careers/',
-              label: 'Careers',
-              description: 'Join our growing team',
             },
             {
               to: '/store/',
@@ -265,10 +274,6 @@ const config: Config = {
           title: 'Solutions',
           items: [
             {
-              label: 'Healthcare',
-              to: '/solutions/healthcare/',
-            },
-            {
               label: 'Financial Services',
               to: '/solutions/finance/',
             },
@@ -307,7 +312,7 @@ const config: Config = {
             },
             {
               label: 'Running Benchmarks',
-              to: '/docs/guides/llama2-uncensored-benchmark-ollama',
+              to: '/docs/guides/censored-vs-uncensored-ollama',
             },
             {
               label: 'Evaluating Factuality',
@@ -355,10 +360,6 @@ const config: Config = {
               to: '/contact/',
             },
             {
-              label: 'Careers',
-              to: '/careers/',
-            },
-            {
               label: 'Swag',
               to: '/store/',
             },
@@ -403,7 +404,6 @@ const config: Config = {
                 <div style="display: flex; gap: 16px; align-items: center; margin-top: 12px;">
                   <img loading="lazy" src="/img/badges/soc2.png" alt="SOC2 Certified" style="width:80px; height: auto"/>
                   <img loading="lazy" src="/img/badges/iso27001.png" alt="ISO 27001 Certified" style="width:80px; height: auto"/>
-                  <img loading="lazy" src="/img/badges/hipaa.png" alt="HIPAA Compliant" style="width:80px; height: auto"/>
                 </div>
                 `,
             },
@@ -441,6 +441,7 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 
   plugins: [
+    webpackProgressCompatibilityPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
     // GA/analytics loaded conditionally via consent.js (GDPR)
@@ -469,8 +470,103 @@ const config: Config = {
             to: '/docs/guides/prevent-llm-hallucinations',
           },
           {
+            from: '/docs/category/guides',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/gpt-5-vs-gpt-5-mini-mmlu',
+            to: '/docs/guides/gpt-mmlu-comparison',
+          },
+          {
+            from: '/docs/guides/gpt-5.2-vs-o3',
+            to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          {
+            from: '/solutions/healthcare',
+            to: '/docs/red-team/plugins/medical',
+          },
+          {
+            from: '/docs/guides/llama2-uncensored-benchmark-ollama',
+            to: '/docs/guides/censored-vs-uncensored-ollama',
+          },
+          {
             from: '/docs/red-team/guardrails',
             to: '/docs/enterprise/guardrails',
+          },
+          // Deleted guides consolidated into gpt-vs-claude-vs-gemini
+          {
+            from: '/docs/guides/claude-vs-gpt',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+          },
+          {
+            from: '/docs/guides/gemini-vs-gpt',
+            to: '/docs/guides/gpt-vs-claude-vs-gemini',
+          },
+          // Deleted guides consolidated into compare-open-source-models
+          {
+            from: '/docs/guides/compare-llama2-vs-gpt',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/gemma-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/gemma-vs-mistral',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/mistral-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          {
+            from: '/docs/guides/phi-vs-llama',
+            to: '/docs/guides/compare-open-source-models',
+          },
+          // Deleted guides consolidated into choosing-best-gpt-model
+          {
+            from: '/docs/guides/gpt-3.5-vs-gpt-4',
+            to: '/docs/guides/choosing-best-gpt-model',
+          },
+          {
+            from: '/docs/guides/gpt-4-vs-gpt-4o',
+            to: '/docs/guides/choosing-best-gpt-model',
+          },
+          // Deleted guides consolidated into gpt-vs-reasoning-model
+          {
+            from: '/docs/guides/gpt-vs-o1',
+            to: '/docs/guides/gpt-vs-reasoning-model',
+          },
+          // Deleted guides consolidated into gpt-mmlu-comparison
+          {
+            from: '/docs/guides/gpt-4.1-vs-gpt-4o-mmlu',
+            to: '/docs/guides/gpt-mmlu-comparison',
+          },
+          // Deleted guides redirected to guides index
+          {
+            from: '/docs/guides/cohere-command-r-benchmark',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/dbrx-benchmark',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/evaluate-replicate-lifeboat',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/building-trust-in-ai-with-portkey-and-promptfoo',
+            to: '/docs/guides',
+          },
+          {
+            from: '/docs/guides/mistral-magistral-aime2024',
+            to: '/docs/guides',
+          },
+          // Renamed guide: agent-eval -> evaluate-coding-agents
+          {
+            from: '/docs/guides/agent-eval',
+            to: '/docs/guides/evaluate-coding-agents',
           },
         ],
       },
@@ -481,19 +577,19 @@ const config: Config = {
         name: 'llms-txt-plugin',
         loadContent: async () => {
           const { siteDir } = context;
-          const docsDir = path.join(siteDir, 'docs');
+          const docsDir = join(siteDir, 'docs');
           const allMdx: string[] = [];
 
           // Recursive function to get all mdx/md files
           const getMdFiles = async (dir: string): Promise<void> => {
-            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+            const entries = await fsPromises.readdir(dir, { withFileTypes: true });
 
             for (const entry of entries) {
-              const fullPath = path.join(dir, entry.name);
+              const fullPath = join(dir, entry.name);
               if (entry.isDirectory()) {
                 await getMdFiles(fullPath);
               } else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
-                const content = await fs.promises.readFile(fullPath, 'utf8');
+                const content = await fsPromises.readFile(fullPath, 'utf8');
                 allMdx.push(content);
               }
             }
@@ -508,8 +604,8 @@ const config: Config = {
           const { allMdx } = pluginContent;
 
           // Write concatenated MDX content
-          const concatenatedPath = path.join(outDir, 'llms-full.txt');
-          await fs.promises.writeFile(concatenatedPath, allMdx.join('\n\n---\n\n'));
+          const concatenatedPath = join(outDir, 'llms-full.txt');
+          await fsPromises.writeFile(concatenatedPath, allMdx.join('\n\n---\n\n'));
 
           // Process routes - use routesPaths which is a string[] of all routes
           const docsRoutes: string[] = [];
@@ -533,9 +629,9 @@ const config: Config = {
           const llmsTxt = `# ${context.siteConfig.title}\n\n## Docs\n\n${docsRoutes.join('\n')}`;
 
           // Write llms.txt file
-          const llmsTxtPath = path.join(outDir, 'llms.txt');
+          const llmsTxtPath = join(outDir, 'llms.txt');
           try {
-            fs.writeFileSync(llmsTxtPath, llmsTxt);
+            await fsPromises.writeFile(llmsTxtPath, llmsTxt);
             console.log('Successfully created llms.txt and llms-full.txt files.');
           } catch (err) {
             console.error('Error writing llms.txt file:', err);

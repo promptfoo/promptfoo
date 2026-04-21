@@ -10,6 +10,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { CheckCircle, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import { useTableStore } from './store';
+import { getNamedMetricTotal } from './utils';
 
 const DEFAULT_VISIBLE_COUNT = 8;
 
@@ -34,7 +35,7 @@ export function FilterChips() {
         Object.keys(prompt.metrics.namedScores).forEach((metric) => {
           const existing = metricMap.get(metric) || { passCount: 0, testCount: 0 };
           const score = prompt.metrics?.namedScores?.[metric] ?? 0;
-          const count = prompt.metrics?.namedScoresCount?.[metric] ?? 0;
+          const count = getNamedMetricTotal(prompt.metrics, metric);
           metricMap.set(metric, {
             passCount: existing.passCount + score,
             testCount: existing.testCount + count,
