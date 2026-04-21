@@ -29,7 +29,7 @@ export const BrowserBehaviorNames: Record<BrowserBehavior, string> = {
 
 // Cache for feature detection results to avoid repeated version checks
 const featureCache = new Map<string, boolean>();
-export const DEFAULT_SERVER_HOST = 'localhost';
+const DEFAULT_SERVER_HOST = 'localhost';
 
 export function getServerHost(): string {
   return getEnvString('PROMPTFOO_SERVER_HOST', DEFAULT_SERVER_HOST).trim() || DEFAULT_SERVER_HOST;

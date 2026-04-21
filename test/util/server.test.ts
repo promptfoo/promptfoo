@@ -70,6 +70,15 @@ describe('Server Utilities', () => {
       }
     });
 
+    it('should trim and return PROMPTFOO_SERVER_HOST when configured', () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_SERVER_HOST: ' 0.0.0.0 ' });
+      try {
+        expect(getServerHost()).toBe('0.0.0.0');
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('should format wildcard and IPv6 hosts for browser-safe URLs', () => {
       expect(getServerBaseUrl(3000, '0.0.0.0')).toBe('http://localhost:3000');
       expect(getServerBaseUrl(3000, '::')).toBe('http://localhost:3000');
