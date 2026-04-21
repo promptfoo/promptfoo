@@ -542,6 +542,126 @@ describe('OpenAiImageProvider', () => {
     });
   });
 
+  describe('GPT Image 2 support', () => {
+    const mockGptImage2Response = {
+      data: {
+        data: [{ b64_json: 'base64EncodedImageData' }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    };
+
+    beforeEach(() => {
+      vi.mocked(fetchWithCache).mockResolvedValue(mockGptImage2Response);
+    });
+
+    it('should not send response_format parameter for gpt-image-2', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body).not.toHaveProperty('response_format');
+      expect(body.model).toBe('gpt-image-2');
+    });
+
+    it('should always treat gpt-image-2 response as b64_json', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
+        cached: false,
+        isBase64: true,
+        format: 'json',
+        cost: 0.006,
+      });
+    });
+
+    it('should handle gpt-image-2 parameters and custom sizes', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: {
+          apiKey: 'test-key',
+          size: '2048x1152',
+          quality: 'high',
+          background: 'opaque',
+          output_format: 'webp',
+          output_compression: 80,
+          moderation: 'low',
+        },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body).toMatchObject({
+        model: 'gpt-image-2',
+        size: '2048x1152',
+        quality: 'high',
+        background: 'opaque',
+        output_format: 'webp',
+        output_compression: 80,
+        moderation: 'low',
+      });
+      expect(result).toMatchObject({
+        output: 'data:image/webp;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/webp;base64,base64EncodedImageData', mimeType: 'image/webp' }],
+      });
+    });
+
+    it('should reject invalid gpt-image-2 custom sizes', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', size: '512x512' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toHaveProperty('error');
+      expect(result.error).toContain('Invalid size "512x512" for GPT Image 2');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject transparent background for gpt-image-2', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', background: 'transparent' },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'background: "transparent" is not supported for GPT Image 2. Use "opaque" or "auto".',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should support dated model variant gpt-image-2-2026-04-21', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2-2026-04-21', {
+        config: { apiKey: 'test-key', quality: 'medium', size: '1024x1024' },
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body.model).toBe('gpt-image-2-2026-04-21');
+      expect(body).not.toHaveProperty('response_format');
+      expect(body.quality).toBe('medium');
+    });
+  });
+
   describe('GPT Image 1 support', () => {
     const mockGptImage1Response = {
       data: {

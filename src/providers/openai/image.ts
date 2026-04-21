@@ -17,6 +17,7 @@ import type { OpenAiSharedOptions } from './types';
 type OpenAiImageModel =
   | 'dall-e-2'
   | 'dall-e-3'
+  | 'gpt-image-2'
   | 'gpt-image-1'
   | 'gpt-image-1-mini'
   | 'gpt-image-1.5';
@@ -24,10 +25,15 @@ type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 type DallE2Size = '256x256' | '512x512' | '1024x1024';
 type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
 type GptImage1Size = '1024x1024' | '1024x1536' | '1536x1024';
+type GptImage2Size = `${number}x${number}`;
 
 const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
 const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
 const GPT_IMAGE1_VALID_SIZES: GptImage1Size[] = ['1024x1024', '1024x1536', '1536x1024'];
+const GPT_IMAGE2_MAX_EDGE = 3840;
+const GPT_IMAGE2_MIN_PIXELS = 655_360;
+const GPT_IMAGE2_MAX_PIXELS = 8_294_400;
+const DATED_GPT_IMAGE2_MODEL_PATTERN = /^gpt-image-2-\d{4}-\d{2}-\d{2}$/;
 const DEFAULT_SIZE = '1024x1024';
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
@@ -69,6 +75,18 @@ export const GPT_IMAGE1_MINI_COSTS: Record<string, number> = {
   high_1536x1024: 0.052,
 };
 
+export const GPT_IMAGE2_COSTS: Record<string, number> = {
+  low_1024x1024: 0.006,
+  low_1024x1536: 0.005,
+  low_1536x1024: 0.005,
+  medium_1024x1024: 0.053,
+  medium_1024x1536: 0.041,
+  medium_1536x1024: 0.041,
+  high_1024x1024: 0.211,
+  high_1024x1536: 0.165,
+  high_1536x1024: 0.165,
+};
+
 // GPT Image 1.5 uses token-based pricing: $32/1M output image tokens
 // Estimated token counts: low ~2K, medium ~4K, high ~6K tokens per image
 // Larger images use proportionally more tokens
@@ -95,18 +113,28 @@ type DallE3Options = CommonImageOptions & {
   style?: 'natural' | 'vivid';
 };
 
+type GptImageQuality = 'low' | 'medium' | 'high' | 'auto';
 type GptImage1Background = 'transparent' | 'opaque' | 'auto';
-type GptImage1OutputFormat = 'png' | 'jpeg' | 'webp';
-type GptImage1Moderation = 'auto' | 'low';
+type GptImage2Background = 'opaque' | 'auto';
+type GptImageOutputFormat = 'png' | 'jpeg' | 'webp';
+type GptImageModeration = 'auto' | 'low';
 
-type GptImage1Options = {
+type GptImageCommonOptions = {
   n?: number;
-  size?: GptImage1Size | 'auto';
-  quality?: 'low' | 'medium' | 'high' | 'auto';
-  background?: GptImage1Background;
-  output_format?: GptImage1OutputFormat;
+  quality?: GptImageQuality;
+  output_format?: GptImageOutputFormat;
   output_compression?: number;
-  moderation?: GptImage1Moderation;
+  moderation?: GptImageModeration;
+};
+
+type GptImage1Options = GptImageCommonOptions & {
+  size?: GptImage1Size | 'auto';
+  background?: GptImage1Background;
+};
+
+type GptImage2Options = GptImageCommonOptions & {
+  size?: GptImage2Size | 'auto';
+  background?: GptImage2Background;
 };
 
 type DallE2Options = CommonImageOptions & {
@@ -118,9 +146,13 @@ type DallE2Options = CommonImageOptions & {
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options | GptImage1Options);
+} & (DallE2Options | DallE3Options | GptImage1Options | GptImage2Options);
 
 // Helper functions to check model types (including dated variants like gpt-image-1.5-2025-12-16)
+function isGptImage2(model: string): boolean {
+  return model === 'gpt-image-2' || DATED_GPT_IMAGE2_MODEL_PATTERN.test(model);
+}
+
 function isGptImage1(model: string): boolean {
   return model === 'gpt-image-1' || model.startsWith('gpt-image-1-2025');
 }
@@ -134,7 +166,61 @@ function isGptImage15(model: string): boolean {
 }
 
 function isGptImageModel(model: string): boolean {
-  return isGptImage1(model) || isGptImage1Mini(model) || isGptImage15(model);
+  return isGptImage2(model) || isGptImage1(model) || isGptImage1Mini(model) || isGptImage15(model);
+}
+
+function getGptImageModelDisplayName(model: string): string {
+  if (isGptImage2(model)) {
+    return 'GPT Image 2';
+  }
+  if (isGptImage15(model)) {
+    return 'GPT Image 1.5';
+  }
+  if (isGptImage1Mini(model)) {
+    return 'GPT Image 1 Mini';
+  }
+  return 'GPT Image 1';
+}
+
+function validateGptImage2Size(size: string): { valid: boolean; message?: string } {
+  if (size === 'auto') {
+    return { valid: true };
+  }
+
+  const constraints =
+    'Valid sizes are auto or WIDTHxHEIGHT where both dimensions are multiples of 16, the maximum edge is 3840px, the long edge to short edge ratio is at most 3:1, and total pixels are between 655,360 and 8,294,400.';
+
+  const sizeMatch = /^(\d+)x(\d+)$/.exec(size);
+  if (!sizeMatch) {
+    return {
+      valid: false,
+      message: `Invalid size "${size}" for GPT Image 2. ${constraints}`,
+    };
+  }
+
+  const width = Number(sizeMatch[1]);
+  const height = Number(sizeMatch[2]);
+  const longEdge = Math.max(width, height);
+  const shortEdge = Math.min(width, height);
+  const totalPixels = width * height;
+
+  if (
+    width <= 0 ||
+    height <= 0 ||
+    longEdge > GPT_IMAGE2_MAX_EDGE ||
+    width % 16 !== 0 ||
+    height % 16 !== 0 ||
+    longEdge / shortEdge > 3 ||
+    totalPixels < GPT_IMAGE2_MIN_PIXELS ||
+    totalPixels > GPT_IMAGE2_MAX_PIXELS
+  ) {
+    return {
+      valid: false,
+      message: `Invalid size "${size}" for GPT Image 2. ${constraints}`,
+    };
+  }
+
+  return { valid: true };
 }
 
 export function validateSizeForModel(
@@ -155,22 +241,34 @@ export function validateSizeForModel(
     };
   }
 
+  if (isGptImage2(model)) {
+    return validateGptImage2Size(size);
+  }
+
   if (
     isGptImageModel(model) &&
     size !== 'auto' &&
     !GPT_IMAGE1_VALID_SIZES.includes(size as GptImage1Size)
   ) {
-    let modelName = model;
-    if (isGptImage15(model)) {
-      modelName = 'GPT Image 1.5';
-    } else if (isGptImage1Mini(model)) {
-      modelName = 'GPT Image 1 Mini';
-    } else if (isGptImage1(model)) {
-      modelName = 'GPT Image 1';
-    }
+    const modelName = getGptImageModelDisplayName(model);
     return {
       valid: false,
       message: `Invalid size "${size}" for ${modelName}. Valid sizes are: ${GPT_IMAGE1_VALID_SIZES.join(', ')}, auto`,
+    };
+  }
+
+  return { valid: true };
+}
+
+function validateBackgroundForModel(
+  background: string | undefined,
+  model: string,
+): { valid: boolean; message?: string } {
+  if (isGptImage2(model) && background === 'transparent') {
+    return {
+      valid: false,
+      message:
+        'background: "transparent" is not supported for GPT Image 2. Use "opaque" or "auto".',
     };
   }
 
@@ -303,7 +401,7 @@ export function prepareRequestBody(
       body.quality = config.quality;
     }
 
-    // Background: transparent, opaque, or auto (only works with png/webp)
+    // Background options are model-dependent.
     if ('background' in config && config.background) {
       body.background = config.background;
     }
@@ -334,6 +432,8 @@ export function calculateImageCost(
   n: number = 1,
 ): number {
   const imageQuality = quality || 'standard';
+  const gptImageQuality =
+    quality === 'medium' || quality === 'high' || quality === 'low' ? quality : 'low';
 
   if (model === 'dall-e-3') {
     const costKey = `${imageQuality}_${size}`;
@@ -342,19 +442,24 @@ export function calculateImageCost(
   } else if (model === 'dall-e-2') {
     const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
     return costPerImage * n;
+  } else if (isGptImage2(model)) {
+    const costKey = `${gptImageQuality}_${size}`;
+    const fallbackCostKey = `${gptImageQuality}_1024x1024`;
+    const costPerImage =
+      GPT_IMAGE2_COSTS[costKey] ||
+      GPT_IMAGE2_COSTS[fallbackCostKey] ||
+      GPT_IMAGE2_COSTS['low_1024x1024'];
+    return costPerImage * n;
   } else if (isGptImage1(model)) {
-    const q = (quality as 'low' | 'medium' | 'high') || 'low';
-    const costKey = `${q}_${size}`;
+    const costKey = `${gptImageQuality}_${size}`;
     const costPerImage = GPT_IMAGE1_COSTS[costKey] || GPT_IMAGE1_COSTS['low_1024x1024'];
     return costPerImage * n;
   } else if (isGptImage1Mini(model)) {
-    const q = (quality as 'low' | 'medium' | 'high') || 'low';
-    const costKey = `${q}_${size}`;
+    const costKey = `${gptImageQuality}_${size}`;
     const costPerImage = GPT_IMAGE1_MINI_COSTS[costKey] || GPT_IMAGE1_MINI_COSTS['low_1024x1024'];
     return costPerImage * n;
   } else if (isGptImage15(model)) {
-    const q = (quality as 'low' | 'medium' | 'high') || 'low';
-    const costKey = `${q}_${size}`;
+    const costKey = `${gptImageQuality}_${size}`;
     const costPerImage = GPT_IMAGE1_5_COSTS[costKey] || GPT_IMAGE1_5_COSTS['low_1024x1024'];
     return costPerImage * n;
   }
@@ -465,6 +570,14 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     const sizeValidation = validateSizeForModel(size as string, model);
     if (!sizeValidation.valid) {
       return { error: sizeValidation.message };
+    }
+
+    const backgroundValidation = validateBackgroundForModel(
+      'background' in config ? config.background : undefined,
+      model,
+    );
+    if (!backgroundValidation.valid) {
+      return { error: backgroundValidation.message };
     }
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);

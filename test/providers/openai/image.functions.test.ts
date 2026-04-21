@@ -7,6 +7,7 @@ import {
   DALLE2_COSTS,
   DALLE3_COSTS,
   formatOutput,
+  GPT_IMAGE2_COSTS,
   prepareRequestBody,
   processApiResponse,
   validateSizeForModel,
@@ -51,6 +52,28 @@ describe('OpenAI Image Provider Functions', () => {
 
     it('should validate any size for unknown models', () => {
       expect(validateSizeForModel('any-size', 'unknown-model')).toEqual({ valid: true });
+    });
+
+    it('should validate GPT Image 2 sizes using dimensional constraints', () => {
+      expect(validateSizeForModel('auto', 'gpt-image-2')).toEqual({ valid: true });
+      expect(validateSizeForModel('1024x1024', 'gpt-image-2')).toEqual({ valid: true });
+      expect(validateSizeForModel('2048x1152', 'gpt-image-2')).toEqual({ valid: true });
+      expect(validateSizeForModel('3840x2160', 'gpt-image-2')).toEqual({ valid: true });
+    });
+
+    it('should invalidate GPT Image 2 sizes that violate constraints', () => {
+      expect(validateSizeForModel('512x512', 'gpt-image-2')).toMatchObject({
+        valid: false,
+      });
+      expect(validateSizeForModel('1024x1000', 'gpt-image-2')).toMatchObject({
+        valid: false,
+      });
+      expect(validateSizeForModel('3840x1024', 'gpt-image-2')).toMatchObject({
+        valid: false,
+      });
+      expect(validateSizeForModel('4096x2048', 'gpt-image-2').message).toContain(
+        'Invalid size "4096x2048" for GPT Image 2',
+      );
     });
   });
 
@@ -162,6 +185,29 @@ describe('OpenAI Image Provider Functions', () => {
       expect(body).not.toHaveProperty('quality');
       expect(body).not.toHaveProperty('style');
     });
+
+    it('should prepare GPT Image 2 request body without response_format', () => {
+      const config = {
+        quality: 'high',
+        background: 'opaque',
+        output_format: 'webp',
+        output_compression: 90,
+        moderation: 'low',
+      };
+      const body = prepareRequestBody('gpt-image-2', 'prompt', '2048x1152', 'url', config);
+
+      expect(body).toEqual({
+        model: 'gpt-image-2',
+        prompt: 'prompt',
+        size: '2048x1152',
+        n: 1,
+        quality: 'high',
+        background: 'opaque',
+        output_format: 'webp',
+        output_compression: 90,
+        moderation: 'low',
+      });
+    });
   });
 
   describe('calculateImageCost', () => {
@@ -203,6 +249,18 @@ describe('OpenAI Image Provider Functions', () => {
       );
       expect(calculateImageCost('dall-e-3', '1024x1024', 'standard', 2)).toBe(
         DALLE3_COSTS['standard_1024x1024'] * 2,
+      );
+    });
+
+    it('should calculate correct cost for GPT Image 2 common sizes', () => {
+      expect(calculateImageCost('gpt-image-2', '1024x1024', 'low')).toBe(
+        GPT_IMAGE2_COSTS['low_1024x1024'],
+      );
+      expect(calculateImageCost('gpt-image-2', '1024x1536', 'medium')).toBe(
+        GPT_IMAGE2_COSTS['medium_1024x1536'],
+      );
+      expect(calculateImageCost('gpt-image-2', '1536x1024', 'high', 2)).toBe(
+        GPT_IMAGE2_COSTS['high_1536x1024'] * 2,
       );
     });
 
