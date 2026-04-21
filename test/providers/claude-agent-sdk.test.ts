@@ -14,6 +14,7 @@ import {
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 import { checkProviderApiKeys } from '../../src/util/provider';
+import { mockProcessEnv } from '../util/utils';
 import type {
   NonNullableUsage,
   Query,
@@ -444,9 +445,9 @@ describe('ClaudeCodeSDKProvider', () => {
 
       it('should return error when API key is missing', async () => {
         // ensure process env won't provide the key or any other Claude Agent SDK env vars
-        delete process.env.ANTHROPIC_API_KEY;
-        delete process.env.CLAUDE_CODE_USE_BEDROCK;
-        delete process.env.CLAUDE_CODE_USE_VERTEX;
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
 
         const provider = new ClaudeCodeSDKProvider();
         await expect(provider.callApi('Test prompt')).rejects.toThrow(
@@ -475,44 +476,44 @@ describe('ClaudeCodeSDKProvider', () => {
         const provider = new ClaudeCodeSDKProvider();
 
         // Set the env var in process.env for the test
-        process.env.CLAUDE_CODE_USE_BEDROCK = 'true';
+        mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: 'true' });
 
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Response');
 
-        delete process.env.CLAUDE_CODE_USE_BEDROCK;
+        mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
       });
     });
 
     describe('checkProviderApiKeys pre-check', () => {
       it('should not report missing key when CLAUDE_CODE_USE_VERTEX is set in process.env', () => {
-        delete process.env.ANTHROPIC_API_KEY;
-        process.env.CLAUDE_CODE_USE_VERTEX = 'true';
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: 'true' });
 
         const provider = new ClaudeCodeSDKProvider();
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(0);
 
-        delete process.env.CLAUDE_CODE_USE_VERTEX;
+        mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
       });
 
       it('should not report missing key when CLAUDE_CODE_USE_BEDROCK is set in process.env', () => {
-        delete process.env.ANTHROPIC_API_KEY;
-        process.env.CLAUDE_CODE_USE_BEDROCK = 'true';
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: 'true' });
 
         const provider = new ClaudeCodeSDKProvider();
         const result = checkProviderApiKeys([provider]);
         expect(result.size).toBe(0);
 
-        delete process.env.CLAUDE_CODE_USE_BEDROCK;
+        mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
       });
 
       it('should report missing key when no Vertex/Bedrock env is set', () => {
-        delete process.env.ANTHROPIC_API_KEY;
-        delete process.env.CLAUDE_CODE_USE_VERTEX;
-        delete process.env.CLAUDE_CODE_USE_BEDROCK;
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
 
         const provider = new ClaudeCodeSDKProvider();
         const result = checkProviderApiKeys([provider]);
@@ -521,9 +522,9 @@ describe('ClaudeCodeSDKProvider', () => {
       });
 
       it('should not report missing key when apiKeyRequired is false', () => {
-        delete process.env.ANTHROPIC_API_KEY;
-        delete process.env.CLAUDE_CODE_USE_VERTEX;
-        delete process.env.CLAUDE_CODE_USE_BEDROCK;
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
 
         const provider = new ClaudeCodeSDKProvider({
           config: { apiKeyRequired: false },
@@ -535,8 +536,8 @@ describe('ClaudeCodeSDKProvider', () => {
 
     describe('provider-level env overrides via loadApiProvider', () => {
       it('should pass provider-level env through to the provider', async () => {
-        delete process.env.ANTHROPIC_API_KEY;
-        delete process.env.CLAUDE_CODE_USE_VERTEX;
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
 
         const provider = new ClaudeCodeSDKProvider({
           env: { CLAUDE_CODE_USE_VERTEX: 'true' } as EnvOverrides,

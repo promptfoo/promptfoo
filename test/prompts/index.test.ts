@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../src/esm';
 import { processPrompts, readPrompts, readProviderPromptMap } from '../../src/prompts/index';
 import { maybeFilePath } from '../../src/prompts/utils';
+import { mockProcessEnv } from '../util/utils';
 
 import type {
   ApiProvider,
@@ -51,7 +52,7 @@ describe('readPrompts', () => {
     vi.clearAllMocks();
   });
   afterEach(() => {
-    delete process.env.PROMPTFOO_STRICT_FILES;
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: undefined });
     vi.mocked(fs.readFileSync).mockReset();
     vi.mocked(fs.statSync).mockReset();
     vi.mocked(globSync).mockReset();
@@ -73,7 +74,7 @@ describe('readPrompts', () => {
   });
 
   it('should throw an error when PROMPTFOO_STRICT_FILES is true and the file does not exist', async () => {
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(fs.readFileSync).mockImplementationOnce(() => {
       throw new Error("ENOENT: no such file or directory, stat 'non-existent-file.txt'");
@@ -91,7 +92,7 @@ describe('readPrompts', () => {
     vi.mocked(fs.readFileSync).mockReturnValueOnce('');
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(maybeFilePath).mockReturnValueOnce(true);
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
     await expect(readPrompts(['prompts.txt'])).rejects.toThrow(
       'There are no prompts in "prompts.txt"',
     );
@@ -101,7 +102,7 @@ describe('readPrompts', () => {
   it('should throw an error for an unsupported file format', async () => {
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(maybeFilePath).mockReturnValueOnce(true);
-    process.env.PROMPTFOO_STRICT_FILES = 'true';
+    mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
     await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
       'There are no prompts in "unsupported.for.mat"',
     );

@@ -11,6 +11,7 @@ import {
 } from '../../src/util/tokenUsageCompat';
 
 import type { SpanData } from '../../src/tracing/store';
+import type { TraceData } from '../../src/types/tracing';
 
 // Mock the TraceStore
 vi.mock('../../src/tracing/store', () => ({
@@ -27,20 +28,25 @@ vi.mock('../../src/util/tokenUsage', () => ({
 import { getTraceStore } from '../../src/tracing/store';
 
 describe('tokenUsageCompat', () => {
+  type TraceStoreType = ReturnType<typeof getTraceStore>;
+  type TokenUsageTrackerInstance = ReturnType<typeof TokenUsageTracker.getInstance>;
+
   const mockTraceStore = {
-    getSpans: vi.fn(),
-    getTracesByEvaluation: vi.fn(),
+    getSpans: vi.fn<TraceStoreType['getSpans']>(),
+    getTracesByEvaluation: vi.fn<TraceStoreType['getTracesByEvaluation']>(),
   };
 
   const mockTracker = {
-    getProviderUsage: vi.fn(),
-    getTotalUsage: vi.fn(),
+    getProviderUsage: vi.fn<TokenUsageTrackerInstance['getProviderUsage']>(),
+    getTotalUsage: vi.fn<TokenUsageTrackerInstance['getTotalUsage']>(),
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getTraceStore).mockReturnValue(mockTraceStore as any);
-    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTracker as any);
+    vi.mocked(getTraceStore).mockReturnValue(mockTraceStore as unknown as TraceStoreType);
+    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(
+      mockTracker as unknown as TokenUsageTrackerInstance,
+    );
   });
 
   afterEach(() => {
@@ -191,7 +197,7 @@ describe('tokenUsageCompat', () => {
         name: 'test',
         startTime: 0,
         attributes: {
-          'gen_ai.usage.input_tokens': 'not-a-number' as any,
+          'gen_ai.usage.input_tokens': 'not-a-number',
           'gen_ai.usage.output_tokens': 50,
         },
       };
@@ -359,9 +365,11 @@ describe('tokenUsageCompat', () => {
 
   describe('getTokenUsageFromEvaluation', () => {
     it('should aggregate usage from all traces in evaluation', async () => {
-      const traces = [
+      const traces: TraceData[] = [
         {
           traceId: 'trace-1',
+          evaluationId: 'eval-456',
+          testCaseId: 'test-1',
           spans: [
             {
               spanId: 'span-1',
@@ -377,6 +385,8 @@ describe('tokenUsageCompat', () => {
         },
         {
           traceId: 'trace-2',
+          evaluationId: 'eval-456',
+          testCaseId: 'test-2',
           spans: [
             {
               spanId: 'span-2',
@@ -430,9 +440,11 @@ describe('tokenUsageCompat', () => {
     });
 
     it('should use OTEL data when evalId is provided', async () => {
-      const traces = [
+      const traces: TraceData[] = [
         {
           traceId: 'trace-1',
+          evaluationId: 'eval-456',
+          testCaseId: 'test-1',
           spans: [
             {
               spanId: 'span-1',
