@@ -276,6 +276,38 @@ function validateBackgroundForModel(
   return { valid: true };
 }
 
+function validateOutputCompressionForModel(
+  outputCompression: unknown,
+  outputFormat: string | undefined,
+  model: string,
+): { valid: boolean; message?: string } {
+  if (!isGptImageModel(model) || outputCompression === undefined) {
+    return { valid: true };
+  }
+
+  if (
+    typeof outputCompression !== 'number' ||
+    !Number.isFinite(outputCompression) ||
+    outputCompression < 0 ||
+    outputCompression > 100
+  ) {
+    return {
+      valid: false,
+      message: 'output_compression must be a number between 0 and 100.',
+    };
+  }
+
+  if (outputFormat !== 'jpeg' && outputFormat !== 'webp') {
+    return {
+      valid: false,
+      message:
+        'output_compression is only supported when output_format is "jpeg" or "webp". Set output_format to "jpeg" or "webp", or remove output_compression.',
+    };
+  }
+
+  return { valid: true };
+}
+
 function getMimeTypeForOutputFormat(outputFormat?: string): string {
   switch (outputFormat) {
     case 'jpeg':
@@ -607,6 +639,15 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     );
     if (!backgroundValidation.valid) {
       return { error: backgroundValidation.message };
+    }
+
+    const outputCompressionValidation = validateOutputCompressionForModel(
+      'output_compression' in config ? config.output_compression : undefined,
+      'output_format' in config ? config.output_format : undefined,
+      model,
+    );
+    if (!outputCompressionValidation.valid) {
+      return { error: outputCompressionValidation.message };
     }
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);

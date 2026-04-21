@@ -45,8 +45,8 @@ providers:
       size: 1024x1024 # common sizes, custom WIDTHxHEIGHT, auto
       quality: low # low, medium, high, auto
       background: opaque # opaque, auto
-      output_format: png # png, jpeg, webp
-      output_compression: 80 # 0-100, only for jpeg/webp
+      output_format: webp # png, jpeg, webp
+      output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto, low
 ```
 
@@ -61,8 +61,8 @@ providers:
       size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, auto
       quality: low # low, medium, high, auto
       background: transparent # transparent, opaque, auto
-      output_format: png # png, jpeg, webp
-      output_compression: 80 # 0-100, only for jpeg/webp
+      output_format: webp # png, jpeg, webp
+      output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto, low
 ```
 
@@ -77,8 +77,8 @@ providers:
       size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, auto
       quality: low # low, medium, high, auto
       background: transparent # transparent, opaque, auto
-      output_format: png # png, jpeg, webp
-      output_compression: 80 # 0-100, only for jpeg/webp
+      output_format: webp # png, jpeg, webp
+      output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto, low
 ```
 
@@ -93,8 +93,8 @@ providers:
       size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, auto
       quality: low # low, medium, high, auto
       background: transparent # transparent, opaque, auto
-      output_format: png # png, jpeg, webp
-      output_compression: 80 # 0-100, only for jpeg/webp
+      output_format: webp # png, jpeg, webp
+      output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto, low
 ```
 

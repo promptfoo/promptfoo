@@ -699,6 +699,33 @@ describe('OpenAiImageProvider', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
+    it('should reject output_compression unless output_format is jpeg or webp', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', output_format: 'png', output_compression: 80 },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error:
+          'output_compression is only supported when output_format is "jpeg" or "webp". Set output_format to "jpeg" or "webp", or remove output_compression.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should reject output_compression values outside 0-100', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', {
+        config: { apiKey: 'test-key', output_format: 'webp', output_compression: 101 },
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({
+        error: 'output_compression must be a number between 0 and 100.',
+      });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should support dated model variant gpt-image-2-2026-04-21', async () => {
       const provider = new OpenAiImageProvider('gpt-image-2-2026-04-21', {
         config: { apiKey: 'test-key', quality: 'medium', size: '1024x1024' },
