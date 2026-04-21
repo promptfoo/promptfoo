@@ -3,16 +3,11 @@ import type { Assertion, EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 export type MetricDisplayKind = 'percentage' | 'value';
 
-function getAssertionMetricBaseType(type: string): string {
-  return type.startsWith('not-') ? type.slice(4) : type;
-}
-
 export function isValueMetricAssertion(assertion: { type: string; threshold?: number }): boolean {
-  if (assertion.type.startsWith('not-')) {
+  if (assertion.threshold !== undefined) {
     return false;
   }
-  const baseType = getAssertionMetricBaseType(assertion.type);
-  return (baseType === 'cost' || baseType === 'latency') && assertion.threshold === undefined;
+  return assertion.type === 'cost' || assertion.type === 'latency';
 }
 
 function resolveMetricTemplate(
