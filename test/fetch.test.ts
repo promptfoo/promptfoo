@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
+import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
@@ -185,6 +186,42 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should preserve Request headers when init headers are absent', async () => {
+    const request = new Request('https://example.com/api', {
+      headers: { Authorization: 'Bearer request-token' },
+    });
+
+    await fetchWithProxy(request);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer request-token',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should replace Request headers when init headers are provided', async () => {
+    const request = new Request('https://example.com/api', {
+      headers: { Authorization: 'Bearer request-token' },
+    });
+
+    await fetchWithProxy(request, { headers: { Accept: 'application/json' } });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      request,
+      expect.objectContaining({
+        headers: {
+          Accept: 'application/json',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
   it('should handle URLs with basic auth credentials', async () => {
     const url = 'https://username:password@example.com/api';
     const options = { headers: { 'Content-Type': 'application/json' } };
@@ -249,6 +286,36 @@ describe('fetchWithProxy', () => {
           'Content-Type': 'application/json',
           'x-promptfoo-version': VERSION,
         },
+      }),
+    );
+  });
+
+  it('should add cloud auth only for the exact Promptfoo cloud origin', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('cloud-token');
+
+    await fetchWithProxy('https://api.promptfoo.dev/api/v1/task');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev/api/v1/task',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer cloud-token',
+        }),
+      }),
+    );
+  });
+
+  it('should not add cloud auth to lookalike Promptfoo cloud hosts', async () => {
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('cloud-token');
+
+    await fetchWithProxy('https://api.promptfoo.dev.evil.example/api/v1/task');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.promptfoo.dev.evil.example/api/v1/task',
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          Authorization: 'Bearer cloud-token',
+        }),
       }),
     );
   });

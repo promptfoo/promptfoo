@@ -17,6 +17,7 @@ vi.mock('../../../src/commands/modelScan', () => ({
 // Import after mocking
 import { checkModelAuditInstalled } from '../../../src/commands/modelScan';
 import { getDb } from '../../../src/database/index';
+import { modelAuditsTable } from '../../../src/database/tables';
 import { runDbMigrations } from '../../../src/migrate';
 import ModelAudit from '../../../src/models/modelAudit';
 import {
@@ -406,8 +407,15 @@ describe('Model Audit Routes - DB-backed', () => {
     vi.resetAllMocks();
   });
 
-  async function createTestAudit(overrides: Partial<Parameters<typeof ModelAudit.create>[0]> = {}) {
-    return ModelAudit.create({
+  async function createTestAudit(
+    overrides: Partial<Parameters<typeof ModelAudit.create>[0]> & {
+      createdAt?: number;
+      updatedAt?: number;
+      id?: string;
+    } = {},
+  ) {
+    const { createdAt, updatedAt, id, ...createOverrides } = overrides;
+    const baseData = {
       name: 'Test Scan',
       modelPath: '/path/to/model.pkl',
       results: {
@@ -418,8 +426,26 @@ describe('Model Audit Routes - DB-backed', () => {
         issues: [],
         checks: [],
       },
-      ...overrides,
-    });
+      ...createOverrides,
+    };
+
+    if (createdAt !== undefined || updatedAt !== undefined || id !== undefined) {
+      const audit = new ModelAudit({
+        ...baseData,
+        id,
+        createdAt,
+        updatedAt,
+        checks: baseData.results.checks || null,
+        issues: baseData.results.issues || null,
+        totalChecks: baseData.results.total_checks || null,
+        passedChecks: baseData.results.passed_checks || null,
+        failedChecks: baseData.results.failed_checks || null,
+      });
+      await audit.save();
+      return audit;
+    }
+
+    return ModelAudit.create(baseData);
   }
 
   describe('POST /api/model-audit/check-path', () => {
@@ -555,6 +581,110 @@ describe('Model Audit Routes - DB-backed', () => {
       expect(response.body.scans[1].name).toBe('Zebra');
     });
 
+    it('should use scan id as a stable tie-breaker for non-unique sort fields', async () => {
+      const db = getDb();
+      const scanResults = {
+        total_checks: 5,
+        passed_checks: 5,
+        failed_checks: 0,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      };
+      db.insert(modelAuditsTable)
+        .values([
+          {
+            id: 'scan-b',
+            createdAt: 1,
+            updatedAt: 1,
+            name: 'Same name',
+            modelPath: '/path/b.pkl',
+            results: scanResults,
+            hasErrors: false,
+            totalChecks: 5,
+            passedChecks: 5,
+            failedChecks: 0,
+          },
+          {
+            id: 'scan-a',
+            createdAt: 2,
+            updatedAt: 2,
+            name: 'Same name',
+            modelPath: '/path/a.pkl',
+            results: scanResults,
+            hasErrors: false,
+            totalChecks: 5,
+            passedChecks: 5,
+            failedChecks: 0,
+          },
+        ])
+        .run();
+
+      const ascResponse = await request(app).get('/api/model-audit/scans?sort=name&order=asc');
+      const descResponse = await request(app).get('/api/model-audit/scans?sort=name&order=desc');
+
+      expect(ascResponse.status).toBe(200);
+      expect(ascResponse.body.scans.map((scan: { id: string }) => scan.id)).toEqual([
+        'scan-a',
+        'scan-b',
+      ]);
+      expect(descResponse.status).toBe(200);
+      expect(descResponse.body.scans.map((scan: { id: string }) => scan.id)).toEqual([
+        'scan-b',
+        'scan-a',
+      ]);
+    });
+
+    it('should sort by id ascending', async () => {
+      await createTestAudit({ name: 'Second scan' });
+      await createTestAudit({ name: 'First scan' });
+
+      const response = await request(app).get('/api/model-audit/scans?sort=id&order=asc');
+
+      expect(response.status).toBe(200);
+      expect(response.body.scans).toHaveLength(2);
+      expect(response.body.scans.map((scan: { id: string }) => scan.id)).toEqual(
+        [...response.body.scans.map((scan: { id: string }) => scan.id)].sort(),
+      );
+    });
+
+    it('should sort by status and check counts', async () => {
+      await createTestAudit({
+        name: 'Clean scan',
+        results: {
+          total_checks: 10,
+          passed_checks: 10,
+          failed_checks: 0,
+          has_errors: false,
+          issues: [],
+          checks: [],
+        },
+      });
+      await createTestAudit({
+        name: 'Issues scan',
+        results: {
+          total_checks: 3,
+          passed_checks: 1,
+          failed_checks: 2,
+          has_errors: true,
+          issues: [{ severity: 'error', message: 'Issue found' }],
+          checks: [],
+        },
+      });
+
+      const statusResponse = await request(app).get(
+        '/api/model-audit/scans?sort=hasErrors&order=desc',
+      );
+      const checksResponse = await request(app).get(
+        '/api/model-audit/scans?sort=totalChecks&order=asc',
+      );
+
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.body.scans[0].name).toBe('Issues scan');
+      expect(checksResponse.status).toBe(200);
+      expect(checksResponse.body.scans[0].name).toBe('Issues scan');
+    });
+
     it('should return 400 for invalid sort field', async () => {
       const response = await request(app).get('/api/model-audit/scans?sort=hackerField');
 
@@ -607,9 +737,17 @@ describe('Model Audit Routes - DB-backed', () => {
     });
 
     it('should return the latest scan', async () => {
-      await createTestAudit({ name: 'Older Scan' });
-      // Small delay to ensure different timestamps
-      const latest = await createTestAudit({ name: 'Newer Scan' });
+      const olderCreatedAt = Date.UTC(2026, 3, 20, 20, 13, 29);
+      await createTestAudit({
+        name: 'Older Scan',
+        createdAt: olderCreatedAt,
+        updatedAt: olderCreatedAt,
+      });
+      const latest = await createTestAudit({
+        name: 'Newer Scan',
+        createdAt: olderCreatedAt + 1000,
+        updatedAt: olderCreatedAt + 1000,
+      });
 
       const response = await request(app).get('/api/model-audit/scans/latest');
 
