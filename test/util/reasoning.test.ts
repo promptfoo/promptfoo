@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { hasReasoning, reasoningToString } from '../../src/util/reasoning';
+import {
+  combineReasoningAndOutput,
+  getReasoningTokens,
+  hasReasoning,
+  reasoningToString,
+} from '../../src/util/reasoning';
 
-import type { ReasoningContent } from '../../src/types/providers';
+import type { ProviderResponse, ReasoningContent } from '../../src/types/providers';
 
 describe('reasoning utilities', () => {
   describe('reasoningToString', () => {
@@ -118,6 +123,92 @@ describe('reasoning utilities', () => {
       expect(hasReasoning(reasoning)).toBe(true);
       expect(hasReasoning(thought)).toBe(true);
       expect(hasReasoning(think)).toBe(true);
+    });
+  });
+
+  describe('getReasoningTokens', () => {
+    it('should return undefined for undefined response', () => {
+      expect(getReasoningTokens(undefined)).toBeUndefined();
+    });
+
+    it('should return undefined when reasoning token usage is absent', () => {
+      expect(getReasoningTokens({ output: 'test' })).toBeUndefined();
+    });
+
+    it('should return reasoning token usage when present', () => {
+      const response = {
+        output: 'test',
+        tokenUsage: {
+          completionDetails: {
+            reasoning: 42,
+          },
+        },
+      } as ProviderResponse;
+
+      expect(getReasoningTokens(response)).toBe(42);
+    });
+  });
+
+  describe('combineReasoningAndOutput', () => {
+    it('should return empty string for undefined response', () => {
+      expect(combineReasoningAndOutput(undefined)).toBe('');
+    });
+
+    it('should combine reasoning and string output', () => {
+      const response: ProviderResponse = {
+        output: 'Final answer',
+        reasoning: [{ type: 'reasoning', content: 'Step 1' }],
+      };
+
+      expect(combineReasoningAndOutput(response)).toBe('Reasoning: Step 1\n\nFinal answer');
+    });
+
+    it('should use a custom reasoning prefix', () => {
+      const response: ProviderResponse = {
+        output: 'Final answer',
+        reasoning: [{ type: 'thought', thought: 'Gemini thought' }],
+      };
+
+      expect(combineReasoningAndOutput(response, 'Thinking')).toBe(
+        'Thinking: Gemini thought\n\nFinal answer',
+      );
+    });
+
+    it('should stringify object output', () => {
+      const response = {
+        output: { answer: 'Final answer' },
+        reasoning: [{ type: 'think', content: 'DeepSeek thought' }],
+      } as ProviderResponse;
+
+      expect(combineReasoningAndOutput(response)).toBe(
+        'Reasoning: DeepSeek thought\n\n{"answer":"Final answer"}',
+      );
+    });
+
+    it('should omit null and undefined outputs', () => {
+      expect(
+        combineReasoningAndOutput({
+          output: null,
+          reasoning: [{ type: 'thinking', thinking: 'Only reasoning' }],
+        } as ProviderResponse),
+      ).toBe('Reasoning: Only reasoning');
+
+      expect(
+        combineReasoningAndOutput({
+          output: undefined,
+        } as ProviderResponse),
+      ).toBe('');
+    });
+
+    it('should fall back to String when object output cannot be serialized', () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      const response = {
+        output: circular,
+        reasoning: [{ type: 'redacted_thinking', data: 'secret' }],
+      } as ProviderResponse;
+
+      expect(combineReasoningAndOutput(response)).toBe('Reasoning: [Redacted]\n\n[object Object]');
     });
   });
 });
