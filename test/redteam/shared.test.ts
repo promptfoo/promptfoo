@@ -222,9 +222,10 @@ describe('doRedteamRun', () => {
 
       const expectedConfigPrefix = path.join('/tmp', 'redteam-config-');
       const expectedOutputPrefix = path.join('/tmp', 'redteam-');
+      const expectedTempDir = path.normalize('/tmp');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp', { recursive: true });
+      expect(fs.mkdirSync).toHaveBeenCalledWith(expectedTempDir, { recursive: true });
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining(expectedConfigPrefix),
         'mocked-yaml-content',
@@ -246,9 +247,10 @@ describe('doRedteamRun', () => {
 
       const expectedConfigPrefix = path.join('/tmp', 'redteam-config-');
       const expectedOutputPrefix = path.join('/tmp', 'redteam-');
+      const expectedTempDir = path.normalize('/tmp');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp', { recursive: true });
+      expect(fs.mkdirSync).toHaveBeenCalledWith(expectedTempDir, { recursive: true });
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining(expectedConfigPrefix),
         'mocked-yaml-content',
