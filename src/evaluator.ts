@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
-import { collectCountableComponentResults } from './assertions/componentResults';
+import { countAssertionPassFail } from './assertions/componentResults';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
@@ -3021,15 +3021,9 @@ class Evaluator {
     }
 
     updatePromptResultCounts(metrics, row);
-    const countableComponentResults = collectCountableComponentResults(
-      row.gradingResult?.componentResults,
-    );
-    metrics.assertPassCount += countableComponentResults.filter(
-      (r) => !r.metadata?.isMetricOnly && r.pass,
-    ).length;
-    metrics.assertFailCount += countableComponentResults.filter(
-      (r) => !r.metadata?.isMetricOnly && !r.pass,
-    ).length;
+    const { passCount, failCount } = countAssertionPassFail(row.gradingResult?.componentResults);
+    metrics.assertPassCount += passCount;
+    metrics.assertFailCount += failCount;
     metrics.totalLatencyMs += row.latencyMs || 0;
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
 

@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { and, eq, inArray } from 'drizzle-orm';
-import { collectCountableComponentResults } from '../assertions/componentResults';
+import { countAssertionPassFail } from '../assertions/componentResults';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -161,15 +161,11 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         }
 
         // Update assertion counts
-        const countableComponentResults = collectCountableComponentResults(
+        const { passCount, failCount } = countAssertionPassFail(
           result.gradingResult?.componentResults,
         );
-        metrics.assertPassCount += countableComponentResults.filter(
-          (r) => !r.metadata?.isMetricOnly && r.pass,
-        ).length;
-        metrics.assertFailCount += countableComponentResults.filter(
-          (r) => !r.metadata?.isMetricOnly && !r.pass,
-        ).length;
+        metrics.assertPassCount += passCount;
+        metrics.assertFailCount += failCount;
 
         // Update token usage
         if (result.response?.tokenUsage) {

@@ -30,3 +30,27 @@ export function collectCountableComponentResults(
 ): GradingResult[] {
   return collectComponentResults(componentResults, true);
 }
+
+/**
+ * Counts countable component results that contribute to the assertPass/assertFail
+ * totals, skipping metric-only results (e.g. thresholdless cost/latency) that only
+ * record raw named metrics.
+ */
+export function countAssertionPassFail(componentResults: GradingResult[] | undefined): {
+  passCount: number;
+  failCount: number;
+} {
+  let passCount = 0;
+  let failCount = 0;
+  for (const result of collectCountableComponentResults(componentResults)) {
+    if (result.metadata?.isMetricOnly) {
+      continue;
+    }
+    if (result.pass) {
+      passCount++;
+    } else {
+      failCount++;
+    }
+  }
+  return { passCount, failCount };
+}
