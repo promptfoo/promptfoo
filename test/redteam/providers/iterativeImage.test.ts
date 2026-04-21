@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
+import type { CallApiContextParams } from '../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../src/logger', () => ({
@@ -37,8 +38,8 @@ vi.mock('../../../src/redteam/providers/shared', () => ({
 
 describe('RedteamIterativeImageProvider', () => {
   let RedteamIterativeProvider: typeof import('../../../src/redteam/providers/iterativeImage').default;
-  let mockRedteamProvider: ApiProvider;
-  let mockTargetProvider: ApiProvider;
+  let mockRedteamProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
   let getTargetResponse: typeof import('../../../src/redteam/providers/shared').getTargetResponse;
   let redteamProviderManager: typeof import('../../../src/redteam/providers/shared').redteamProviderManager;
 
@@ -55,16 +56,12 @@ describe('RedteamIterativeImageProvider', () => {
     RedteamIterativeProvider = module.default;
 
     // Setup mock redteam provider (also serves as vision provider)
-    mockRedteamProvider = {
-      id: () => 'mock-redteam-provider',
-      callApi: vi.fn() as any,
-    };
+    mockRedteamProvider = createMockProvider({ id: 'mock-redteam-provider' });
+    mockRedteamProvider.callApi.mockReset();
 
     // Setup mock target provider
-    mockTargetProvider = {
-      id: () => 'mock-target-provider',
-      callApi: vi.fn() as any,
-    };
+    mockTargetProvider = createMockProvider({ id: 'mock-target-provider' });
+    mockTargetProvider.callApi.mockReset();
 
     // Default redteam provider setup
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);

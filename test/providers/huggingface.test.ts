@@ -5,6 +5,7 @@ import {
   HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
 import { loadApiProvider } from '../../src/providers/index';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
@@ -83,14 +84,14 @@ function mockErrorResponse(statusCode: number, errorMessage: string) {
 
 describe('HuggingfaceChatCompletionProvider', () => {
   beforeEach(() => {
-    process.env.HF_TOKEN = 'test-hf-token';
+    mockProcessEnv({ HF_TOKEN: 'test-hf-token' });
   });
 
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
-    delete process.env.HF_TOKEN;
-    delete process.env.HF_API_TOKEN;
+    mockProcessEnv({ HF_TOKEN: undefined });
+    mockProcessEnv({ HF_API_TOKEN: undefined });
   });
 
   describe('constructor and identity', () => {
@@ -147,21 +148,21 @@ describe('HuggingfaceChatCompletionProvider', () => {
     });
 
     it('falls back to HF_TOKEN env var', () => {
-      process.env.HF_TOKEN = 'env-hf-token';
+      mockProcessEnv({ HF_TOKEN: 'env-hf-token' });
       const provider = new HuggingfaceChatCompletionProvider('test-model');
       expect(provider.getApiKey()).toBe('env-hf-token');
     });
 
     it('falls back to HF_API_TOKEN env var', () => {
-      delete process.env.HF_TOKEN;
-      process.env.HF_API_TOKEN = 'env-hf-api-token';
+      mockProcessEnv({ HF_TOKEN: undefined });
+      mockProcessEnv({ HF_API_TOKEN: 'env-hf-api-token' });
       const provider = new HuggingfaceChatCompletionProvider('test-model');
       expect(provider.getApiKey()).toBe('env-hf-api-token');
     });
 
     it('uses provider-level env overrides for HF_TOKEN', () => {
-      delete process.env.HF_TOKEN;
-      delete process.env.HF_API_TOKEN;
+      mockProcessEnv({ HF_TOKEN: undefined });
+      mockProcessEnv({ HF_API_TOKEN: undefined });
       const provider = new HuggingfaceChatCompletionProvider('test-model', {
         env: { HF_TOKEN: 'env-override-token' },
       });
@@ -169,8 +170,8 @@ describe('HuggingfaceChatCompletionProvider', () => {
     });
 
     it('uses provider-level env overrides for HF_API_TOKEN', () => {
-      delete process.env.HF_TOKEN;
-      delete process.env.HF_API_TOKEN;
+      mockProcessEnv({ HF_TOKEN: undefined });
+      mockProcessEnv({ HF_API_TOKEN: undefined });
       const provider = new HuggingfaceChatCompletionProvider('test-model', {
         env: { HF_API_TOKEN: 'env-override-api-token' },
       });
@@ -178,8 +179,8 @@ describe('HuggingfaceChatCompletionProvider', () => {
     });
 
     it('returns undefined when no key is set', () => {
-      delete process.env.HF_TOKEN;
-      delete process.env.HF_API_TOKEN;
+      mockProcessEnv({ HF_TOKEN: undefined });
+      mockProcessEnv({ HF_API_TOKEN: undefined });
       const provider = new HuggingfaceChatCompletionProvider('test-model');
       expect(provider.getApiKey()).toBeUndefined();
     });
@@ -273,7 +274,7 @@ describe('HuggingfaceChatCompletionProvider', () => {
     });
 
     it('sends Authorization header with HF token', async () => {
-      process.env.HF_TOKEN = 'my-secret-token';
+      mockProcessEnv({ HF_TOKEN: 'my-secret-token' });
       mockFetch.mockResolvedValue(mockChatResponse('response'));
       const provider = new HuggingfaceChatCompletionProvider('test-model');
       await provider.callApi('test');
@@ -329,13 +330,13 @@ describe('HuggingfaceChatCompletionProvider', () => {
 
 describe('HuggingfaceTextGenerationProvider chat delegation', () => {
   beforeEach(() => {
-    process.env.HF_TOKEN = 'test-hf-token';
+    mockProcessEnv({ HF_TOKEN: 'test-hf-token' });
   });
 
   afterEach(async () => {
     vi.clearAllMocks();
     await clearCache();
-    delete process.env.HF_TOKEN;
+    mockProcessEnv({ HF_TOKEN: undefined });
   });
 
   it('auto-detects chat completion format from /v1/chat URL', async () => {

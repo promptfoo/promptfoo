@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
+import { mockProcessEnv } from '../../util/utils';
 
 // Mock dependencies
 vi.mock('../../../src/envars', () => ({
@@ -45,13 +46,13 @@ describe('GoogleAuthManager', () => {
     mockGoogleAuthInstance.getProjectId.mockClear().mockResolvedValue('detected-project');
     mockGoogleAuthInstance.fromJSON.mockClear().mockResolvedValue({});
     // Clear environment variables
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.VERTEX_API_KEY;
-    delete process.env.PALM_API_KEY;
-    delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ VERTEX_API_KEY: undefined });
+    mockProcessEnv({ PALM_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
   });
 
   afterEach(() => {

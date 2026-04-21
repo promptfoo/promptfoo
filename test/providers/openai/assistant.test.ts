@@ -2,7 +2,8 @@ import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
-import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 import type { CallbackContext } from '../../../src/providers/openai/types';
 
@@ -272,8 +273,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle missing API key', async () => {
-      const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const providerNoKey = new OpenAiAssistantProvider('test-assistant-id', {
@@ -286,15 +286,15 @@ describe('OpenAI Provider', () => {
           getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
+        restoreEnv();
       }
     });
 
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
-      const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
-      const originalCustomApiKey = process.env.CUSTOM_ASSISTANT_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_ASSISTANT_API_KEY;
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_ASSISTANT_API_KEY: undefined,
+      });
 
       try {
         const providerNoKey = new OpenAiAssistantProvider('test-assistant-id', {
@@ -311,8 +311,7 @@ describe('OpenAI Provider', () => {
           getOpenAiMissingApiKeyMessage('CUSTOM_ASSISTANT_API_KEY'),
         );
       } finally {
-        restoreEnvVar('OPENAI_API_KEY', originalOpenAiApiKey);
-        restoreEnvVar('CUSTOM_ASSISTANT_API_KEY', originalCustomApiKey);
+        restoreEnv();
       }
     });
   });
