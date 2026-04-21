@@ -1,9 +1,10 @@
 import * as fs from 'fs';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
-import { GoogleProvider } from '../../../src/providers/google/provider';
+import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import * as util from '../../../src/providers/google/util';
+import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import * as fetchUtil from '../../../src/util/fetch/index';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
@@ -146,8 +147,9 @@ function mockGoogleClientRequest(
   } as any);
 }
 
-describe('GoogleProvider retry logic', () => {
+describe('Google Gemini provider retry logic', () => {
   beforeEach(() => {
+    cache.disableCache();
     vi.clearAllMocks();
     vi.mocked(cache.fetchWithCache).mockReset();
     vi.mocked(fetchUtil.fetchWithProxy).mockReset();
@@ -171,9 +173,13 @@ describe('GoogleProvider retry logic', () => {
     });
   });
 
+  afterEach(() => {
+    cache.enableCache();
+  });
+
   describe('AI Studio mode retries', () => {
     it('should retry on returned HTTP 503 responses and eventually succeed', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -195,7 +201,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should retry on HTTP 503 and eventually succeed', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -215,7 +221,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should use prompt-level retry config overrides', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 0 },
       });
 
@@ -242,7 +248,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should retry on HTTP 429 rate limit errors', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -261,7 +267,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should retry on ECONNRESET network errors', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -280,7 +286,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should retry on ETIMEDOUT network errors', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -298,8 +304,46 @@ describe('GoogleProvider retry logic', () => {
       expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
     });
 
+    it('should retry wrapped fetchWithCache network errors', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
+      });
+
+      vi.mocked(cache.fetchWithCache)
+        .mockRejectedValueOnce(
+          new Error(
+            'Request failed after 0 retries: TypeError: fetch failed (Cause: read ECONNRESET) (Code: ECONNRESET)',
+          ),
+        )
+        .mockResolvedValueOnce(successResponse as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('test response');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+    });
+
+    it('should retry wrapped fetchWithCache 500 errors', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
+      });
+
+      vi.mocked(cache.fetchWithCache)
+        .mockRejectedValueOnce(
+          new Error('Request failed after 0 retries: Error: Internal Server Error: 500 Internal'),
+        )
+        .mockResolvedValueOnce(successResponse as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('test response');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+    });
+
     it('should retry on "overloaded" error messages', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -316,7 +360,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should NOT retry on HTTP 400 client errors', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -333,7 +377,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should NOT retry non-retryable HTTP statuses even when the message mentions quota', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -349,8 +393,24 @@ describe('GoogleProvider retry logic', () => {
       expect(timeUtil.sleep).not.toHaveBeenCalled();
     });
 
+    it('should NOT retry unstructured quota configuration errors', async () => {
+      const provider = new AIStudioChatProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockRejectedValueOnce(
+        new Error('Bad Request: quota project is invalid'),
+      );
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('API call error');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+      expect(timeUtil.sleep).not.toHaveBeenCalled();
+    });
+
     it('should NOT retry on HTTP 401 auth errors', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -366,7 +426,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should exhaust all retries and return error on persistent failures', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
       });
 
@@ -387,7 +447,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should disable retries when maxRetries is 0', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 0 },
       });
 
@@ -404,7 +464,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should default to 3 retries when maxRetries is not specified', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key' },
       });
 
@@ -428,7 +488,7 @@ describe('GoogleProvider retry logic', () => {
 
   describe('Vertex AI Express mode retries', () => {
     it('should retry on HTTP 503 in express mode', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new VertexChatProvider('gemini-pro', {
         config: {
           vertexai: true,
           apiKey: 'test-vertex-key',
@@ -470,7 +530,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should retry on HTTP 429 in express mode', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new VertexChatProvider('gemini-pro', {
         config: {
           vertexai: true,
           apiKey: 'test-vertex-key',
@@ -510,7 +570,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should NOT retry on HTTP 400 in express mode', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new VertexChatProvider('gemini-pro', {
         config: {
           vertexai: true,
           apiKey: 'test-vertex-key',
@@ -560,7 +620,7 @@ describe('GoogleProvider retry logic', () => {
 
       mockGoogleClientRequest(mockRequest);
 
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new VertexChatProvider('gemini-pro', {
         config: {
           vertexai: true,
           projectId: 'test-project',
@@ -579,7 +639,7 @@ describe('GoogleProvider retry logic', () => {
 
   describe('exponential backoff', () => {
     it('should use increasing delays between retries', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 3, baseRetryDelay: 100 },
       });
 
@@ -612,7 +672,7 @@ describe('GoogleProvider retry logic', () => {
 
   describe('error detection', () => {
     it('should detect retryable errors from cause.code', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
       });
 
@@ -631,7 +691,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should detect retryable errors from "service unavailable" message', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
       });
 
@@ -648,7 +708,7 @@ describe('GoogleProvider retry logic', () => {
     });
 
     it('should detect retryable errors from ECONNREFUSED', async () => {
-      const provider = new GoogleProvider('gemini-pro', {
+      const provider = new AIStudioChatProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 1, baseRetryDelay: 10 },
       });
 

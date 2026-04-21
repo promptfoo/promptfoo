@@ -21,6 +21,12 @@ import {
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  getGeminiMaxRetries,
+  isGeminiRetryableError,
+  isGeminiRetryableStatus,
+  waitBeforeGeminiRetry,
+} from './retry';
+import {
   calculateGoogleCost,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
@@ -514,70 +520,84 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
     if (response === undefined) {
       let data;
-      try {
-        // Default to non-streaming (generateContent) since:
-        // 1. Model Armor floor settings only work with non-streaming endpoint
-        // 2. Promptfoo collects full responses for evaluation anyway
-        // Set streaming: true to use streamGenerateContent if needed
-        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+      const maxRetries = getGeminiMaxRetries(config);
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          // Default to non-streaming (generateContent) since:
+          // 1. Model Armor floor settings only work with non-streaming endpoint
+          // 2. Promptfoo collects full responses for evaluation anyway
+          // Set streaming: true to use streamGenerateContent if needed
+          const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
 
-        // Check if we should use express mode (API key without OAuth)
-        if (this.isExpressMode()) {
-          // Express mode: use simplified endpoint with API key in header
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+          // Check if we should use express mode (API key without OAuth)
+          if (this.isExpressMode()) {
+            // Express mode: use simplified endpoint with API key in header
+            const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
-          const res = await fetchWithProxy(url, {
-            method: 'POST',
-            headers: await this.getAuthHeaders(),
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          });
+            const res = await fetchWithProxy(url, {
+              method: 'POST',
+              headers: await this.getAuthHeaders(),
+              body: JSON.stringify(body),
+              signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            });
 
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => null);
-            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
-            return {
-              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
-            };
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => null);
+              logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
+              if (isGeminiRetryableStatus(res.status) && attempt < maxRetries) {
+                await waitBeforeGeminiRetry(config, attempt, maxRetries);
+                continue;
+              }
+              return {
+                error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+              };
+            }
+
+            data = (await res.json()) as GeminiApiResponse;
+          } else {
+            // Standard mode: use OAuth and full endpoint
+            const client = await this.getClientWithCredentials();
+            const projectId = await this.getProjectId();
+            const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+              this.modelName
+            }:${endpoint}`;
+            const res = await client.request({
+              url,
+              method: 'POST',
+              data: body,
+              timeout: REQUEST_TIMEOUT_MS,
+            });
+            data = res.data as GeminiApiResponse;
           }
 
-          data = (await res.json()) as GeminiApiResponse;
-        } else {
-          // Standard mode: use OAuth and full endpoint
-          const client = await this.getClientWithCredentials();
-          const projectId = await this.getProjectId();
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-            this.modelName
-          }:${endpoint}`;
-          const res = await client.request({
-            url,
-            method: 'POST',
-            data: body,
-            timeout: REQUEST_TIMEOUT_MS,
-          });
-          data = res.data as GeminiApiResponse;
-        }
-      } catch (err) {
-        const geminiError = err as GaxiosError;
-        if (
-          geminiError.response &&
-          geminiError.response.data &&
-          geminiError.response.data[0] &&
-          geminiError.response.data[0].error
-        ) {
-          const errorDetails = geminiError.response.data[0].error;
-          const code = errorDetails.code;
-          const message = errorDetails.message;
-          const status = errorDetails.status;
-          logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+          break;
+        } catch (err) {
+          if (attempt < maxRetries && isGeminiRetryableError(err)) {
+            await waitBeforeGeminiRetry(config, attempt, maxRetries);
+            continue;
+          }
+
+          const geminiError = err as GaxiosError;
+          if (
+            geminiError.response &&
+            geminiError.response.data &&
+            geminiError.response.data[0] &&
+            geminiError.response.data[0].error
+          ) {
+            const errorDetails = geminiError.response.data[0].error;
+            const code = errorDetails.code;
+            const message = errorDetails.message;
+            const status = errorDetails.status;
+            logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+            return {
+              error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+            };
+          }
+          logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
           return {
-            error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
+            error: `API call error: ${String(err)}`,
           };
         }
-        logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
-        return {
-          error: `API call error: ${String(err)}`,
-        };
       }
 
       try {

@@ -19,9 +19,14 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import {
+  getGeminiMaxRetries,
+  isGeminiRetryableError,
+  isGeminiRetryableStatus,
+  waitBeforeGeminiRetry,
+} from './retry';
 import {
   calculateGoogleCost,
   createAuthCacheDiscriminator,
@@ -283,87 +288,6 @@ export class GoogleProvider extends GoogleGenericProvider {
     return this.callGeminiApi(prompt, context);
   }
 
-  /**
-   * Determine if an error is retryable (transient server/network error).
-   */
-  private isRetryableError(error: unknown): boolean {
-    if (error instanceof Error) {
-      // Prefer structured HTTP status over message matching so permanent
-      // 4xx errors are not retried just because their message mentions quota.
-      const responseStatus = (error as any).response?.status;
-      if (typeof responseStatus === 'number') {
-        return this.isRetryableStatus(responseStatus);
-      }
-
-      const message = error.message.toLowerCase();
-      // Check HTTP status codes
-      if (message.includes('503') || message.includes('service unavailable')) {
-        return true;
-      }
-      if (message.includes('429') || message.includes('rate limit') || message.includes('quota')) {
-        return true;
-      }
-      if (message.includes('overloaded')) {
-        return true;
-      }
-      // Check network error codes
-      const code = (error as any).code;
-      if (
-        code === 'ECONNRESET' ||
-        code === 'ETIMEDOUT' ||
-        code === 'ECONNREFUSED' ||
-        code === 'EPIPE'
-      ) {
-        return true;
-      }
-      // Check cause.code for wrapped errors (e.g., fetch failures)
-      const causeCode = (error as any).cause?.code;
-      if (
-        causeCode === 'ECONNRESET' ||
-        causeCode === 'ETIMEDOUT' ||
-        causeCode === 'ECONNREFUSED' ||
-        causeCode === 'EPIPE'
-      ) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Determine if an HTTP status code is retryable.
-   */
-  private isRetryableStatus(status: number): boolean {
-    return status === 408 || status === 429 || status >= 500;
-  }
-
-  /**
-   * Calculate retry delay with exponential backoff and jitter.
-   */
-  private getRetryDelay(config: CompletionOptions, attempt: number): number {
-    const baseDelay = Math.max(0, config.baseRetryDelay ?? 1000);
-    return baseDelay * Math.pow(2, attempt) + Math.random() * baseDelay;
-  }
-
-  /**
-   * Get the maximum number of retries.
-   */
-  private getMaxRetries(config: CompletionOptions): number {
-    return Math.max(0, config.maxRetries ?? 3);
-  }
-
-  private async waitBeforeRetry(
-    config: CompletionOptions,
-    attempt: number,
-    maxRetries: number,
-  ): Promise<void> {
-    const delay = this.getRetryDelay(config, attempt);
-    logger.debug(
-      `Retrying Google API call (attempt ${attempt + 1}/${maxRetries}) after ${Math.round(delay)}ms`,
-    );
-    await sleep(delay);
-  }
-
   private async callGeminiApiOnce(
     body: Record<string, any>,
     config: CompletionOptions,
@@ -509,16 +433,16 @@ export class GoogleProvider extends GoogleGenericProvider {
 
     let data: GeminiApiResponse;
     let cached = false;
-    const maxRetries = this.getMaxRetries(config);
+    const maxRetries = getGeminiMaxRetries(config);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         const result = await this.callGeminiApiOnce(body, config);
         const shouldRetryStatus =
-          result.status !== undefined && this.isRetryableStatus(result.status);
+          result.status !== undefined && isGeminiRetryableStatus(result.status);
 
         if (shouldRetryStatus && attempt < maxRetries) {
-          await this.waitBeforeRetry(config, attempt, maxRetries);
+          await waitBeforeGeminiRetry(config, attempt, maxRetries);
           continue;
         }
 
@@ -533,8 +457,8 @@ export class GoogleProvider extends GoogleGenericProvider {
         break;
       } catch (err) {
         // Check if we should retry
-        if (attempt < maxRetries && this.isRetryableError(err)) {
-          await this.waitBeforeRetry(config, attempt, maxRetries);
+        if (attempt < maxRetries && isGeminiRetryableError(err)) {
+          await waitBeforeGeminiRetry(config, attempt, maxRetries);
           continue;
         }
 

@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
@@ -6,6 +6,12 @@ import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import {
+  getGeminiMaxRetries,
+  isGeminiRetryableError,
+  isGeminiRetryableStatus,
+  waitBeforeGeminiRetry,
+} from './retry';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -429,30 +435,51 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    let data;
+    let data: GeminiResponseData | undefined;
     let cached = false;
-    try {
-      const endpoint = this.getApiEndpoint('generateContent');
-      const headers = await this.getAuthHeaders();
-      const authDiscriminator = createAuthCacheDiscriminator(headers);
-      ({ data, cached } = (await fetchWithCache(
-        endpoint,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-          ...(authDiscriminator && { _authHash: authDiscriminator }),
-        } as RequestInit,
-        REQUEST_TIMEOUT_MS,
-        'json',
-        shouldBustCache(context),
-      )) as {
-        data: GeminiResponseData;
-        cached: boolean;
-      });
-    } catch (err) {
+    const maxRetries = getGeminiMaxRetries(config);
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const endpoint = this.getApiEndpoint('generateContent');
+        const headers = await this.getAuthHeaders();
+        const authDiscriminator = createAuthCacheDiscriminator(headers);
+        const result = (await fetchWithCache<GeminiResponseData>(
+          endpoint,
+          {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            ...(authDiscriminator && { _authHash: authDiscriminator }),
+          } as RequestInit,
+          REQUEST_TIMEOUT_MS,
+          'json',
+          shouldBustCache(context),
+        )) as FetchWithCacheResult<GeminiResponseData>;
+
+        if (isGeminiRetryableStatus(result.status) && attempt < maxRetries) {
+          await waitBeforeGeminiRetry(config, attempt, maxRetries);
+          continue;
+        }
+
+        data = result.data;
+        cached = result.cached;
+        break;
+      } catch (err) {
+        if (attempt < maxRetries && isGeminiRetryableError(err)) {
+          await waitBeforeGeminiRetry(config, attempt, maxRetries);
+          continue;
+        }
+
+        return {
+          error: `API call error: ${String(err)}`,
+        };
+      }
+    }
+
+    if (!data) {
       return {
-        error: `API call error: ${String(err)}`,
+        error: 'API call error: Gemini API did not return a response',
       };
     }
 
