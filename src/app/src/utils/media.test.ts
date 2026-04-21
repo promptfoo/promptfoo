@@ -1,11 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  downloadFile,
+  downloadMediaItem,
   formatBytes,
   formatCost,
   formatLatency,
+  formatMediaDate,
   generateMediaFilename,
   getExtensionFromMimeType,
+  getKindIcon,
+  getKindLabel,
   hashToNumber,
+  normalizeMediaText,
+  resolveAudioSource,
   resolveBlobUri,
   resolveImageSource,
   resolveVideoSource,
@@ -540,7 +547,7 @@ describe('resolveVideoSource', () => {
     });
   });
 
-  describe('blob reference resolution', () => {
+  describe('blob reference resolution (without format)', () => {
     it('should return an object with resolved blob URL as src and type video/mp4 when given a video object with valid blobRef and no format', () => {
       const videoObject = {
         blobRef: { hash: 'mock-blob-hash' },
@@ -557,7 +564,7 @@ describe('resolveVideoSource', () => {
     });
   });
 
-  describe('format handling', () => {
+  describe('format handling (with blobRef)', () => {
     it('should return an object with the correct type when the video object specifies a format', () => {
       const videoObject = {
         blobRef: { hash: 'mock-blob-hash' },
@@ -712,5 +719,397 @@ describe('resolveImageSource security', () => {
   it('should return undefined for short strings that could be session IDs', () => {
     expect(resolveImageSource('abc123')).toBeUndefined();
     expect(resolveImageSource('short-string')).toBeUndefined();
+  });
+
+  it('should resolve blobRef from image object', () => {
+    const result = resolveImageSource({
+      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+    });
+    expect(result).toBe('/api/blobs/abc123def456789012345678901234567890');
+  });
+
+  it('should resolve data from image object with format', () => {
+    const result = resolveImageSource({
+      data: 'SGVsbG8gV29ybGQ=',
+      format: 'jpeg',
+    });
+    expect(result).toBe('data:image/jpeg;base64,SGVsbG8gV29ybGQ=');
+  });
+
+  it('should resolve data from image object with default png format', () => {
+    const result = resolveImageSource({
+      data: 'SGVsbG8gV29ybGQ=',
+    });
+    expect(result).toBe('data:image/png;base64,SGVsbG8gV29ybGQ=');
+  });
+
+  it('should pass through data URI from image object', () => {
+    const dataUri = 'data:image/webp;base64,UklGRg==';
+    const result = resolveImageSource({
+      data: dataUri,
+    });
+    expect(result).toBe(dataUri);
+  });
+
+  it('should return undefined for image object with no blobRef or data', () => {
+    const result = resolveImageSource({
+      format: 'png',
+    });
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('resolveAudioSource', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('should return null for null audio and no fallback', () => {
+    expect(resolveAudioSource(null)).toBeNull();
+    expect(resolveAudioSource(null, undefined)).toBeNull();
+  });
+
+  it('should return null for undefined audio and no fallback', () => {
+    expect(resolveAudioSource(undefined)).toBeNull();
+    expect(resolveAudioSource(undefined, undefined)).toBeNull();
+  });
+
+  it('should return null for empty audio object with no data or blobRef', () => {
+    expect(resolveAudioSource({})).toBeNull();
+  });
+
+  it('should resolve blobRef and return audio source with type', () => {
+    const result = resolveAudioSource({
+      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+    });
+
+    expect(result).toEqual({
+      src: '/api/blobs/abc123def456789012345678901234567890',
+      type: 'audio/mpeg',
+    });
+  });
+
+  it('should resolve blobRef with custom format', () => {
+    const result = resolveAudioSource({
+      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+      format: 'wav',
+    });
+
+    expect(result).toEqual({
+      src: '/api/blobs/abc123def456789012345678901234567890',
+      type: 'audio/wav',
+    });
+  });
+
+  it('should resolve storageRef from fallbackContent', () => {
+    const result = resolveAudioSource(undefined, 'storageRef:audio/test.mp3');
+
+    expect(result).toEqual({
+      src: '/api/media/audio/test.mp3',
+      type: 'audio/mpeg',
+    });
+  });
+
+  it('should use data from audio object with base64 encoding', () => {
+    const result = resolveAudioSource({
+      data: 'SGVsbG8gV29ybGQ=',
+    });
+
+    expect(result).toEqual({
+      src: 'data:audio/mp3;base64,SGVsbG8gV29ybGQ=',
+      type: 'audio/mp3',
+    });
+  });
+
+  it('should use data from audio object with custom format', () => {
+    const result = resolveAudioSource({
+      data: 'SGVsbG8gV29ybGQ=',
+      format: 'ogg',
+    });
+
+    expect(result).toEqual({
+      src: 'data:audio/ogg;base64,SGVsbG8gV29ybGQ=',
+      type: 'audio/ogg',
+    });
+  });
+
+  it('should pass through data: URI as-is', () => {
+    const dataUri = 'data:audio/wav;base64,UklGRg==';
+    const result = resolveAudioSource({
+      data: dataUri,
+    });
+
+    expect(result).toEqual({
+      src: dataUri,
+      type: 'audio/mp3',
+    });
+  });
+
+  it('should use fallbackContent as data when no audio object data', () => {
+    const result = resolveAudioSource({}, 'SGVsbG8gV29ybGQ=');
+
+    expect(result).toEqual({
+      src: 'data:audio/mp3;base64,SGVsbG8gV29ybGQ=',
+      type: 'audio/mp3',
+    });
+  });
+
+  it('should prefer blobRef over data', () => {
+    const result = resolveAudioSource({
+      blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
+      data: 'SGVsbG8gV29ybGQ=',
+    });
+
+    expect(result?.src).toBe('/api/blobs/abc123def456789012345678901234567890');
+  });
+
+  it('should use fallbackContent when audio.data is undefined', () => {
+    const result = resolveAudioSource({ format: 'wav' }, 'SGVsbG8gV29ybGQ=');
+
+    expect(result).toEqual({
+      src: 'data:audio/wav;base64,SGVsbG8gV29ybGQ=',
+      type: 'audio/wav',
+    });
+  });
+
+  it('should use mp3 as default format', () => {
+    const result = resolveAudioSource({
+      data: 'SGVsbG8gV29ybGQ=',
+    });
+
+    expect(result?.type).toBe('audio/mp3');
+  });
+});
+
+describe('normalizeMediaText', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('should replace promptfoo://blob/ URIs with /api/blobs/', () => {
+    const text = 'Check this image: promptfoo://blob/abc123def456789012345678901234567890';
+    const result = normalizeMediaText(text);
+    expect(result).toBe('Check this image: /api/blobs/abc123def456789012345678901234567890');
+  });
+
+  it('should replace multiple promptfoo://blob/ URIs', () => {
+    const text =
+      'Image 1: promptfoo://blob/abc123def456789012345678901234567890 and Image 2: promptfoo://blob/def456abc123789012345678901234567890';
+    const result = normalizeMediaText(text);
+    expect(result).toBe(
+      'Image 1: /api/blobs/abc123def456789012345678901234567890 and Image 2: /api/blobs/def456abc123789012345678901234567890',
+    );
+  });
+
+  it('should replace storageRef: URIs with /api/media/', () => {
+    const text = 'Check this file: storageRef:images/photo.png';
+    const result = normalizeMediaText(text);
+    expect(result).toBe('Check this file: /api/media/images/photo.png');
+  });
+
+  it('should replace storageRef:/ URIs with /api/media/', () => {
+    const text = 'Check this file: storageRef:/images/photo.png';
+    const result = normalizeMediaText(text);
+    expect(result).toBe('Check this file: /api/media/images/photo.png');
+  });
+
+  it('should replace multiple storageRef: URIs', () => {
+    const text = 'File 1: storageRef:images/a.png and File 2: storageRef:videos/b.mp4';
+    const result = normalizeMediaText(text);
+    expect(result).toBe('File 1: /api/media/images/a.png and File 2: /api/media/videos/b.mp4');
+  });
+
+  it('should replace both promptfoo://blob/ and storageRef: URIs in same text', () => {
+    const text =
+      'Image: promptfoo://blob/abc123def456789012345678901234567890 and Video: storageRef:videos/test.mp4';
+    const result = normalizeMediaText(text);
+    expect(result).toBe(
+      'Image: /api/blobs/abc123def456789012345678901234567890 and Video: /api/media/videos/test.mp4',
+    );
+  });
+
+  it('should return unchanged text when no URIs to replace', () => {
+    const text = 'This is plain text without any URIs';
+    const result = normalizeMediaText(text);
+    expect(result).toBe(text);
+  });
+
+  it('should handle empty string', () => {
+    expect(normalizeMediaText('')).toBe('');
+  });
+
+  it('should prepend apiBaseUrl when configured', () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+
+    const text = 'Image: promptfoo://blob/abc123def456789012345678901234567890';
+    const result = normalizeMediaText(text);
+    expect(result).toBe(
+      'Image: https://api.example.com/api/blobs/abc123def456789012345678901234567890',
+    );
+  });
+});
+
+describe('downloadFile', () => {
+  let clickSpy: ReturnType<typeof vi.fn>;
+  let mockAnchor: Partial<HTMLAnchorElement>;
+
+  beforeEach(() => {
+    clickSpy = vi.fn();
+    mockAnchor = {
+      href: '',
+      download: '',
+      style: { display: '' } as CSSStyleDeclaration,
+      click: clickSpy as () => void,
+    };
+
+    // Mock createElement to return a mock anchor element
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      if (tagName === 'a') {
+        return mockAnchor as HTMLAnchorElement;
+      }
+      return document.createElement(tagName);
+    });
+
+    vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
+    vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should create anchor element with correct URL and filename', () => {
+    const url = 'https://example.com/test.png';
+    const filename = 'test.png';
+
+    downloadFile(url, filename);
+
+    expect(document.createElement).toHaveBeenCalledWith('a');
+    expect(mockAnchor.href).toBe(url);
+    expect(mockAnchor.download).toBe(filename);
+  });
+
+  it('should append anchor to body, click it, and remove it', () => {
+    downloadFile('https://example.com/test.png', 'test.png');
+
+    expect(document.body.appendChild).toHaveBeenCalledWith(mockAnchor);
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    expect(document.body.removeChild).toHaveBeenCalledWith(mockAnchor);
+  });
+
+  it('should set anchor display to none', () => {
+    downloadFile('https://example.com/test.png', 'test.png');
+
+    expect(mockAnchor.style?.display).toBe('none');
+  });
+});
+
+describe('downloadMediaItem', () => {
+  let clickSpy: ReturnType<typeof vi.fn>;
+  let mockAnchor: Partial<HTMLAnchorElement>;
+
+  beforeEach(() => {
+    clickSpy = vi.fn();
+    mockAnchor = {
+      href: '',
+      download: '',
+      style: { display: '' } as CSSStyleDeclaration,
+      click: clickSpy as () => void,
+    };
+
+    vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+      if (tagName === 'a') {
+        return mockAnchor as HTMLAnchorElement;
+      }
+      return document.createElement(tagName);
+    });
+
+    vi.spyOn(document.body, 'appendChild').mockImplementation((node) => node);
+    vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should generate filename from hash and mimeType', () => {
+    downloadMediaItem('https://example.com/test.png', 'abc123def456789012', 'image/png');
+
+    expect(mockAnchor.download).toBe('abc123def456.png');
+  });
+
+  it('should call downloadFile with correct URL and generated filename', () => {
+    downloadMediaItem('https://example.com/video.mp4', 'xyz789abc123456789', 'video/mp4');
+
+    expect(mockAnchor.href).toBe('https://example.com/video.mp4');
+    expect(mockAnchor.download).toBe('xyz789abc123.mp4');
+  });
+
+  it('should handle JPEG MIME type mapping to jpg', () => {
+    downloadMediaItem('https://example.com/photo.jpg', 'photo123456', 'image/jpeg');
+
+    expect(mockAnchor.download).toBe('photo123456.jpg');
+  });
+});
+
+describe('formatMediaDate', () => {
+  it('should format date string to localized format', () => {
+    const dateString = '2024-01-15T10:30:00.000Z';
+    const result = formatMediaDate(dateString);
+
+    // The result will vary by locale, but we can verify it's a string
+    expect(typeof result).toBe('string');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('should format ISO date string', () => {
+    const dateString = '2024-12-25T15:45:30Z';
+    const result = formatMediaDate(dateString);
+
+    expect(typeof result).toBe('string');
+    // Should contain at least year and month
+    expect(result).toMatch(/2024/);
+  });
+});
+
+describe('getKindIcon', () => {
+  it('should return ImageIcon for image kind', () => {
+    const icon = getKindIcon('image');
+    expect(icon).toBeDefined();
+  });
+
+  it('should return Video icon for video kind', () => {
+    const icon = getKindIcon('video');
+    expect(icon).toBeDefined();
+  });
+
+  it('should return Music icon for audio kind', () => {
+    const icon = getKindIcon('audio');
+    expect(icon).toBeDefined();
+  });
+
+  it('should return FileIcon for other kind', () => {
+    const icon = getKindIcon('other');
+    expect(icon).toBeDefined();
+  });
+});
+
+describe('getKindLabel', () => {
+  it('should return "Image" for image kind', () => {
+    expect(getKindLabel('image')).toBe('Image');
+  });
+
+  it('should return "Video" for video kind', () => {
+    expect(getKindLabel('video')).toBe('Video');
+  });
+
+  it('should return "Audio" for audio kind', () => {
+    expect(getKindLabel('audio')).toBe('Audio');
+  });
+
+  it('should return "File" for other kind', () => {
+    expect(getKindLabel('other')).toBe('File');
   });
 });

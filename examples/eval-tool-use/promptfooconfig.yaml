@@ -1,8 +1,11 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Tool use evaluation with function calling capabilities
 
+prompts:
+  - Tell me about the weather in {{city}} in the default unit for the location.
+
 providers:
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-4-6
     config:
       tools:
         - name: get_weather
@@ -20,7 +23,7 @@ providers:
                   - fahrenheit
             required:
               - location
-  - id: anthropic:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-4-6
     label: With Strict Mode
     config:
       tools:
@@ -41,7 +44,7 @@ providers:
             required:
               - location
             additionalProperties: false
-  - id: openai:chat:gpt-5-mini
+  - id: openai:chat:gpt-5.4-mini
     config:
       tools:
         - type: function
@@ -61,7 +64,7 @@ providers:
                     - fahrenheit
               required:
                 - location
-  - id: openai:chat:gpt-5-mini
+  - id: openai:chat:gpt-5.4-mini
     label: External Tools
     config:
       tools: file://external_tools.yaml
@@ -86,9 +89,6 @@ providers:
               required:
                 - 'location'
       tool_choice: auto
-
-prompts:
-  - Tell me about the weather in {{city}} in the default unit for the location.
 
 tests:
   # Test that tool calls result in 'tool_calls' finish reason

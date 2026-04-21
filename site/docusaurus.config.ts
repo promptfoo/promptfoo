@@ -1,12 +1,24 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { promises as fsPromises } from 'fs';
+import { join } from 'path';
 
 import { themes } from 'prism-react-renderer';
 import type * as Preset from '@docusaurus/preset-classic';
-import type { Config } from '@docusaurus/types';
+import type { Config, Plugin } from '@docusaurus/types';
 
 const lightCodeTheme = themes.github;
 const darkCodeTheme = themes.duotoneDark;
+
+function webpackProgressCompatibilityPlugin(): Plugin {
+  return {
+    name: 'webpack-progress-compatibility-plugin',
+    configureWebpack(config) {
+      config.plugins = config.plugins?.filter(
+        (plugin) => plugin?.constructor?.name !== 'WebpackBarPlugin',
+      );
+      return {};
+    },
+  };
+}
 
 const config: Config = {
   title: 'Promptfoo',
@@ -28,7 +40,7 @@ const config: Config = {
 
   onBrokenLinks: 'throw',
   onBrokenAnchors: 'throw',
-  // Even if you don't use internalization, you can use this field to set useful
+  // Even if you don't use internationalization, you can use this field to set useful
   // metadata like html lang. For example, if your site is Chinese, you may want
   // to replace "en" with "zh-Hans".
   i18n: {
@@ -153,7 +165,7 @@ const config: Config = {
             {
               to: '/solutions/insurance/',
               label: 'Insurance',
-              description: 'PHI protection & coverage accuracy',
+              description: 'Policyholder data & coverage accuracy',
             },
             {
               to: '/solutions/telecom/',
@@ -429,6 +441,7 @@ const config: Config = {
   } satisfies Preset.ThemeConfig,
 
   plugins: [
+    webpackProgressCompatibilityPlugin,
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
     // GA/analytics loaded conditionally via consent.js (GDPR)
@@ -564,19 +577,19 @@ const config: Config = {
         name: 'llms-txt-plugin',
         loadContent: async () => {
           const { siteDir } = context;
-          const docsDir = path.join(siteDir, 'docs');
+          const docsDir = join(siteDir, 'docs');
           const allMdx: string[] = [];
 
           // Recursive function to get all mdx/md files
           const getMdFiles = async (dir: string): Promise<void> => {
-            const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+            const entries = await fsPromises.readdir(dir, { withFileTypes: true });
 
             for (const entry of entries) {
-              const fullPath = path.join(dir, entry.name);
+              const fullPath = join(dir, entry.name);
               if (entry.isDirectory()) {
                 await getMdFiles(fullPath);
               } else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
-                const content = await fs.promises.readFile(fullPath, 'utf8');
+                const content = await fsPromises.readFile(fullPath, 'utf8');
                 allMdx.push(content);
               }
             }
@@ -591,8 +604,8 @@ const config: Config = {
           const { allMdx } = pluginContent;
 
           // Write concatenated MDX content
-          const concatenatedPath = path.join(outDir, 'llms-full.txt');
-          await fs.promises.writeFile(concatenatedPath, allMdx.join('\n\n---\n\n'));
+          const concatenatedPath = join(outDir, 'llms-full.txt');
+          await fsPromises.writeFile(concatenatedPath, allMdx.join('\n\n---\n\n'));
 
           // Process routes - use routesPaths which is a string[] of all routes
           const docsRoutes: string[] = [];
@@ -616,9 +629,9 @@ const config: Config = {
           const llmsTxt = `# ${context.siteConfig.title}\n\n## Docs\n\n${docsRoutes.join('\n')}`;
 
           // Write llms.txt file
-          const llmsTxtPath = path.join(outDir, 'llms.txt');
+          const llmsTxtPath = join(outDir, 'llms.txt');
           try {
-            fs.writeFileSync(llmsTxtPath, llmsTxt);
+            await fsPromises.writeFile(llmsTxtPath, llmsTxt);
             console.log('Successfully created llms.txt and llms-full.txt files.');
           } catch (err) {
             console.error('Error writing llms.txt file:', err);

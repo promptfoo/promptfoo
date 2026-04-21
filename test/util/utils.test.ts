@@ -14,9 +14,9 @@ function restoreTestEnv(): void {
   for (const key of envKeys) {
     const value = originalEnv[key];
     if (value === undefined) {
-      delete process.env[key];
+      mockProcessEnv({ [key]: undefined });
     } else {
-      process.env[key] = value;
+      mockProcessEnv({ [key]: value });
     }
   }
 }
@@ -29,14 +29,14 @@ afterEach(() => {
 
 describe('mockProcessEnv', () => {
   it('applies overrides and restores the previous environment snapshot', () => {
-    process.env.PROMPTFOO_TEST_UTIL_ORIGINAL = 'original';
+    mockProcessEnv({ PROMPTFOO_TEST_UTIL_ORIGINAL: 'original' });
 
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_TEST_UTIL_ORIGINAL: 'override',
       PROMPTFOO_TEST_UTIL_OVERRIDE: 'set',
     });
 
-    process.env.PROMPTFOO_TEST_UTIL_CREATED = 'created-by-test';
+    mockProcessEnv({ PROMPTFOO_TEST_UTIL_CREATED: 'created-by-test' });
 
     expect(process.env.PROMPTFOO_TEST_UTIL_ORIGINAL).toBe('override');
     expect(process.env.PROMPTFOO_TEST_UTIL_OVERRIDE).toBe('set');
@@ -49,7 +49,7 @@ describe('mockProcessEnv', () => {
   });
 
   it('can start from an empty environment without replacing the process.env object', () => {
-    process.env.PROMPTFOO_TEST_UTIL_ORIGINAL = 'original';
+    mockProcessEnv({ PROMPTFOO_TEST_UTIL_ORIGINAL: 'original' });
     const envReference = process.env;
 
     const restoreEnv = mockProcessEnv(

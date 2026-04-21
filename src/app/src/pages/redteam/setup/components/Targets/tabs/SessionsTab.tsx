@@ -66,15 +66,12 @@ const SessionEndpointConfig: React.FC<SessionEndpointConfigProps> = ({ session, 
 
   const updateHeaders = (newHeaders: Array<{ key: string; value: string }>) => {
     setHeaders(newHeaders);
-    const headersObj = newHeaders.reduce(
-      (acc, { key, value }) => {
-        if (key.trim()) {
-          acc[key] = value;
-        }
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+    const headersObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+      if (key.trim()) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
     updateSession('headers', Object.keys(headersObj).length > 0 ? headersObj : undefined);
   };
 

@@ -1210,12 +1210,12 @@ function parseRawRequest(input: string) {
       method: requestModel.method,
       url: requestModel.target,
       httpVersion: getRawRequestHttpVersion(input),
-      headers: requestModel.headers.reduce(
+      headers: requestModel.headers.reduce<Record<string, string>>(
         (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
           return acc;
         },
-        {} as Record<string, string>,
+        {},
       ),
       body: requestModel.body,
     };

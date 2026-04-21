@@ -12,6 +12,6 @@
   "author": "Promptfoo",
   "license": "MIT",
   "dependencies": {
-    "openai": "^6.33.0"
+    "openai": "^6.34.0"
   }
 }

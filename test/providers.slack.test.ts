@@ -1,6 +1,7 @@
 import { WebClient } from '@slack/web-api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SlackProvider } from '../src/providers/slack';
+import { mockProcessEnv } from './util/utils';
 
 import type { ApiProvider } from '../src/types/index';
 
@@ -23,7 +24,7 @@ describe('SlackProvider', () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     slackMocks.webClientImpl.mockReset();
-    process.env.SLACK_BOT_TOKEN = 'xoxb-test-token';
+    mockProcessEnv({ SLACK_BOT_TOKEN: 'xoxb-test-token' });
 
     mockWebClient = {
       chat: {
@@ -40,12 +41,12 @@ describe('SlackProvider', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
-    delete process.env.SLACK_BOT_TOKEN;
+    mockProcessEnv({ SLACK_BOT_TOKEN: undefined });
   });
 
   describe('constructor', () => {
     it('should throw error if no token is provided', () => {
-      delete process.env.SLACK_BOT_TOKEN;
+      mockProcessEnv({ SLACK_BOT_TOKEN: undefined });
       expect(() => new SlackProvider({ config: { channel: 'C123' } })).toThrow(
         'Slack provider requires a token',
       );
