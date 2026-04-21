@@ -258,13 +258,15 @@ export const EvaluateOptionsSchema = z.object({
   /**
    * Timeout in milliseconds for each individual test case/provider API call.
    * When reached, that specific test is marked as an error.
-   * Default is 0 (no timeout).
+   * Defaults to PROMPTFOO_EVAL_TIMEOUT_MS or 5x REQUEST_TIMEOUT_MS.
+   * Set to 0 to disable.
    */
   timeoutMs: z.number().optional(),
   /**
    * Maximum total runtime in milliseconds for the entire evaluation process.
    * When reached, all remaining tests are marked as errors and the evaluation ends.
-   * Default is 0 (no limit).
+   * Defaults to PROMPTFOO_MAX_EVAL_TIME_MS or an eval-size-based estimate.
+   * Set to 0 to disable.
    */
   maxEvalTimeMs: z.number().optional(),
   isRedteam: z.boolean().optional(),

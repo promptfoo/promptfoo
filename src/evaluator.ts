@@ -4253,14 +4253,10 @@ class Evaluator {
 
     const testCaseTimeoutMs =
       options.timeoutMs === undefined ? getEvalTimeoutMs() : options.timeoutMs;
+    const isRedteamEval = options.isRedteam ?? Boolean(testSuite.redteam);
     maxEvalTimeMs =
       options.maxEvalTimeMs ??
-      getDefaultMaxEvalTimeMs(
-        runEvalOptions.length,
-        concurrency,
-        testCaseTimeoutMs,
-        Boolean(options.isRedteam),
-      );
+      getDefaultMaxEvalTimeMs(runEvalOptions.length, concurrency, testCaseTimeoutMs, isRedteamEval);
 
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();

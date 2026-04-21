@@ -604,6 +604,64 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('uses redteam max eval timeout defaults for direct redteam suite evaluation', async () => {
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
+
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Test output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const mockEval = {
+      id: 'mock-eval-id',
+      results: [],
+      prompts: [],
+      persisted: false,
+      config: {},
+      addResult: mockAddResult,
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        results: [],
+        prompts: [],
+        stats: {
+          successes: 1,
+          failures: 0,
+          errors: 0,
+          tokenUsage: createEmptyTokenUsage(),
+        },
+      }),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+      redteam: {} as TestSuite['redteam'],
+    };
+
+    try {
+      await evaluate(testSuite, mockEval as unknown as Eval, {
+        maxConcurrency: 1,
+        timeoutMs: 1_500_000,
+      });
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('per-test=1500000ms, max=660000ms, steps=1, concurrency=1'),
+      );
+    } finally {
+      debugSpy.mockRestore();
+    }
+  });
+
   it('should honor external abortSignal when timeoutMs is set', async () => {
     vi.useFakeTimers();
 
