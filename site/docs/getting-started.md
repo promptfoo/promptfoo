@@ -142,8 +142,8 @@ Now that you've created an initial configuration, you can update `promptfooconfi
 
    ```yaml
    providers:
-     - openai:gpt-5.2
-     - openai:gpt-5-mini
+     - openai:chat:gpt-5.4
+     - openai:chat:gpt-5.4-mini
      - anthropic:messages:claude-opus-4-6
      - google:gemini-3-pro-preview
      # Or use your own custom provider
@@ -271,7 +271,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:gpt-5.2
+  - openai:chat:gpt-5.4
 defaultTest:
   assert:
     - type: llm-rubric
@@ -324,7 +324,7 @@ You can also output a [spreadsheet](https://docs.google.com/spreadsheets/d/1nano
 
 ### Model quality
 
-In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate the difference between GPT-5 and GPT-5.2 outputs for a given prompt:
+In [this next example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-openai-models), we evaluate the difference between GPT-5.4 and GPT-5.4 Mini outputs for a given prompt:
 
 You can quickly set up this example by running:
 
@@ -357,8 +357,8 @@ prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
-  - openai:gpt-5
-  - openai:gpt-5-mini
+  - openai:chat:gpt-5.4
+  - openai:chat:gpt-5.4-mini
 
 defaultTest:
   assert:
@@ -461,9 +461,10 @@ It produces the following table, with Gemini models replacing the GPT models in 
 
 A similar approach can be used to run other model comparisons. For example, you can:
 
+- Compare GPT-5.4 reasoning effort settings (see [GPT reasoning effort comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-reasoning-effort))
 - Compare models with different temperatures (see [GPT temperature comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-gpt-temperature))
 - Compare open-source models (see [Comparing Open-Source Models](/docs/guides/compare-open-source-models))
-- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT-4 (see [LangChain example](/docs/configuration/testing-llm-chains))
+- Compare Retrieval-Augmented Generation (RAG) with LangChain vs. regular GPT (see [LangChain example](/docs/configuration/testing-llm-chains))
 
 ### RAG quality
 

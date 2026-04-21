@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { fetchDataset, XSTestPlugin } from '../../../src/redteam/plugins/xstest';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
+import { createMockProvider } from '../../factories/provider';
 
 vi.mock('fs');
 vi.mock('csv-parse/sync');
@@ -95,11 +96,7 @@ describe('XSTest Plugin', () => {
   });
 
   describe('XSTestPlugin', () => {
-    const mockProvider = {
-      id: () => 'test-provider',
-      generateText: vi.fn(),
-      callApi: vi.fn(),
-    };
+    const mockProvider = Object.assign(createMockProvider(), { generateText: vi.fn() });
 
     it('should have correct plugin ID', () => {
       const plugin = new XSTestPlugin(mockProvider, 'test', 'input');

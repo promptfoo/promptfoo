@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
+import { mockProcessEnv } from '../../util/utils';
 import type { MockedFunction } from 'vitest';
 
 // Mock external dependencies
@@ -22,33 +23,33 @@ const originalOpenAiMaxCompletionTokens = process.env.OPENAI_MAX_COMPLETION_TOKE
 describe('AzureResponsesProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    delete process.env.OPENAI_TEMPERATURE;
-    delete process.env.OPENAI_MAX_TOKENS;
-    delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
+    mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
+    mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
 
     // Mock environment variables
-    process.env.AZURE_API_KEY = 'test-key';
-    process.env.AZURE_API_HOST = 'test.openai.azure.com';
+    mockProcessEnv({ AZURE_API_KEY: 'test-key' });
+    mockProcessEnv({ AZURE_API_HOST: 'test.openai.azure.com' });
     authHeadersValue = { 'api-key': 'test-key' };
   });
 
   afterEach(() => {
-    delete process.env.AZURE_API_KEY;
-    delete process.env.AZURE_API_HOST;
+    mockProcessEnv({ AZURE_API_KEY: undefined });
+    mockProcessEnv({ AZURE_API_HOST: undefined });
     if (originalOpenAiTemperature === undefined) {
-      delete process.env.OPENAI_TEMPERATURE;
+      mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
     } else {
-      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+      mockProcessEnv({ OPENAI_TEMPERATURE: originalOpenAiTemperature });
     }
     if (originalOpenAiMaxTokens === undefined) {
-      delete process.env.OPENAI_MAX_TOKENS;
+      mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
     } else {
-      process.env.OPENAI_MAX_TOKENS = originalOpenAiMaxTokens;
+      mockProcessEnv({ OPENAI_MAX_TOKENS: originalOpenAiMaxTokens });
     }
     if (originalOpenAiMaxCompletionTokens === undefined) {
-      delete process.env.OPENAI_MAX_COMPLETION_TOKENS;
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
     } else {
-      process.env.OPENAI_MAX_COMPLETION_TOKENS = originalOpenAiMaxCompletionTokens;
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: originalOpenAiMaxCompletionTokens });
     }
     delete (AzureResponsesProvider.prototype as any).authHeaders;
   });
@@ -246,8 +247,8 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
-      process.env.OPENAI_TEMPERATURE = '0.5';
-      process.env.OPENAI_MAX_TOKENS = '2048';
+      mockProcessEnv({ OPENAI_TEMPERATURE: '0.5' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { omitDefaults: true },
@@ -262,8 +263,8 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
-      process.env.OPENAI_MAX_COMPLETION_TOKENS = '4096';
-      process.env.OPENAI_MAX_TOKENS = '2048';
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: '4096' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
       const provider = new AzureResponsesProvider('o1-preview', {
         config: { omitDefaults: true },
@@ -276,7 +277,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
-      process.env.OPENAI_MAX_TOKENS = '2048';
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
       const provider = new AzureResponsesProvider('o1-preview', {
         config: { omitDefaults: true },
@@ -289,7 +290,7 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should use OPENAI_MAX_TOKENS for reasoning models when omitDefaults is false and OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
-      process.env.OPENAI_MAX_TOKENS = '2048';
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
 
       const provider = new AzureResponsesProvider('o1-preview');
 

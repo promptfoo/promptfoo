@@ -70,17 +70,14 @@ export const ColumnSelector = ({ columnData, selectedColumns, onChange }: Column
   };
 
   // Group columns by their group property
-  const groupedColumns = columnData.reduce(
-    (acc, column) => {
-      const group = column?.group || 'Other';
-      if (!acc[group]) {
-        acc[group] = [];
-      }
-      acc[group].push(column);
-      return acc;
-    },
-    {} as Record<string, ColumnData[]>,
-  );
+  const groupedColumns = columnData.reduce<Record<string, ColumnData[]>>((acc, column) => {
+    const group = column?.group || 'Other';
+    if (!acc[group]) {
+      acc[group] = [];
+    }
+    acc[group].push(column);
+    return acc;
+  }, {});
 
   return (
     <>
