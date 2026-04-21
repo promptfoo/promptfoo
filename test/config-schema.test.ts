@@ -246,4 +246,110 @@ describe('config-schema.json', () => {
       expect(properties).toHaveProperty('defaultTest');
     });
   });
+
+  describe('transform schema', () => {
+    it('should accept string transforms in JSON/YAML config files', () => {
+      const validate = ajv.compile(schema);
+
+      const config = {
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [
+          {
+            options: {
+              transform: 'output.trim()',
+              transformVars: '{ ...vars, name: vars.name.toUpperCase() }',
+            },
+            assert: [
+              {
+                type: 'contains',
+                value: 'HELLO',
+                transform: 'output.toUpperCase()',
+                contextTransform: 'output.context',
+              },
+            ],
+          },
+        ],
+      };
+
+      expect(validate(config)).toBe(true);
+    });
+
+    it('should reject non-string transforms in JSON/YAML config files', () => {
+      const validate = ajv.compile(schema);
+
+      const config = {
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [
+          {
+            options: {
+              transform: { unexpected: 'object' },
+            },
+          },
+        ],
+      };
+
+      expect(validate(config)).toBe(false);
+      expect(validate.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            instancePath: '/tests/0/options/transform',
+            keyword: 'type',
+          }),
+        ]),
+      );
+    });
+
+    it('should reject non-string redteam provider transforms in JSON/YAML config files', () => {
+      const validate = ajv.compile(schema);
+
+      const config = {
+        prompts: ['hello'],
+        redteam: {
+          plugins: ['default'],
+          strategies: ['default'],
+          provider: {
+            id: 'openai:chat:gpt-4o-mini',
+            transform: { unexpected: 'object' },
+          },
+        },
+      };
+
+      expect(validate(config)).toBe(false);
+      expect(validate.errors).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            instancePath: '/redteam/provider/transform',
+            keyword: 'type',
+          }),
+        ]),
+      );
+    });
+
+    it('emits string-only types for every transform field in the JSON schema', () => {
+      // Guard against the StringOrFunctionSchema leaking into the generated
+      // config-schema.json via a `z.custom` → `{}` (any) branch. Every transform
+      // property anywhere in the schema tree must declare `type: string` so
+      // external YAML/JSON validators reject objects, numbers, and functions.
+      const schemaJson = JSON.stringify(schema);
+      const transformOccurrences = schemaJson.match(/"transform":\s*\{[^}]*\}/g) ?? [];
+      const transformVarsOccurrences = schemaJson.match(/"transformVars":\s*\{[^}]*\}/g) ?? [];
+      const contextTransformOccurrences =
+        schemaJson.match(/"contextTransform":\s*\{[^}]*\}/g) ?? [];
+      const postprocessOccurrences = schemaJson.match(/"postprocess":\s*\{[^}]*\}/g) ?? [];
+
+      const allTransformFields = [
+        ...transformOccurrences,
+        ...transformVarsOccurrences,
+        ...contextTransformOccurrences,
+        ...postprocessOccurrences,
+      ];
+
+      expect(allTransformFields.length).toBeGreaterThan(0);
+      for (const field of allTransformFields) {
+        expect(field).toContain('"type":"string"');
+      }
+    });
+  });
 });

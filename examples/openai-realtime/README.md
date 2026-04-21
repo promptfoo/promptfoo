@@ -1,6 +1,6 @@
 # openai-realtime (OpenAI Realtime API Example)
 
-This example demonstrates how to use promptfoo to test OpenAI's Realtime API capabilities. The Realtime API allows for real-time communication with GPT-4o class models using WebSockets, supporting both text and audio inputs/outputs.
+This example demonstrates how to use promptfoo to test OpenAI's Realtime API capabilities. The Realtime API allows for real-time communication with `gpt-realtime` and `gpt-realtime-1.5` using WebSockets, supporting both text and audio inputs/outputs.
 
 ## Quick Start
 
@@ -21,7 +21,7 @@ This will create all necessary files and folder structure to get started quickly
 export OPENAI_API_KEY=your-api-key-here
 ```
 
-2. Ensure you have access to the OpenAI Realtime API (Beta), which may require specific permissions from OpenAI.
+2. Ensure you have access to the OpenAI Realtime API, which may require specific permissions from OpenAI.
 
 ### Custom endpoints and local development
 
@@ -29,7 +29,7 @@ You can point the Realtime provider at custom/proxy endpoints (including Azure-c
 
 ```yaml
 providers:
-  - id: openai:realtime:gpt-4o-realtime-preview
+  - id: openai:realtime:gpt-realtime-1.5
     config:
       # Custom hosted gateway
       apiBaseUrl: 'https://my-custom-api.com/v1' # connects to wss://my-custom-api.com/v1/realtime
@@ -41,7 +41,7 @@ For local development:
 
 ```yaml
 providers:
-  - id: openai:realtime:gpt-4o-realtime-preview
+  - id: openai:realtime:gpt-realtime-1.5
     config:
       apiBaseUrl: 'http://localhost:8080/v1' # connects to ws://localhost:8080/v1/realtime
       modalities: ['text']
@@ -52,7 +52,7 @@ You can also use environment variables like `OPENAI_API_BASE_URL` or `OPENAI_BAS
 ## Files
 
 - `promptfooconfig.yaml`: Configuration file defining the providers and tests
-- `promptfooconfig-gpt-realtime.yaml`: Comprehensive gpt-realtime model demonstration with audio support
+- `promptfooconfig-gpt-realtime.yaml`: Comprehensive gpt-realtime-1.5 model demonstration with audio support
 - `test-webui-audio.yaml`: Simple audio test for WebUI playback
 - `realtime-input.json`: JSON template for the realtime input prompt
 - `promptfooconfig-conversation.yaml`: Configuration for multi-turn conversation tests
@@ -338,7 +338,8 @@ The Realtime API supports both text and audio interactions. promptfoo now includ
 
 ### Supported Models and Features
 
-- **gpt-realtime**: Latest model with enhanced audio capabilities
+- **gpt-realtime-1.5**: Flagship audio model for voice agents and customer support
+- **gpt-realtime**: General-availability realtime model with text and audio support
   - Supports new voices: `cedar` and `marin` (in addition to existing voices)
   - Audio output is automatically converted from PCM16 to WAV format for browser playback
   - Use `promptfoo view` to access the WebUI and play generated audio files
@@ -349,7 +350,7 @@ To enable audio support, configure your provider with:
 
 ```yaml
 providers:
-  - id: openai:realtime:gpt-realtime
+  - id: openai:realtime:gpt-realtime-1.5
     config:
       modalities: ['text', 'audio']
       voice: 'cedar' # or 'marin', 'alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'

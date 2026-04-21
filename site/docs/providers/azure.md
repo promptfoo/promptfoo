@@ -121,17 +121,17 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 Azure AI Foundry provides access to models from multiple providers:
 
-| Provider             | Models                                                                                                                                                                                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Anthropic Claude** | `claude-opus-4-6-20260205` (Claude Opus 4.6), `claude-sonnet-4-6` (Claude Sonnet 4.6), `claude-opus-4-5-20251101` (Claude Opus 4.5), `claude-sonnet-4-5-20250929` (Claude Sonnet 4.5), `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` |
-| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                |
-| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                        |
-| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                             |
-| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                        |
-| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                        |
-| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                       |
-| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                    |
-| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                           |
+| Provider             | Models                                                                                                                                                                                                                                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Anthropic Claude** | `claude-opus-4-7`, `claude-opus-4-6-20260205`, `claude-sonnet-4-6`, `claude-opus-4-5-20251101`, `claude-sonnet-4-5-20250929`, `claude-haiku-4-5-20251001`, `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022` — see [Using Claude Models](#using-claude-models) for deployment and config details |
+| **Meta Llama**       | `Llama-4-Scout-17B-16E-Instruct`, `Llama-4-Maverick-17B-128E-Instruct-FP8`, `Llama-3.3-70B-Instruct`, `Meta-Llama-3.1-405B-Instruct`, `Meta-Llama-3.1-70B-Instruct`, `Meta-Llama-3.1-8B-Instruct`                                                                                                        |
+| **DeepSeek**         | `DeepSeek-R1` (reasoning), `DeepSeek-V3`, `DeepSeek-R1-Distill-Llama-70B`, `DeepSeek-R1-Distill-Qwen-32B`                                                                                                                                                                                                |
+| **Mistral**          | `Mistral-Large-2411`, `Pixtral-Large-2411`, `Ministral-3B-2410`, `Mistral-Nemo-2407`                                                                                                                                                                                                                     |
+| **Cohere**           | `Cohere-command-a-03-2025`, `command-r-plus-08-2024`, `command-r-08-2024`                                                                                                                                                                                                                                |
+| **Microsoft Phi**    | `Phi-4`, `Phi-4-mini-instruct`, `Phi-4-reasoning`, `Phi-4-mini-reasoning`                                                                                                                                                                                                                                |
+| **xAI Grok**         | `grok-3`, `grok-3-mini`, `grok-3-reasoning`, `grok-3-mini-reasoning`, `grok-2-vision-1212`                                                                                                                                                                                                               |
+| **AI21**             | `AI21-Jamba-1.5-Large`, `AI21-Jamba-1.5-Mini`                                                                                                                                                                                                                                                            |
+| **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                                   |
 
 For the complete list of 200+ models with pricing, see the [Azure model catalog](https://azure.microsoft.com/en-us/products/ai-services/ai-foundry/).
 
@@ -846,28 +846,50 @@ See the [Azure OpenAI example](https://github.com/promptfoo/promptfoo/tree/main/
 
 ## Using Claude Models
 
-Azure AI Foundry provides access to Anthropic Claude models. These models use the standard Azure chat endpoint:
+Azure AI Foundry exposes Claude through two endpoint families. Pick the one that matches how you want to manage the model.
+
+### Option 1 (recommended): Anthropic Messages endpoint
+
+Per Anthropic's own Foundry integration, every Claude deployment publishes a native Messages endpoint at `https://<resource>.services.ai.azure.com/anthropic/v1/messages`. Point promptfoo's `anthropic:messages` provider at that base URL and you get the full Anthropic provider feature set — adaptive thinking, `xhigh` effort, automatic Opus 4.7 `temperature` suppression, and consistent pricing across Anthropic/Bedrock/Vertex:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: azure:chat:claude-opus-4-6-20260205
+  - id: anthropic:messages:claude-opus-4-7
+    config:
+      apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
+      apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
+      max_tokens: 1024
+```
+
+Promptfoo appends `/v1/messages` to the base URL automatically, so set `apiBaseUrl` to the `https://…/anthropic` prefix shown above.
+
+### Option 2: Azure OpenAI-compatible chat endpoint
+
+The same deployment also accepts OpenAI-style chat completion requests. Use this if you want a single provider type across Azure Claude and Azure OpenAI deployments:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: azure:chat:claude-opus-4-7
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
       max_tokens: 4096
-      temperature: 0.7
 ```
 
-Available Claude models on Azure:
+Opus 4.7 deployments automatically omit `temperature` from the request body on this path too.
 
-| Model                        | Description                              |
-| ---------------------------- | ---------------------------------------- |
-| `claude-opus-4-6-20260205`   | Claude Opus 4.6 - Most capable model     |
-| `claude-sonnet-4-6`          | Claude Sonnet 4.6 - Balanced performance |
-| `claude-opus-4-5-20251101`   | Claude Opus 4.5                          |
-| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 - Balanced performance |
-| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet                        |
-| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku - Fast, efficient       |
+Available Claude deployments on Azure AI Foundry:
+
+| Model                        | Description       |
+| ---------------------------- | ----------------- |
+| `claude-opus-4-7`            | Claude Opus 4.7   |
+| `claude-opus-4-6-20260205`   | Claude Opus 4.6   |
+| `claude-sonnet-4-6`          | Claude Sonnet 4.6 |
+| `claude-opus-4-5-20251101`   | Claude Opus 4.5   |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
+| `claude-haiku-4-5-20251001`  | Claude Haiku 4.5  |
+| `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
+| `claude-3-5-haiku-20241022`  | Claude 3.5 Haiku  |
 
 ### Claude Configuration Example
 
@@ -875,13 +897,13 @@ Available Claude models on Azure:
 description: Azure Claude evaluation
 
 providers:
-  - id: azure:chat:claude-sonnet-4-5-20250929
-    label: claude-sonnet
+  - id: anthropic:messages:claude-opus-4-7
+    label: claude-opus-4-7
     config:
-      apiHost: 'your-deployment.services.ai.azure.com'
-      apiVersion: '2025-04-01-preview'
-      max_tokens: 4096
-      temperature: 0.7
+      apiBaseUrl: 'https://<resource>.services.ai.azure.com/anthropic'
+      apiKey: '{{env.AZURE_FOUNDRY_API_KEY}}'
+      max_tokens: 1024
+      effort: xhigh
 
 prompts:
   - 'Explain {{concept}} in simple terms.'

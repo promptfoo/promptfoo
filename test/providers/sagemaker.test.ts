@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
 const { mockSend, mockCacheGet, mockCacheSet, mockIsCacheEnabled } = vi.hoisted(() => ({
@@ -104,6 +105,134 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   describe('payload formatting', () => {
+    it('accepts function transforms in config without validation warnings', () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const transformFn = (output: unknown) => String(output).trim();
+
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: transformFn,
+        },
+      });
+
+      expect(provider.transform).toBe(transformFn);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('applies a direct TransformFunction to the prompt via applyTransformation', async () => {
+      const transformFn = (prompt: unknown) => `TRANSFORMED:${String(prompt).trim()}`;
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: transformFn,
+        },
+      });
+
+      const transformed = await provider.applyTransformation('  hello  ');
+      expect(transformed).toBe('TRANSFORMED:hello');
+    });
+
+    it('evaluates inline string arrow transforms with `prompt` as the identifier', async () => {
+      // Pins down why the inline-string branch stays local to sagemaker.ts:
+      // the shared util would rename `prompt` to `output` and break user configs.
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: '(prompt) => prompt.toUpperCase()',
+        },
+      });
+
+      const transformed = await provider.applyTransformation('hello world');
+      expect(transformed).toBe('HELLO WORLD');
+    });
+
+    it('awaits async inline string arrow transforms', async () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: 'async (prompt) => `${prompt}!`',
+        },
+      });
+
+      await expect(provider.applyTransformation('hello')).resolves.toBe('hello!');
+    });
+
+    it('rethrows errors from a function transform instead of silently running against the untransformed prompt', async () => {
+      // Contract change in PR #8441: a user-supplied TransformFunction that throws
+      // is a programming error and must surface — string/file transforms keep their
+      // legacy best-effort behavior for backward compatibility.
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: (() => {
+            throw new Error('boom in transform');
+          }) as (prompt: unknown) => string,
+        },
+      });
+
+      await expect(provider.applyTransformation('hello')).rejects.toThrow('boom in transform');
+    });
+
+    it('swallows errors from inline string transforms (legacy best-effort behavior)', async () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: `(prompt) => { throw new Error('string boom'); }`,
+        },
+      });
+
+      // String transforms preserve the legacy contract: log and fall back to the
+      // original prompt. This test guards that we didn't over-rotate the rethrow.
+      await expect(provider.applyTransformation('hello')).resolves.toBe('hello');
+    });
+  });
+
+  describe('callApi with function transforms', () => {
+    it('surfaces function-transform failures as a ProviderResponse.error without double-labeling', async () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: (() => {
+            throw new Error('transform boom');
+          }) as (prompt: unknown) => string,
+        },
+      });
+
+      const result = await provider.callApi('hello');
+      expect(result.output).toBeUndefined();
+      // The response error unwraps `transform()`'s wrapper so the user sees a
+      // single `SageMaker transform error: <raw>` with no double-labeling.
+      // Pin the exact shape rather than negating the wrapper's internal format.
+      expect(result.error).toMatch(/^SageMaker transform error: transform boom$/);
+    });
+
+    it('falls back to the original prompt when a function transform returns undefined', async () => {
+      // `stringifyTransformResult` returns undefined for null/undefined return values,
+      // which causes `applyTransformation` to fall back to the original prompt with a
+      // debug log. Guard this observable behavior so a future refactor doesn't turn
+      // it into an error by accident.
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'custom',
+          transform: (() => undefined) as unknown as (prompt: unknown) => string,
+        },
+      });
+
+      await expect(provider.applyTransformation('original-prompt')).resolves.toBe(
+        'original-prompt',
+      );
+    });
+
     it('preserves an explicit maxTokens value of 0', () => {
       vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '1024');
 

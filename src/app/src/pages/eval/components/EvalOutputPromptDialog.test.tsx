@@ -915,7 +915,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
     expect(screen.queryByTestId('pf-cloud-policy-detail-link')).not.toBeInTheDocument();
   });
 
-  it('Should not render policy link if policy is not reusable', async () => {
+  it('Should render policy link if policyId is a uuid (reusable policy)', async () => {
     const customCloudConfig = {
       appUrl: 'https://custom.cloud.com',
       isEnabled: true,
