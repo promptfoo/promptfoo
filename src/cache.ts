@@ -138,7 +138,7 @@ function getCurrentCacheNamespace() {
   return cacheNamespaceStorage.getStore()?.namespace;
 }
 
-function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheNamespace()) {
+export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheNamespace()) {
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
 

@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
@@ -10,6 +9,7 @@ import EvalResult from '../../models/evalResult';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
+import { sanitizeObject } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import {
@@ -172,9 +172,10 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       console.log(`[${id}] Complete`);
     })
     .catch((error) => {
-      logger.error(dedent`Failed to eval tests:
-        Error: ${error}
-        Body: ${JSON.stringify(req.body, null, 2)}`);
+      logger.error('Failed to eval tests', {
+        error,
+        body: sanitizeObject(testSuite, { context: 'request body' }),
+      });
 
       const job = evalJobs.get(id);
       invariant(job, 'Job not found');
@@ -810,9 +811,10 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       res.json(EvalSchemas.Save.Response.parse({ id: eval_.id }));
     }
   } catch (error) {
-    logger.error(dedent`Failed to write eval to database:
-      Error: ${error}
-      Body: ${JSON.stringify(body, null, 2)}`);
+    logger.error('Failed to write eval to database', {
+      error,
+      body: sanitizeObject(body, { context: 'request body' }),
+    });
     res.status(500).json({ error: 'Failed to write eval to database' });
   }
 });
