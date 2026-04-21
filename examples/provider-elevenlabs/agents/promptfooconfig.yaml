@@ -32,7 +32,7 @@ prompts:
 providers:
   # Basic agent with evaluation criteria
   - id: elevenlabs:agents
-    label: Support Agent (GPT-4o)
+    label: Support Agent (GPT-5-mini)
     config:
       agentConfig:
         name: Customer Support Agent
@@ -46,7 +46,7 @@ providers:
         firstMessage: Hi! I'm here to help. What can I do for you today?
         language: en
         voiceId: 21m00Tcm4TlvDq8ikWAM
-        llmModel: gpt-4o
+        llmModel: gpt-5-mini
         temperature: 0.7
         maxTokens: 500
       evaluationCriteria:
@@ -88,7 +88,7 @@ providers:
         firstMessage: Hello! How may I assist you today?
         language: en
         voiceId: 2EiwWnXFnvU5JabPnv8n
-        llmModel: claude-sonnet-4-5
+        llmModel: claude-sonnet-4-6
         temperature: 0.7
         maxTokens: 500
       evaluationCriteria:
@@ -108,7 +108,7 @@ providers:
 
   # Agent with tools
   - id: elevenlabs:agents
-    label: Support Agent with Tools (GPT-4o)
+    label: Support Agent with Tools (GPT-5-mini)
     config:
       agentConfig:
         name: Customer Support Agent with Tools
@@ -121,7 +121,7 @@ providers:
         firstMessage: Hi! I can help you with orders, support tickets, and more. What do you need?
         language: en
         voiceId: 21m00Tcm4TlvDq8ikWAM
-        llmModel: gpt-4o
+        llmModel: gpt-5-mini
         temperature: 0.7
         tools:
           - name: get_order_status

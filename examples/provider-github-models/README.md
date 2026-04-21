@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-github-models
+cd provider-github-models
 ```
 
 ## Setup

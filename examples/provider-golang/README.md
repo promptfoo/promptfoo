@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example provider-golang
+cd provider-golang
 ```
 
 This example demonstrates how to structure a Go-based provider for promptfoo. For detailed documentation, see [Go Provider](https://www.promptfoo.dev/docs/providers/go/) documentation.
@@ -18,7 +19,7 @@ promptfoo init --example provider-golang
 
 This example shows two implementations of the same provider interface:
 
-```
+```text
 provider-golang/
 ├── go.mod            # Root module definition
 ├── main.go           # Root provider implementation

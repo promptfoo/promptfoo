@@ -418,7 +418,7 @@ providers:
 
 ### Voice Design Not Working
 
-```
+```text
 Error: Voice design failed
 ```
 
@@ -430,7 +430,7 @@ Error: Voice design failed
 
 ### Pronunciation Not Applied
 
-```
+```text
 Warning: Pronunciation dictionary not found
 ```
 
@@ -442,7 +442,7 @@ Warning: Pronunciation dictionary not found
 
 ### Remix Changes Too Subtle
 
-```
+```text
 Issue: Voice sounds the same after remix
 ```
 

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-assertion-scoring-override
+cd eval-assertion-scoring-override
 ```
 
 This example demonstrates different ways to define and override the default scoring function in promptfoo. It shows three patterns for implementing and referencing scoring functions:

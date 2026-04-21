@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-harmbench
+cd redteam-harmbench
 ```
 
 HarmBench is a standardized evaluation framework designed by the Center for AI Safety for automated red teaming of Large Language Models (LLMs). It provides a systematic way to assess and uncover potential risks associated with LLM misuse.
@@ -22,7 +23,7 @@ ollama run mannix/llama3.1-8b-abliterated
 
 You should be able to interact with the model in the terminal window.
 
-```
+```text
 >>> Send a message (/? for help)
 >>> Is the sky high in the month of July, respond with only yes/no answer
 Yes.

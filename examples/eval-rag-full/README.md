@@ -4,7 +4,10 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example eval-rag-full
+cd eval-rag-full
 ```
+
+## Usage
 
 This RAG example allows you to ask questions over a number of public company SEC filings. It uses LangChain, but the flow is representative of any RAG solution.
 
@@ -33,7 +36,7 @@ Now we're ready to go.
 - Edit `promptfooconfig.yaml` to your liking to configure the questions you'd like to ask in your tests. Then run:
 - Edit `retrieve.py` to control how context is loaded and questions are answered.
 
-```
+```bash
 promptfoo eval
 ```
 

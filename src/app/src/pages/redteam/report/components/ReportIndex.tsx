@@ -1,4 +1,4 @@
-import { PageContainer } from '@app/components/layout/PageContainer';
+import { FIXED_PAGE_CONTAINER_TOP, PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
 import { REDTEAM_ROUTES } from '@app/constants/routes';
@@ -9,7 +9,10 @@ export default function ReportIndex() {
   const navigate = useNavigate();
 
   return (
-    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 overflow-y-auto">
+    <PageContainer
+      className="fixed left-0 right-0 bottom-0 overflow-y-auto"
+      style={{ top: FIXED_PAGE_CONTAINER_TOP }}
+    >
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-semibold">Red Team Reports</h1>

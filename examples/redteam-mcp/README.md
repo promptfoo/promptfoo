@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-mcp
+cd redteam-mcp
 ```
 
 ## Environment Variables
@@ -60,7 +61,7 @@ This example evaluates an AI customer support agent implementing MCP with the fo
 
 This example is configured to test the Anthropic Claude 4 Sonnet model with MCP enabled. The MCP server is specified as:
 
-```
+```text
 https://customer-service-mcp-server-example.promptfoo.app/mcp
 ```
 

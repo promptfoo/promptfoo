@@ -8,17 +8,17 @@ prompts:
     label: llama_prompt
 
 providers:
-  - id: ollama:chat:llama4-scout
+  - id: ollama:llama4:scout
     prompts:
       - llama_prompt
     config:
       num_predict: 1024
-  - id: ollama:chat:llama4-maverick
+  - id: ollama:llama2-uncensored
     prompts:
       - llama_prompt
     config:
       num_predict: 1024
-  - id: openai:gpt-5-mini
+  - id: openai:chat:gpt-5.4-mini
     prompts:
       - openai_prompt
 

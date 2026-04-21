@@ -1,6 +1,6 @@
 # compare-open-source-models (Open-Source Model Comparison)
 
-This example compares Mistral, Mixtral, Llama, and Gemma on various tasks with factual assertions using OpenRouter.
+This example compares DeepSeek, Mistral, Llama, and Qwen on various tasks with factual assertions using OpenRouter.
 
 See the [guide](https://www.promptfoo.dev/docs/guides/compare-open-source-models/) for more details.
 
@@ -8,6 +8,7 @@ See the [guide](https://www.promptfoo.dev/docs/guides/compare-open-source-models
 
 ```sh
 npx promptfoo@latest init --example compare-open-source-models
+cd compare-open-source-models
 ```
 
 Set the required environment variable:

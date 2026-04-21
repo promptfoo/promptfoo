@@ -1,7 +1,9 @@
 import { useVersionCheck } from '@app/hooks/useVersionCheck';
+import { mockClipboard } from '@app/tests/browserMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import UpdateBanner from './UpdateBanner';
 
 vi.mock('@app/hooks/useVersionCheck');
@@ -11,6 +13,12 @@ describe('UpdateBanner', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    document.documentElement.style.removeProperty('--update-banner-height');
+  });
+
+  afterEach(() => {
+    document.documentElement.style.removeProperty('--update-banner-height');
+    vi.restoreAllMocks();
   });
 
   it('should render the banner with correct info when an update with a primary command is available', () => {
@@ -51,6 +59,7 @@ describe('UpdateBanner', () => {
   });
 
   it('should copy the update command to the clipboard and show check icon when the copy command button is clicked', async () => {
+    const user = userEvent.setup();
     const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
       versionInfo: {
         updateAvailable: true,
@@ -71,17 +80,13 @@ describe('UpdateBanner', () => {
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
     const mockWriteText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, {
-      clipboard: {
-        writeText: mockWriteText,
-      },
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     renderWithProviders(<UpdateBanner />);
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
 
-    await fireEvent.click(copyCommandButton);
+    await user.click(copyCommandButton);
 
     expect(mockWriteText).toHaveBeenCalledWith('npm i -g promptfoo@latest');
 
@@ -176,5 +181,80 @@ describe('UpdateBanner', () => {
 
     const copyCommandButton = screen.getByRole('button', { name: /Copy Update Command/i });
     expect(copyCommandButton).toBeInTheDocument();
+  });
+
+  it('should publish and clear the banner height CSS variable', async () => {
+    const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    };
+    mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(48);
+
+    const { unmount } = renderWithProviders(<UpdateBanner />);
+
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe(
+        '48px',
+      );
+    });
+
+    unmount();
+
+    expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe('');
+  });
+
+  it('should publish the banner height after version loading finishes', async () => {
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: null,
+      loading: true,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(48);
+
+    const { rerender } = renderWithProviders(<UpdateBanner />);
+
+    expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe('');
+
+    mockUseVersionCheck.mockReturnValue({
+      versionInfo: {
+        updateAvailable: true,
+        latestVersion: '2.0.0',
+        currentVersion: '1.9.0',
+        updateCommands: {
+          primary: 'npm i -g promptfoo@latest',
+          alternative: null,
+        },
+        commandType: 'npm',
+        isNpx: false,
+      },
+      loading: false,
+      error: null,
+      dismissed: false,
+      dismiss: vi.fn(),
+    });
+
+    rerender(<UpdateBanner />);
+
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--update-banner-height')).toBe(
+        '48px',
+      );
+    });
   });
 });

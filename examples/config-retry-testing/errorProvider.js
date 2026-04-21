@@ -1,5 +1,3 @@
-const promptfoo = require('../../dist/src/index.js').default;
-
 class ErrorProneProvider {
   constructor(options) {
     this.providerId = options.id || 'error-prone-provider';

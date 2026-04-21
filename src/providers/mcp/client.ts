@@ -1,7 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import { TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -82,7 +82,7 @@ export class MCPClient {
   // Track token expiration time per server
   private tokenExpiresAt: Map<string, number> = new Map();
   // Lock mechanism to prevent concurrent token refresh per server
-  private tokenRefreshPromise: Map<string, Promise<void>> = new Map();
+  private tokenRefreshLocks: Map<string, TokenRefreshLock> = new Map();
 
   get hasInitialized(): boolean {
     return this.clients.size > 0;
@@ -310,45 +310,61 @@ export class MCPClient {
       return;
     }
 
-    const now = Date.now();
+    await this.refreshOAuthToken(serverKey, oauthConfig, false);
+  }
+
+  private hasValidToken(serverKey: string): boolean {
     const expiresAt = this.tokenExpiresAt.get(serverKey);
+    return (
+      expiresAt != null &&
+      this.clients.has(serverKey) &&
+      Date.now() + TOKEN_REFRESH_BUFFER_MS < expiresAt
+    );
+  }
 
-    // Check if token is still valid (with buffer)
-    if (expiresAt && now + TOKEN_REFRESH_BUFFER_MS < expiresAt) {
-      logger.debug(`[MCP] Token for ${serverKey} still valid, no refresh needed`);
-      return;
-    }
+  private async refreshOAuthToken(
+    serverKey: string,
+    oauthConfig: OAuthServerConfig,
+    forceRefresh: boolean,
+  ): Promise<void> {
+    // If a refresh is already in progress, wait for it instead of starting a new one.
+    while (true) {
+      const existingRefreshPromise = this.tokenRefreshLocks.get(serverKey)?.promise;
+      if (!existingRefreshPromise) {
+        break;
+      }
 
-    // If a refresh is already in progress, wait for it instead of starting a new one
-    const existingRefresh = this.tokenRefreshPromise.get(serverKey);
-    if (existingRefresh) {
       logger.debug(`[MCP] Token refresh already in progress for ${serverKey}, waiting...`);
       try {
-        await existingRefresh;
+        await existingRefreshPromise;
         // Verify token is still valid after waiting
-        const newExpiresAt = this.tokenExpiresAt.get(serverKey);
-        if (newExpiresAt && Date.now() + TOKEN_REFRESH_BUFFER_MS < newExpiresAt) {
+        if (this.hasValidToken(serverKey)) {
           return;
         }
-        // Token expired while waiting, fall through to refresh again
-        logger.debug(`[MCP] Token expired while waiting for ${serverKey}, refreshing again...`);
+        // Token still needs refresh after waiting, so fall through and try again.
+        logger.debug(`[MCP] Token still needs refresh for ${serverKey}, refreshing again...`);
       } catch {
         // If the in-progress refresh failed, we'll try again below
         logger.debug(`[MCP] Previous token refresh failed for ${serverKey}, retrying...`);
       }
     }
 
+    if (!forceRefresh && this.hasValidToken(serverKey)) {
+      logger.debug(`[MCP] Token for ${serverKey} still valid, no refresh needed`);
+      return;
+    }
+
     // Start a new token refresh and store the promise for deduplication
-    logger.debug(`[MCP] Proactively refreshing OAuth token for server ${serverKey}`);
-    const refreshPromise = this.performTokenRefresh(serverKey, oauthConfig);
-    this.tokenRefreshPromise.set(serverKey, refreshPromise);
+    logger.debug(`[MCP] Refreshing OAuth token for server ${serverKey}`);
+    const refreshLock = { promise: this.performTokenRefresh(serverKey, oauthConfig) };
+    this.tokenRefreshLocks.set(serverKey, refreshLock);
 
     try {
-      await refreshPromise;
+      await refreshLock.promise;
     } finally {
-      // Only clear the promise if it's still the one we created (prevents race conditions)
-      if (this.tokenRefreshPromise.get(serverKey) === refreshPromise) {
-        this.tokenRefreshPromise.delete(serverKey);
+      // Only clear the lock if it's still the one we created (prevents race conditions)
+      if (this.tokenRefreshLocks.get(serverKey) === refreshLock) {
+        this.tokenRefreshLocks.delete(serverKey);
       }
     }
   }
@@ -381,16 +397,31 @@ export class MCPClient {
 
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
     const requestOptions = getEffectiveRequestOptions(this.config);
+    const disconnectedServers: string[] = [];
 
     // Find which server has this tool
-    for (const [serverKey, client] of this.clients.entries()) {
-      const serverTools = this.tools.get(serverKey) || [];
+    for (const [serverKey, serverTools] of this.tools.entries()) {
       if (serverTools.some((tool) => tool.name === name)) {
         // Proactively refresh token if close to expiration (with locking)
-        await this.refreshOAuthTokenIfNeeded(serverKey);
+        try {
+          await this.refreshOAuthTokenIfNeeded(serverKey);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          logger.debug(
+            `[MCP] Failed to refresh OAuth token for ${serverKey}, trying the next matching server: ${errorMessage}`,
+          );
+        }
 
         // Get the current client (may have changed after token refresh)
-        let currentClient = this.clients.get(serverKey) || client;
+        const client = this.clients.get(serverKey);
+        if (!client) {
+          logger.debug(
+            `[MCP] Server ${serverKey} is not connected, trying the next matching server`,
+          );
+          disconnectedServers.push(serverKey);
+          continue;
+        }
+        let currentClient = client;
         let retried = false;
 
         while (true) {
@@ -438,7 +469,7 @@ export class MCPClient {
               logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
               retried = true;
               try {
-                await this.performTokenRefresh(serverKey, oauthConfig);
+                await this.refreshOAuthToken(serverKey, oauthConfig, true);
                 // Get the new client after reconnection
                 const newClient = this.clients.get(serverKey);
                 if (newClient) {
@@ -462,6 +493,13 @@ export class MCPClient {
           }
         }
       }
+    }
+
+    if (disconnectedServers.length > 0) {
+      const plural = disconnectedServers.length > 1 ? 's are' : ' is';
+      throw new Error(
+        `Tool ${name} is known but MCP server${plural} disconnected: ${disconnectedServers.join(', ')}`,
+      );
     }
 
     throw new Error(`Tool ${name} not found in any connected MCP server`);
@@ -488,6 +526,6 @@ export class MCPClient {
     this.tools.clear();
     this.oauthConfigs.clear();
     this.tokenExpiresAt.clear();
-    this.tokenRefreshPromise.clear();
+    this.tokenRefreshLocks.clear();
   }
 }

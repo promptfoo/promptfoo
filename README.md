@@ -20,6 +20,8 @@
   <a href="https://discord.gg/promptfoo">Discord</a>
 </p>
 
+> Promptfoo is now part of OpenAI. Promptfoo remains open source and MIT licensed. Read the [company update](https://www.promptfoo.dev/blog/promptfoo-joining-openai/).
+
 ## Quick Start
 
 ```sh
@@ -64,7 +66,7 @@ It works on the command line too:
 
 It also can generate [security vulnerability reports](https://www.promptfoo.dev/docs/red-team/):
 
-<img src="https://www.promptfoo.dev/img/riskreport-1@2x.png" alt="gen ai red team" width="700">
+<img src="https://www.promptfoo.dev/img/redteam-dashboard@2x.jpg" alt="gen ai red team" width="700">
 
 ## Why Promptfoo?
 

@@ -1,4 +1,4 @@
-import { PageContainer } from '@app/components/layout/PageContainer';
+import { FIXED_PAGE_CONTAINER_TOP, PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
@@ -12,7 +12,10 @@ export default function EvalsIndexPage() {
   usePageMeta({ title: 'Evals', description: 'Browse evaluation runs' });
 
   return (
-    <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+    <PageContainer
+      className="fixed left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0"
+      style={{ top: FIXED_PAGE_CONTAINER_TOP }}
+    >
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-semibold">Evaluations</h1>

@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-structured-outputs
+cd config-structured-outputs
 ```
 
 This example demonstrates how to enforce structured JSON outputs using schema validation across multiple AI providers:

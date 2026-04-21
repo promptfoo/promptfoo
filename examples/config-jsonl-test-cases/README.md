@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example config-jsonl-test-cases
+cd config-jsonl-test-cases
 ```
 
 This example demonstrates how to define test cases using the JSON Lines text file format.

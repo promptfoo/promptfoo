@@ -23,6 +23,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example huggingface/dataset-factuality
+cd huggingface/dataset-factuality
 ```
 
 After initialization, you can customize the `promptfooconfig.yaml` file to adjust:
@@ -123,7 +124,7 @@ Example of a generated test case:
 
 The example uses the following HuggingFace Datasets API endpoint:
 
-```
+```text
 https://datasets-server.huggingface.co/rows?dataset=EleutherAI%2Ftruthful_qa_mc&config=multiple_choice&split=validation&offset=0&length=100
 ```
 

@@ -33,19 +33,24 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
-import { extractPromptFromTags, extractVariablesFromJson, getSessionId } from '../util';
+import {
+  extractMaterializedVariablesFromJsonWithMetadata,
+  extractPromptFromTags,
+  getSessionId,
+} from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
-  type TargetResponse,
 } from './shared';
 import type { Environment } from 'nunjucks';
 
@@ -56,6 +61,7 @@ import type {
   CallApiOptionsParams,
   GradingResult,
   GuardrailResponse,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -486,7 +492,7 @@ async function runRedteamConversation({
   vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   treeParams?: {
     maxDepth?: number;
     maxAttempts?: number;
@@ -545,10 +551,9 @@ async function runRedteamConversation({
 
   let bestResponse = '';
 
-  let stoppingReason: StopReason = 'MAX_DEPTH';
+  let stoppingReason: StopReason;
 
   const treeOutputs: TreeSearchOutput[] = [];
-  let lastResponse: TargetResponse | undefined = undefined;
 
   // Track display vars from per-turn layer transforms (e.g., fetchPrompt, embeddedInjection)
   let lastTransformDisplayVars: Record<string, string> | undefined;
@@ -665,7 +670,14 @@ async function runRedteamConversation({
           try {
             // Use the original newInjectVar (before escaping) for parsing
             const parsed = JSON.parse(newInjectVar);
-            Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
+            const { vars: materializedVars } =
+              await extractMaterializedVariablesFromJsonWithMetadata(parsed, inputs, {
+                materializationIndex: attempts - 1,
+                pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
+                provider: redteamProvider,
+                purpose: test?.metadata?.purpose as string | undefined,
+              });
+            Object.assign(updatedVars, materializedVars);
           } catch {
             // If parsing fails, it's plain text - keep original vars
           }
@@ -690,7 +702,6 @@ async function runRedteamConversation({
           testIdx: context?.testIdx,
           promptIdx: context?.promptIdx,
         });
-        lastResponse = targetResponse;
         // Count the target request even when the target returns an error.
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
@@ -781,12 +792,10 @@ async function runRedteamConversation({
           const grader = getGraderById(assertToUse.type);
           if (grader) {
             // Create test object with iteration-specific vars
-            const iterationTest = test
-              ? {
-                  ...test,
-                  vars: iterationVars,
-                }
-              : { vars: iterationVars };
+            const iterationTest = {
+              ...test,
+              vars: iterationVars,
+            };
 
             // Build grading context with exfil tracking data
             let gradingContext:
@@ -853,18 +862,14 @@ async function runRedteamConversation({
               targetResponse.output,
               iterationTest,
               gradingProvider,
-              assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              getGraderAssertionValue(assertToUse),
               additionalRubric,
               undefined, // skipRefusalCheck
               gradingContext,
             );
             storedGraderResult = {
               ...grade,
-              assertion: grade.assertion
-                ? { ...grade.assertion, value: rubric }
-                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                  ? { ...assertToUse, value: rubric }
-                  : undefined,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             };
             graderPassed = grade.pass;
           }
@@ -1055,7 +1060,17 @@ async function runRedteamConversation({
   if (inputs && Object.keys(inputs).length > 0) {
     try {
       const parsed = JSON.parse(bestPrompt);
-      Object.assign(finalUpdatedVars, extractVariablesFromJson(parsed, inputs));
+      const { vars: materializedVars } = await extractMaterializedVariablesFromJsonWithMetadata(
+        parsed,
+        inputs,
+        {
+          materializationIndex: attempts,
+          pluginId: String(test?.metadata?.pluginId || 'unknown-plugin'),
+          provider: redteamProvider,
+          purpose: test?.metadata?.purpose as string | undefined,
+        },
+      );
+      Object.assign(finalUpdatedVars, materializedVars);
     } catch {
       // If parsing fails, it's plain text - keep original vars
     }
@@ -1075,7 +1090,6 @@ async function runRedteamConversation({
     context,
     options,
   );
-  lastResponse = finalTargetResponse;
   if (finalTargetResponse.tokenUsage) {
     accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
   }
@@ -1102,7 +1116,9 @@ async function runRedteamConversation({
     sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
-    output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
+    output:
+      bestResponse ||
+      (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
     prompt: bestNode.prompt,
     metadata: {
       highestScore: maxScore,
@@ -1119,7 +1135,7 @@ async function runRedteamConversation({
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse?.guardrails,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
   };
 }
 
@@ -1129,7 +1145,7 @@ async function runRedteamConversation({
 class RedteamIterativeTreeProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
-  readonly inputs?: Record<string, string>;
+  readonly inputs?: Inputs;
 
   /**
    * Creates a new instance of RedteamIterativeTreeProvider.
@@ -1148,7 +1164,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     logger.debug('[IterativeTree] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
-    this.inputs = config.inputs as Record<string, string> | undefined;
+    this.inputs = config.inputs as Inputs | undefined;
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );

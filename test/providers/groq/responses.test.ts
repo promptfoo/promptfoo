@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqResponsesProvider } from '../../../src/providers/groq/index';
 import * as fetchModule from '../../../src/util/fetch/index';
+import { mockProcessEnv } from '../../util/utils';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 
@@ -11,11 +12,11 @@ describe('GroqResponsesProvider', () => {
   const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   beforeEach(() => {
-    process.env.GROQ_API_KEY = 'test-key';
+    mockProcessEnv({ GROQ_API_KEY: 'test-key' });
   });
 
   afterEach(async () => {
-    delete process.env.GROQ_API_KEY;
+    mockProcessEnv({ GROQ_API_KEY: undefined });
     await clearCache();
     vi.clearAllMocks();
   });
@@ -116,6 +117,45 @@ describe('GroqResponsesProvider', () => {
   });
 
   describe('callApi', () => {
+    it('preserves temperature for Groq reasoning models', async () => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: {
+          temperature: 0.7,
+          reasoning_effort: 'medium',
+        },
+      });
+
+      const mockResponse = new Response(
+        JSON.stringify({
+          id: 'resp_123',
+          model: 'openai/gpt-oss-120b',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Hello, world!' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        }),
+        {
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers({ 'Content-Type': 'application/json' }),
+        },
+      );
+      mockedFetchWithRetries.mockResolvedValueOnce(mockResponse);
+
+      await provider.callApi('Test prompt');
+
+      const mockCall = mockedFetchWithRetries.mock.calls[0];
+      const reqOptions = mockCall[1] as { body: string };
+      const body = JSON.parse(reqOptions.body);
+
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.temperature).toBe(0.7);
+    });
+
     it('should call Groq Responses API endpoint', async () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
 
@@ -197,9 +237,9 @@ describe('GroqResponsesProvider', () => {
     });
 
     it('should handle missing API key', async () => {
-      delete process.env.GROQ_API_KEY;
+      mockProcessEnv({ GROQ_API_KEY: undefined });
       const originalOpenAIKey = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
@@ -207,7 +247,7 @@ describe('GroqResponsesProvider', () => {
       } finally {
         // Restore OPENAI_API_KEY if it was set
         if (originalOpenAIKey) {
-          process.env.OPENAI_API_KEY = originalOpenAIKey;
+          mockProcessEnv({ OPENAI_API_KEY: originalOpenAIKey });
         }
       }
     });
