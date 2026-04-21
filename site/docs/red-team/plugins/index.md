@@ -253,7 +253,7 @@ Promptfoo also supports custom test cases to reflect more nuanced requirements, 
 
 ### Custom Policies
 
-You also establish [custom policies](custom.md) to test against. When creating custom policies, each policy should be defined as its own plugin. These are particularly useful when testing custom requirements for a business, like from an AI Code of Conduct.
+You can also establish [custom policies](policy.md) to test against. Each policy should be defined as its own `policy` plugin so it generates and reports independently. These are useful for business-specific requirements from legal, compliance, support, brand, or AI governance teams.
 
 ```yaml
 plugins:
