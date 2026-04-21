@@ -1,12 +1,79 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
+import { mockProcessEnv } from '../../util/utils';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+
+const setAuthHeaders = (
+  provider: AzureChatCompletionProvider,
+  headers: Record<string, string> = { 'api-key': 'test-key' },
+) => {
+  (provider as any).authHeaders = headers;
+  (provider as any).initialized = true;
+};
+
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
+const originalOpenAiMaxTokens = process.env.OPENAI_MAX_TOKENS;
+const originalOpenAiMaxCompletionTokens = process.env.OPENAI_MAX_COMPLETION_TOKENS;
+const originalOpenAiTopP = process.env.OPENAI_TOP_P;
+const originalOpenAiPresencePenalty = process.env.OPENAI_PRESENCE_PENALTY;
+const originalOpenAiFrequencyPenalty = process.env.OPENAI_FREQUENCY_PENALTY;
 
 describe('AzureChatCompletionProvider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
+    mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
+    mockProcessEnv({ OPENAI_TOP_P: undefined });
+    mockProcessEnv({ OPENAI_PRESENCE_PENALTY: undefined });
+    mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: undefined });
+    vi.spyOn(AzureChatCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
+      'api-key': 'test-key',
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (originalOpenAiTemperature === undefined) {
+      mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_TEMPERATURE: originalOpenAiTemperature });
+    }
+    if (originalOpenAiMaxTokens === undefined) {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: originalOpenAiMaxTokens });
+    }
+    if (originalOpenAiMaxCompletionTokens === undefined) {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: originalOpenAiMaxCompletionTokens });
+    }
+    if (originalOpenAiTopP === undefined) {
+      mockProcessEnv({ OPENAI_TOP_P: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_TOP_P: originalOpenAiTopP });
+    }
+    if (originalOpenAiPresencePenalty === undefined) {
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: originalOpenAiPresencePenalty });
+    }
+    if (originalOpenAiFrequencyPenalty === undefined) {
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: originalOpenAiFrequencyPenalty });
+    }
+  });
+
   describe('config merging', () => {
     let provider: AzureChatCompletionProvider;
 
@@ -20,21 +87,23 @@ describe('AzureChatCompletionProvider', () => {
           temperature: 0.5,
         },
       });
+      setAuthHeaders(provider);
     });
 
-    it('should use provider config when no prompt config exists', () => {
+    it('should use provider config when no prompt config exists', async () => {
       const context = {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'provider_func', parameters: {} }],
         max_tokens: 100,
         temperature: 0.5,
       });
     });
 
-    it('should merge prompt config with provider config', () => {
+    it('should merge prompt config with provider config', async () => {
       const context = {
         prompt: {
           config: {
@@ -46,38 +115,41 @@ describe('AzureChatCompletionProvider', () => {
         },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'prompt_func', parameters: {} }],
         max_tokens: 100,
         temperature: 0.7,
       });
     });
 
-    it('should handle undefined prompt config', () => {
+    it('should handle undefined prompt config', async () => {
       const context = {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'provider_func', parameters: {} }],
         max_tokens: 100,
         temperature: 0.5,
       });
     });
 
-    it('should handle empty prompt config', () => {
+    it('should handle empty prompt config', async () => {
       const context = {
         prompt: { config: {}, label: 'test prompt', raw: 'test prompt' },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'provider_func', parameters: {} }],
         max_tokens: 100,
         temperature: 0.5,
       });
     });
 
-    it('should handle complex nested config merging', () => {
+    it('should handle complex nested config merging', async () => {
       const context = {
         prompt: {
           config: {
@@ -89,7 +161,8 @@ describe('AzureChatCompletionProvider', () => {
         },
         vars: {},
       };
-      expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+      expect(body).toMatchObject({
         functions: [{ name: 'provider_func', parameters: {} }],
         max_tokens: 100,
         response_format: { type: 'json_object' },
@@ -98,7 +171,7 @@ describe('AzureChatCompletionProvider', () => {
       });
     });
 
-    it('should handle json_schema response format', () => {
+    it('should handle json_schema response format', async () => {
       const context = {
         prompt: {
           config: {
@@ -123,7 +196,7 @@ describe('AzureChatCompletionProvider', () => {
         },
         vars: {},
       };
-      const { body } = (provider as any).getOpenAiBody('test prompt', context);
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
       expect(body.response_format).toMatchObject({
         type: 'json_schema',
         json_schema: {
@@ -141,7 +214,7 @@ describe('AzureChatCompletionProvider', () => {
       });
     });
 
-    it('should render variables in response format', () => {
+    it('should render variables in response format', async () => {
       const context = {
         prompt: {
           config: {
@@ -166,8 +239,57 @@ describe('AzureChatCompletionProvider', () => {
           schemaName: 'dynamic_schema',
         },
       };
-      const { body } = (provider as any).getOpenAiBody('test prompt', context);
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
       expect(body.response_format.json_schema.name).toBe('dynamic_schema');
+    });
+
+    it('should omit default parameters when omitDefaults is true', async () => {
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          omitDefaults: true,
+        },
+      });
+      setAuthHeaders(provider);
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.max_tokens).toBeUndefined();
+      expect('max_tokens' in body).toBe(false);
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+      expect(body.top_p).toBeUndefined();
+      expect('top_p' in body).toBe(false);
+      expect(body.presence_penalty).toBeUndefined();
+      expect('presence_penalty' in body).toBe(false);
+      expect(body.frequency_penalty).toBeUndefined();
+      expect('frequency_penalty' in body).toBe(false);
+    });
+
+    it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
+      mockProcessEnv({ OPENAI_TEMPERATURE: '0.5' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+      mockProcessEnv({ OPENAI_TOP_P: '0.9' });
+      mockProcessEnv({ OPENAI_PRESENCE_PENALTY: '0.1' });
+      mockProcessEnv({ OPENAI_FREQUENCY_PENALTY: '0.2' });
+
+      provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          omitDefaults: true,
+        },
+      });
+      setAuthHeaders(provider);
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.max_tokens).toBe(2048);
+      expect(body.temperature).toBe(0.5);
+      expect(body.top_p).toBe(0.9);
+      expect(body.presence_penalty).toBe(0.1);
+      expect(body.frequency_penalty).toBe(0.2);
     });
   });
 
@@ -181,10 +303,11 @@ describe('AzureChatCompletionProvider', () => {
           apiKey: 'test-key',
         },
       });
+      setAuthHeaders(provider);
     });
 
     afterEach(() => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
     });
 
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
@@ -226,26 +349,28 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
 
+      vi.spyOn(logger, 'warn');
+
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual({ test: 'value' });
     });
 
     it('should handle API errors', async () => {
-      jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
       const result = await provider.callApi('test prompt');
       expect(result.error).toBe('API call error: API Error');
     });
 
     it('should handle invalid JSON response', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: 'invalid json',
         cached: false,
         status: 200,
@@ -287,12 +412,14 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      vi.spyOn(logger, 'warn');
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual([
@@ -307,7 +434,7 @@ describe('AzureChatCompletionProvider', () => {
     });
 
     it('should pass custom headers from config to fetchWithCache', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           choices: [{ message: { content: 'test' } }],
           usage: {},
@@ -359,10 +486,11 @@ describe('AzureChatCompletionProvider', () => {
           apiKey: 'test-key',
         },
       });
+      setAuthHeaders(provider);
     });
 
     afterEach(() => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
     });
 
     it('should parse JSON response when prompt config specifies json_object format', async () => {
@@ -388,7 +516,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -435,7 +563,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -471,12 +599,14 @@ describe('AzureChatCompletionProvider', () => {
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      (provider as any).apiVersion = '2024-custom';
 
       await provider.callApi('test prompt', {
         prompt: {
@@ -491,7 +621,7 @@ describe('AzureChatCompletionProvider', () => {
       });
 
       // Verify the URL includes extensions and uses the custom API version
-      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
         '/extensions/chat/completions?api-version=2024-custom',
       );
     });
@@ -510,12 +640,14 @@ describe('AzureChatCompletionProvider', () => {
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      (provider as any).apiVersion = '2024-custom';
 
       await provider.callApi('test prompt', {
         prompt: {
@@ -530,8 +662,8 @@ describe('AzureChatCompletionProvider', () => {
       });
 
       // Verify the URL doesn't include the legacy extensions path
-      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).not.toContain('extensions');
-      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).not.toContain('extensions');
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
         '/chat/completions?api-version=2024-custom',
       );
     });
@@ -545,6 +677,26 @@ describe('AzureChatCompletionProvider', () => {
         },
       });
       expect((provider as any).isReasoningModel()).toBe(true);
+    });
+
+    it('flags Claude Opus 4.7 via isClaudeOpus47 without treating it as reasoning', () => {
+      // Claude Opus 4.7 uses the chat body's standard max_tokens path but
+      // rejects `temperature` at the model level. Must NOT flip to the
+      // reasoning-model branch (which would swap max_tokens and send
+      // reasoning_effort).
+      const opus47 = new AzureChatCompletionProvider('claude-opus-4-7', { config: {} });
+      expect((opus47 as any).isReasoningModel()).toBe(false);
+      expect((opus47 as any).isClaudeOpus47()).toBe(true);
+
+      // Opus 4.6 regression: not matched.
+      const opus46 = new AzureChatCompletionProvider('claude-opus-4-6-20260205', { config: {} });
+      expect((opus46 as any).isReasoningModel()).toBe(false);
+      expect((opus46 as any).isClaudeOpus47()).toBe(false);
+
+      // Boundary: a hypothetical `claude-opus-4-70` or `claude-opus-4-7N`
+      // model must not be accidentally matched by the 4.7 predicate.
+      const opus470 = new AzureChatCompletionProvider('claude-opus-4-70', { config: {} });
+      expect((opus470 as any).isClaudeOpus47()).toBe(false);
     });
 
     it('should detect reasoning models with isReasoningModel flag', () => {
@@ -566,7 +718,23 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
-    it('should use max_completion_tokens for reasoning models', () => {
+    it('omits temperature for Claude Opus 4.7 while keeping the standard chat body', async () => {
+      const provider = new AzureChatCompletionProvider('claude-opus-4-7', {
+        config: {
+          apiHost: 'test.azure.com',
+          apiKey: 'test-key',
+          max_tokens: 512,
+          temperature: 0.5,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('hi');
+      expect(body).toHaveProperty('max_tokens', 512);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+      expect(body).not.toHaveProperty('temperature');
+      expect(body).not.toHaveProperty('reasoning_effort');
+    });
+
+    it('should use max_completion_tokens for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
@@ -574,34 +742,93 @@ describe('AzureChatCompletionProvider', () => {
           max_tokens: 1000,
         },
       });
-      const body = (provider as any).getOpenAiBody('test prompt').body;
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).toHaveProperty('max_completion_tokens', 2000);
       expect(body).not.toHaveProperty('max_tokens');
     });
 
-    it('should use reasoning_effort for reasoning models', () => {
+    it('should omit default max_completion_tokens when omitDefaults is true for reasoning models', async () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+      expect(body.max_completion_tokens).toBeUndefined();
+      expect('max_completion_tokens' in body).toBe(false);
+    });
+
+    it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: '4096' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body).toHaveProperty('max_completion_tokens', 4096);
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body).toHaveProperty('max_completion_tokens', 2048);
+      expect(body).not.toHaveProperty('max_tokens');
+    });
+
+    it('should use reasoning_effort for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
           reasoning_effort: 'high',
         },
       });
-      const body = (provider as any).getOpenAiBody('test prompt').body;
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).toHaveProperty('reasoning_effort', 'high');
     });
 
-    it('should not include temperature for reasoning models', () => {
+    it('should omit default reasoning_effort when omitDefaults is true for reasoning models', async () => {
+      const provider = new AzureChatCompletionProvider('test-deployment', {
+        config: {
+          isReasoningModel: true,
+          omitDefaults: true,
+        },
+      });
+
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+      expect(body.reasoning_effort).toBeUndefined();
+      expect('reasoning_effort' in body).toBe(false);
+    });
+
+    it('should not include temperature for reasoning models', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
           temperature: 0.7,
         },
       });
-      const body = (provider as any).getOpenAiBody('test prompt').body;
+      const { body } = await (provider as any).getOpenAiBody('test prompt');
       expect(body).not.toHaveProperty('temperature');
     });
 
-    it('should support variable rendering in reasoning_effort', () => {
+    it('should support variable rendering in reasoning_effort', async () => {
       const provider = new AzureChatCompletionProvider('test-deployment', {
         config: {
           isReasoningModel: true,
@@ -613,7 +840,7 @@ describe('AzureChatCompletionProvider', () => {
         prompt: { label: 'test prompt', raw: 'test prompt' },
         vars: { effort: 'high' as const },
       };
-      const body = (provider as any).getOpenAiBody('test prompt', context).body;
+      const { body } = await (provider as any).getOpenAiBody('test prompt', context);
       expect(body).toHaveProperty('reasoning_effort', 'high');
     });
   });
@@ -631,7 +858,7 @@ describe('AzureChatCompletionProvider', () => {
     });
 
     afterEach(() => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
     });
 
     it('should detect output content filtering', async () => {
@@ -679,12 +906,14 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      vi.spyOn(logger, 'warn');
 
       const result = await provider.callApi('test prompt');
 
@@ -733,7 +962,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 400,
@@ -823,12 +1052,14 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      const warnSpy = vi.spyOn(logger, 'warn');
 
       const result = await provider.callApi('test prompt');
 
@@ -839,7 +1070,7 @@ describe('AzureChatCompletionProvider', () => {
       });
       expect(result.output).toBe('generated text');
       expect(result.finishReason).toBe('stop');
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
         'Content filtering system is down or otherwise unable to complete the request in time: content_filter_error The contents are not filtered',
       );
     });
@@ -873,7 +1104,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -920,7 +1151,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -987,7 +1218,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -1044,7 +1275,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -1098,7 +1329,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,

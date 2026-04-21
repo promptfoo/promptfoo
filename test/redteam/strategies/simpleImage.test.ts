@@ -1,31 +1,36 @@
 import { SingleBar } from 'cli-progress';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { addImageToBase64 } from '../../../src/redteam/strategies/simpleImage';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
-jest.mock('sharp', () => {
+vi.mock('sharp', () => {
   return {
-    default: jest.fn().mockImplementation(() => ({
-      png: jest.fn().mockReturnValue({
-        toBuffer: jest
-          .fn()
-          .mockResolvedValue(
-            Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]),
-          ),
-      }),
-    })),
+    default: vi.fn().mockImplementation(function () {
+      return {
+        png: vi.fn().mockReturnValue({
+          toBuffer: vi
+            .fn()
+            .mockResolvedValue(
+              Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]),
+            ),
+        }),
+      };
+    }),
   };
 });
 
-jest.mock('cli-progress');
+vi.mock('cli-progress');
 
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-  level: 'info',
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    level: 'info',
+  },
 }));
 
 describe('Image strategy', () => {
@@ -55,11 +60,11 @@ describe('Image strategy', () => {
   ];
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('addImageToBase64', () => {
@@ -130,9 +135,9 @@ describe('Image strategy', () => {
     });
 
     it('should create and update progress bar', async () => {
-      const mockStart = jest.fn();
-      const mockIncrement = jest.fn();
-      const mockStop = jest.fn();
+      const mockStart = vi.fn();
+      const mockIncrement = vi.fn();
+      const mockStop = vi.fn();
 
       (logger.level as any) = 'info';
 
@@ -142,7 +147,9 @@ describe('Image strategy', () => {
         stop: mockStop,
       };
 
-      jest.mocked(SingleBar).mockImplementation(() => mockSingleBar as unknown as SingleBar);
+      vi.mocked(SingleBar).mockImplementation(function () {
+        return mockSingleBar as unknown as SingleBar;
+      });
 
       await addImageToBase64(testCases, 'prompt');
 

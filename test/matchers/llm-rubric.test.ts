@@ -1,32 +1,43 @@
-import fs from 'fs';
 import path from 'path';
 
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import { matchesLlmRubric, renderLlmRubricPrompt } from '../../src/matchers';
+import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
-import type { ApiProvider, Assertion, GradingConfig } from '../../src/types/index';
+import type { Assertion, GradingConfig } from '../../src/types/index';
 
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(),
 }));
-jest.mock('../../src/cliState');
-jest.mock('../../src/remoteGrading', () => ({
-  doRemoteGrading: jest.fn(),
+vi.mock('../../src/cliState');
+vi.mock('../../src/remoteGrading', () => ({
+  doRemoteGrading: vi.fn(),
 }));
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  readFileSync: jest.fn(),
-  existsSync: jest.fn(),
+// Create mock functions that can be configured in tests - use vi.hoisted for mock factory access
+const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
+  mockExistsSync: vi.fn(),
+  mockReadFileSync: vi.fn(),
 }));
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    existsSync: mockExistsSync,
+    readFileSync: mockReadFileSync,
+  };
+});
 
 const Grader = new TestGrader();
 
@@ -35,22 +46,22 @@ describe('matchesLlmRubric', () => {
   const mockFileContent = 'This is an external rubric prompt';
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(mockFileContent);
 
     (cliState as any).config = {};
 
-    jest.mocked(remoteGrading.doRemoteGrading).mockReset();
-    jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+    vi.mocked(remoteGrading.doRemoteGrading).mockReset();
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
       pass: true,
       score: 1,
       reason: 'Remote grading passed',
     });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
@@ -64,24 +75,26 @@ describe('matchesLlmRubric', () => {
       provider: Grader,
     };
 
-    jest.spyOn(Grader, 'callApi').mockResolvedValue({
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
       output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      pass: true,
-      reason: 'Test grading output',
-      score: 1,
-      tokensUsed: {
-        total: expect.any(Number),
-        prompt: expect.any(Number),
-        completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-        numRequests: 0,
-      },
-    });
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        reason: 'Test grading output',
+        score: 1,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
   });
 
   it('should handle when provider returns direct object output instead of string', async () => {
@@ -89,32 +102,144 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: { pass: true, score: 0.85, reason: 'Direct object output' },
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      pass: true,
-      score: 0.85,
-      reason: 'Direct object output',
-      tokensUsed: {
-        total: 10,
-        prompt: 5,
-        completion: 5,
-        cached: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 0.85,
+        reason: 'Direct object output',
+        tokensUsed: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+          numRequests: 0,
         },
-        numRequests: 0,
-      },
+      }),
+    );
+  });
+
+  it('should preserve provider completion details when grader JSON omits them', async () => {
+    const completionDetails = {
+      reasoning: 3,
+      acceptedPrediction: 2,
+      rejectedPrediction: 1,
+    };
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          tokenUsage: {
+            total: 10,
+            prompt: 5,
+            completion: 5,
+            completionDetails,
+          },
+        },
+      }),
     });
+
+    expect(result.tokensUsed?.completionDetails).toEqual(completionDetails);
+  });
+
+  it('should merge provider metadata into the grading result metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: {
+            uploadId: 'upload-123',
+            trace: { id: 'trace-456' },
+          },
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      trace: { id: 'trace-456' },
+      renderedGradingPrompt: 'Grading prompt',
+    });
+  });
+
+  it('should preserve renderedGradingPrompt when provider metadata uses the same key', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: {
+            renderedGradingPrompt: 'spoofed prompt',
+            uploadId: 'upload-123',
+          },
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      renderedGradingPrompt: 'Grading prompt',
+    });
+  });
+
+  it('should ignore array provider metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: ['ignored'] as any,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      renderedGradingPrompt: 'Grading prompt',
+    });
+  });
+
+  it('should sanitize circular provider metadata before attaching it to the grading result', async () => {
+    const responseMetadata: Record<string, any> = {
+      uploadId: 'upload-123',
+      trace: { id: 'trace-456' },
+    };
+    responseMetadata.self = responseMetadata;
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: responseMetadata,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      trace: { id: 'trace-456' },
+      renderedGradingPrompt: 'Grading prompt',
+    });
+    expect(result.metadata).not.toHaveProperty('self');
   });
 
   it('should render rubric when provided as an object', async () => {
@@ -122,13 +247,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grade: {{ rubric }}',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
           tokenUsage: { total: 1, prompt: 1, completion: 1 },
-        }),
-      },
+        },
+      }),
     };
 
     await matchesLlmRubric(rubric, output, options);
@@ -153,13 +277,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 42, // Numeric output
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -172,7 +295,64 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should fail when output is null', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: null,
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'No output',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should fail when output is an array', async () => {
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const options: GradingConfig = {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        response: {
+          output: [{ pass: false, score: 0, reason: 'bad' }],
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason:
+        'llm-rubric produced malformed response - output must be string or object. Output: [{"pass":false,"score":0,"reason":"bad"}]',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -183,13 +363,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: '{ "pass": true, "reason": "Invalid JSON missing closing brace',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -201,7 +380,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -212,13 +391,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 'This is a valid text response but contains no JSON objects',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -230,7 +408,7 @@ describe('matchesLlmRubric', () => {
         prompt: 5,
         completion: 5,
         cached: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
         numRequests: 0,
       },
     });
@@ -241,13 +419,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 'Here is the result: []',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -260,7 +437,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -270,13 +447,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 'Result: null',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // Since extractJsonObjects only looks for objects starting with {, this returns no objects
@@ -290,7 +466,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -300,13 +476,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: '"just a string"',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -319,7 +494,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -329,13 +504,12 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: 'Result: 123',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -348,7 +522,7 @@ describe('matchesLlmRubric', () => {
         completion: 5,
         cached: 0,
         numRequests: 0,
-        completionDetails: undefined,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
       },
     });
   });
@@ -361,24 +535,26 @@ describe('matchesLlmRubric', () => {
       provider: Grader,
     };
 
-    jest.spyOn(Grader, 'callApi').mockResolvedValueOnce({
+    vi.spyOn(Grader, 'callApi').mockResolvedValueOnce({
       output: JSON.stringify({ pass: false, reason: 'Grading failed' }),
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      pass: false,
-      reason: 'Grading failed',
-      score: 0,
-      tokensUsed: {
-        total: expect.any(Number),
-        prompt: expect.any(Number),
-        completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-        numRequests: 0,
-      },
-    });
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
   });
 
   it('should throw error when throwOnError is true and provider returns an error', async () => {
@@ -386,14 +562,13 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           error: 'Provider error',
           output: null,
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // With throwOnError: true - should throw
@@ -407,14 +582,13 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           error: null,
           output: null,
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // With throwOnError: true - should throw
@@ -437,7 +611,7 @@ describe('matchesLlmRubric', () => {
       },
     };
 
-    const mockCallApi = jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi');
+    const mockCallApi = vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi');
     mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
       expect(this.config.temperature).toBe(3.1415926);
       expect(this.getApiKey()).toBe('abc123');
@@ -447,19 +621,21 @@ describe('matchesLlmRubric', () => {
       });
     });
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      reason: 'Grading passed',
-      pass: true,
-      score: 1,
-      tokensUsed: {
-        total: expect.any(Number),
-        prompt: expect.any(Number),
-        completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-        numRequests: 0,
-      },
-    });
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        reason: 'Grading passed',
+        pass: true,
+        score: 1,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
     expect(mockCallApi).toHaveBeenCalledWith(
       'Grading prompt',
       expect.objectContaining({
@@ -487,12 +663,9 @@ describe('matchesLlmRubric', () => {
     };
 
     const lowScoreResponse = { score: 0.25, reason: 'Low score' };
-    const lowScoreProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
-        output: JSON.stringify(lowScoreResponse),
-      }),
-    };
+    const lowScoreProvider = createMockProvider({
+      response: createProviderResponse({ output: JSON.stringify(lowScoreResponse) }),
+    });
 
     await expect(
       matchesLlmRubric(
@@ -505,12 +678,9 @@ describe('matchesLlmRubric', () => {
     ).resolves.toEqual(expect.objectContaining({ assertion, pass: false, ...lowScoreResponse }));
 
     const highScoreResponse = { score: 0.75, reason: 'High score' };
-    const highScoreProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
-        output: JSON.stringify(highScoreResponse),
-      }),
-    };
+    const highScoreProvider = createMockProvider({
+      response: createProviderResponse({ output: JSON.stringify(highScoreResponse) }),
+    });
     await expect(
       matchesLlmRubric(
         rubricPrompt,
@@ -534,12 +704,11 @@ describe('matchesLlmRubric', () => {
     const lowScoreResult = { score: 0.25, reason: 'Low score but pass', pass: true };
     const lowScoreOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(lowScoreResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -560,12 +729,11 @@ describe('matchesLlmRubric', () => {
     const failingResult = { score: 0.7, reason: 'Score below threshold', pass: true };
     const failingOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(failingResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -587,12 +755,11 @@ describe('matchesLlmRubric', () => {
     };
     const passingOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(passingResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -620,12 +787,11 @@ describe('matchesLlmRubric', () => {
     const exactThresholdResult = { score: 0.8, reason: 'Exactly at threshold' };
     const exactOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(exactThresholdResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -643,12 +809,11 @@ describe('matchesLlmRubric', () => {
     const justBelowResult = { score: 0.799, reason: 'Just below threshold' };
     const belowOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(justBelowResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -676,12 +841,11 @@ describe('matchesLlmRubric', () => {
     const missingScoreResult = { pass: true, reason: 'No score provided' };
     const missingScoreOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(missingScoreResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -699,12 +863,11 @@ describe('matchesLlmRubric', () => {
     const invalidScoreResult = { score: 'high', reason: 'Invalid score type', pass: true };
     const invalidScoreOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(invalidScoreResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -731,12 +894,11 @@ describe('matchesLlmRubric', () => {
     const stringScoreResult = { score: '0.9', reason: 'String score' };
     const stringScoreOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(stringScoreResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -763,12 +925,11 @@ describe('matchesLlmRubric', () => {
     const stringPassResult = { reason: 'String pass', pass: 'true' };
     const stringPassOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(stringPassResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -784,12 +945,11 @@ describe('matchesLlmRubric', () => {
     const stringFailResult = { reason: 'String fail', pass: 'false' };
     const stringFailOptions: GradingConfig = {
       rubricPrompt,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify(stringFailResult),
-        }),
-      },
+        },
+      }),
     };
 
     await expect(
@@ -808,21 +968,20 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: `file://${mockFilePath}`,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading);
 
-    expect(fs.existsSync).toHaveBeenCalledWith(
+    expect(mockExistsSync).toHaveBeenCalledWith(
       expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
     );
-    expect(fs.readFileSync).toHaveBeenCalledWith(
+    expect(mockReadFileSync).toHaveBeenCalledWith(
       expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
       'utf8',
     );
@@ -839,37 +998,155 @@ describe('matchesLlmRubric', () => {
         }),
       }),
     );
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: 'Test passed',
-      tokensUsed: {
-        total: 10,
-        prompt: 5,
-        completion: 5,
-        cached: 0,
-        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
-        numRequests: 0,
-      },
-    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+        tokensUsed: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
+  it('should load rubric prompt from JSON file with Nunjucks templates', async () => {
+    // This test verifies the fix for issue #2961:
+    // JSON files with Nunjucks templates should be loaded as raw text first,
+    // allowing template rendering before JSON parsing.
+    const mockJsonFilePath = path.join('path', 'to', 'rubric.json');
+    const mockJsonContent = `[
+  {%- set system_prompt -%}
+  Evaluate the response
+  {%- endset -%}
+  { "role": "system", "content": {{ system_prompt | dump }} },
+  { "role": "user", "content": "Output: {{ output }}" }
+]`;
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(mockJsonContent);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockJsonFilePath}`,
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(mockExistsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.json')),
+    );
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.json')),
+      'utf8',
+    );
+    // Verify the template was rendered - the Nunjucks set block should be processed
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluate the response'),
+      expect.anything(),
+    );
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Test output'),
+      expect.anything(),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+        tokensUsed: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          numRequests: 0,
+        },
+      }),
+    );
+  });
+
+  it('should load rubric prompt from YAML file with Nunjucks templates', async () => {
+    const mockYamlFilePath = path.join('path', 'to', 'rubric.yaml');
+    const mockYamlContent = `{%- set system_prompt -%}
+Evaluate the response
+{%- endset -%}
+- role: system
+  content: {{ system_prompt }}
+- role: user
+  content: "Output: {{ output }}"`;
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockYamlFilePath}`,
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(mockExistsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.yaml')),
+    );
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.yaml')),
+      'utf8',
+    );
+    // Verify the template was rendered
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluate the response'),
+      expect.anything(),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+        tokensUsed: {
+          total: 10,
+          prompt: 5,
+          completion: 5,
+          cached: 0,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          numRequests: 0,
+        },
+      }),
+    );
   });
 
   it('should load rubric prompt from js file when specified', async () => {
     const filePath = path.join('path', 'to', 'external', 'file.js');
-    const mockImportModule = jest.mocked(importModule);
-    const mockFunction = jest.fn(() => 'Do this: {{ rubric }}');
+    const mockImportModule = vi.mocked(importModule);
+    const mockFunction = vi.fn(() => 'Do this: {{ rubric }}');
     mockImportModule.mockResolvedValue(mockFunction);
 
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: `file://${filePath}`,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
-        }),
-      },
+        },
+      }),
     };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading);
@@ -899,29 +1176,28 @@ describe('matchesLlmRubric', () => {
   });
 
   it('should throw an error when the external file is not found', async () => {
-    jest.mocked(fs.existsSync).mockReturnValue(false);
+    mockExistsSync.mockReturnValue(false);
 
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: `file://${mockFilePath}`,
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     await expect(matchesLlmRubric(rubric, llmOutput, grading)).rejects.toThrow(
       'File does not exist',
     );
 
-    expect(fs.existsSync).toHaveBeenCalledWith(
+    expect(mockExistsSync).toHaveBeenCalledWith(
       expect.stringContaining(path.join('path', 'to', 'external', 'rubric.txt')),
     );
-    expect(fs.readFileSync).not.toHaveBeenCalled();
+    expect(mockReadFileSync).not.toHaveBeenCalled();
     expect(grading.provider.callApi).not.toHaveBeenCalled();
   });
 
@@ -930,13 +1206,12 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading = {
       rubricPrompt: 'Custom prompt',
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
+      provider: createMockProvider({
+        response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
     // Give it a redteam config
@@ -962,30 +1237,82 @@ describe('matchesLlmRubric', () => {
     );
   });
 
-  it('should call remote when redteam is enabled and rubric prompt is not overridden', async () => {
+  it('should not call remote when a grading provider is configured, even if redteam is enabled', async () => {
     const rubric = 'Test rubric';
     const llmOutput = 'Test output';
     const grading = {
-      provider: {
-        id: () => 'test-provider',
-        callApi: jest.fn().mockResolvedValue({
-          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      },
+        },
+      }),
     };
 
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
+    expect(grading.provider.callApi).toHaveBeenCalled();
+    expect(result.reason).toBe('Local provider used');
+  });
+
+  it('should call remote when a caller prefers remote despite an injected default provider', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: createMockProvider({
+        id: 'implicit-default-provider',
+        response: createProviderResponse({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      }),
+    };
+
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+    (cliState as any).config = { redteam: {} };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading, undefined, undefined, {
+      preferRemote: true,
+    });
+
+    expect(remoteGrading.doRemoteGrading).toHaveBeenCalledWith({
+      task: 'llm-rubric',
+      rubric,
+      output: llmOutput,
+      vars: {},
+    });
+    expect(grading.provider.callApi).not.toHaveBeenCalled();
+    expect(result.reason).toBe('Remote grading passed');
+  });
+
+  it('should call remote when redteam is enabled and rubric prompt is not overridden and no provider is configured', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    // No provider configured - this is the key change
+    const grading = {};
+
     // Clear and set up specific mock behavior for this test
-    jest.mocked(remoteGrading.doRemoteGrading).mockClear();
-    jest.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
       pass: true,
       score: 1,
       reason: 'Remote grading passed',
     });
 
     // Import and set up shouldGenerateRemote mock properly
-    const { shouldGenerateRemote } = jest.requireMock('../../src/redteam/remoteGeneration');
-    jest.mocked(shouldGenerateRemote).mockReturnValue(true);
+    const remoteGeneration = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
 
     // Give it a redteam config
     (cliState as any).config = { redteam: {} };
@@ -999,8 +1326,47 @@ describe('matchesLlmRubric', () => {
       output: llmOutput,
       vars: {},
     });
+    expect(remoteGeneration.shouldGenerateRemote).toHaveBeenCalledWith({
+      canUseCodexDefaultProvider: true,
+    });
+  });
 
-    expect(grading.provider.callApi).not.toHaveBeenCalled();
+  it('should use local provider when redteam.provider is configured even if remote generation is available', async () => {
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      provider: createMockProvider({
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Local provider used' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    };
+
+    // Clear and set up specific mock behavior for this test
+    vi.mocked(remoteGrading.doRemoteGrading).mockClear();
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Remote grading passed',
+    });
+
+    // Import and set up shouldGenerateRemote mock properly
+    const remoteGeneration2 = await import('../../src/redteam/remoteGeneration');
+    vi.mocked(remoteGeneration2.shouldGenerateRemote).mockReturnValue(true);
+
+    // Give it a redteam config WITH a provider configured
+    (cliState as any).config = { redteam: { provider: 'ollama:llama3.2' } };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    // Remote grading should NOT be called when redteam.provider is configured
+    const { doRemoteGrading } = remoteGrading;
+    expect(doRemoteGrading).not.toHaveBeenCalled();
+
+    // Local provider should be used instead
+    expect(grading.provider.callApi).toHaveBeenCalled();
+    expect(result.reason).toBe('Local provider used');
   });
 });
 

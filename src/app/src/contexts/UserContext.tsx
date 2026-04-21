@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { fetchUserEmail } from '@app/utils/api';
 import { UserContext } from './UserContextDef';
@@ -17,7 +17,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     loadUserEmail();
   }, []);
 
-  return (
-    <UserContext.Provider value={{ email, setEmail, isLoading }}>{children}</UserContext.Provider>
-  );
+  const value = useMemo(() => ({ email, setEmail, isLoading }), [email, isLoading]);
+
+  return <UserContext value={value}>{children}</UserContext>;
 }

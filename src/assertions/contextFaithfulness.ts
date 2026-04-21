@@ -1,4 +1,4 @@
-import { matchesContextFaithfulness } from '../matchers';
+import { matchesContextFaithfulness } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 
@@ -20,6 +20,7 @@ export async function handleContextFaithfulness({
   output,
   prompt,
   providerResponse,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> {
   invariant(test.vars, 'context-faithfulness assertion requires a test with variables');
   invariant(
@@ -48,6 +49,8 @@ export async function handleContextFaithfulness({
       context,
       assertion.threshold ?? 0,
       test.options,
+      test.vars,
+      providerCallContext,
     )),
     metadata: {
       context,

@@ -1,398 +1,472 @@
 import React from 'react';
 
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+
 import type { ProviderOptions } from '../../types';
 
 vi.mock('@app/utils/api');
 
-vi.mock('prismjs', () => ({
-  default: {
-    highlight: vi.fn((code) => code),
-    languages: { javascript: {} },
-  },
+vi.mock('react-simple-code-editor', () => ({
+  default: ({ value, onValueChange, placeholder }: any) => (
+    <textarea
+      data-testid="code-editor"
+      placeholder={placeholder}
+      value={value}
+      onChange={(e) => onValueChange(e.target.value)}
+    />
+  ),
 }));
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
+// Wrapper component for providing tooltip context
+const Wrapper = ({ children }: { children: React.ReactNode }) => (
+  <TooltipProvider>{children}</TooltipProvider>
+);
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(ui, { wrapper: Wrapper });
 };
 
-describe('HttpEndpointConfiguration', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
-  let mockSetBodyError: ReturnType<typeof vi.fn>;
-  let mockSetUrlError: ReturnType<typeof vi.fn>;
+const defaultHttpTarget: ProviderOptions = {
+  id: 'http',
+  label: 'Test HTTP Target',
+  config: {
+    url: 'https://api.example.com/chat',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:
+        'Bearer very-long-token-value-that-could-cause-layout-issues-if-not-handled-properly',
+    },
+    body: '{"message": "{{prompt}}"}',
+  },
+};
+
+const createSuccessfulTestResponse = (body: Record<string, unknown>) =>
+  ({
+    ok: true,
+    json: async () => body,
+  }) as Response;
+
+describe('HttpEndpointConfiguration - Header Field Layout', () => {
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetBodyError: (error: string | React.ReactNode | null) => void;
+  let mockSetUrlError: (error: string | null) => void;
+
+  const defaultProps = {
+    selectedTarget: defaultHttpTarget,
+    bodyError: null,
+    urlError: null,
+  };
+
+  beforeEach(() => {
+    mockUpdateCustomTarget = vi.fn();
+    mockSetBodyError = vi.fn();
+    mockSetUrlError = vi.fn();
+    vi.clearAllMocks();
+  });
+
+  it('should maintain minimum widths for header Name and Value fields on narrow viewports', () => {
+    renderWithProviders(
+      <div style={{ width: 200 }}>
+        <HttpEndpointConfiguration
+          {...defaultProps}
+          updateCustomTarget={mockUpdateCustomTarget}
+          setBodyError={mockSetBodyError}
+          urlError={defaultProps.urlError}
+          setUrlError={mockSetUrlError}
+        />
+      </div>,
+    );
+
+    const nameFields = screen.getAllByPlaceholderText('Name');
+    const valueFields = screen.getAllByPlaceholderText('Value');
+
+    expect(nameFields).toHaveLength(2);
+    expect(valueFields).toHaveLength(2);
+
+    const firstNameField = nameFields[0];
+    const firstValueField = valueFields[0];
+
+    expect(firstNameField).toBeVisible();
+    expect(firstValueField).toBeVisible();
+  });
+
+  it('should maintain header Name and Value field layout constraints when bodyError state changes', () => {
+    const { rerender } = renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const newBodyError = 'Invalid JSON format';
+    act(() => {
+      rerender(
+        <Wrapper>
+          <HttpEndpointConfiguration
+            {...defaultProps}
+            updateCustomTarget={mockUpdateCustomTarget}
+            setBodyError={mockSetBodyError}
+            bodyError={newBodyError}
+            urlError={defaultProps.urlError}
+            setUrlError={mockSetUrlError}
+          />
+        </Wrapper>,
+      );
+    });
+
+    const nameFields = screen.getAllByPlaceholderText('Name');
+    const valueFields = screen.getAllByPlaceholderText('Value');
+
+    expect(nameFields).toHaveLength(2);
+    expect(valueFields).toHaveLength(2);
+
+    const firstNameField = nameFields[0];
+    const firstValueField = valueFields[0];
+
+    // Fields should remain visible after error state change
+    expect(firstNameField).toBeVisible();
+    expect(firstValueField).toBeVisible();
+  });
+
+  it('should maintain header Name and Value field layout constraints when urlError state changes', () => {
+    const { rerender } = renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const newUrlError = 'Invalid URL format';
+    act(() => {
+      rerender(
+        <Wrapper>
+          <HttpEndpointConfiguration
+            {...defaultProps}
+            updateCustomTarget={mockUpdateCustomTarget}
+            setBodyError={mockSetBodyError}
+            urlError={newUrlError}
+            setUrlError={mockSetUrlError}
+          />
+        </Wrapper>,
+      );
+    });
+
+    const nameFields = screen.getAllByPlaceholderText('Name');
+    const valueFields = screen.getAllByPlaceholderText('Value');
+
+    expect(nameFields).toHaveLength(2);
+    expect(valueFields).toHaveLength(2);
+
+    const firstNameField = nameFields[0];
+    const firstValueField = valueFields[0];
+
+    // Fields should remain visible after URL error state change
+    expect(firstNameField).toBeVisible();
+    expect(firstValueField).toBeVisible();
+  });
+
+  it('should render header Name and Value fields with correct minimum widths and flex grow, ensuring both fields remain visible and usable for typical header values', () => {
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const nameFields = screen.getAllByPlaceholderText('Name');
+    const valueFields = screen.getAllByPlaceholderText('Value');
+
+    expect(nameFields).toHaveLength(2);
+    expect(valueFields).toHaveLength(2);
+
+    const firstNameField = nameFields[0];
+    const firstValueField = valueFields[0];
+
+    expect(firstNameField).toBeVisible();
+    expect(firstValueField).toBeVisible();
+
+    expect(firstNameField).toHaveValue('Content-Type');
+    expect(firstValueField).toHaveValue('application/json');
+
+    expect(nameFields[1]).toHaveValue('Authorization');
+    expect(valueFields[1]).toHaveValue(
+      'Bearer very-long-token-value-that-could-cause-layout-issues-if-not-handled-properly',
+    );
+
+    expect(valueFields[1]).toBeVisible();
+  });
+
+  it('should re-render header fields with correct layout when selectedTarget prop changes', () => {
+    const { rerender } = renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const newSelectedTarget = {
+      id: 'http2',
+      label: 'New Test HTTP Target',
+      config: {
+        url: 'https://api.example.com/newchat',
+        method: 'GET',
+        headers: {
+          'X-Request-ID': '12345',
+          'Accept-Language': 'en-US',
+        },
+        body: '',
+      },
+    };
+
+    rerender(
+      <Wrapper>
+        <HttpEndpointConfiguration
+          {...defaultProps}
+          selectedTarget={newSelectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+          setBodyError={mockSetBodyError}
+          urlError={defaultProps.urlError}
+          setUrlError={mockSetUrlError}
+        />
+      </Wrapper>,
+    );
+
+    const nameFields = screen.getAllByPlaceholderText('Name');
+    const valueFields = screen.getAllByPlaceholderText('Value');
+
+    expect(nameFields).toHaveLength(2);
+    expect(valueFields).toHaveLength(2);
+
+    const firstNameField = nameFields[0];
+    const firstValueField = valueFields[0];
+
+    expect(firstNameField).toBeVisible();
+    expect(firstValueField).toBeVisible();
+
+    expect(firstNameField).toHaveValue('X-Request-ID');
+    expect(firstValueField).toHaveValue('12345');
+
+    expect(nameFields[1]).toHaveValue('Accept-Language');
+    expect(valueFields[1]).toHaveValue('en-US');
+  });
+});
+
+describe('HttpEndpointConfiguration - Header Management', () => {
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetBodyError: (error: string | React.ReactNode | null) => void;
+  let mockSetUrlError: (error: string | null) => void;
+
+  const defaultProps = {
+    selectedTarget: {
+      id: 'http',
+      label: 'Test HTTP Target',
+      config: {
+        url: 'https://api.example.com/chat',
+        method: 'POST',
+        headers: {},
+        body: '{"message": "{{prompt}}"}',
+      },
+    },
+    bodyError: null,
+    urlError: null,
+  };
+
+  beforeEach(() => {
+    mockUpdateCustomTarget = vi.fn();
+    mockSetBodyError = vi.fn();
+    mockSetUrlError = vi.fn();
+    vi.clearAllMocks();
+  });
+
+  it('should add a new header row with visible Name and Value fields when the Add Header button is clicked', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        urlError={defaultProps.urlError}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+    const addHeaderButton = screen.getByText('Add Header');
+    await user.click(addHeaderButton);
+
+    const nameFields = screen.getAllByPlaceholderText('Name');
+    const valueFields = screen.getAllByPlaceholderText('Value');
+
+    expect(nameFields.length).toBeGreaterThan(
+      Object.keys(defaultProps.selectedTarget.config.headers).length,
+    );
+    expect(valueFields.length).toBeGreaterThan(
+      Object.keys(defaultProps.selectedTarget.config.headers).length,
+    );
+
+    expect(nameFields[nameFields.length - 1]).toBeVisible();
+    expect(valueFields[valueFields.length - 1]).toBeVisible();
+  });
+});
+
+describe('HttpEndpointConfiguration - Configuration Change Suggestions', () => {
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetBodyError: (error: string | React.ReactNode | null) => void;
+  let mockSetUrlError: (error: string | null) => void;
   const mockCallApi = vi.mocked(callApi);
 
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
-  });
-
-  afterEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('Configuration Change Suggestions', () => {
-    it("should update the selectedTarget configuration and internal state when a configuration change suggestion is applied via the 'Apply All' button", async () => {
-      const initialTarget: ProviderOptions = {
-        id: 'http-provider',
-        config: {
-          url: 'https://example.com/api',
-          method: 'POST',
-          headers: { 'X-Initial-Header': 'initial-value' },
-          body: JSON.stringify({ initial: 'body' }),
+  const renderTarget = (selectedTarget: ProviderOptions = defaultHttpTarget) =>
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        selectedTarget={selectedTarget}
+        updateCustomTarget={mockUpdateCustomTarget}
+        bodyError={null}
+        setBodyError={mockSetBodyError}
+        urlError={null}
+        setUrlError={mockSetUrlError}
+      />,
+    );
+
+  const mockSuggestionsResponse = (suggestion: Record<string, unknown>) => {
+    mockCallApi.mockResolvedValue(
+      createSuccessfulTestResponse({
+        testResult: {
+          changes_needed: true,
+          message: 'Changes needed',
+          configuration_change_suggestion: suggestion,
         },
-      };
+        providerResponse: {},
+      }),
+    );
+  };
 
-      const suggestion = {
-        headers: { 'X-New-Header': 'new-value', 'Content-Type': 'application/json' },
-        body: { new: 'body', prompt: '{{prompt}}' },
-      };
+  it('applies all suggested config changes and updates local HTTP form state', async () => {
+    const suggestion = {
+      headers: { 'X-New-Header': 'new-value', 'Content-Type': 'application/json' },
+      body: { new: 'body', prompt: '{{prompt}}' },
+    };
+    mockSuggestionsResponse(suggestion);
+    const user = userEvent.setup();
 
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            changes_needed: true,
-            message: 'Changes needed',
-            configuration_change_suggestion: suggestion,
-          },
-          providerResponse: {},
-        }),
-      } as Response);
-
-      renderWithTheme(
-        <HttpEndpointConfiguration
-          selectedTarget={initialTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-          bodyError={null}
-          setBodyError={mockSetBodyError}
-          urlError={null}
-          setUrlError={mockSetUrlError}
-        />,
-      );
-
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Configuration Changes Needed')).toBeInTheDocument();
-      });
-
-      const applyAllButton = screen.getByRole('button', { name: /Apply All/i });
-      fireEvent.click(applyAllButton);
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', suggestion.headers);
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('body', suggestion.body);
-
-      expect(screen.queryByDisplayValue('X-Initial-Header')).not.toBeInTheDocument();
-      expect(screen.getByDisplayValue('X-New-Header')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('new-value')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Content-Type')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('application/json')).toBeInTheDocument();
-
-      const allTextBoxes = screen.getAllByRole('textbox');
-      const bodyEditor = allTextBoxes.find(
-        (box) => box.textContent === JSON.stringify(suggestion.body, null, 2),
-      );
-      expect(bodyEditor).toBeInTheDocument();
+    renderTarget({
+      ...defaultHttpTarget,
+      config: {
+        ...defaultHttpTarget.config,
+        headers: { 'X-Initial-Header': 'initial-value' },
+        body: JSON.stringify({ initial: 'body' }),
+      },
     });
 
-    it('should handle applying a configuration suggestion with an invalid URL format', async () => {
-      const initialTarget: ProviderOptions = {
-        id: 'http-provider',
-        config: {
-          url: 'https://example.com/api',
-          method: 'POST',
-          headers: { 'X-Initial-Header': 'initial-value' },
-          body: JSON.stringify({ initial: 'body' }),
-        },
-      };
+    await user.click(screen.getByRole('button', { name: /Test Target/i }));
 
-      const invalidUrl = 'invalid-url';
-      const suggestion = {
-        url: invalidUrl,
-      };
+    expect(await screen.findByText('Configuration Changes Needed')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Apply All/i }));
 
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            changes_needed: true,
-            message: 'Changes needed',
-            configuration_change_suggestion: suggestion,
-          },
-          providerResponse: {},
-        }),
-      } as Response);
-
-      renderWithTheme(
-        <HttpEndpointConfiguration
-          selectedTarget={initialTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-          bodyError={null}
-          setBodyError={mockSetBodyError}
-          urlError={null}
-          setUrlError={mockSetUrlError}
-        />,
-      );
-
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Configuration Changes Needed')).toBeInTheDocument();
-      });
-
-      const applyButton = screen.getByRole('button', { name: /^Apply$/i });
-      fireEvent.click(applyButton);
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('url', invalidUrl);
-    });
-
-    it('should handle configuration suggestion with empty headers object', async () => {
-      const initialTarget: ProviderOptions = {
-        id: 'http-provider',
-        config: {
-          url: 'https://example.com/api',
-          method: 'POST',
-          headers: { 'X-Initial-Header': 'initial-value' },
-          body: JSON.stringify({ initial: 'body' }),
-        },
-      };
-
-      const suggestion = {
-        headers: {},
-        body: { new: 'body', prompt: '{{prompt}}' },
-      };
-
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            changes_needed: true,
-            message: 'Changes needed',
-            configuration_change_suggestion: suggestion,
-          },
-          providerResponse: {},
-        }),
-      } as Response);
-
-      renderWithTheme(
-        <HttpEndpointConfiguration
-          selectedTarget={initialTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-          bodyError={null}
-          setBodyError={mockSetBodyError}
-          urlError={null}
-          setUrlError={mockSetUrlError}
-        />,
-      );
-
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Configuration Changes Needed')).toBeInTheDocument();
-      });
-
-      const applyAllButton = screen.getByRole('button', { name: /Apply All/i });
-      fireEvent.click(applyAllButton);
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', {});
-
-      expect(screen.queryByDisplayValue('X-Initial-Header')).not.toBeInTheDocument();
-    });
-
-    it('should convert non-string header values to strings when applying configuration suggestions', async () => {
-      const initialTarget: ProviderOptions = {
-        id: 'http-provider',
-        config: {
-          url: 'https://example.com/api',
-          method: 'POST',
-          headers: {},
-          body: JSON.stringify({ initial: 'body' }),
-        },
-      };
-
-      const suggestion = {
-        headers: {
-          'X-Number-Header': 123,
-          'X-Boolean-Header': true,
-          'X-Null-Header': null,
-        },
-        url: 'https://newexample.com/api',
-      };
-
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            changes_needed: true,
-            message: 'Changes needed',
-            configuration_change_suggestion: suggestion,
-          },
-          providerResponse: {},
-        }),
-      } as Response);
-
-      renderWithTheme(
-        <HttpEndpointConfiguration
-          selectedTarget={initialTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-          bodyError={null}
-          setBodyError={mockSetBodyError}
-          urlError={null}
-          setUrlError={mockSetUrlError}
-        />,
-      );
-
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Configuration Changes Needed')).toBeInTheDocument();
-      });
-
-      const applyButtons = await screen.findAllByRole('button', { name: /^Apply$/i });
-      fireEvent.click(applyButtons[0]);
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', {
-        'X-Number-Header': '123',
-        'X-Boolean-Header': 'true',
-        'X-Null-Header': 'null',
-      });
-
-      expect(screen.getByDisplayValue('123')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('true')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('null')).toBeInTheDocument();
-
-      fireEvent.click(applyButtons[1]);
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('url', 'https://newexample.com/api');
-    });
-
-    it('should validate URL and body fields correctly and show appropriate error messages when applying a configuration suggestion that updates both fields', async () => {
-      const initialTarget: ProviderOptions = {
-        id: 'http-provider',
-        config: {
-          url: 'https://example.com/api/initial',
-          method: 'POST',
-          headers: {},
-          body: JSON.stringify({ initial: 'body', prompt: '{{prompt}}' }),
-        },
-      };
-
-      const suggestion = {
-        url: 'https://example.com/api/new',
-        body: JSON.stringify({ new: 'body' }),
-      };
-
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            changes_needed: true,
-            message: 'Changes needed',
-            configuration_change_suggestion: suggestion,
-          },
-          providerResponse: {},
-        }),
-      } as Response);
-
-      renderWithTheme(
-        <HttpEndpointConfiguration
-          selectedTarget={initialTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-          bodyError={null}
-          setBodyError={mockSetBodyError}
-          urlError={null}
-          setUrlError={mockSetUrlError}
-        />,
-      );
-
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(screen.getByText('Configuration Changes Needed')).toBeInTheDocument();
-      });
-
-      const applyAllButton = screen.getByRole('button', { name: /Apply All/i });
-      fireEvent.click(applyAllButton);
-
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('url', suggestion.url);
-      expect(mockUpdateCustomTarget).toHaveBeenCalledWith('body', suggestion.body);
-
-      expect(screen.getByDisplayValue('https://example.com/api/new')).toBeInTheDocument();
-
-      const allTextBoxes = screen.getAllByRole('textbox');
-      const bodyEditor = allTextBoxes.find(
-        (box) => box.textContent === JSON.stringify(suggestion.body, null, 2),
-      );
-      expect(bodyEditor).toBeInTheDocument();
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', suggestion.headers);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('body', suggestion.body);
+    expect(screen.queryByDisplayValue('X-Initial-Header')).not.toBeInTheDocument();
+    expect(screen.getByDisplayValue('X-New-Header')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('new-value')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Content-Type')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('application/json')).toBeInTheDocument();
+    await waitFor(() => {
+      const editorValues = screen
+        .getAllByTestId('code-editor')
+        .map((editor) => (editor as HTMLTextAreaElement).value);
+      expect(editorValues).toContain(JSON.stringify(suggestion.body, null, 2));
     });
   });
 
-  describe('Response Parser Test Modal', () => {
-    it('should pass the latest provider response (savedProviderResponse) as initialTestInput to ResponseParserTestModal after a successful test run', async () => {
-      const initialTarget: ProviderOptions = {
-        id: 'http-provider',
-        config: {
-          url: 'https://example.com/api',
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: 'hello' }),
-          transformResponse: 'json.message',
-        },
-      };
+  it('normalizes non-string suggested header values before updating config', async () => {
+    const suggestion = {
+      headers: {
+        'X-Number-Header': 123,
+        'X-Boolean-Header': true,
+        'X-Null-Header': null,
+      },
+      url: 'https://newexample.com/api',
+    };
+    mockSuggestionsResponse(suggestion);
+    const user = userEvent.setup();
 
-      const mockProviderResponse = {
-        raw: JSON.stringify({ message: 'hello world' }),
-        output: 'hello world',
-      };
+    renderTarget();
 
-      mockCallApi.mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          testResult: {
-            success: true,
-            message: 'Target configuration is valid!',
-          },
-          providerResponse: mockProviderResponse,
-        }),
-      } as Response);
+    await user.click(screen.getByRole('button', { name: /Test Target/i }));
+    expect(await screen.findByText('Configuration Changes Needed')).toBeInTheDocument();
 
-      renderWithTheme(
-        <HttpEndpointConfiguration
-          selectedTarget={initialTarget}
-          updateCustomTarget={mockUpdateCustomTarget}
-          bodyError={null}
-          setBodyError={mockSetBodyError}
-          urlError={null}
-          setUrlError={mockSetUrlError}
-        />,
-      );
+    const applyButtons = screen.getAllByRole('button', { name: /^Apply$/i });
+    await user.click(applyButtons[0]);
 
-      const testTargetButton = screen.getByRole('button', { name: /Test Target/i });
-      fireEvent.click(testTargetButton);
-
-      await waitFor(() => {
-        expect(mockCallApi).toHaveBeenCalled();
-      });
-
-      const testResponseParserButton = screen.getByRole('button', { name: /^Test$/i });
-      fireEvent.click(testResponseParserButton);
-
-      await waitFor(() => {
-        const testInput = screen.getByPlaceholderText('Enter the API response from your endpoint');
-        expect(testInput).toHaveValue(mockProviderResponse.raw);
-      });
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('headers', {
+      'X-Number-Header': '123',
+      'X-Boolean-Header': 'true',
+      'X-Null-Header': 'null',
     });
+    expect(screen.getByDisplayValue('123')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('true')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('null')).toBeInTheDocument();
+
+    await user.click(applyButtons[1]);
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('url', 'https://newexample.com/api');
+  });
+
+  it('passes the latest provider response into the response parser test modal', async () => {
+    const mockProviderResponse = {
+      raw: JSON.stringify({ message: 'hello world' }),
+      output: 'hello world',
+    };
+    mockCallApi.mockResolvedValue(
+      createSuccessfulTestResponse({
+        testResult: {
+          success: true,
+          message: 'Target configuration is valid!',
+        },
+        providerResponse: mockProviderResponse,
+      }),
+    );
+    const user = userEvent.setup();
+
+    renderTarget({
+      ...defaultHttpTarget,
+      config: {
+        ...defaultHttpTarget.config,
+        transformResponse: 'json.message',
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: /Test Target/i }));
+    await waitFor(() =>
+      expect(mockCallApi).toHaveBeenCalledWith('/providers/test', expect.anything()),
+    );
+
+    await user.click(screen.getByRole('button', { name: /^Test$/i }));
+
+    expect(
+      await screen.findByPlaceholderText('Enter the API response from your endpoint'),
+    ).toHaveValue(mockProviderResponse.raw);
   });
 });

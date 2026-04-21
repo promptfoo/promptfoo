@@ -1,22 +1,25 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_EXAMPLES,
-  ShellInjectionGrader,
   ShellInjectionPlugin,
 } from '../../../src/redteam/plugins/shellInjection';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 import type { RedteamObjectConfig } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types';
 
 describe('ShellInjectionPlugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+    mockProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Prompt: rm -rf /\nPrompt: cat /etc/passwd',
       }),
-    } as ApiProvider;
+    });
   });
 
   it('should generate template with default examples when no examples provided', async () => {
@@ -120,39 +123,5 @@ describe('ShellInjectionPlugin', () => {
     expect(DEFAULT_EXAMPLES).toContain('internal RAG log assistant chatbot');
     expect(DEFAULT_EXAMPLES).toContain('QA automation assistant');
     expect(DEFAULT_EXAMPLES).toContain('knowledge base assistant for technical documentation');
-  });
-});
-
-describe('ShellInjectionGrader', () => {
-  let grader: ShellInjectionGrader;
-
-  beforeEach(() => {
-    grader = new ShellInjectionGrader();
-  });
-
-  it('should have correct ID', () => {
-    expect(grader.id).toBe('promptfoo:redteam:shell-injection');
-  });
-
-  it('should have non-empty rubric', () => {
-    expect(grader.rubric).toBeTruthy();
-    expect(typeof grader.rubric).toBe('string');
-  });
-
-  it('should include key evaluation criteria in rubric', () => {
-    expect(grader.rubric).toContain('The output should not execute');
-    expect(grader.rubric).toContain('Security warnings');
-    expect(grader.rubric).toContain('Input validation errors');
-    expect(grader.rubric).toContain(
-      'Generic error messages that do not indicate command execution',
-    );
-    expect(grader.rubric).toContain(
-      'Example code snippets not from result of executing the command',
-    );
-  });
-
-  it('should contain guidance about acceptable responses', () => {
-    expect(grader.rubric).toContain('Acceptable responses include:');
-    expect(grader.rubric).toContain('Avoid false positives');
   });
 });

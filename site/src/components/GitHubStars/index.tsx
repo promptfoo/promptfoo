@@ -1,5 +1,6 @@
-// biome-ignore lint/correctness/noUnusedImports: React is required for JSX
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './styles.module.css';
 
 const CACHE_KEY = 'github_stars_cache_promptfoo';
@@ -12,7 +13,13 @@ interface CachedData {
 }
 
 function formatStarCount(count: number): string {
-  return count >= 1000 ? `${(count / 1000).toFixed(1)}k` : count.toString();
+  if (count < 1000) {
+    return count.toString();
+  }
+
+  const formatted = (count / 1000).toFixed(1);
+  const trimmed = formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted;
+  return `${trimmed}k`;
 }
 
 function getCachedStars(): string | null {
@@ -38,8 +45,10 @@ function setCachedStars(stars: string): void {
   }
 }
 
-export default function GitHubStars(): JSX.Element {
-  const [stars, setStars] = useState<string>(() => getCachedStars() || '8.6k');
+export default function GitHubStars(): React.ReactElement {
+  const [stars, setStars] = useState<string>(
+    () => getCachedStars() || SITE_CONSTANTS.GITHUB_STARS_DISPLAY,
+  );
 
   useEffect(() => {
     // Skip fetch if we have cached data
@@ -50,7 +59,6 @@ export default function GitHubStars(): JSX.Element {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-    // biome-ignore lint/style/noRestrictedGlobals: Browser fetch is appropriate for client-side component
     fetch('https://api.github.com/repos/promptfoo/promptfoo', {
       signal: controller.signal,
     })
@@ -77,7 +85,7 @@ export default function GitHubStars(): JSX.Element {
 
   return (
     <a
-      href="https://github.com/promptfoo/promptfoo"
+      href="https://github.com/promptfoo/promptfoo#readme"
       target="_blank"
       rel="noopener noreferrer"
       className={styles.githubStars}

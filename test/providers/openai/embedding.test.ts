@@ -1,11 +1,14 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -34,7 +37,7 @@ describe('OpenAI Provider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -47,11 +50,12 @@ describe('OpenAI Provider', () => {
         total: 10,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       });
     });
 
     it('should handle API errors', async () => {
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
       const result = await provider.callEmbeddingApi('test text');
       expect(result.error).toBe('API call error: Error: API error');
@@ -67,7 +71,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle HTTP error status', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: { error: { message: 'Unauthorized' } },
         cached: false,
         status: 401,
@@ -82,9 +86,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should validate API key', async () => {
-      // Clear any environment variables that might provide an API key
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const providerNoKey = new OpenAiEmbeddingProvider('text-embedding-3-large', {
@@ -92,17 +94,10 @@ describe('OpenAI Provider', () => {
         });
 
         const result = await providerNoKey.callEmbeddingApi('test text');
-        expect(result.error).toBe(
-          'API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-        );
+        expect(result.error).toBe(getOpenAiMissingApiKeyMessage());
         expect(result.embedding).toBeUndefined();
       } finally {
-        // Always restore original environment state
-        if (originalEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalEnv;
-        } else {
-          delete process.env.OPENAI_API_KEY;
-        }
+        restoreEnv();
       }
     });
   });

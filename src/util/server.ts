@@ -1,18 +1,30 @@
 import chalk from 'chalk';
 import opener from 'opener';
 import { getDefaultPort, VERSION } from '../constants';
-import { fetchWithProxy } from './fetch';
 import logger from '../logger';
 import { getRemoteVersionUrl } from '../redteam/remoteGeneration';
+import { fetchWithProxy } from './fetch/index';
 import { promptYesNo } from './readline';
 
-export enum BrowserBehavior {
-  ASK = 0,
-  OPEN = 1,
-  SKIP = 2,
-  OPEN_TO_REPORT = 3,
-  OPEN_TO_REDTEAM_CREATE = 4,
-}
+export const BrowserBehavior = {
+  ASK: 0,
+  OPEN: 1,
+  SKIP: 2,
+  OPEN_TO_REPORT: 3,
+  OPEN_TO_REDTEAM_CREATE: 4,
+  OPEN_TO_EVAL_SETUP: 5,
+} as const;
+export type BrowserBehavior = (typeof BrowserBehavior)[keyof typeof BrowserBehavior];
+
+// Reverse lookup for BrowserBehavior names
+export const BrowserBehaviorNames: Record<BrowserBehavior, string> = {
+  [BrowserBehavior.ASK]: 'ASK',
+  [BrowserBehavior.OPEN]: 'OPEN',
+  [BrowserBehavior.SKIP]: 'SKIP',
+  [BrowserBehavior.OPEN_TO_REPORT]: 'OPEN_TO_REPORT',
+  [BrowserBehavior.OPEN_TO_REDTEAM_CREATE]: 'OPEN_TO_REDTEAM_CREATE',
+  [BrowserBehavior.OPEN_TO_EVAL_SETUP]: 'OPEN_TO_EVAL_SETUP',
+};
 
 // Cache for feature detection results to avoid repeated version checks
 const featureCache = new Map<string, boolean>();
@@ -113,6 +125,8 @@ export async function openBrowser(
     url = `${baseUrl}/report`;
   } else if (browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE) {
     url = `${baseUrl}/redteam/setup`;
+  } else if (browserBehavior === BrowserBehavior.OPEN_TO_EVAL_SETUP) {
+    url = `${baseUrl}/setup`;
   }
 
   const doOpen = async () => {

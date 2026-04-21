@@ -1,14 +1,17 @@
 import OpenAI from 'openai';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import { OpenAiAssistantProvider } from '../../../src/providers/openai/assistant';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 import type { CallbackContext } from '../../../src/providers/openai/types';
 
-jest.mock('openai');
+vi.mock('openai');
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -20,25 +23,25 @@ describe('OpenAI Provider', () => {
     let mockClient: any;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       mockClient = {
         beta: {
           threads: {
-            createAndRun: jest.fn(),
+            createAndRun: vi.fn(),
             runs: {
-              retrieve: jest.fn(),
-              submitToolOutputs: jest.fn(),
+              retrieve: vi.fn(),
+              submitToolOutputs: vi.fn(),
               steps: {
-                list: jest.fn(),
+                list: vi.fn(),
               },
             },
             messages: {
-              retrieve: jest.fn(),
+              retrieve: vi.fn(),
             },
           },
         },
       };
-      jest.mocked(OpenAI).mockImplementation(function (this: any) {
+      vi.mocked(OpenAI).mockImplementation(function (this: any) {
         Object.assign(this, mockClient);
         return this;
       });
@@ -49,7 +52,7 @@ describe('OpenAI Provider', () => {
         apiKey: 'test-key',
         organization: 'test-org',
         functionToolCallbacks: {
-          test_function: async (args: string) => 'Function result',
+          test_function: async (_args: string) => 'Function result',
         },
       },
     });
@@ -99,6 +102,60 @@ describe('OpenAI Provider', () => {
       expect(mockClient.beta.threads.runs.retrieve).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.runs.steps.list).toHaveBeenCalledTimes(1);
       expect(mockClient.beta.threads.messages.retrieve).toHaveBeenCalledTimes(1);
+    });
+
+    it('should preserve an explicit temperature of 0', async () => {
+      const mockRun = {
+        id: 'run_123',
+        thread_id: 'thread_123',
+        status: 'completed',
+      };
+
+      const mockSteps = {
+        data: [
+          {
+            id: 'step_1',
+            step_details: {
+              type: 'message_creation',
+              message_creation: {
+                message_id: 'msg_1',
+              },
+            },
+          },
+        ],
+      };
+
+      const mockMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'text',
+            text: {
+              value: 'Test response',
+            },
+          },
+        ],
+      };
+
+      mockClient.beta.threads.createAndRun.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.retrieve.mockResolvedValue(mockRun);
+      mockClient.beta.threads.runs.steps.list.mockResolvedValue(mockSteps);
+      mockClient.beta.threads.messages.retrieve.mockResolvedValue(mockMessage);
+
+      const provider = new OpenAiAssistantProvider('test-assistant-id', {
+        config: {
+          apiKey: 'test-key',
+          temperature: 0,
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(mockClient.beta.threads.createAndRun).toHaveBeenCalledWith(
+        expect.objectContaining({
+          temperature: 0,
+        }),
+      );
     });
 
     it('should handle function calling', async () => {
@@ -216,14 +273,46 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle missing API key', async () => {
-      const providerNoKey = new OpenAiAssistantProvider('test-assistant-id');
-      process.env.OPENAI_API_KEY = '';
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
-      await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
-        'OpenAI API key is not set',
-      );
+      try {
+        const providerNoKey = new OpenAiAssistantProvider('test-assistant-id', {
+          env: {
+            OPENAI_API_KEY: undefined,
+          },
+        });
 
-      process.env.OPENAI_API_KEY = 'test-key'; // Restore for other tests
+        await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage(),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_ASSISTANT_API_KEY: undefined,
+      });
+
+      try {
+        const providerNoKey = new OpenAiAssistantProvider('test-assistant-id', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_ASSISTANT_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_ASSISTANT_API_KEY: undefined,
+          },
+        });
+
+        await expect(providerNoKey.callApi('Test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_ASSISTANT_API_KEY'),
+        );
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -231,35 +320,35 @@ describe('OpenAI Provider', () => {
     let mockClient: any;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       disableCache();
 
       mockClient = {
         beta: {
           threads: {
-            createAndRun: jest.fn(),
+            createAndRun: vi.fn(),
             runs: {
-              retrieve: jest.fn(),
-              submitToolOutputs: jest.fn(),
+              retrieve: vi.fn(),
+              submitToolOutputs: vi.fn(),
               steps: {
-                list: jest.fn(),
+                list: vi.fn(),
               },
             },
             messages: {
-              retrieve: jest.fn(),
+              retrieve: vi.fn(),
             },
           },
         },
       };
 
-      jest.mocked(OpenAI).mockImplementation(function (this: any) {
+      vi.mocked(OpenAI).mockImplementation(function (this: any) {
         Object.assign(this, mockClient);
         return this;
       });
     });
 
     it('should pass context to function callbacks', async () => {
-      const mockCallback = jest.fn().mockResolvedValue('test result');
+      const mockCallback = vi.fn().mockResolvedValue('test result');
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {
@@ -346,7 +435,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should work with callbacks that do not use context', async () => {
-      const oldStyleCallback = jest.fn().mockResolvedValue('old style result');
+      const oldStyleCallback = vi.fn().mockResolvedValue('old style result');
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {
@@ -459,18 +548,19 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle callbacks that access context properties', async () => {
-      const contextAwareCallback = jest
-        .fn()
-        .mockImplementation((args: any, context?: CallbackContext) => {
-          const result = {
-            originalArgs: args,
-            contextInfo: {
-              threadId: context?.threadId,
-              provider: context?.provider,
-            },
-          };
-          return Promise.resolve(JSON.stringify(result));
-        });
+      const contextAwareCallback = vi.fn().mockImplementation(function (
+        args: any,
+        context?: CallbackContext,
+      ) {
+        const result = {
+          originalArgs: args,
+          contextInfo: {
+            threadId: context?.threadId,
+            provider: context?.provider,
+          },
+        };
+        return Promise.resolve(JSON.stringify(result));
+      });
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {
@@ -544,7 +634,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle function callback errors gracefully', async () => {
-      const errorCallback = jest.fn().mockRejectedValue(new Error('Callback error'));
+      const errorCallback = vi.fn().mockRejectedValue(new Error('Callback error'));
 
       const provider = new OpenAiAssistantProvider('asst_test', {
         config: {

@@ -1,6 +1,81 @@
-import { JSDOM } from 'jsdom';
+import { parse } from 'parse5';
+import type { DefaultTreeAdapterMap } from 'parse5';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+
+type HtmlNode = DefaultTreeAdapterMap['node'];
+type HtmlChildNode = DefaultTreeAdapterMap['childNode'];
+type HtmlElement = DefaultTreeAdapterMap['element'];
+type HtmlParentNode = DefaultTreeAdapterMap['parentNode'];
+
+// Matches a literal opening tag for html/head/body — the next character must
+// terminate the tag name (whitespace, `>`, or `/`). Without this
+// guard a substring check like `input.includes('<head')` would false-positive
+// on tags that merely share a prefix, e.g. `<headphones>` or `<bodyguard>`.
+const LITERAL_WRAPPER_PATTERNS = {
+  html: /<html(?=[\s>/])/,
+  head: /<head(?=[\s>/])/,
+  body: /<body(?=[\s>/])/,
+} as const;
+
+type WrapperTagName = keyof typeof LITERAL_WRAPPER_PATTERNS;
+
+function isWrapperTagName(tagName: string): tagName is WrapperTagName {
+  return tagName === 'html' || tagName === 'head' || tagName === 'body';
+}
+
+function isTextNode(node: HtmlNode): node is DefaultTreeAdapterMap['textNode'] {
+  return node.nodeName === '#text';
+}
+
+function isElementNode(node: HtmlNode): node is HtmlElement {
+  return 'tagName' in node;
+}
+
+function hasSourceCodeLocation(element: HtmlElement): boolean {
+  return (
+    'sourceCodeLocation' in element &&
+    element.sourceCodeLocation !== null &&
+    element.sourceCodeLocation !== undefined
+  );
+}
+
+function getChildNodes(node: HtmlNode): HtmlChildNode[] {
+  return 'childNodes' in node ? node.childNodes : [];
+}
+
+// Iterative pre-order DFS. Avoids the ~10-15k V8 stack-frame limit on
+// adversarially deep inputs (parse5 imposes no tree-depth cap).
+function findFirstElement(
+  root: HtmlNode,
+  predicate: (element: HtmlElement) => boolean,
+): HtmlElement | undefined {
+  const stack: HtmlNode[] = [root];
+  while (stack.length > 0) {
+    const current = stack.pop() as HtmlNode;
+    if (isElementNode(current) && predicate(current)) {
+      return current;
+    }
+    const children = getChildNodes(current);
+    // Push in reverse so pop() yields document order.
+    for (let i = children.length - 1; i >= 0; i--) {
+      stack.push(children[i]);
+    }
+  }
+  return undefined;
+}
+
+function hasTopLevelText(parentNode: HtmlParentNode): boolean {
+  return parentNode.childNodes.some((node) => isTextNode(node) && Boolean(node.value.trim()));
+}
+
+function isUserProvidedElement(element: HtmlElement, inputLowercase: string): boolean {
+  const tagName = element.tagName.toLowerCase();
+  if (isWrapperTagName(tagName)) {
+    return LITERAL_WRAPPER_PATTERNS[tagName].test(inputLowercase) && hasSourceCodeLocation(element);
+  }
+  return VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-');
+}
 
 // Patterns that indicate HTML content
 const HTML_PATTERNS = {
@@ -78,8 +153,8 @@ function containsHtml(text: string): boolean {
     return true;
   }
 
-  // For edge cases, don't use jsdom as it's too permissive
-  // The pattern-based approach is sufficient for contains-html
+  // The pattern-based approach is intentionally strict for contains-html to avoid
+  // false positives on prose containing stray angle brackets.
   return false;
 }
 
@@ -229,55 +304,30 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
     return { isValid: false, reason: 'Output appears to be XML, not HTML' };
   }
 
-  try {
-    // Parse with jsdom
-    const dom = new JSDOM(trimmed, {
-      contentType: 'text/html',
-    });
+  const document = parse(trimmed, { sourceCodeLocationInfo: true });
+  const inputLowercase = trimmed.toLowerCase();
+  const body = findFirstElement(document, (element) => element.tagName === 'body');
 
-    const { document } = dom.window;
+  // parse5 auto-wraps fragments and plain text in <html><head><body>, so if the
+  // input didn't include <body> itself, treat top-level body text as invalid.
+  const hasUserProvidedBody =
+    body !== undefined &&
+    LITERAL_WRAPPER_PATTERNS.body.test(inputLowercase) &&
+    hasSourceCodeLocation(body);
 
-    // Check if JSDOM wrapped our content (indicates a fragment or plain text)
-    const isWrapped = document.body && !trimmed.toLowerCase().includes('<body');
-
-    if (isWrapped) {
-      // Check what's in the body that JSDOM created
-      const hasText = Array.from(document.body.childNodes).some(
-        (node) => node.nodeType === 3 /* TEXT_NODE */ && node.textContent?.trim(),
-      );
-
-      if (hasText) {
-        // Either plain text or mixed content - both invalid
-        return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
-      }
-    }
-
-    // Find all elements that are actually in the user's input
-    const allElements = document.querySelectorAll('*');
-    const userProvidedElement = Array.from(allElements).find((element) => {
-      const tagName = element.tagName.toLowerCase();
-      // Skip JSDOM's auto-added elements unless user explicitly included them
-      if (
-        ['html', 'head', 'body'].includes(tagName) &&
-        !trimmed.toLowerCase().includes(`<${tagName}`)
-      ) {
-        return false;
-      }
-      // Check if it's a valid HTML element or custom element (with hyphen)
-      return VALID_HTML_ELEMENTS.has(tagName) || tagName.includes('-');
-    });
-
-    if (!userProvidedElement) {
-      return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
-    }
-
-    return { isValid: true, reason: 'Output is valid HTML' };
-  } catch (error) {
-    return {
-      isValid: false,
-      reason: `HTML parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    };
+  if (!hasUserProvidedBody && body && hasTopLevelText(body)) {
+    return { isValid: false, reason: 'Output must be wrapped in HTML tags' };
   }
+
+  const userProvidedElement = findFirstElement(document, (element) =>
+    isUserProvidedElement(element, inputLowercase),
+  );
+
+  if (!userProvidedElement) {
+    return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
+  }
+
+  return { isValid: true, reason: 'Output is valid HTML' };
 }
 
 export const handleContainsHtml = ({

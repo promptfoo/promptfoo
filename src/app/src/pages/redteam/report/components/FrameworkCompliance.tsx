@@ -1,34 +1,49 @@
 import React from 'react';
 
-import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import Grid from '@mui/material/Grid';
-import LinearProgress from '@mui/material/LinearProgress';
-import Typography from '@mui/material/Typography';
+import { Card, CardContent } from '@app/components/ui/card';
+import { cn } from '@app/lib/utils';
+import { formatASRForDisplay } from '@app/utils/redteam';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_COMPLIANCE_IDS,
+  type FrameworkComplianceId,
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import { getProgressColor } from '../utils/color';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import FrameworkCard from './FrameworkCard';
-import { categorizePlugins, expandPluginCollections } from './FrameworkComplianceUtils';
+import {
+  categorizePlugins,
+  expandPluginCollections,
+  type TestResultStats,
+} from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
-import './FrameworkCompliance.css';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
-import { formatASRForDisplay } from '@app/utils/redteam';
-import { type TestResultStats } from './FrameworkComplianceUtils';
+import type { UnifiedConfig } from '@promptfoo/types';
 
 interface FrameworkComplianceProps {
   evalId: string;
   categoryStats: Record<string, Required<TestResultStats>>;
+  config?: Partial<UnifiedConfig>;
 }
 
-const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps) => {
-  const { pluginPassRateThreshold } = useReportStore();
+const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplianceProps) => {
+  const { pluginPassRateThreshold, showUntestedPlugins } = useReportStore();
+
+  // Filter frameworks based on config
+  const frameworksToShow = React.useMemo(() => {
+    const configuredFrameworks = config?.redteam?.frameworks;
+
+    // If not configured or empty, show all frameworks (default behavior)
+    if (!configuredFrameworks || configuredFrameworks.length === 0) {
+      return FRAMEWORK_COMPLIANCE_IDS;
+    }
+
+    // Filter to only show configured frameworks
+    return FRAMEWORK_COMPLIANCE_IDS.filter((id) =>
+      configuredFrameworks.includes(id as FrameworkComplianceId),
+    );
+  }, [config?.redteam?.frameworks]);
 
   const getNonCompliantPlugins = React.useCallback(
     (framework: string) => {
@@ -64,7 +79,7 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
       }
 
       // Find the highest severity among non-compliant plugins
-      let highestSeverity = Severity.Low;
+      let highestSeverity: Severity = Severity.Low;
 
       for (const plugin of nonCompliantPlugins) {
         const pluginSeverity =
@@ -87,21 +102,19 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
   );
 
   const frameworkCompliance = React.useMemo(() => {
-    return FRAMEWORK_COMPLIANCE_IDS.reduce(
-      (acc, framework) => {
-        const nonCompliantPlugins = getNonCompliantPlugins(framework);
-        acc[framework] = nonCompliantPlugins.length === 0;
-        return acc;
-      },
-      {} as Record<string, boolean>,
-    );
-  }, [getNonCompliantPlugins]);
+    const result: Partial<Record<FrameworkComplianceId, boolean>> = {};
+    frameworksToShow.forEach((framework) => {
+      const nonCompliantPlugins = getNonCompliantPlugins(framework);
+      result[framework] = nonCompliantPlugins.length === 0;
+    });
+    return result;
+  }, [frameworksToShow, getNonCompliantPlugins]);
 
   const pluginComplianceStats = React.useMemo(() => {
-    // Collect all unique plugins across all frameworks
+    // Collect all unique plugins across all frameworks to show
     const allFrameworkPlugins = new Set<string>();
 
-    FRAMEWORK_COMPLIANCE_IDS.forEach((framework) => {
+    frameworksToShow.forEach((framework) => {
       const mappings = ALIASED_PLUGIN_MAPPINGS[framework];
       if (!mappings) {
         return;
@@ -137,76 +150,81 @@ const FrameworkCompliance = ({ evalId, categoryStats }: FrameworkComplianceProps
       failedTests: totalFailedTests,
       totalTests,
     };
-  }, [categoryStats, pluginPassRateThreshold]);
+  }, [frameworksToShow, categoryStats, pluginPassRateThreshold]);
+
+  // Get progress bar color based on attack success rate (high is bad)
+  // All colors are red-toned since attacks succeeding is always bad.
+  const getProgressBarColor = (percentage: number): string => {
+    if (percentage >= 90) {
+      return 'bg-red-800';
+    }
+    if (percentage >= 75) {
+      return 'bg-red-700';
+    }
+    if (percentage >= 50) {
+      return 'bg-red-600';
+    }
+    if (percentage >= 25) {
+      return 'bg-red-500';
+    }
+    return 'bg-red-400';
+  };
 
   return (
-    <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5">
+    <div>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-semibold">
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
-          {FRAMEWORK_COMPLIANCE_IDS.length})
-        </Typography>
+          {frameworksToShow.length})
+        </h2>
         <CSVExporter
           categoryStats={categoryStats}
           pluginPassRateThreshold={pluginPassRateThreshold}
+          frameworksToShow={frameworksToShow}
         />
-      </Box>
-      <Card className="framework-compliance-card">
-        <CardContent>
-          <Box display="flex" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="subtitle1" color="textSecondary">
-              {formatASRForDisplay(pluginComplianceStats.attackSuccessRate)}% Attack Success Rate (
-              {pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
-              across {pluginComplianceStats.total} plugins)
-            </Typography>
-          </Box>
-          <LinearProgress
-            variant="determinate"
-            value={pluginComplianceStats.attackSuccessRate} // Show attack success rate (failure rate)
-            sx={{
-              mb: 3,
-              height: 8,
-              borderRadius: 4,
-              backgroundColor: 'rgba(0, 0, 0, 0.1)',
-              '& .MuiLinearProgress-bar': {
-                borderRadius: 4,
-                backgroundColor: (theme) =>
-                  getProgressColor(pluginComplianceStats.attackSuccessRate, theme, true), // Invert color scale
-              },
-            }}
-          />
-          <Grid container spacing={3} className="framework-grid">
-            {FRAMEWORK_COMPLIANCE_IDS.map((framework, idx) => {
+      </div>
+      <Card className="overflow-hidden rounded-xl transition-shadow duration-300">
+        <CardContent className="pt-6">
+          <p className="mb-2 text-sm text-muted-foreground">
+            {formatASRForDisplay(pluginComplianceStats.attackSuccessRate)}% Attack Success Rate (
+            {pluginComplianceStats.failedTests}/{pluginComplianceStats.totalTests} tests failed
+            across {pluginComplianceStats.total} plugins)
+          </p>
+          {/* Progress bar */}
+          <div className="mb-6 h-2 w-full overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all',
+                getProgressBarColor(pluginComplianceStats.attackSuccessRate),
+              )}
+              style={{ width: `${Math.min(100, pluginComplianceStats.attackSuccessRate)}%` }}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {frameworksToShow.map((framework, idx) => {
               const nonCompliantPlugins = getNonCompliantPlugins(framework);
-              const isCompliant = frameworkCompliance[framework];
+              const isCompliant = frameworkCompliance[framework] ?? false;
               const frameworkSeverity = getFrameworkSeverity(framework);
 
               return (
-                <Grid
+                <FrameworkCard
                   key={framework}
-                  size={{
-                    xs: 12,
-                    sm: 6,
-                    md: 4,
-                  }}
-                >
-                  <FrameworkCard
-                    evalId={evalId}
-                    framework={framework}
-                    isCompliant={isCompliant}
-                    frameworkSeverity={frameworkSeverity}
-                    categoryStats={categoryStats}
-                    pluginPassRateThreshold={pluginPassRateThreshold}
-                    nonCompliantPlugins={nonCompliantPlugins}
-                    idx={idx}
-                  />
-                </Grid>
+                  evalId={evalId}
+                  framework={framework}
+                  isCompliant={isCompliant}
+                  frameworkSeverity={frameworkSeverity}
+                  categoryStats={categoryStats}
+                  pluginPassRateThreshold={pluginPassRateThreshold}
+                  nonCompliantPlugins={nonCompliantPlugins}
+                  showUntestedPlugins={showUntestedPlugins}
+                  idx={idx}
+                />
               );
             })}
-          </Grid>
+          </div>
         </CardContent>
       </Card>
-    </Box>
+    </div>
   );
 };
 

@@ -3,6 +3,28 @@ title: ModelAudit Advanced Usage
 sidebar_label: Advanced Usage
 sidebar_position: 120
 description: Automate LLM model scanning across cloud providers with remote storage integration, CI/CD workflows, and programmatic controls for advanced security testing
+keywords:
+  [
+    modelaudit,
+    model scanning,
+    cloud storage,
+    remote model scanning,
+    huggingface,
+    s3 model scanning,
+    gcs model scanning,
+    mlflow,
+    jfrog artifactory,
+    dvc,
+    model authentication,
+    ci cd integration,
+    github actions,
+    gitlab ci,
+    programmatic scanning,
+    sarif output,
+    sbom generation,
+    custom scanners,
+    model security automation,
+  ]
 ---
 
 # Advanced Usage
@@ -174,11 +196,44 @@ promptfoo scan-model models/ \
 # Enable strict mode for enhanced security validation
 promptfoo scan-model model.pkl --strict
 
+# Discover available scanner IDs and class names
+promptfoo scan-model --list-scanners
+
+# Run only selected scanners by ID
+promptfoo scan-model models/ --scanners pickle,tf_savedmodel
+
+# Repeat scanner-selection flags when that is clearer in scripts
+promptfoo scan-model models/ --scanners pickle --scanners tf_savedmodel
+
+# Exclude a scanner from the default scanner set
+promptfoo scan-model models/ --exclude-scanner weight_distribution
+
 # Strict mode with additional output options
 promptfoo scan-model models/ \
   --strict \
   --format sarif \
   --output security-scan.sarif
+```
+
+Use `--scanners` for focused triage scans. Use `--exclude-scanner` when the default scanner set is right except for a noisy or irrelevant scanner.
+
+### Sharing Results
+
+When connected to promptfoo Cloud, model audit results are automatically shared by default. This provides a web-based interface to view, analyze, and collaborate on scan results.
+
+```bash
+# Results are automatically shared when cloud is enabled
+promptfoo scan-model models/
+
+# Explicitly enable sharing
+promptfoo scan-model models/ --share
+
+# Disable sharing for this scan
+promptfoo scan-model models/ --no-share
+
+# Disable sharing globally via environment variable
+export PROMPTFOO_DISABLE_SHARING=true
+promptfoo scan-model models/
 ```
 
 ## CI/CD Integration
@@ -599,16 +654,19 @@ class CustomModelScanner(BaseScanner):
         return result
 ```
 
-Register your custom scanner:
+To integrate your custom scanner, add it to the scanner registry in `modelaudit/scanners/__init__.py`:
 
 ```python
-from modelaudit.scanners import SCANNER_REGISTRY
-from my_custom_scanner import CustomModelScanner
+# In modelaudit/scanners/__init__.py
+from .custom_scanner import CustomModelScanner
 
-# Register the custom scanner
-SCANNER_REGISTRY.append(CustomModelScanner)
-
-# Now you can use it
-from modelaudit.core import scan_model_directory_or_file
-results = scan_model_directory_or_file("path/to/custom_model.mymodel")
+# Add to the registry
+registry.register(
+    "custom_format",
+    lambda: CustomModelScanner,
+    description="Custom model format scanner",
+    module="modelaudit.scanners.custom_scanner"
+)
 ```
+
+Custom scanners require integration into the ModelAudit package structure and cannot be dynamically registered at runtime. For production use, consider contributing your scanner to the ModelAudit project.

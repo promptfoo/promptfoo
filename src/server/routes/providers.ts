@@ -1,54 +1,67 @@
-import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
-import { fromZodError } from 'zod-validation-error';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { createTransformRequest, createTransformResponse } from '../../providers/http';
+import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
 import { loadApiProvider } from '../../providers/index';
 import {
   doTargetPurposeDiscovery,
   type TargetPurposeDiscoveryResult,
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
+import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { ProviderOptionsSchema } from '../../validators/providers';
-import { testHTTPProviderConnectivity, testProviderSession } from '../../validators/testProvider';
+import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
+import { getAvailableProviders } from '../config/serverConfig';
+import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
-import type { ZodError } from 'zod-validation-error';
 
 import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
 
 export const providersRouter = Router();
 
-// Validation schemas
-const TestRequestTransformSchema = z.object({
-  transformCode: z.string().optional(),
-  prompt: z.string(),
-});
+/**
+ * GET /api/providers/config-status
+ *
+ * Returns whether a custom provider configuration exists.
+ * Used by redteam setup UI to determine whether to filter provider types.
+ *
+ * When custom config exists (hasCustomConfig: true), redteam setup restricts
+ * provider types to: http, websocket, python, javascript for testing custom implementations.
+ *
+ * Response:
+ * - hasCustomConfig: Boolean indicating if ui-providers.yaml exists with providers
+ */
+providersRouter.get('/config-status', (_req: Request, res: Response): void => {
+  try {
+    const serverProviders = getAvailableProviders();
+    const hasCustomConfig = serverProviders.length > 0;
 
-const TestResponseTransformSchema = z.object({
-  transformCode: z.string().optional(),
-  response: z.string(),
+    res.json({
+      success: true,
+      data: { hasCustomConfig },
+    });
+  } catch (error) {
+    logger.error('[GET /api/providers/config-status] Error loading config status', { error });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load provider config status',
+    });
+  }
 });
 
 providersRouter.post('/test', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body;
-  let providerOptions: ProviderOptions;
-
-  try {
-    providerOptions = ProviderOptionsSchema.parse(body);
-  } catch (e) {
-    res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+  const bodyResult = ProviderSchemas.Test.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
     return;
   }
 
-  invariant(providerOptions.id, 'id is required');
+  const { providerOptions } = bodyResult.data;
 
   const loadedProvider = await loadApiProvider(providerOptions.id, {
     options: {
-      ...providerOptions,
+      ...(providerOptions as ProviderOptions),
       config: {
         ...providerOptions.config,
         maxRetries: 1,
@@ -56,8 +69,13 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     },
   });
 
-  // Use refactored function
-  const result = await testHTTPProviderConnectivity(loadedProvider);
+  // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
+  // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+  const result = await testProviderConnectivity({
+    provider: loadedProvider,
+    prompt: bodyResult.data.prompt,
+    inputs: providerOptions.inputs || providerOptions.config?.inputs,
+  });
 
   res.status(200).json({
     testResult: {
@@ -80,15 +98,12 @@ providersRouter.post(
     req: Request,
     res: Response<TargetPurposeDiscoveryResult | { error: string }>,
   ): Promise<void> => {
-    const body = req.body;
-    let providerOptions: ProviderOptions;
-    try {
-      providerOptions = ProviderOptionsSchema.parse(body);
-    } catch (e) {
-      res.status(400).json({ error: fromZodError(e as ZodError).toString() });
+    const bodyResult = ProviderSchemas.Discover.Request.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
       return;
     }
-    invariant(providerOptions.id, 'Provider ID (`id`) is required');
+    const providerOptions = bodyResult.data;
 
     // Check that remote generation is enabled:
     if (neverGenerateRemote()) {
@@ -98,7 +113,7 @@ providersRouter.post(
 
     try {
       const loadedProvider = await loadApiProvider(providerOptions.id, {
-        options: providerOptions,
+        options: providerOptions as ProviderOptions,
       });
       const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
 
@@ -108,34 +123,31 @@ providersRouter.post(
         res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
       }
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      const serializedError = dedent`
-        [POST /providers/discover] Error calling target purpose discovery
-        error: ${errorMessage}
-        providerOptions: ${JSON.stringify(providerOptions)}`;
-      logger.error(serializedError);
-      res.status(500).json({ error: serializedError });
+      logger.error('Error calling target purpose discovery', {
+        error: e,
+        providerOptions,
+      });
+      sendError(res, 500, "Discovery failed to discover the target's purpose");
       return;
     }
   },
 );
 
 providersRouter.post('/http-generator', async (req: Request, res: Response): Promise<void> => {
-  const { requestExample, responseExample } = req.body;
-
-  if (!requestExample) {
-    res.status(400).json({ error: 'Request example is required' });
+  const bodyResult = ProviderSchemas.HttpGenerator.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
     return;
   }
+  const { requestExample, responseExample } = bodyResult.data;
 
   const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
 
   try {
-    logger.debug(
-      dedent`[POST /providers/http-generator] Calling HTTP provider generator API
-        requestExample: ${requestExample?.substring(0, 200)}
-        hasResponseExample: ${!!responseExample}`,
-    );
+    logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
+      requestExamplePreview: requestExample?.substring(0, 200),
+      hasResponseExample: !!responseExample,
+    });
 
     const response = await fetchWithProxy(`${HOST}/api/v1/http-provider-generator`, {
       method: 'POST',
@@ -150,14 +162,12 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
 
     if (!response.ok) {
       const errorText = await response.text();
-      logger.error(
-        dedent`[POST /providers/http-generator] Error from cloud API
-          status: ${response.status}
-          error: ${errorText}`,
-      );
+      logger.error('[POST /providers/http-generator] Error from cloud API', {
+        status: response.status,
+        errorText,
+      });
       res.status(response.status).json({
         error: `HTTP error! status: ${response.status}`,
-        details: errorText,
       });
       return;
     }
@@ -166,15 +176,10 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
     logger.debug('[POST /providers/http-generator] Successfully generated config');
     res.status(200).json(data);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(
-      dedent`[POST /providers/http-generator] Error calling HTTP provider generator
-        error: ${errorMessage}`,
-    );
-    res.status(500).json({
-      error: 'Failed to generate HTTP configuration',
-      details: errorMessage,
+    logger.error('[POST /providers/http-generator] Error calling HTTP provider generator', {
+      error,
     });
+    sendError(res, 500, 'Failed to generate HTTP configuration');
   }
 });
 
@@ -182,9 +187,14 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
 providersRouter.post(
   '/test-request-transform',
   async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { transformCode, prompt } = TestRequestTransformSchema.parse(req.body);
+    const bodyResult = ProviderSchemas.TestRequestTransform.Request.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+      return;
+    }
+    const { transformCode, prompt } = bodyResult.data;
 
+    try {
       // Treat empty string as undefined to show base behavior
       const normalizedTransformCode =
         transformCode && transformCode.trim() ? transformCode : undefined;
@@ -207,22 +217,15 @@ providersRouter.post(
         return;
       }
 
-      // Return the result even if it's an empty string or other falsy value
-      // as it might be intentional
       res.json({
         success: true,
         result,
       });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          success: false,
-          error: fromZodError(error).toString(),
-        });
-        return;
-      }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`[POST /providers/test-request-transform] Error: ${errorMessage}`);
+      logger.error('[POST /providers/test-request-transform] Error', {
+        error,
+      });
       res.status(200).json({
         success: false,
         error: errorMessage,
@@ -235,9 +238,14 @@ providersRouter.post(
 providersRouter.post(
   '/test-response-transform',
   async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { transformCode, response: responseText } = TestResponseTransformSchema.parse(req.body);
+    const bodyResult = ProviderSchemas.TestResponseTransform.Request.safeParse(req.body);
+    if (!bodyResult.success) {
+      res.status(400).json({ success: false, error: z.prettifyError(bodyResult.error) });
+      return;
+    }
+    const { transformCode, response: responseText } = bodyResult.data;
 
+    try {
       // Treat empty string as undefined to show base behavior
       const normalizedTransformCode =
         transformCode && transformCode.trim() ? transformCode : undefined;
@@ -254,11 +262,9 @@ providersRouter.post(
       const transformFn = await createTransformResponse(normalizedTransformCode);
       const result = transformFn(jsonData, responseText);
 
-      // Check if result is empty/null/undefined
       // The result is always a ProviderResponse object with an 'output' field
       const output = result?.output ?? result?.raw ?? result;
 
-      // Check if both output and raw are empty
       if (output === null || output === undefined || output === '') {
         res.json({
           success: false,
@@ -269,22 +275,15 @@ providersRouter.post(
         return;
       }
 
-      // If output is empty but raw has content, still return it as success
-      // This handles cases where the result isn't a string but is still valid
       res.json({
         success: true,
         result: output,
       });
     } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          success: false,
-          error: fromZodError(error).toString(),
-        });
-        return;
-      }
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error(`[POST /providers/test-response-transform] Error: ${errorMessage}`);
+      logger.error('[POST /providers/test-response-transform] Error', {
+        error,
+      });
       res.status(200).json({
         success: false,
         error: errorMessage,
@@ -295,13 +294,14 @@ providersRouter.post(
 
 // Test multi-turn session functionality
 providersRouter.post('/test-session', async (req: Request, res: Response): Promise<void> => {
-  const body = req.body;
-  const { provider: providerOptions, sessionConfig } = body;
+  const bodyResult = ProviderSchemas.TestSession.Request.safeParse(req.body);
+  if (!bodyResult.success) {
+    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    return;
+  }
+  const { provider: validatedProvider, sessionConfig, mainInputVariable } = bodyResult.data;
 
   try {
-    const validatedProvider = ProviderOptionsSchema.parse(providerOptions);
-    invariant(validatedProvider.id, 'Provider ID is required');
-
     const loadedProvider = await loadApiProvider(validatedProvider.id, {
       options: {
         ...validatedProvider,
@@ -314,16 +314,22 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       },
     });
 
-    // Use refactored function
-    const result = await testProviderSession(loadedProvider, sessionConfig);
+    // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
+    // Check both top-level inputs (from redteam UI) and config.inputs for backwards compatibility
+    const result = await testProviderSession({
+      provider: loadedProvider,
+      sessionConfig,
+      inputs: validatedProvider.inputs || validatedProvider.config?.inputs,
+      mainInputVariable,
+    });
 
     res.json(result);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.error('[POST /providers/test-session] Error testing session', { error });
     res.status(500).json({
       success: false,
-      message: `Failed to test session: ${errorMessage}`,
-      error: errorMessage,
+      message: 'Failed to test session',
+      error: 'Failed to test session',
     });
   }
 });

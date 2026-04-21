@@ -1,18 +1,16 @@
 import { useMemo } from 'react';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
-import type { SxProps, Theme } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import { Info } from 'lucide-react';
+import { getEstimatedProbes } from './strategies/utils';
 
 import type { Config } from '../types';
-import { getEstimatedProbes } from './strategies/utils';
 
 interface EstimatedProbesDisplayProps {
   config: Config;
   tooltipContent?: string;
-  sx?: SxProps<Theme>;
+  className?: string;
 }
 
 const DEFAULT_TOOLTIP =
@@ -22,37 +20,22 @@ const DEFAULT_TOOLTIP =
 export default function EstimatedProbesDisplay({
   config,
   tooltipContent = DEFAULT_TOOLTIP,
-  sx = {},
+  className,
 }: EstimatedProbesDisplayProps) {
-  const theme = useTheme();
-
   const estimatedProbes = useMemo(() => getEstimatedProbes(config), [config]);
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        mb: 3,
-        p: 2,
-        borderRadius: 1,
-        backgroundColor: theme.palette.background.paper,
-        border: `1px solid ${theme.palette.divider}`,
-        ...sx,
-      }}
+    <div
+      className={cn('mb-6 flex items-center gap-2 rounded-lg border border-border p-4', className)}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-        <Typography variant="body1" color="text.secondary">
-          Estimated Probes:
-        </Typography>
-      </Box>
-      <Typography variant="body1" fontWeight="bold" color="primary.main">
-        {estimatedProbes.toLocaleString()}
-      </Typography>
-      <Tooltip title={tooltipContent}>
-        <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+      <span className="text-muted-foreground">Estimated Probes:</span>
+      <span className="font-bold text-primary">{estimatedProbes.toLocaleString()}</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Info className="size-4 cursor-help text-muted-foreground" />
+        </TooltipTrigger>
+        <TooltipContent>{tooltipContent}</TooltipContent>
       </Tooltip>
-    </Box>
+    </div>
   );
 }

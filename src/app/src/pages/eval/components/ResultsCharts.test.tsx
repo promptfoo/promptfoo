@@ -1,13 +1,15 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsCharts from './ResultsCharts';
 import { useTableStore } from './store';
 
 // Mock Chart.js
 vi.mock('chart.js', () => {
-  const ChartMock = vi.fn().mockImplementation(() => ({
-    destroy: vi.fn(),
-  }));
+  const ChartMock = vi.fn().mockImplementation(function () {
+    return {
+      destroy: vi.fn(),
+    };
+  });
 
   // Add static properties to the mock constructor
   (ChartMock as any).register = vi.fn();
@@ -30,15 +32,6 @@ vi.mock('chart.js', () => {
   };
 });
 
-// Mock MUI theme
-vi.mock('@mui/material/styles', () => ({
-  useTheme: vi.fn(() => ({
-    palette: {
-      mode: 'light',
-    },
-  })),
-}));
-
 // Mock the store
 vi.mock('./store', () => ({
   useTableStore: vi.fn(),
@@ -53,9 +46,7 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 describe('ResultsCharts', () => {
-  const defaultProps = {
-    handleHideCharts: vi.fn(),
-  };
+  const defaultProps = {};
 
   // Helper function to calculate scores using the same logic as ResultsView
   const calculateScores = (table: any): number[] => {
@@ -68,7 +59,7 @@ describe('ResultsCharts', () => {
     vi.clearAllMocks();
   });
 
-  it('should call handleHideCharts when the close button is clicked', () => {
+  it('renders chart canvases without a close button', () => {
     const mockTable = {
       head: {
         prompts: [
@@ -106,14 +97,9 @@ describe('ResultsCharts', () => {
       fetchEvalData: vi.fn(),
     });
 
-    const handleHideCharts = vi.fn();
-
-    render(<ResultsCharts {...defaultProps} handleHideCharts={handleHideCharts} scores={scores} />);
-
-    const closeButton = screen.getByRole('button');
-    fireEvent.click(closeButton);
-
-    expect(handleHideCharts).toHaveBeenCalled();
+    const { container } = render(<ResultsCharts scores={scores} />);
+    expect(screen.queryByRole('button')).toBeNull();
+    expect(container.querySelectorAll('canvas').length).toBeGreaterThan(0);
   });
 
   it('should render without errors with a large number of providers', () => {
@@ -158,9 +144,9 @@ describe('ResultsCharts', () => {
       fetchEvalData: vi.fn(),
     });
 
-    const { container } = render(<ResultsCharts {...defaultProps} scores={scores} />);
+    const { container } = render(<ResultsCharts scores={scores} />);
 
-    expect(() => render(<ResultsCharts {...defaultProps} scores={scores} />)).not.toThrow();
+    expect(() => render(<ResultsCharts scores={scores} />)).not.toThrow();
 
     const canvasElements = container.querySelectorAll('canvas');
     expect(canvasElements.length).toBeGreaterThan(0);

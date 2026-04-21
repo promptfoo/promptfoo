@@ -26,7 +26,7 @@ This is useful for when you want to test a wide range of inputs with the same se
 Let's take the example of a language translation app. We want to test whether the system can accurately translate three phrases ('Hello world', 'Good morning', and 'How are you?') from English to three different languages (Spanish, French, and German).
 
 ```text title="prompts.txt"
-You're a translator.  Translate this into {{language}}: {{input}}
+You're a translator. Translate this into {{language}}: {{input}}
 ---
 Speak in {{language}}: {{input}}
 ```
@@ -78,7 +78,7 @@ scenarios:
 
 This will generate a matrix of tests for each language and input phrase combination, running the same set of assertions on each.
 
-The full source behind this sample is in [`examples/multiple-translations`][1].
+The full source behind this sample is in [`examples/config-multiple-translations`][1].
 
 ## Configuration
 
@@ -137,4 +137,4 @@ scenarios:
 
 This functionality allows you to easily run a wide range of tests without having to manually create each one. It also keeps your configuration file cleaner and easier to read.
 
-[1]: https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-translations
+[1]: https://github.com/promptfoo/promptfoo/tree/main/examples/config-multiple-translations

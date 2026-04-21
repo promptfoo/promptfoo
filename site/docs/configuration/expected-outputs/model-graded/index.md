@@ -5,11 +5,12 @@ description: 'Comprehensive overview of model-graded evaluation techniques lever
 
 # Model-graded metrics
 
-Promptfoo supports several types of model-graded assertions:
+promptfoo supports several types of model-graded assertions:
 
-## Output-based
+Output-based:
 
 - [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) - Promptfoo's general-purpose grader; uses an LLM to evaluate outputs against custom criteria or rubrics.
+- [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) - Like `llm-rubric` but with web search capabilities for verifying current information.
 - [`model-graded-closedqa`](/docs/configuration/expected-outputs/model-graded/model-graded-closedqa) - Checks if LLM answers meet specific requirements using OpenAI's public evals prompts.
 - [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) - Evaluates factual consistency between LLM output and a reference statement. Uses OpenAI's public evals prompt to determine if the output is factually consistent with the reference.
 - [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) - Uses chain-of-thought prompting to evaluate outputs against custom criteria following the G-Eval framework.
@@ -21,15 +22,19 @@ Promptfoo supports several types of model-graded assertions:
 - [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) - Compares multiple outputs from different prompts/providers and selects the best one based on custom criteria.
 - [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) - Selects the output with the highest aggregate score based on other assertion results.
 
-## Context-based
+Context-based:
 
-- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - Evaluates whether retrieved context contains the information needed to answer a given question or support a ground truth fact.
-- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Evaluates whether retrieved context is relevant and useful for answering the original query.
-- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Evaluates whether the LLM output is factually supported by and consistent with the provided context.
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
 
-## Conversational
+Conversational:
 
-- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - Evaluates whether responses remain relevant and contextually appropriate throughout multi-turn conversations.
+- [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - ensure that responses remain relevant throughout a conversation
+
+Trajectory-based:
+
+- [`trajectory:goal-success`](#trajectorygoal-success) - uses an LLM judge to decide whether a traced agent run achieved its goal
 
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
@@ -52,6 +57,34 @@ assert:
     # Make sure the LLM output is consistent with this statement:
     value: Sacramento is the capital of California
 ```
+
+## trajectory:goal-success {#trajectorygoal-success}
+
+Use `trajectory:goal-success` when you care about whether an agent actually completed a task, not just whether it used a specific tool or produced a plausible final sentence.
+
+This assertion requires trace data. Promptfoo summarizes the traced trajectory, includes the final output, and asks a grading model whether the run achieved the goal you specify.
+
+```yaml
+tests:
+  - vars:
+      order_id: '123'
+    assert:
+      - type: trajectory:goal-success
+        value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
+```
+
+Like other model-graded assertions, you can set `threshold`, `provider`, or `rubricPrompt`:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:goal-success
+        value: Resolve the user's issue and provide the correct next step
+        threshold: 0.8
+        provider: openai:gpt-5-mini
+```
+
+This works best alongside deterministic trajectory checks such as [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used), [`trajectory:tool-args-match`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match), or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) when the exact path through the task also matters.
 
 Example of pi scorer:
 
@@ -106,7 +139,7 @@ This produces German reasoning: `{"reason": "Die Antwort ist hilfreich und klar.
 
 For more language options and alternative approaches, see the [llm-rubric language guide](/docs/configuration/expected-outputs/model-graded/llm-rubric#non-english-evaluation).
 
-Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
+Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-self-grading)):
 
 [![LLM prompt quality evaluation with PASS/FAIL expectations](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
 
@@ -116,7 +149,7 @@ You can use test `vars` in the LLM rubric. This example uses the `question` vari
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -143,7 +176,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -168,7 +201,7 @@ prompts:
   - 'Write a comprehensive summary of {{article}} with key points'
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -188,12 +221,12 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do not have access to `gpt-4.1-2025-04-14` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts use `gpt-5` for grading. If you do not have access to `gpt-5` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
-   ```bash
-   promptfoo eval --grader openai:gpt-4.1-mini
+   ```
+   promptfoo eval --grader openai:gpt-5-mini
    ```
 
 2. Using `test.options` or `defaultTest.options` on a per-test or testsuite basis:
@@ -201,7 +234,7 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4.1-mini
+       provider: openai:gpt-5-mini
    tests:
      - description: Use LLM to evaluate output
        assert:
@@ -217,17 +250,27 @@ By default, model-graded asserts use `gpt-4.1-2025-04-14` for grading. If you do
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
-           provider: openai:gpt-4.1-mini
+           provider: openai:gpt-5-mini
    ```
 
-Use the `provider.config` field to set custom parameters:
+Use the `provider.config` field to set custom parameters such as `temperature`, `max_tokens`, or API host:
 
 ```yaml
-provider:
-  - id: openai:gpt-4.1-mini
-    config:
-      temperature: 0
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Is not apologetic and provides a clear, concise answer
+        provider:
+          id: openai:gpt-5-mini
+          config:
+            temperature: 0
 ```
+
+This works at every level where a grader can be set — per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
+
+:::note
+The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. GPT-5 series reasoning models ignore `temperature` entirely.
+:::
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.
 
@@ -291,16 +334,16 @@ defaultTest:
       ]
 ```
 
-See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
+See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/eval-custom-grading-prompt/promptfooconfig.yaml).
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-4.1`.
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-5.
 
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4.1
+    provider: openai:gpt-5
     rubricPrompt: |
       [
         { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
@@ -324,11 +367,19 @@ Classifiers can be used to detect tone, bias, toxicity, helpfulness, and much mo
 
 ---
 
-## Defining context for context-based assertions
+## Context-based
+
+Context-based assertions are a special class of model-graded assertions that evaluate whether the LLM's output is supported by context provided at inference time. They are particularly useful for evaluating RAG systems.
+
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) - ensure that ground truth appears in context
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - ensure that context is relevant to original query
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - ensure that LLM output is supported by context
+
+### Defining context
 
 Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
 
-### Statically via test variables
+#### Statically via test variables
 
 Set `context` as a variable in your test case:
 
@@ -342,7 +393,7 @@ tests:
         threshold: 0.8
 ```
 
-### Dynamically via Context Transform
+#### Dynamically via Context Transform
 
 Defining `contextTransform` allows you to construct context from provider responses. This is particularly useful for RAG systems.
 
@@ -439,7 +490,7 @@ prompts:
     Respond to this query: {{query}}
     Here is some context that you can use to write your response: {{context}}
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -483,7 +534,7 @@ prompts:
     You are an internal corporate chatbot.
     Respond to this query: {{query}}
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -511,8 +562,7 @@ providers:
 tests:
   - vars:
       prompt: '{"answer": "Paris is the capital of France", "confidence": 0.95}'
-      context: 'France is a country in Europe. Paris is the capital of France. Paris has over 2 million residents.'
-      query: 'What is the capital of France?'
+      context: 'France is a country in Europe. Its capital city is Paris, which has over 2 million residents.'
     assert:
       - type: context-faithfulness
         transform: 'JSON.parse(output).answer' # Grade only the answer field
@@ -521,7 +571,7 @@ tests:
       - type: context-recall
         transform: 'JSON.parse(output).answer' # Check if answer appears in context
         value: 'Paris is the capital of France'
-        threshold: 0.1
+        threshold: 0.8
 ```
 
 ### Context transform: Extract context from provider response
@@ -537,11 +587,11 @@ tests:
     assert:
       - type: context-faithfulness
         transform: 'JSON.parse(output).answer'
-        contextTransform: 'JSON.parse(context.vars.prompt).sources.join(". ")' # Extract sources as context
+        contextTransform: 'JSON.parse(output).sources.join(". ")' # Extract sources as context
         threshold: 0.9
 
       - type: context-relevance
-        contextTransform: 'JSON.parse(context.vars.prompt).sources.join(". ")' # Check if context is relevant to query
+        contextTransform: 'JSON.parse(output).sources.join(". ")' # Check if context is relevant to query
         threshold: 0.8
 ```
 
@@ -562,6 +612,8 @@ tests:
         contextTransform: 'output.documents.map(d => d.text).join(" ")' # Extract documents as context
         threshold: 0.85
 ```
+
+**Processing order:** API call → `transformResponse` → `transform` → `contextTransform` → context assertion
 
 ## Common patterns and troubleshooting
 

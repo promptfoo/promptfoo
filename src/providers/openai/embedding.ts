@@ -11,7 +11,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     // Validate API key first (like chat provider)
     if (this.requiresApiKey() && !this.getApiKey()) {
       return {
-        error: `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`,
+        error: this.getMissingApiKeyErrorMessage(),
       };
     }
 
@@ -32,14 +32,16 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     let statusText: string | undefined;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let cached = false;
+    let latencyMs: number | undefined;
     try {
+      const apiKey = this.getApiKey();
       const response = await fetchWithCache(
         `${this.getApiUrl()}/embeddings`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
             ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
             ...this.config.headers,
           },
@@ -50,7 +52,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
         false,
         this.config.maxRetries,
       );
-      ({ data, cached, status, statusText, deleteFromCache } = response as any);
+      ({ data, cached, status, statusText, latencyMs, deleteFromCache } = response as any);
 
       // Check HTTP status like chat provider
       if (status && (status < 200 || status >= 300)) {
@@ -75,6 +77,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       }
       return {
         embedding,
+        latencyMs,
         tokenUsage: getTokenUsage(data, cached),
       };
     } catch (err) {

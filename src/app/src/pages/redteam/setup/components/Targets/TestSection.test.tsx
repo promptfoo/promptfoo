@@ -1,25 +1,27 @@
 import React from 'react';
 
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSection, { type TestResult } from './TestSection';
+
 import type { ProviderOptions } from '../../types';
 
-const renderWithTheme = (ui: React.ReactElement) => {
-  const theme = createTheme({ palette: { mode: 'light' } });
-  return render(<ThemeProvider theme={theme}>{ui}</ThemeProvider>);
-};
+const renderWithProviders = (ui: React.ReactElement) =>
+  render(<TooltipProvider>{ui}</TooltipProvider>);
 
 describe('TestSection', () => {
-  let mockHandleTestTarget: ReturnType<typeof vi.fn>;
-  let mockOnApplyConfigSuggestion: ReturnType<typeof vi.fn>;
-  let baseProps: any;
+  let mockHandleTestTarget: ReturnType<typeof vi.fn<() => void>>;
+  let mockOnApplyConfigSuggestion: ReturnType<
+    typeof vi.fn<(field: string, value: unknown) => void>
+  >;
+  let mockOnDetailsExpandedChange: ReturnType<typeof vi.fn<(expanded: boolean) => void>>;
+  let baseProps: React.ComponentProps<typeof TestSection>;
 
   beforeEach(() => {
-    mockHandleTestTarget = vi.fn();
-    mockOnApplyConfigSuggestion = vi.fn();
+    mockHandleTestTarget = vi.fn<() => void>();
+    mockOnApplyConfigSuggestion = vi.fn<(field: string, value: unknown) => void>();
+    mockOnDetailsExpandedChange = vi.fn<(expanded: boolean) => void>();
     baseProps = {
       selectedTarget: {
         id: 'http:custom',
@@ -32,6 +34,8 @@ describe('TestSection', () => {
       testResult: null,
       handleTestTarget: mockHandleTestTarget,
       disabled: false,
+      detailsExpanded: false,
+      onDetailsExpandedChange: mockOnDetailsExpandedChange,
       onApplyConfigSuggestion: mockOnApplyConfigSuggestion,
     };
   });
@@ -48,28 +52,28 @@ describe('TestSection', () => {
         },
       };
 
-      renderWithTheme(<TestSection {...baseProps} testResult={testResultWithSuggestion} />);
+      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithSuggestion} />);
 
-      const headersLabel = screen.getByText('headers:');
-      const suggestionContainer = headersLabel.closest('div[class*="MuiBox-root"]')?.parentElement;
-      expect(suggestionContainer).toBeInTheDocument();
+      const suggestionContainer = screen.getByTestId('config-suggestion-headers');
+      expect(within(suggestionContainer).getByText('headers')).toBeInTheDocument();
 
-      const { getByRole: getByRoleInContainer } = within(suggestionContainer as HTMLElement);
-      const applyButton = getByRoleInContainer('button', { name: 'Apply' });
-
+      const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
       fireEvent.click(applyButton);
 
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('headers', suggestedHeaders);
 
       await waitFor(() => {
-        const { getByRole, queryByRole } = within(suggestionContainer as HTMLElement);
-        expect(getByRole('button', { name: 'Test' })).toBeInTheDocument();
-        expect(queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
+        expect(
+          within(suggestionContainer).getByRole('button', { name: 'Test' }),
+        ).toBeInTheDocument();
+        expect(
+          within(suggestionContainer).queryByRole('button', { name: 'Apply' }),
+        ).not.toBeInTheDocument();
       });
 
-      expect(suggestionContainer).toHaveStyle('background-color: rgba(76, 175, 80, 0.1)');
-      expect(suggestionContainer).toHaveStyle('border: 1px solid rgba(76, 175, 80, 0.3)');
+      expect(suggestionContainer).toHaveClass('border-emerald-500/50');
+      expect(suggestionContainer).toHaveClass('bg-emerald-500/10');
     });
 
     it("should call onApplyConfigSuggestion for each field in configuration_change_suggestion and mark all fields as applied when the user clicks 'Apply All'", async () => {
@@ -84,7 +88,7 @@ describe('TestSection', () => {
         },
       };
 
-      renderWithTheme(
+      renderWithProviders(
         <TestSection {...baseProps} testResult={testResultWithMultipleSuggestions} />,
       );
 
@@ -97,27 +101,14 @@ describe('TestSection', () => {
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledWith('url', 'https://newurl.com');
 
       await waitFor(() => {
-        const testButtons = screen.getAllByRole('button', { name: 'Test' });
-        const applyAllTestButton = testButtons.find((button) =>
-          button.classList.contains('MuiButton-contained'),
-        );
-        expect(applyAllTestButton).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: 'Test' })).toHaveLength(4);
       });
 
-      const header1Label = screen.getByText('header1:');
-      const header1Container = header1Label.closest('div[class*="MuiBox-root"]')?.parentElement;
-      expect(header1Container).toHaveStyle('background-color: rgba(76, 175, 80, 0.1)');
-      expect(header1Container).toHaveStyle('border: 1px solid rgba(76, 175, 80, 0.3)');
-
-      const bodyLabel = screen.getByText('body:');
-      const bodyContainer = bodyLabel.closest('div[class*="MuiBox-root"]')?.parentElement;
-      expect(bodyContainer).toHaveStyle('background-color: rgba(76, 175, 80, 0.1)');
-      expect(bodyContainer).toHaveStyle('border: 1px solid rgba(76, 175, 80, 0.3)');
-
-      const urlLabel = screen.getByText('url:');
-      const urlContainer = urlLabel.closest('div[class*="MuiBox-root"]')?.parentElement;
-      expect(urlContainer).toHaveStyle('background-color: rgba(76, 175, 80, 0.1)');
-      expect(urlContainer).toHaveStyle('border: 1px solid rgba(76, 175, 80, 0.3)');
+      for (const field of ['header1', 'body', 'url']) {
+        const suggestionContainer = screen.getByTestId(`config-suggestion-${field}`);
+        expect(suggestionContainer).toHaveClass('border-emerald-500/50');
+        expect(suggestionContainer).toHaveClass('bg-emerald-500/10');
+      }
     });
 
     it('should handle complex nested objects in configuration_change_suggestion values', () => {
@@ -137,17 +128,13 @@ describe('TestSection', () => {
         },
       };
 
-      renderWithTheme(<TestSection {...baseProps} testResult={testResultWithNestedObject} />);
+      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithNestedObject} />);
 
-      const nestedConfigLabel = screen.getByText('nestedConfig:');
-      const suggestionContainer = nestedConfigLabel.closest(
-        'div[class*="MuiBox-root"]',
-      )?.parentElement;
-      expect(suggestionContainer).toBeInTheDocument();
+      const suggestionContainer = screen.getByTestId('config-suggestion-nestedConfig');
+      expect(within(suggestionContainer).getByText('nestedConfig')).toBeInTheDocument();
+      expect(screen.getByText('"deepValue"', { exact: false })).toBeInTheDocument();
 
-      const { getByRole: getByRoleInContainer } = within(suggestionContainer as HTMLElement);
-      const applyButton = getByRoleInContainer('button', { name: 'Apply' });
-
+      const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
       fireEvent.click(applyButton);
 
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
@@ -161,7 +148,7 @@ describe('TestSection', () => {
         configuration_change_suggestion: undefined,
       };
 
-      renderWithTheme(<TestSection {...baseProps} testResult={testResultWithNullSuggestion} />);
+      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithNullSuggestion} />);
 
       expect(screen.getByText('Test Target Configuration')).toBeInTheDocument();
     });
@@ -173,7 +160,7 @@ describe('TestSection', () => {
         configuration_change_suggestion: undefined,
       };
 
-      renderWithTheme(
+      renderWithProviders(
         <TestSection {...baseProps} testResult={testResultWithUndefinedSuggestion} />,
       );
 
@@ -192,14 +179,12 @@ describe('TestSection', () => {
         },
       };
 
-      renderWithTheme(<TestSection {...baseProps} testResult={testResultWithInvalidJson} />);
+      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithInvalidJson} />);
 
-      const bodyLabel = screen.getByText('body:');
-      const suggestionContainer = bodyLabel.closest('div[class*="MuiBox-root"]')?.parentElement;
-      expect(suggestionContainer).toBeInTheDocument();
+      const suggestionContainer = screen.getByTestId('config-suggestion-body');
+      expect(within(suggestionContainer).getByText('body')).toBeInTheDocument();
 
-      const { getByRole: getByRoleInContainer } = within(suggestionContainer as HTMLElement);
-      const applyButton = getByRoleInContainer('button', { name: 'Apply' });
+      const applyButton = within(suggestionContainer).getByRole('button', { name: 'Apply' });
       fireEvent.click(applyButton);
 
       expect(mockOnApplyConfigSuggestion).toHaveBeenCalledTimes(1);
@@ -217,12 +202,11 @@ describe('TestSection', () => {
         },
       };
 
-      renderWithTheme(<TestSection {...baseProps} testResult={testResultWithLongValue} />);
+      renderWithProviders(<TestSection {...baseProps} testResult={testResultWithLongValue} />);
 
-      const longValueElement = screen.getByText(longValue);
-      expect(longValueElement).toBeInTheDocument();
-
-      expect(longValueElement).toHaveStyle('word-break: break-word');
+      const longValueElement = screen.getByTestId('config-suggestion-long_header-value');
+      expect(longValueElement).toHaveTextContent(longValue);
+      expect(longValueElement).toHaveClass('break-all');
     });
   });
 });

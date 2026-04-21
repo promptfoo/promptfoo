@@ -1,14 +1,15 @@
+import { describe, expect, it } from 'vitest';
 import {
-  parseModelAuditArgs,
-  validateModelAuditArgs,
-  suggestReplacements,
+  DEPRECATED_OPTIONS_MAP,
   formatUnsupportedArgsError,
   isValidFormat,
-  validateModelAuditOptions,
-  safeValidateModelAuditOptions,
-  VALID_MODELAUDIT_OPTIONS,
-  DEPRECATED_OPTIONS_MAP,
   type ModelAuditCliOptions,
+  parseModelAuditArgs,
+  safeValidateModelAuditOptions,
+  suggestReplacements,
+  VALID_MODELAUDIT_OPTIONS,
+  validateModelAuditArgs,
+  validateModelAuditOptions,
 } from '../../src/util/modelAuditCliParser';
 
 describe('ModelAudit CLI Parser', () => {
@@ -205,14 +206,13 @@ describe('ModelAudit CLI Parser', () => {
     });
 
     it('should return null for options with no replacement', () => {
-      const deprecated = ['--registry-uri', '--cache-dir', '--stream'];
+      const deprecated = ['--registry-uri', '--cache-dir'];
 
       const suggestions = suggestReplacements(deprecated);
 
       expect(suggestions).toEqual({
         '--registry-uri': null,
         '--cache-dir': null,
-        '--stream': null,
       });
     });
 
@@ -299,6 +299,10 @@ describe('ModelAudit CLI Parser', () => {
         '--max-size',
         '--dry-run',
         '--no-cache',
+        '--stream',
+        '--scanners',
+        '--exclude-scanner',
+        '--list-scanners',
       ];
 
       expectedOptions.forEach((option) => {
@@ -418,6 +422,51 @@ describe('ModelAudit CLI Parser', () => {
         };
 
         expect(() => parseModelAuditArgs(paths, invalidOptions)).toThrow();
+      });
+    });
+
+    describe('scanner selection options', () => {
+      it('should parse selected scanners and excluded scanners', () => {
+        const result = parseModelAuditArgs(['model.pkl'], {
+          scanners: ['pickle,tf_savedmodel', 'PickleScanner'],
+          excludeScanner: ['weight_distribution'],
+        });
+
+        expect(result.args).toEqual([
+          'scan',
+          'model.pkl',
+          '--scanners',
+          'pickle,tf_savedmodel',
+          '--scanners',
+          'PickleScanner',
+          '--exclude-scanner',
+          'weight_distribution',
+        ]);
+      });
+
+      it('should parse scanner catalog listing without paths', () => {
+        const result = parseModelAuditArgs([], {
+          listScanners: true,
+          format: 'json',
+        });
+
+        expect(result.args).toEqual(['scan', '--format', 'json', '--list-scanners']);
+      });
+
+      it('should validate scanner selection arguments as supported', () => {
+        const result = validateModelAuditArgs([
+          'scan',
+          '--list-scanners',
+          '--format',
+          'json',
+          '--scanners',
+          'pickle',
+          '--exclude-scanner',
+          'weight_distribution',
+        ]);
+
+        expect(result.valid).toBe(true);
+        expect(result.unsupportedArgs).toEqual([]);
       });
     });
   });

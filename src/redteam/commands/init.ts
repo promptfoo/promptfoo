@@ -206,7 +206,7 @@ export function renderRedteamConfig({
 }
 
 export async function redteamInit(directory: string | undefined) {
-  telemetry.record('command_used', { name: 'redteam init - started' });
+  telemetry.record('redteam init', { phase: 'started' });
   recordOnboardingStep('start');
 
   const projectDir = directory || '.';
@@ -314,16 +314,20 @@ export async function redteamInit(directory: string | undefined) {
       { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
       { name: 'openai:gpt-5', value: 'openai:gpt-5' },
       {
+        name: 'anthropic:claude-opus-4-6',
+        value: 'anthropic:messages:claude-opus-4-6',
+      },
+      {
+        name: 'anthropic:claude-opus-4-5-20251101',
+        value: 'anthropic:messages:claude-opus-4-5-20251101',
+      },
+      {
         name: 'anthropic:claude-sonnet-4-5-20250929',
         value: 'anthropic:messages:claude-sonnet-4-5-20250929',
       },
       {
         name: 'anthropic:claude-opus-4-1-20250805',
         value: 'anthropic:messages:claude-opus-4-1-20250805',
-      },
-      {
-        name: 'anthropic:claude-opus-4-20250514',
-        value: 'anthropic:messages:claude-opus-4-20250514',
       },
       {
         name: 'anthropic:claude-3-7-sonnet-20250219',
@@ -626,6 +630,7 @@ export async function redteamInit(directory: string | undefined) {
   );
 
   telemetry.record('command_used', { name: 'redteam init' });
+  telemetry.record('redteam init', { phase: 'completed' });
   await recordOnboardingStep('finish');
 
   if (deferGeneration) {

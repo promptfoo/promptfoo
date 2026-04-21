@@ -7,7 +7,7 @@ prompts:
   - "You are a helpful assistant. Reply with a concise answer to this inquiry: '{{question}}'"
 
 providers:
-  - id: 'vertex:gemini-1.5-flash'
+  - id: 'vertex:gemini-2.5-flash'
     config:
       systemInstruction:
         parts:

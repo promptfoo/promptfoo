@@ -1,14 +1,9 @@
-import { v4 as uuidv4 } from 'uuid';
-
-import { jest } from '@jest/globals';
-
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createTreeNode,
   evaluateResponse,
   getNewPrompt,
-  MAX_WIDTH,
+  DEFAULT_MAX_WIDTH as MAX_WIDTH,
   renderSystemPrompts,
   selectNodes,
   updateRedteamHistory,
@@ -19,20 +14,33 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getNunjucksEngine } from '../../../src/util/templates';
+import {
+  accumulateResponseTokenUsage,
+  createEmptyTokenUsage,
+} from '../../../src/util/tokenUsageUtils';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
+
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
-  ApiProvider,
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
-} from '../../../src/types';
-import { getNunjucksEngine } from '../../../src/util/templates';
+} from '../../../src/types/index';
 
-jest.mock('../../../src/providers/openai');
-jest.mock('../../../src/util/templates');
-jest.mock('../../../src/redteam/graders', () => ({
-  getGraderById: jest.fn(),
-}));
+vi.mock('../../../src/providers/openai');
+// Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getGraderById: vi.fn(),
+  };
+});
 
 describe('RedteamIterativeProvider', () => {
   describe('renderSystemPrompts', () => {
@@ -53,16 +61,70 @@ describe('RedteamIterativeProvider', () => {
       expect(result.redteamSystemPrompt).toBe(attackerPrompt);
       expect(result.judgeSystemPrompt).toBe(JUDGE_SYSTEM_PROMPT);
     });
+
+    it('should include modifiers in system prompts when provided', () => {
+      const goal = 'test goal';
+      const purpose = 'test purpose';
+      const modifiers = {
+        testGenerationInstructions: 'Generate prompts as invoice notes',
+        language: 'Spanish',
+      };
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, purpose, false, modifiers);
+
+      // Verify modifiers are included in the system prompt
+      expect(result.redteamSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).toContain('<Modifiers>');
+      expect(result.redteamSystemPrompt).toContain(
+        'testGenerationInstructions: Generate prompts as invoice notes',
+      );
+      expect(result.redteamSystemPrompt).toContain('language: Spanish');
+      expect(result.redteamSystemPrompt).toContain('Rewrite ALL prompts to fully comply');
+    });
+
+    it('should include modifiers with cloud attacker prompt', () => {
+      const goal = 'test goal';
+      const modifiers = {
+        testGenerationInstructions: 'Use merchant terminology',
+      };
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, true, modifiers);
+
+      // Verify modifiers are included in cloud attacker prompt
+      expect(result.redteamSystemPrompt).toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).toContain(
+        'testGenerationInstructions: Use merchant terminology',
+      );
+    });
+
+    it('should not include modifiers section when modifiers are empty', () => {
+      const goal = 'test goal';
+      const modifiers = {};
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, false, modifiers);
+
+      // Should not contain the modifiers section
+      expect(result.redteamSystemPrompt).not.toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).not.toContain('<Modifiers>');
+    });
+
+    it('should not include modifiers section when modifiers are undefined', () => {
+      const goal = 'test goal';
+
+      const result = renderSystemPrompts(getNunjucksEngine(), goal, undefined, false, undefined);
+
+      // Should not contain the modifiers section
+      expect(result.redteamSystemPrompt).not.toContain('CRITICAL: Ensure all generated prompts');
+      expect(result.redteamSystemPrompt).not.toContain('<Modifiers>');
+    });
   });
 
   describe('evaluateResponse', () => {
-    let mockRedteamProvider: jest.Mocked<OpenAiChatCompletionProvider>;
+    let mockRedteamProvider: MockApiProvider;
 
     beforeEach(() => {
-      mockRedteamProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn(),
-      } as unknown as jest.Mocked<OpenAiChatCompletionProvider>;
+      mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
+      mockRedteamProvider.callApi.mockReset();
     });
 
     it('should evaluate response correctly without penalized phrase', async () => {
@@ -166,13 +228,11 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('getNewPrompt', () => {
-    let mockRedteamProvider: jest.Mocked<OpenAiChatCompletionProvider>;
+    let mockRedteamProvider: MockApiProvider;
 
     beforeEach(() => {
-      mockRedteamProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn(),
-      } as unknown as jest.Mocked<OpenAiChatCompletionProvider>;
+      mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
+      mockRedteamProvider.callApi.mockReset();
     });
 
     it('should generate a new prompt correctly', async () => {
@@ -255,6 +315,71 @@ describe('RedteamIterativeProvider', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('Abort Signal Handling', () => {
+    let mockRedteamProvider: MockApiProvider;
+
+    beforeEach(() => {
+      mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
+      mockRedteamProvider.callApi.mockReset();
+    });
+
+    it('should re-throw AbortError from evaluateResponse and not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock callApi to throw AbortError
+      mockRedteamProvider.callApi.mockRejectedValue(abortError);
+
+      await expect(
+        evaluateResponse(mockRedteamProvider, 'Judge prompt', 'Response', 'Best', false),
+      ).rejects.toThrow('The operation was aborted');
+    });
+
+    it('should re-throw AbortError from getNewPrompt primary parse failure', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock callApi to throw AbortError
+      mockRedteamProvider.callApi.mockRejectedValue(abortError);
+
+      await expect(getNewPrompt(mockRedteamProvider, [])).rejects.toThrow(
+        'The operation was aborted',
+      );
+    });
+
+    it('should handle non-AbortError parse failures gracefully in evaluateResponse', async () => {
+      // Return unparseable output - should return default score
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: 'not valid json at all',
+      });
+
+      const result = await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Response',
+        'Best',
+        false,
+      );
+
+      // Should return default score instead of throwing
+      expect(result.score).toBe(1);
+      expect(result.explanation).toBe('Failed to parse judge response');
+    });
+
+    it('should handle non-AbortError parse failures gracefully in getNewPrompt', async () => {
+      // Return unparseable output - should skip turn gracefully
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: 'definitely not JSON',
+      });
+
+      const result = await getNewPrompt(mockRedteamProvider, []);
+
+      // Should return skip marker instead of throwing
+      expect(result.improvement).toBe('parse failure – skipping turn');
+      expect(result.prompt).toBe('');
     });
   });
 
@@ -377,13 +502,11 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('getTargetResponse', () => {
-    let mockTargetProvider: jest.Mocked<ApiProvider>;
+    let mockTargetProvider: MockApiProvider;
 
     beforeEach(() => {
-      mockTargetProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn<ApiProvider['callApi']>(),
-      } as jest.Mocked<ApiProvider>;
+      mockTargetProvider = createMockProvider({ id: 'mock-provider' });
+      mockTargetProvider.callApi.mockReset();
     });
 
     it('should get target response correctly', async () => {
@@ -443,7 +566,7 @@ describe('TreeNode', () => {
     });
 
     it('should use provided UUID if given', () => {
-      const customId = uuidv4();
+      const customId = crypto.randomUUID();
       const node = createTreeNode('prompt', 5, 0, customId);
       expect(node.id).toBe(customId);
     });
@@ -452,8 +575,8 @@ describe('TreeNode', () => {
 
 describe('Tree Structure', () => {
   it('should track parent-child relationships in treeOutputs', async () => {
-    const parentId = uuidv4();
-    const childId = uuidv4();
+    const parentId = crypto.randomUUID();
+    const childId = crypto.randomUUID();
     const parentNode = createTreeNode('parent', 5, 0, parentId);
     const childNode = createTreeNode('child', 7, 1, childId);
 
@@ -583,23 +706,19 @@ describe('Tree Structure', () => {
 });
 
 describe('Tree Structure and Metadata', () => {
-  let mockRedteamProvider: jest.Mocked<ApiProvider>;
-  let mockTargetProvider: jest.Mocked<ApiProvider>;
+  let mockRedteamProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockRedteamProvider = {
-      id: jest.fn().mockReturnValue('mock-provider'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
-        output: JSON.stringify({ onTopic: true }),
-      }),
-    } as jest.Mocked<ApiProvider>;
+    mockRedteamProvider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({ output: JSON.stringify({ onTopic: true }) }),
+    });
 
-    mockTargetProvider = {
-      id: jest.fn().mockReturnValue('mock-provider'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
-        output: 'test response',
-      }),
-    } as jest.Mocked<ApiProvider>;
+    mockTargetProvider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({ output: 'test response' }),
+    });
   });
   it('should track parent-child relationships in metadata', async () => {
     const parentPrompt = 'parent prompt';
@@ -644,13 +763,13 @@ describe('Tree Structure and Metadata', () => {
 
   it('should not throw on target error and allow error-bearing output to be recorded', async () => {
     // This test validates the non-throwing behavior at a unit level by calling shared.getTargetResponse directly
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'This is 504',
         error: 'HTTP 504',
       }),
-    } as jest.Mocked<ApiProvider>;
+    });
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -664,10 +783,10 @@ describe('Tree Structure and Metadata', () => {
   });
 
   it('should track tree structure across multiple depths', () => {
-    const rootId = uuidv4();
-    const child1Id = uuidv4();
-    const child2Id = uuidv4();
-    const grandchild1Id = uuidv4();
+    const rootId = crypto.randomUUID();
+    const child1Id = crypto.randomUUID();
+    const child2Id = crypto.randomUUID();
+    const grandchild1Id = crypto.randomUUID();
 
     const treeOutputs: TreeSearchOutput[] = [
       {
@@ -753,7 +872,7 @@ describe('Tree Structure and Metadata', () => {
       attempts: 10,
       highestScore: 8,
       redteamFinalPrompt: 'final prompt',
-      stoppingReason: 'TARGET_SCORE' as const,
+      stoppingReason: 'GRADER_FAILED' as const,
       treeOutputs: JSON.stringify([
         {
           depth: 0,
@@ -830,7 +949,7 @@ describe('runRedteamConversation with transformVars', () => {
     expect(uniqueSessionIds.size).toBe(sessionIds.length);
 
     // Verify the pattern of generated prompts
-    targetPrompts.forEach((prompt, index) => {
+    targetPrompts.forEach((prompt, _index) => {
       expect(prompt).toMatch(/Session session-\d+-\w+ - prompt\d+/);
     });
   });
@@ -925,20 +1044,17 @@ describe('Stored Grader Results', () => {
   });
 });
 
-describe('Enhanced Stop Reason Logic', () => {
-  it('should prioritize GRADER_FAILED over TARGET_SCORE', () => {
+describe('Stop Reason Logic', () => {
+  it('prioritizes GRADER_FAILED regardless of score', () => {
     const graderPassed = false;
-    const score = 10; // Would normally trigger TARGET_SCORE
+    const score = 10;
 
-    // Simulate the priority logic from the actual code
     function determineStopReason(
       passed: boolean,
-      currentScore: number,
-    ): 'TARGET_SCORE' | 'GRADER_FAILED' | undefined {
+      _currentScore: number,
+    ): 'GRADER_FAILED' | undefined {
       if (passed === false) {
         return 'GRADER_FAILED';
-      } else if (currentScore >= 10) {
-        return 'TARGET_SCORE';
       }
       return undefined;
     }
@@ -947,82 +1063,36 @@ describe('Enhanced Stop Reason Logic', () => {
     expect(stopReason).toBe('GRADER_FAILED');
   });
 
-  it('should use TARGET_SCORE when grader passes', () => {
+  it('returns undefined when grader passes even for high scores', () => {
     const graderPassed = true;
     const score = 10;
 
     function determineStopReason(
       passed: boolean,
-      currentScore: number,
-    ): 'TARGET_SCORE' | 'GRADER_FAILED' | undefined {
+      _currentScore: number,
+    ): 'GRADER_FAILED' | undefined {
       if (passed === false) {
         return 'GRADER_FAILED';
-      } else if (currentScore >= 10) {
-        return 'TARGET_SCORE';
       }
       return undefined;
     }
 
     const stopReason = determineStopReason(graderPassed, score);
-    expect(stopReason).toBe('TARGET_SCORE');
+    expect(stopReason).toBeUndefined();
   });
 
-  it('should create synthetic grader result when judge triggers early exit', () => {
+  it('does not synthesize grader results when judge hits target score', () => {
     const score = 10;
     const explanation = 'High scoring jailbreak detected';
-    let storedGraderResult: GradingResult | undefined = undefined;
+    const storedGraderResult: GradingResult | undefined = undefined;
 
-    // Simulate the synthetic grader result creation logic
+    // New behavior: judge-only success does not create a synthetic grader result
     if (score >= 10 && !storedGraderResult) {
-      storedGraderResult = {
-        pass: false,
-        score: 0,
-        reason: explanation || 'Jailbreak goal achieved',
-      };
+      // no-op
     }
 
-    expect(storedGraderResult).toBeDefined();
-    expect(storedGraderResult?.pass).toBe(false);
-    expect(storedGraderResult?.score).toBe(0);
-    expect(storedGraderResult?.reason).toBe('High scoring jailbreak detected');
-  });
-
-  it('should use default reason when explanation is not provided', () => {
-    const score = 10;
-    const explanation: string | undefined = undefined;
-    let storedGraderResult: GradingResult | undefined = undefined;
-
-    if (score >= 10 && !storedGraderResult) {
-      storedGraderResult = {
-        pass: false,
-        score: 0,
-        reason: explanation || 'Jailbreak goal achieved',
-      };
-    }
-
-    expect(storedGraderResult?.reason).toBe('Jailbreak goal achieved');
-  });
-
-  it('should not overwrite existing storedGraderResult', () => {
-    const score = 10;
-    const explanation = 'Judge explanation';
-    let storedGraderResult: GradingResult = {
-      pass: false,
-      score: 0.9,
-      reason: 'Original grader result',
-    };
-
-    // Should not overwrite existing result
-    if (score >= 10 && !storedGraderResult) {
-      storedGraderResult = {
-        pass: false,
-        score: 0,
-        reason: explanation || 'Jailbreak goal achieved',
-      };
-    }
-
-    expect(storedGraderResult.reason).toBe('Original grader result');
-    expect(storedGraderResult.score).toBe(0.9);
+    expect(storedGraderResult).toBeUndefined();
+    expect(explanation).toBe('High scoring jailbreak detected');
   });
 });
 
@@ -1082,21 +1152,21 @@ describe('Metadata Validation with New Fields', () => {
 });
 
 describe('Token Counting', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Reset TokenUsageTracker between tests to ensure clean state
-    const { TokenUsageTracker } = require('../../../src/util/tokenUsage');
+    const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
     TokenUsageTracker.getInstance().resetAllUsage();
   });
 
   it('should correctly track token usage from target provider responses', async () => {
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'target response',
         tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
         cached: false,
       }),
-    } as jest.Mocked<ApiProvider>;
+    });
 
     const targetPrompt = 'Test prompt';
     const context: CallApiContextParams = {
@@ -1118,14 +1188,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle missing token usage from target responses', async () => {
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'response without tokens',
-        // No tokenUsage provided
+        tokenUsage: undefined,
         cached: false,
       }),
-    } as jest.Mocked<ApiProvider>;
+    });
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -1139,14 +1209,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle zero token counts correctly', async () => {
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'response with zero tokens',
         tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
         cached: false,
       }),
-    } as jest.Mocked<ApiProvider>;
+    });
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -1163,17 +1233,31 @@ describe('Token Counting', () => {
     });
   });
 
+  it('should count target requests even when target responses contain errors', () => {
+    const totalTokenUsage = createEmptyTokenUsage();
+    const errorResponse = {
+      output: 'gateway timeout',
+      error: 'HTTP 504',
+      tokenUsage: { numRequests: 1 },
+    };
+
+    // Mirrors the iterative-tree error branch behavior where we now accumulate before continue.
+    accumulateResponseTokenUsage(totalTokenUsage, errorResponse);
+
+    expect(totalTokenUsage.numRequests).toBe(1);
+  });
+
   it('should track token usage from redteam provider calls', async () => {
-    const mockRedteamProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-redteam'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockRedteamProvider = createMockProvider({
+      id: 'mock-redteam',
+      response: createProviderResponse({
         output: JSON.stringify({
           improvement: 'test improvement',
           prompt: 'test prompt',
         }),
         tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
       }),
-    } as jest.Mocked<ApiProvider>;
+    });
 
     const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: 'System prompt' },
@@ -1189,16 +1273,16 @@ describe('Token Counting', () => {
   });
 
   it('should track token usage from judge evaluation calls', async () => {
-    const mockJudgeProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-judge'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockJudgeProvider = createMockProvider({
+      id: 'mock-judge',
+      response: createProviderResponse({
         output: JSON.stringify({
           currentResponse: { rating: 8, explanation: 'Good response' },
           previousBestResponse: { rating: 5, explanation: 'Previous response' },
         }),
         tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
       }),
-    } as jest.Mocked<ApiProvider>;
+    });
 
     const { score, explanation } = await evaluateResponse(
       mockJudgeProvider,
@@ -1216,13 +1300,13 @@ describe('Token Counting', () => {
   // removed on-topic token usage test
 
   it('should handle incomplete token usage data gracefully', async () => {
-    const mockProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-provider'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({
         output: 'response with partial tokens',
         tokenUsage: { total: 100, prompt: 60 }, // completion missing
       }),
-    } as jest.Mocked<ApiProvider>;
+    });
 
     const result = await getTargetResponse(
       mockProvider,
@@ -1238,34 +1322,128 @@ describe('Token Counting', () => {
     });
   });
 
+  describe('Rubric Storage', () => {
+    it('should store rendered rubric in storedGraderResult.assertion.value', () => {
+      const mockRenderedRubric = '<rubric>Rendered policy evaluation criteria</rubric>';
+      const mockGraderResult: {
+        pass: boolean;
+        score: number;
+        reason: string;
+        assertion?: any;
+      } = {
+        pass: false,
+        score: 0,
+        reason: 'Policy violation detected',
+      };
+
+      const testCase: AtomicTestCase = {
+        vars: {},
+        assert: [
+          {
+            type: 'promptfoo:redteam:policy',
+            metric: 'PolicyViolation:test',
+          },
+        ],
+        metadata: {
+          pluginId: 'policy',
+          goal: 'Test goal',
+        },
+      };
+
+      // Test the pattern used in iterativeTree for storing rubric
+      const storedResult = {
+        ...mockGraderResult,
+        assertion: mockGraderResult.assertion
+          ? { ...mockGraderResult.assertion, value: mockRenderedRubric }
+          : testCase.assert?.[0] &&
+              'type' in testCase.assert[0] &&
+              (testCase.assert[0] as any).type !== 'assert-set'
+            ? { ...testCase.assert[0], value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeDefined();
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:policy');
+    });
+
+    it('should handle grade.assertion when present', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResultWithAssertion = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: {
+          type: 'promptfoo:redteam:harmful' as const,
+          metric: 'Harmful',
+          value: 'old value',
+        },
+      };
+
+      const storedResult = {
+        ...mockGraderResultWithAssertion,
+        assertion: mockGraderResultWithAssertion.assertion
+          ? { ...mockGraderResultWithAssertion.assertion, value: mockRenderedRubric }
+          : undefined,
+      };
+
+      expect(storedResult.assertion?.value).toBe(mockRenderedRubric);
+      expect(storedResult.assertion?.type).toBe('promptfoo:redteam:harmful');
+      expect(storedResult.assertion?.metric).toBe('Harmful');
+    });
+
+    it('should not create assertion for AssertionSet', () => {
+      const mockRenderedRubric = '<rubric>Test rubric</rubric>';
+      const mockGraderResult = {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+      };
+
+      const assertionSet = {
+        type: 'assert-set' as const,
+        assert: [{ type: 'contains' as const, value: 'test' }],
+      };
+
+      const storedResult = {
+        ...mockGraderResult,
+        assertion:
+          assertionSet && 'type' in assertionSet && assertionSet.type !== 'assert-set'
+            ? { ...assertionSet, value: mockRenderedRubric }
+            : undefined,
+      };
+
+      expect(storedResult.assertion).toBeUndefined();
+      expect(storedResult.pass).toBe(false);
+    });
+  });
+
   it('should properly accumulate token usage across multiple provider calls', async () => {
     // This test simulates how token usage would be accumulated in the actual iterativeTree provider
     // by testing individual components that contribute to token usage
 
-    const mockRedteamProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-redteam'),
-      callApi: jest
-        .fn<ApiProvider['callApi']>()
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
-          tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({
-            currentResponse: { rating: 7, explanation: 'test' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          }),
-          tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
+    const mockRedteamProvider = createMockProvider({ id: 'mock-redteam' });
+    mockRedteamProvider.callApi
+      .mockReset()
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
+        tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          currentResponse: { rating: 7, explanation: 'test' },
+          previousBestResponse: { rating: 0, explanation: 'none' },
         }),
-    } as jest.Mocked<ApiProvider>;
+        tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
+      });
 
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'target response',
         tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
       }),
-    } as jest.Mocked<ApiProvider>;
+    });
 
     // Simulate the sequence of calls that would happen in one iteration
     const promptResult = await getNewPrompt(mockRedteamProvider, [
@@ -1297,14 +1475,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle provider delay settings during token tracking', async () => {
-    const mockProviderWithDelay: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-provider-with-delay'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockProviderWithDelay = createMockProvider({
+      id: 'mock-provider-with-delay',
+      delay: 100,
+      response: createProviderResponse({
         output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
         tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
       }),
-      delay: 100, // 100ms delay
-    } as jest.Mocked<ApiProvider>;
+    });
 
     const startTime = Date.now();
 
@@ -1318,3 +1496,8 @@ describe('Token Counting', () => {
     expect(elapsed).toBeGreaterThanOrEqual(90); // Allow for 10ms variance
   });
 });
+
+// Note: Tests for perTurnLayers in iterativeTree are covered by testing through
+// the RedteamIterativeTreeProvider class, not exposed internal functions.
+// The TreeSearchOutput interface already supports promptAudio, promptImage,
+// outputAudio, and outputImage fields which are populated when perTurnLayers is configured.

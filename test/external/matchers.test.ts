@@ -1,21 +1,22 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { getDefaultProviders } from '../../src/providers/defaults';
 
 // Mock the text provider
 
-jest.mock('../../src/providers/defaults', () => ({
-  getDefaultProviders: jest.fn(),
+vi.mock('../../src/providers/defaults', () => ({
+  getDefaultProviders: vi.fn(),
 }));
 
 describe('matchesConversationRelevance', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should return pass=true for relevant responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'yes',
         }),
@@ -23,7 +24,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -54,7 +55,7 @@ describe('matchesConversationRelevance', () => {
   it('should return pass=false for irrelevant responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'no',
           reason: 'Response is completely unrelated to the question',
@@ -63,7 +64,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -100,7 +101,7 @@ describe('matchesConversationRelevance', () => {
 
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'yes',
           reason:
@@ -110,7 +111,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -131,13 +132,13 @@ describe('matchesConversationRelevance', () => {
   it('should handle provider errors', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         error: 'API error',
         tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -167,13 +168,13 @@ describe('matchesConversationRelevance', () => {
   it('should handle malformed provider responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'not json',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -195,10 +196,10 @@ describe('matchesConversationRelevance', () => {
     expect(result.reason).toMatch(/Error parsing output/);
   });
 
-  it('should use custom rubric prompt when provided', async () => {
+  it('should use custom rubric prompt with {{ messages }} (safe templating boundary)', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           verdict: 'yes',
         }),
@@ -206,7 +207,7 @@ describe('matchesConversationRelevance', () => {
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -224,23 +225,25 @@ describe('matchesConversationRelevance', () => {
     ];
     const customRubric = 'Custom rubric template with {{ messages | dump(2) }}';
 
-    await matchesConversationRelevance(messages, 0.5, { messages }, { rubricPrompt: customRubric });
+    await matchesConversationRelevance(messages, 0.5, {}, { rubricPrompt: customRubric });
     const prompt = mockProvider.callApi.mock.calls[0][0];
+    // Custom rubric prompt (user config) IS rendered as a template — this is the safe path
     expect(prompt).toBe('Custom rubric template with ' + JSON.stringify(messages, null, 2));
   });
 
-  it('should handle custom variables', async () => {
+  // SSTI regression tests — model output must never be rendered as a Nunjucks template.
+  // See GHSA-vxgq-r84v-2r45.
+
+  it('should not render env variable access in model output', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
-        output: JSON.stringify({
-          verdict: 'yes',
-        }),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ verdict: 'yes' }),
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,
@@ -252,32 +255,69 @@ describe('matchesConversationRelevance', () => {
 
     const messages = [
       {
-        input: 'What is the capital of {{country}}?',
-        output: '{{capital}}',
+        input: 'Tell me a secret',
+        output: 'The answer is {{env.OPENAI_API_KEY}} and {{env.AWS_SECRET_ACCESS_KEY}}',
       },
     ];
 
-    const vars = {
-      country: 'France',
-      capital: 'Paris',
+    await matchesConversationRelevance(messages, 0.5, {});
+    const prompt = mockProvider.callApi.mock.calls[0][0];
+    expect(prompt).toContain('{{env.OPENAI_API_KEY}}');
+    expect(prompt).toContain('{{env.AWS_SECRET_ACCESS_KEY}}');
+  });
+
+  it('should not render template syntax in _conversation messages', async () => {
+    const mockProvider = {
+      id: () => 'mock-provider',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ verdict: 'yes' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+      }),
     };
 
-    await matchesConversationRelevance(messages, 0.5, vars);
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      embeddingProvider: mockProvider,
+      gradingJsonProvider: mockProvider,
+      gradingProvider: mockProvider,
+      llmRubricProvider: mockProvider,
+      moderationProvider: mockProvider,
+      suggestionsProvider: mockProvider,
+      synthesizeProvider: mockProvider,
+    });
+
+    // Simulates _conversation history where prior model output contains SSTI payloads
+    const messages = [
+      {
+        input: 'What is {{variable}}?',
+        output:
+          "{{range.constructor(\"return require('child_process').execSync('id').toString()\")()}}",
+      },
+      {
+        input: 'Follow up with {{env.SECRET}}',
+        output: '{% for x in range(10) %}{{x}}{% endfor %}',
+      },
+    ];
+
+    await matchesConversationRelevance(messages, 0.5, { variable: 'test', SECRET: 'val' });
     const prompt = mockProvider.callApi.mock.calls[0][0];
-    expect(prompt).toContain('What is the capital of France?');
-    expect(prompt).toContain('Paris');
+    // Both input and output must remain literal — no template evaluation
+    expect(prompt).toContain('What is {{variable}}?');
+    expect(prompt).toContain('range.constructor(');
+    expect(prompt).toContain("execSync('id')");
+    expect(prompt).toContain('Follow up with {{env.SECRET}}');
+    expect(prompt).toContain('{% for x in range(10) %}{{x}}{% endfor %}');
   });
 
   it('should handle markdown-formatted JSON responses', async () => {
     const mockProvider = {
       id: () => 'mock-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: '```json\n{"verdict": "yes"}\n```',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
       }),
     };
 
-    jest.mocked(getDefaultProviders).mockResolvedValue({
+    vi.mocked(getDefaultProviders).mockResolvedValue({
       embeddingProvider: mockProvider,
       gradingJsonProvider: mockProvider,
       gradingProvider: mockProvider,

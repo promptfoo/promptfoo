@@ -1,46 +1,47 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../src/constants';
 import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud';
 import logger, { logRequestResponse } from '../src/logger';
 import { createMockResponse } from './util/utils';
 
-jest.mock('../src/logger', () => ({
+vi.mock('../src/logger', () => ({
   __esModule: true,
   default: {
-    debug: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
-  logRequestResponse: jest.fn(),
+  logRequestResponse: vi.fn(),
 }));
 
-jest.mock('../src/globalConfig/cloud', () => ({
+vi.mock('../src/globalConfig/cloud', () => ({
   CLOUD_API_HOST: 'https://api.promptfoo.dev',
   cloudConfig: {
-    getApiKey: jest.fn(),
+    getApiKey: vi.fn(),
   },
 }));
 
 describe('monkeyPatchFetch', () => {
-  let mockOriginalFetch: jest.MockedFunction<typeof fetch>;
+  let mockOriginalFetch: ReturnType<typeof vi.fn>;
   let monkeyPatchFetch: any;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     // Mock global fetch before importing the module
-    mockOriginalFetch = jest.fn();
+    mockOriginalFetch = vi.fn();
     Object.defineProperty(global, 'fetch', {
       value: mockOriginalFetch,
       writable: true,
     });
 
     // Now import the module after mocking global fetch
-    const module = require('../src/util/fetch/monkeyPatchFetch');
+    const module = await import('../src/util/fetch/monkeyPatchFetch');
     monkeyPatchFetch = module.monkeyPatchFetch;
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
-    jest.mocked(logRequestResponse).mockClear();
+    vi.clearAllMocks();
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    vi.mocked(logRequestResponse).mockClear();
     mockOriginalFetch.mockClear();
   });
 
@@ -78,7 +79,7 @@ describe('monkeyPatchFetch', () => {
     for (const url of excludedUrls) {
       await monkeyPatchFetch(url);
       expect(logRequestResponse).not.toHaveBeenCalled();
-      jest.mocked(logRequestResponse).mockClear();
+      vi.mocked(logRequestResponse).mockClear();
     }
   });
 
@@ -87,7 +88,7 @@ describe('monkeyPatchFetch', () => {
     mockOriginalFetch.mockResolvedValue(mockResponse);
 
     const apiKey = 'test-api-key-123';
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
 
     const url = CLOUD_API_HOST + '/api/test';
     await monkeyPatchFetch(url);
@@ -103,7 +104,7 @@ describe('monkeyPatchFetch', () => {
     const mockResponse = createMockResponse({ ok: true, status: 200 });
     mockOriginalFetch.mockResolvedValue(mockResponse);
 
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(undefined);
 
     const url = CLOUD_API_HOST + '/api/test';
     await monkeyPatchFetch(url);
@@ -118,7 +119,7 @@ describe('monkeyPatchFetch', () => {
     mockOriginalFetch.mockResolvedValue(mockResponse);
 
     const apiKey = 'test-api-key-123';
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
 
     const url = new URL('/api/test', CLOUD_API_HOST);
     await monkeyPatchFetch(url);
@@ -135,7 +136,7 @@ describe('monkeyPatchFetch', () => {
     mockOriginalFetch.mockResolvedValue(mockResponse);
 
     const apiKey = 'test-api-key-123';
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue(apiKey);
 
     const url = CLOUD_API_HOST + '/api/test';
     const options = {
@@ -180,7 +181,6 @@ describe('monkeyPatchFetch', () => {
 
   it('should handle connection errors with specific messaging', async () => {
     const connectionError = new TypeError('fetch failed');
-    // @ts-expect-error undici error cause
     connectionError.cause = {
       stack: 'Error: connect ECONNREFUSED\n    at internalConnectMultiple',
     };

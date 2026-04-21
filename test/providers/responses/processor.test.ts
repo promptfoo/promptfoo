@@ -1,20 +1,20 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
-import { FunctionCallbackHandler } from '../../../src/providers/functionCallbackUtils';
 
 // Mock dependencies
-jest.mock('../../../src/providers/functionCallbackUtils');
+vi.mock('../../../src/providers/functionCallbackUtils');
 
 const mockFunctionCallbackHandler = {
-  processCalls: jest.fn(),
+  processCalls: vi.fn(),
 } as any;
 
-const mockCostCalculator = jest.fn().mockReturnValue(0.001);
+const mockCostCalculator = vi.fn().mockReturnValue(0.001);
 
 describe('ResponsesProcessor', () => {
   let processor: ResponsesProcessor;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     processor = new ResponsesProcessor({
       modelName: 'gpt-4.1',
@@ -27,6 +27,8 @@ describe('ResponsesProcessor', () => {
   describe('processResponseOutput', () => {
     it('should process simple text output', async () => {
       const mockData = {
+        id: 'resp_test123',
+        model: 'gpt-5-2025-08-07',
         output: [
           {
             type: 'message',
@@ -42,6 +44,10 @@ describe('ResponsesProcessor', () => {
       expect(result.output).toBe('Hello, world!');
       expect(result.cached).toBe(false);
       expect(result.error).toBeUndefined();
+      expect(result.metadata).toEqual({
+        responseId: 'resp_test123',
+        model: 'gpt-5-2025-08-07',
+      });
     });
 
     it('should process function calls', async () => {
@@ -176,6 +182,8 @@ describe('ResponsesProcessor', () => {
 
     it('should handle refusals correctly', async () => {
       const mockData = {
+        id: 'resp_refusal456',
+        model: 'gpt-4.1',
         output: [
           {
             type: 'message',
@@ -195,6 +203,10 @@ describe('ResponsesProcessor', () => {
 
       expect(result.output).toBe('I cannot help with that request.');
       expect(result.isRefusal).toBe(true);
+      expect(result.metadata).toEqual({
+        responseId: 'resp_refusal456',
+        model: 'gpt-4.1',
+      });
     });
 
     it('should handle mixed response types', async () => {
@@ -261,6 +273,8 @@ describe('ResponsesProcessor', () => {
 
     it('should preserve annotations for deep research', async () => {
       const mockData = {
+        id: 'resp_research789',
+        model: 'o3-deep-research',
         output: [
           {
             type: 'message',
@@ -280,7 +294,11 @@ describe('ResponsesProcessor', () => {
       const result = await processor.processResponseOutput(mockData, {}, false);
 
       expect(result.output).toBe('Research result');
-      expect(result.raw.annotations).toEqual([{ citation: 'Source 1' }]);
+      expect(result.metadata).toEqual({
+        responseId: 'resp_research789',
+        model: 'o3-deep-research',
+        annotations: [{ citation: 'Source 1' }],
+      });
     });
   });
 
@@ -294,6 +312,8 @@ describe('ResponsesProcessor', () => {
       });
 
       const mockData = {
+        id: 'resp_azure001',
+        model: 'gpt-4.1-deployment',
         output: [
           {
             type: 'message',
@@ -308,6 +328,294 @@ describe('ResponsesProcessor', () => {
 
       expect(result.output).toBe('Azure response');
       expect(mockCostCalculator).toHaveBeenCalledWith('gpt-4.1-deployment', mockData.usage, {});
+      expect(result.metadata).toEqual({
+        responseId: 'resp_azure001',
+        model: 'gpt-4.1-deployment',
+      });
+    });
+  });
+
+  describe('Metadata extraction', () => {
+    it('should extract responseId and model from response data', async () => {
+      const mockData = {
+        id: 'resp_metadata123',
+        model: 'gpt-5-mini',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response with metadata' }],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toHaveProperty('responseId', 'resp_metadata123');
+      expect(result.metadata).toHaveProperty('model', 'gpt-5-mini');
+    });
+
+    it('should handle missing id and model gracefully', async () => {
+      const mockData = {
+        // No id or model fields
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response without metadata' }],
+          },
+        ],
+        usage: { input_tokens: 8, output_tokens: 4 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toEqual({});
+    });
+
+    it('should include only available metadata fields', async () => {
+      const mockData = {
+        id: 'resp_partial789',
+        // No model field
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Partial metadata' }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 3 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toEqual({
+        responseId: 'resp_partial789',
+      });
+      expect(result.metadata).not.toHaveProperty('model');
+    });
+
+    it('should combine metadata with annotations for deep research', async () => {
+      const mockData = {
+        id: 'resp_combined999',
+        model: 'o4-mini-deep-research',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Deep research with citations',
+                annotations: [{ url: 'https://example.com', title: 'Example Source' }],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 20, output_tokens: 15 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toEqual({
+        responseId: 'resp_combined999',
+        model: 'o4-mini-deep-research',
+        annotations: [{ url: 'https://example.com', title: 'Example Source' }],
+      });
+    });
+
+    it('should include only model when id is missing', async () => {
+      const mockData = {
+        // No id field
+        model: 'gpt-4o-2024-11-20',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response without id' }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 3 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toEqual({
+        model: 'gpt-4o-2024-11-20',
+      });
+      expect(result.metadata).not.toHaveProperty('responseId');
+    });
+
+    it('should handle multiple annotations from deep research', async () => {
+      const mockData = {
+        id: 'resp_multi123',
+        model: 'o3-deep-research',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'First citation',
+                annotations: [
+                  { url: 'https://source1.com', title: 'Source 1' },
+                  { url: 'https://source2.com', title: 'Source 2' },
+                ],
+              },
+              {
+                type: 'output_text',
+                text: 'Second citation',
+                annotations: [{ url: 'https://source3.com', title: 'Source 3' }],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 30, output_tokens: 20 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toHaveProperty('responseId', 'resp_multi123');
+      expect(result.metadata).toHaveProperty('model', 'o3-deep-research');
+      expect(result.metadata?.annotations).toHaveLength(3);
+      expect(result.metadata?.annotations).toEqual([
+        { url: 'https://source1.com', title: 'Source 1' },
+        { url: 'https://source2.com', title: 'Source 2' },
+        { url: 'https://source3.com', title: 'Source 3' },
+      ]);
+    });
+
+    it('should not include annotations field when empty array', async () => {
+      const mockData = {
+        id: 'resp_noannotations',
+        model: 'gpt-4.1',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'No citations',
+                annotations: [],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(result.metadata).toEqual({
+        responseId: 'resp_noannotations',
+        model: 'gpt-4.1',
+      });
+      expect(result.metadata).not.toHaveProperty('annotations');
+    });
+
+    it('should handle empty string values gracefully', async () => {
+      const mockData = {
+        id: '',
+        model: '',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Empty strings' }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 3 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      // Empty strings are falsy, so they should not be included
+      expect(result.metadata).toEqual({});
+    });
+
+    it('should add annotations to both raw and metadata for backwards compatibility', async () => {
+      const mockData = {
+        id: 'resp_compat123',
+        model: 'o4-mini-deep-research',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Research with citations',
+                annotations: [{ url: 'https://example.com', title: 'Example' }],
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 15, output_tokens: 10 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      // Annotations should be in metadata (new behavior)
+      expect(result.metadata?.annotations).toEqual([
+        { url: 'https://example.com', title: 'Example' },
+      ]);
+
+      // Annotations should also be in raw for backwards compatibility
+      expect(result.raw).toHaveProperty('annotations');
+      expect(result.raw.annotations).toEqual([{ url: 'https://example.com', title: 'Example' }]);
+    });
+
+    it('should handle non-string id and model gracefully', async () => {
+      const mockData = {
+        id: { nested: 'object' }, // Wrong type - should be string
+        model: 12345, // Wrong type - should be string
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response with invalid types' }],
+          },
+        ],
+        usage: { input_tokens: 5, output_tokens: 3 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      // Should exclude invalid types from metadata
+      expect(result.metadata).toEqual({});
+    });
+
+    it('should handle non-array annotations gracefully', async () => {
+      const mockData = {
+        id: 'resp_invalidannot',
+        model: 'gpt-4o',
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Response with invalid annotations',
+                annotations: 'not-an-array', // Wrong type - should be array
+              },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 5 },
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      // Should include id and model but exclude invalid annotations
+      expect(result.metadata).toEqual({
+        responseId: 'resp_invalidannot',
+        model: 'gpt-4o',
+      });
+      expect(result.metadata).not.toHaveProperty('annotations');
     });
   });
 });
