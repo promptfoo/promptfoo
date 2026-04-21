@@ -12,11 +12,8 @@ import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
-import {
-  fetchWithRetries,
-  getFetchWithProxyHeaders,
-  isPromptfooCloudApiHost,
-} from './util/fetch/index';
+import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
+import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
 import { sleep } from './util/time';
 import type { Cache } from 'cache-manager';
 
