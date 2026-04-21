@@ -8,7 +8,7 @@ targets:
   - id: file://provider.js
     label: example-app-docx-summary
     config:
-      appBaseUrl: http://localhost:3500
+      appBaseUrl: https://example-app.promptfoo.app
       domain: general
       level: minnow
     inputs:

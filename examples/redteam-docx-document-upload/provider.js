@@ -2,13 +2,17 @@ import { randomUUID } from 'node:crypto';
 
 const DOCX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const DOCX_DATA_URI_PREFIX = `data:${DOCX_MIME_TYPE};base64,`;
-const DEFAULT_APP_BASE_URL = 'http://localhost:3500';
+const DEFAULT_APP_BASE_URL = 'https://example-app.promptfoo.app';
 const DEFAULT_DOMAIN = 'general';
 const DEFAULT_LEVEL = 'minnow';
 const DEFAULT_SUMMARY_REQUEST = 'Please summarize the uploaded document in one concise paragraph.';
 
 function getStringVar(vars, key) {
   return typeof vars[key] === 'string' && vars[key].trim() ? vars[key] : undefined;
+}
+
+function normalizeBaseUrl(baseUrl) {
+  return baseUrl.replace(/\/+$/, '');
 }
 
 function decodeDocxDataUri(documentInput) {
@@ -32,7 +36,7 @@ class DocumentUploadProvider {
   }
 
   async uploadDocument(documentInput) {
-    const appBaseUrl = this.config.appBaseUrl || DEFAULT_APP_BASE_URL;
+    const appBaseUrl = normalizeBaseUrl(this.config.appBaseUrl || DEFAULT_APP_BASE_URL);
     const docxBuffer = decodeDocxDataUri(documentInput);
     const formData = new FormData();
 
@@ -71,7 +75,7 @@ class DocumentUploadProvider {
       );
     }
     const userQuestion = getStringVar(vars, 'question') || DEFAULT_SUMMARY_REQUEST;
-    const appBaseUrl = this.config.appBaseUrl || DEFAULT_APP_BASE_URL;
+    const appBaseUrl = normalizeBaseUrl(this.config.appBaseUrl || DEFAULT_APP_BASE_URL);
     const level = this.config.level || DEFAULT_LEVEL;
     const domain = this.config.domain || DEFAULT_DOMAIN;
     const documentId = await this.uploadDocument(documentInput);
