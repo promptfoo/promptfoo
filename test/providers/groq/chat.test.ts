@@ -1,18 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqProvider } from '../../../src/providers/groq/index';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 
 describe('GroqProvider', () => {
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    process.env.GROQ_API_KEY = 'test-key';
+    restoreEnv = mockProcessEnv({ GROQ_API_KEY: 'test-key' });
   });
 
   afterEach(async () => {
-    delete process.env.GROQ_API_KEY;
+    restoreEnv();
     await clearCache();
   });
 

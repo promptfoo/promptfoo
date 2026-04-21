@@ -10,6 +10,7 @@ import { registerGenerateDatasetTool } from './tools/generateDataset';
 import { registerGenerateTestCasesTool } from './tools/generateTestCases';
 import { registerGetEvaluationDetailsTool } from './tools/getEvaluationDetails';
 import { registerListEvaluationsTool } from './tools/listEvaluations';
+import { registerLogTools } from './tools/logs';
 import { registerRedteamGenerateTool } from './tools/redteamGenerate';
 import { registerRedteamRunTool } from './tools/redteamRun';
 import { registerRunAssertionTool } from './tools/runAssertion';
@@ -17,6 +18,10 @@ import { registerRunEvaluationTool } from './tools/runEvaluation';
 import { registerShareEvaluationTool } from './tools/shareEvaluation';
 import { registerTestProviderTool } from './tools/testProvider';
 import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooConfig';
+
+function setMcpTransport(transport: 'http' | 'stdio'): void {
+  Object.assign(process.env, { MCP_TRANSPORT: transport });
+}
 
 /**
  * Creates an MCP server with tools for interacting with promptfoo
@@ -56,6 +61,9 @@ export async function createMcpServer() {
   registerRedteamRunTool(server);
   registerRedteamGenerateTool(server);
 
+  // Register debugging tools
+  registerLogTools(server);
+
   // Register resources
   registerResources(server);
 
@@ -72,7 +80,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   }
 
   // Set transport type for telemetry
-  process.env.MCP_TRANSPORT = 'http';
+  setMcpTransport('http');
 
   const app = express();
   app.use(express.json());
@@ -118,8 +126,15 @@ export async function startHttpMcpServer(port: number): Promise<void> {
       // Don't resolve - server runs until shutdown signal
     });
 
+    let isShuttingDown = false;
+
     // Register shutdown handlers
     const shutdown = () => {
+      if (isShuttingDown) {
+        return;
+      }
+      isShuttingDown = true;
+
       logger.info('Shutting down MCP server...');
       const SHUTDOWN_TIMEOUT_MS = 5000;
       const forceCloseTimeout = setTimeout(() => {
@@ -127,14 +142,22 @@ export async function startHttpMcpServer(port: number): Promise<void> {
         resolve();
       }, SHUTDOWN_TIMEOUT_MS);
 
-      httpServer.close((err) => {
-        clearTimeout(forceCloseTimeout);
-        if (err) {
-          logger.warn(`Error closing MCP server: ${err.message}`);
-        }
-        logger.info('MCP server closed');
-        resolve();
-      });
+      // Clean up the MCP server first, then close the HTTP server
+      mcpServer
+        .close()
+        .catch((err) => {
+          logger.warn(`Error closing MCP server: ${err instanceof Error ? err.message : err}`);
+        })
+        .finally(() => {
+          httpServer.close((err) => {
+            clearTimeout(forceCloseTimeout);
+            if (err) {
+              logger.warn(`Error closing HTTP server: ${err.message}`);
+            }
+            logger.info('MCP server closed');
+            resolve();
+          });
+        });
     };
 
     process.once('SIGINT', shutdown);
@@ -147,7 +170,7 @@ export async function startHttpMcpServer(port: number): Promise<void> {
  */
 export async function startStdioMcpServer(): Promise<void> {
   // Set transport type for telemetry
-  process.env.MCP_TRANSPORT = 'stdio';
+  setMcpTransport('stdio');
 
   // Disable all console logging in stdio mode to prevent pollution of JSON-RPC communication
   logger.transports.forEach((transport) => {
@@ -171,6 +194,40 @@ export async function startStdioMcpServer(): Promise<void> {
     transport: 'stdio',
   });
 
-  // Don't log to stdout in stdio mode as it pollutes the JSON-RPC protocol
-  // logger.info('Promptfoo MCP stdio server started');
+  // Return a Promise that only resolves when the server shuts down
+  // This matches the pattern used in startHttpMcpServer
+  return new Promise<void>((resolve) => {
+    let isShuttingDown = false;
+
+    const shutdown = () => {
+      if (isShuttingDown) {
+        return;
+      }
+      isShuttingDown = true;
+
+      // Add timeout to prevent indefinite hangs, matching HTTP server pattern
+      const SHUTDOWN_TIMEOUT_MS = 5000;
+      const forceCloseTimeout = setTimeout(() => {
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      // Clean up the server and transport properly
+      server
+        .close()
+        .catch(() => {
+          // Ignore close errors during shutdown
+        })
+        .finally(() => {
+          clearTimeout(forceCloseTimeout);
+          resolve();
+        });
+    };
+
+    // Register shutdown handlers for signals
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+
+    // Handle client disconnect (stdin close)
+    process.stdin.once('end', shutdown);
+  });
 }

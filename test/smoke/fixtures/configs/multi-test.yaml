@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config with multiple tests for filter testing
+description: 'Smoke test - multiple tests for filtering'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}, you are a {{role}}'
+
+tests:
+  - description: 'user authentication test'
+    vars:
+      name: Alice
+      role: admin
+    metadata:
+      category: auth
+      priority: high
+    assert:
+      - type: contains
+        value: Alice
+
+  - description: 'user profile test'
+    vars:
+      name: Bob
+      role: user
+    metadata:
+      category: profile
+      priority: medium
+    assert:
+      - type: contains
+        value: Bob
+
+  - description: 'admin dashboard test'
+    vars:
+      name: Charlie
+      role: admin
+    metadata:
+      category: admin
+      priority: high
+    assert:
+      - type: contains
+        value: Charlie
+
+  - description: 'guest access test'
+    vars:
+      name: Diana
+      role: guest
+    metadata:
+      category: auth
+      priority: low
+    assert:
+      - type: contains
+        value: Diana
+
+  - description: 'settings update test'
+    vars:
+      name: Eve
+      role: user
+    metadata:
+      category: settings
+      priority: medium
+      tags:
+        - security
+        - config
+    assert:
+      - type: contains
+        value: Eve

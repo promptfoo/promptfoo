@@ -6,6 +6,7 @@ Docusaurus-based documentation at [promptfoo.dev](https://www.promptfoo.dev/).
 
 - Don't start your own dev server for the site (ask user first)
 - Don't edit `CHANGELOG.md` (auto-generated)
+- **Commits:** Always use `docs(site):` scope for all site changes (docs, pages, components, plugins, styles)
 
 ## Key Principles
 
@@ -70,6 +71,11 @@ SKIP_OG_GENERATION=true npm run build  # Faster builds
 - Generic examples
 - Bullet overuse where prose is clearer
 
-## Red Team Docs
+## Source Alignment
 
-See `site/docs/red-team/AGENTS.md` for red-team specific documentation guidelines.
+- Red team docs: read `site/docs/red-team/AGENTS.md`; keep behavior aligned with
+  `src/redteam/AGENTS.md`.
+- Assertion docs: update `site/docs/configuration/expected-outputs/` and
+  `site/docs/tracing.md` when assertion behavior changes.
+- Code scanning docs: keep `site/docs/code-scanning/` aligned with `src/codeScan/` and
+  `code-scan-action/README.md`.

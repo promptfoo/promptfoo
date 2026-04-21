@@ -20,6 +20,7 @@ const severityBorderStyles: Record<Severity, string> = {
   [Severity.High]: 'border-l-red-500',
   [Severity.Medium]: 'border-l-amber-500',
   [Severity.Low]: 'border-l-emerald-500',
+  [Severity.Informational]: 'border-l-blue-500',
 };
 
 export default function FrameworkPluginResult({
@@ -55,17 +56,17 @@ export default function FrameworkPluginResult({
   return (
     <div
       className={cn(
-        'mb-0.5 flex items-center gap-2 rounded-r border-l-[3px] bg-black/[0.02] py-2 pl-2 pr-3 dark:bg-white/[0.02]',
+        'mb-0.5 flex items-center gap-2 rounded-r border-l-[3px] border-l-border bg-black/[0.02] py-2 pl-2 pr-3 dark:bg-white/[0.02]',
         severityBorderStyles[pluginSeverity],
         type === 'untested' && 'opacity-70',
       )}
     >
       <div className="flex w-5 shrink-0 items-center justify-center">
-        {type === 'failed' && <XCircle className="h-4 w-4 text-destructive" />}
+        {type === 'failed' && <XCircle className="size-4 text-destructive" />}
         {type === 'passed' && (
-          <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-500" />
+          <CheckCircle className="size-4 text-emerald-600 dark:text-emerald-500" />
         )}
-        {type === 'untested' && <Info className="h-4 w-4 text-muted-foreground" />}
+        {type === 'untested' && <Info className="size-4 text-muted-foreground" />}
       </div>
       <div className="flex flex-1 items-center justify-between">
         <span

@@ -12,11 +12,11 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { DeleteIcon } from '@app/components/ui/icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import { Tooltip } from '@mui/material';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
@@ -71,6 +71,7 @@ export default function EvalsTable({
     }
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const abortController = new AbortController();
     fetchEvals(abortController.signal);
@@ -236,22 +237,26 @@ export default function EvalsTable({
         cell: ({ row }) => {
           const text = row.original.description || row.original.label;
           return (
-            <Tooltip title={text} placement="top" arrow>
-              <span
-                className="text-sm block"
-                style={{
-                  display: '-webkit-box',
-                  WebkitLineClamp: 3,
-                  WebkitBoxOrient: 'vertical',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {text}
-              </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="text-sm block"
+                  style={{
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {text}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top">{text}</TooltipContent>
             </Tooltip>
           );
         },
+        size: 250,
       },
       {
         accessorKey: 'passRate',
@@ -265,22 +270,20 @@ export default function EvalsTable({
                 ? 'text-amber-600 dark:text-amber-400'
                 : 'text-red-600 dark:text-red-400';
           return (
-            <span className={cn('font-mono text-sm tabular-nums text-right block', colorClass)}>
-              {rate.toFixed(2)}%
-            </span>
+            <span className={cn('font-mono tabular-nums', colorClass)}>{rate.toFixed(2)}%</span>
           );
         },
-        size: 100,
+        size: 120,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'numTests',
         header: '# Tests',
         cell: ({ getValue }) => (
-          <span className="font-mono text-sm tabular-nums text-right block">
-            {getValue<number>()}
-          </span>
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
         ),
         size: 80,
+        meta: { align: 'right' },
       },
     ],
     [focusedEvalId, onEvalSelected, hasRedteamEvals],
@@ -295,7 +298,7 @@ export default function EvalsTable({
         onClick={handleDeleteSelected}
         data-testid="delete-selected-button"
       >
-        <DeleteIcon className="h-4 w-4 mr-1.5" />
+        <DeleteIcon className="size-4 mr-1.5" />
         Delete ({selectedEvalIds.length})
       </Button>
     ) : null;
@@ -318,7 +321,6 @@ export default function EvalsTable({
         onRowSelectionChange={setRowSelection}
         getRowId={(row) => row.evalId}
         initialSorting={[{ id: 'createdAt', desc: true }]}
-        initialPageSize={50}
         showToolbar={showUtilityButtons}
         showColumnToggle={showUtilityButtons}
         toolbarActions={deleteButton}
@@ -343,7 +345,7 @@ export default function EvalsTable({
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleConfirmDelete}>
-              <DeleteIcon className="h-4 w-4 mr-1.5" />
+              <DeleteIcon className="size-4 mr-1.5" />
               Delete
             </Button>
           </DialogFooter>

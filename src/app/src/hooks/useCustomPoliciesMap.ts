@@ -2,7 +2,7 @@
  * @fileoverview Hooks for working w/ custom policies. Sharable between Promptfoo OSS and Promptfoo Cloud.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   isValidPolicyObject,
@@ -23,6 +23,10 @@ export function useCustomPoliciesMap(
 ): Record<PolicyObject['id'], PolicyObject> {
   const [policiesMap, setPoliciesMap] = useState<Record<PolicyObject['id'], PolicyObject>>({});
 
+  // Stringify plugins for deep comparison to prevent infinite loops when plugins array reference changes
+  const pluginsKey = useMemo(() => JSON.stringify(plugins), [plugins]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: using pluginsKey for deep comparison to prevent infinite loops
   useEffect(() => {
     async function buildPoliciesMap() {
       const policyPlugins = plugins.filter(
@@ -54,7 +58,8 @@ export function useCustomPoliciesMap(
     }
 
     buildPoliciesMap();
-  }, [plugins]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginsKey]);
 
   return policiesMap;
 }

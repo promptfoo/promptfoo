@@ -34,14 +34,14 @@ export function InfoBox({ children, variant = 'info', className }: InfoBoxProps)
   return (
     <div
       className={cn(
-        'rounded-lg border p-4 flex gap-3',
+        'rounded-lg border border-border p-4 flex gap-3',
         styles.bg,
         styles.border,
         styles.text,
         className,
       )}
     >
-      <Icon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+      <Icon className="size-5 shrink-0 mt-0.5" />
       <div className="text-sm leading-relaxed flex-1">{children}</div>
     </div>
   );

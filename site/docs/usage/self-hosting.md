@@ -59,6 +59,9 @@ docker pull ghcr.io/promptfoo/promptfoo:latest
 
 # Or pull a specific version
 # docker pull ghcr.io/promptfoo/promptfoo:0.109.1
+
+# You can verify image authenticity with:
+# gh attestation verify oci://ghcr.io/promptfoo/promptfoo:latest --owner promptfoo
 ```
 
 ### 2. Run the Container
@@ -580,7 +583,7 @@ The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the cor
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js v20+, npm
+- **Dependencies**: Node.js 20+, npm
 
 ### Server Requirements (Hosting the Web UI/API)
 

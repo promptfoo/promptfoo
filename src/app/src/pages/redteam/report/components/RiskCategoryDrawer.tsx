@@ -2,40 +2,31 @@ import React from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import {
-  categoryAliases,
-  displayNameOverrides,
-  type Strategy,
-  strategyDescriptions,
-} from '@promptfoo/redteam/constants';
-import { Lightbulb } from 'lucide-react';
+import { getActualPrompt } from '@app/utils/providerResponse';
+import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import ChatMessages, { type Message } from '../../../eval/components/ChatMessages';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
-import { getStrategyIdFromTest } from './shared';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import { getPassRateStyles, getStrategyIdFromTest, type TestWithMetadata } from './shared';
+import type { GradingResult } from '@promptfoo/types';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
   onClose: () => void;
   category: string;
-  failures: {
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  }[];
-  passes: {
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  }[];
+  failures: TestWithMetadata[];
+  passes: TestWithMetadata[];
   evalId: string;
   numPassed: number;
   numFailed: number;
@@ -44,10 +35,7 @@ interface RiskCategoryDrawerProps {
 const PRIORITY_STRATEGIES = ['jailbreak:composite', 'pliny', 'prompt-injections'];
 
 // Sort function for prioritizing specific strategies
-function sortByPriorityStrategies(
-  a: { gradingResult?: GradingResult; metadata?: Record<string, any> },
-  b: { gradingResult?: GradingResult; metadata?: Record<string, any> },
-): number {
+function sortByPriorityStrategies(a: TestWithMetadata, b: TestWithMetadata): number {
   const strategyA = getStrategyIdFromTest(a);
   const strategyB = getStrategyIdFromTest(b);
 
@@ -84,25 +72,65 @@ function getPromptDisplayString(prompt: string): string {
   return prompt;
 }
 
-function getOutputDisplay(output: string | object) {
+function getOutputDisplay(output: string | object): string {
   if (typeof output === 'string') {
     return output;
   }
   if (Array.isArray(output)) {
     const items = output.filter((item) => item.type === 'function');
     if (items.length > 0) {
-      return (
-        <>
-          {items.map((item) => (
-            <div key={item.id}>
-              <strong>Used tool {item.function?.name}</strong>: ({item.function?.arguments})
-            </div>
-          ))}
-        </>
-      );
+      return items
+        .map((item) => `Used tool ${item.function?.name}: (${item.function?.arguments})`)
+        .join('\n');
     }
   }
   return JSON.stringify(output);
+}
+
+interface RedteamHistoryEntry {
+  prompt?: string;
+  promptAudio?: { data?: string; format?: string };
+  promptImage?: { data?: string; format?: string };
+  output?: string;
+  outputAudio?: { data?: string; format?: string };
+  outputImage?: { data?: string; format?: string };
+}
+
+function buildChatMessages(test: TestWithMetadata): Message[] {
+  const metadata = test.result?.metadata;
+  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
+    | RedteamHistoryEntry[]
+    | unknown[];
+
+  const historyMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
+    .filter((entry): entry is RedteamHistoryEntry => {
+      const e = entry as RedteamHistoryEntry;
+      return Boolean(e?.prompt && e?.output);
+    })
+    .flatMap((entry: RedteamHistoryEntry): Message[] => [
+      {
+        role: 'user' as const,
+        content: entry.prompt!,
+        audio: entry.promptAudio,
+        image: entry.promptImage,
+      },
+      {
+        role: 'assistant' as const,
+        content: entry.output!,
+        audio: entry.outputAudio,
+        image: entry.outputImage,
+      },
+    ]);
+
+  if (historyMessages.length > 0) {
+    return historyMessages;
+  }
+
+  // Fallback to last turn
+  return [
+    { role: 'user' as const, content: getPromptDisplayString(test.prompt) },
+    { role: 'assistant' as const, content: getOutputDisplay(test.output) },
+  ];
 }
 
 const RiskCategoryDrawer = ({
@@ -116,6 +144,18 @@ const RiskCategoryDrawer = ({
   numFailed,
 }: RiskCategoryDrawerProps) => {
   const navigate = useNavigate();
+  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
+  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
+    undefined,
+  );
+  const [activeTab, setActiveTab] = React.useState(0);
+  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
+  const [selectedTest, setSelectedTest] = React.useState<TestWithMetadata | null>(null);
+
+  const sortedFailures = React.useMemo(() => {
+    return [...failures].sort(sortByPriorityStrategies);
+  }, [failures]);
+
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
@@ -146,84 +186,102 @@ const RiskCategoryDrawer = ({
     );
   }
 
-  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
-  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
-    undefined,
-  );
-
-  const [activeTab, setActiveTab] = React.useState(0);
-  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
-  const [selectedTest, setSelectedTest] = React.useState<{
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  } | null>(null);
-
-  const sortedFailures = React.useMemo(() => {
-    return [...failures].sort(sortByPriorityStrategies);
-  }, [failures]);
-
   // Helper to render a test item (used for both failures and passes)
-  const renderTestItem = (
-    test: {
-      prompt: string;
-      output: string;
-      gradingResult?: GradingResult;
-      result?: EvaluateResult;
-    },
-    index: number,
-  ) => {
+  const renderTestItem = (test: TestWithMetadata, index: number, isFailed: boolean) => {
     const strategyId = getStrategyIdFromTest(test);
     const hasSuggestions = test.gradingResult?.componentResults?.some(
       (result) => (result.suggestions?.length || 0) > 0,
     );
+    const chatMessages = buildChatMessages(test);
+    const maxTurns = Math.ceil(chatMessages.length / 2);
+    const strategyLabel = strategyId
+      ? displayNameOverrides[strategyId as keyof typeof displayNameOverrides] || strategyId
+      : undefined;
 
     return (
-      <div
-        key={index}
-        className="failure-item group relative cursor-pointer border-b border-border py-3 transition-colors hover:bg-muted/50"
-        onClick={() => {
-          setSelectedTest(test);
-          setDetailsDialogOpen(true);
-        }}
-      >
-        <div className="flex w-full items-start">
-          <div className="min-w-0 flex-1">
-            <p className="prompt text-sm font-medium">{getPromptDisplayString(test.prompt)}</p>
-            <p className="output mt-1 text-sm text-muted-foreground">
-              {getOutputDisplay(test.output)}
-            </p>
-            {test.gradingResult && strategyId && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="mt-2 inline-block">
-                    <Badge variant="secondary">
-                      {displayNameOverrides[strategyId as keyof typeof displayNameOverrides] ||
-                        strategyId}
-                    </Badge>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {strategyDescriptions[strategyId as Strategy] || ''}
-                </TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          {hasSuggestions && (
-            <button
-              className="ml-2 rounded-md p-1.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentGradingResult(test.gradingResult);
-                setSuggestionsDialogOpen(true);
+      <Collapsible key={index} defaultOpen={index === 0}>
+        <div className="group rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-primary/30 hover:shadow-sm">
+          {/* Header */}
+          <CollapsibleTrigger asChild>
+            <div
+              role="button"
+              tabIndex={0}
+              className="flex w-full flex-col gap-1 p-3 text-left cursor-pointer hover:bg-muted/50"
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) {
+                  return;
+                }
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.currentTarget.click();
+                }
               }}
             >
-              <Lightbulb className="h-4 w-4 text-primary" />
-            </button>
-          )}
+              <div className="flex w-full items-center gap-3">
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform [[data-state=closed]_&]:-rotate-90" />
+                <span className="text-sm font-medium text-muted-foreground">#{index + 1}</span>
+                {strategyLabel && (
+                  <Badge variant="secondary" className="text-xs">
+                    {strategyLabel}
+                  </Badge>
+                )}
+                {maxTurns > 1 && (
+                  <span className="text-xs text-muted-foreground">{maxTurns} turns</span>
+                )}
+                <div className="flex-1" />
+                <div className="flex items-center gap-2 shrink-0">
+                  {hasSuggestions && (
+                    <button
+                      type="button"
+                      aria-label="View suggestions"
+                      className="rounded-md p-1 hover:bg-muted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentGradingResult(test.gradingResult);
+                        setSuggestionsDialogOpen(true);
+                      }}
+                    >
+                      <Lightbulb className="size-3.5 text-primary" />
+                    </button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedTest(test);
+                      setDetailsDialogOpen(true);
+                    }}
+                  >
+                    Details
+                  </Button>
+                </div>
+              </div>
+              {isFailed && test.gradingResult?.reason && (
+                <div className="ml-7">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">
+                    Failure Reason
+                  </div>
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    {test.gradingResult.reason}
+                  </p>
+                </div>
+              )}
+            </div>
+          </CollapsibleTrigger>
+
+          {/* Collapsible content */}
+          <CollapsibleContent>
+            {/* Chat conversation */}
+            <ChatMessages
+              messages={chatMessages}
+              displayTurnCount={maxTurns > 1}
+              maxTurns={maxTurns}
+            />
+          </CollapsibleContent>
         </div>
-      </div>
+      </Collapsible>
     );
   };
 
@@ -249,14 +307,7 @@ const RiskCategoryDrawer = ({
               <p className="text-sm text-muted-foreground">Total</p>
             </div>
             <div className="flex-1 text-center">
-              <p
-                className={cn(
-                  'text-3xl font-bold',
-                  passPercentage >= 70
-                    ? 'text-emerald-600 dark:text-emerald-500'
-                    : 'text-destructive',
-                )}
-              >
+              <p className={cn('text-3xl font-bold', getPassRateStyles(passPercentage / 100).text)}>
                 {passPercentage}%
               </p>
               <p className="text-sm text-muted-foreground">Pass Rate</p>
@@ -303,7 +354,7 @@ const RiskCategoryDrawer = ({
           >
             <TabsList className="w-full">
               <TabsTrigger value="flagged" className="flex-1">
-                Flagged Tests ({failures.length})
+                Failed Tests ({failures.length})
               </TabsTrigger>
               <TabsTrigger value="passed" className="flex-1">
                 Passed Tests ({passes.length})
@@ -315,8 +366,8 @@ const RiskCategoryDrawer = ({
 
             <TabsContent value="flagged">
               {failures.length > 0 ? (
-                <div className="mt-2">
-                  {sortedFailures.map((failure, i) => renderTestItem(failure, i))}
+                <div className="mt-3 space-y-3">
+                  {sortedFailures.map((failure, i) => renderTestItem(failure, i, true))}
                 </div>
               ) : (
                 <p className="mt-4 text-center text-muted-foreground">No failed tests</p>
@@ -325,7 +376,9 @@ const RiskCategoryDrawer = ({
 
             <TabsContent value="passed">
               {passes.length > 0 ? (
-                <div className="mt-2">{passes.map((pass, i) => renderTestItem(pass, i))}</div>
+                <div className="mt-3 space-y-3">
+                  {passes.map((pass, i) => renderTestItem(pass, i, false))}
+                </div>
               ) : (
                 <p className="mt-4 text-center text-muted-foreground">No passed tests</p>
               )}
@@ -358,6 +411,7 @@ const RiskCategoryDrawer = ({
           }
           gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
           metadata={selectedTest?.result?.metadata}
+          providerPrompt={getActualPrompt(selectedTest?.result?.response, { formatted: true })}
         />
       </SheetContent>
     </Sheet>

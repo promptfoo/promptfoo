@@ -3,12 +3,27 @@ import http from 'node:http';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const { MockSocketIOServer, mockSocketClose, mockSocketEmit } = vi.hoisted(() => {
+  const mockSocketClose = vi.fn((callback?: () => void) => callback?.());
+  const mockSocketEmit = vi.fn();
+  const mockSocketOn = vi.fn();
+  const MockSocketIOServer = vi.fn(function SocketIOServer() {
+    return {
+      close: mockSocketClose,
+      emit: mockSocketEmit,
+      on: mockSocketOn,
+    };
+  });
+  return { MockSocketIOServer, mockSocketClose, mockSocketEmit, mockSocketOn };
+});
+
 // Mock dependencies before importing the module
 vi.mock('../../src/migrate', () => ({
   runDbMigrations: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../src/database/signal', () => ({
+  readSignalEvalId: vi.fn(),
   setupSignalWatcher: vi.fn().mockReturnValue({
     close: vi.fn(),
     on: vi.fn(),
@@ -32,13 +47,19 @@ vi.mock('../../src/logger', () => ({
 
 vi.mock('../../src/models/eval', () => ({
   default: {
+    findById: vi.fn(),
     latest: vi.fn().mockResolvedValue(null),
   },
   getEvalSummaries: vi.fn().mockResolvedValue([]),
 }));
 
-import { setupSignalWatcher } from '../../src/database/signal';
+vi.mock('socket.io', () => ({
+  Server: MockSocketIOServer,
+}));
+
+import { readSignalEvalId, setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
+import Eval from '../../src/models/eval';
 // Import after mocks are set up
 import { handleServerError, startServer } from '../../src/server/server';
 
@@ -91,6 +112,7 @@ describe('server', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      mockSocketClose.mockImplementation((callback?: () => void) => callback?.());
 
       // Track signal handlers using a Map to support multiple handlers per event
       signalHandlers = new Map();
@@ -147,6 +169,36 @@ describe('server', () => {
         }
       }
     };
+
+    it('emits update signals even before an eval has results', async () => {
+      let signalCallback: (() => void) | undefined;
+      const mockWatcher = { close: vi.fn(), on: vi.fn() };
+      const getResultsCount = vi.fn();
+      vi.mocked(setupSignalWatcher).mockImplementation((onChange) => {
+        signalCallback = onChange;
+        return mockWatcher as never;
+      });
+      vi.mocked(readSignalEvalId).mockReturnValue('eval-prompt-only-123');
+      vi.mocked(Eval.findById).mockResolvedValue({
+        id: 'eval-prompt-only-123',
+        config: { description: 'Prompt-only eval' },
+        getResultsCount,
+      } as never);
+
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(signalCallback).toBeDefined();
+
+      signalCallback?.();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(getResultsCount).not.toHaveBeenCalled();
+      expect(mockSocketEmit).toHaveBeenCalledWith('update', { evalId: 'eval-prompt-only-123' });
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
 
     it('should register SIGINT and SIGTERM handlers', async () => {
       // Start server and immediately trigger shutdown

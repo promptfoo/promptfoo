@@ -42,6 +42,10 @@ tests:
         threshold: 0.8
 ```
 
+:::note
+`_conversation` message content is treated as literal runtime data and is not rendered as a Nunjucks template. Template syntax such as `{{ vars.value }}` or `{{ env.API_KEY }}` is preserved verbatim for security.
+:::
+
 ## Configuration options
 
 ### Window size
