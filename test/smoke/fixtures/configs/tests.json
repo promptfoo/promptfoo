@@ -1,0 +1,10 @@
+[
+  {
+    "vars": { "name": "Charlie" },
+    "assert": [{ "type": "contains", "value": "Charlie" }]
+  },
+  {
+    "vars": { "name": "Diana" },
+    "assert": [{ "type": "contains", "value": "Diana" }]
+  }
+]

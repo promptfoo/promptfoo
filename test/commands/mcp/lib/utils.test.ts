@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertNotNull,
   createToolResponse,
@@ -61,6 +62,14 @@ describe('MCP Utility Functions', () => {
   });
 
   describe('withTimeout', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should resolve when promise resolves before timeout', async () => {
       const promise = Promise.resolve('success');
       const result = await withTimeout(promise, 1000, 'Timed out');
@@ -70,10 +79,12 @@ describe('MCP Utility Functions', () => {
 
     it('should reject when promise times out', async () => {
       const promise = new Promise((resolve) => setTimeout(() => resolve('late'), 100));
+      const result = withTimeout(promise, 50, 'Operation timed out');
+      const expectation = expect(result).rejects.toThrow('Operation timed out');
 
-      await expect(withTimeout(promise, 50, 'Operation timed out')).rejects.toThrow(
-        'Operation timed out',
-      );
+      await vi.runAllTimersAsync();
+
+      await expectation;
     });
 
     it('should reject with original error if promise rejects', async () => {
@@ -219,8 +230,7 @@ describe('MCP Utility Functions', () => {
       const array = ['', 0, false, null, undefined, 'test'];
       const result = filterNonNull(array);
 
-      // Note: filterNonNull uses Boolean() which removes all falsy values
-      expect(result).toEqual(['test']);
+      expect(result).toEqual(['', 0, false, 'test']);
     });
 
     it('should return empty array for all null/undefined', () => {
@@ -240,15 +250,15 @@ describe('MCP Utility Functions', () => {
 
   describe('debounce', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
+      vi.useFakeTimers();
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('should debounce function calls', () => {
-      const mockFn = jest.fn();
+      const mockFn = vi.fn();
       const debouncedFn = debounce(mockFn, 100);
 
       debouncedFn('arg1');
@@ -257,25 +267,25 @@ describe('MCP Utility Functions', () => {
 
       expect(mockFn).not.toHaveBeenCalled();
 
-      jest.advanceTimersByTime(100);
+      vi.advanceTimersByTime(100);
 
       expect(mockFn).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledWith('arg3');
     });
 
     it('should reset timer on subsequent calls', () => {
-      const mockFn = jest.fn();
+      const mockFn = vi.fn();
       const debouncedFn = debounce(mockFn, 100);
 
       debouncedFn('arg1');
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
 
       debouncedFn('arg2');
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
 
       expect(mockFn).not.toHaveBeenCalled();
 
-      jest.advanceTimersByTime(50);
+      vi.advanceTimersByTime(50);
 
       expect(mockFn).toHaveBeenCalledTimes(1);
       expect(mockFn).toHaveBeenCalledWith('arg2');
@@ -284,7 +294,7 @@ describe('MCP Utility Functions', () => {
 
   describe('retry', () => {
     it('should succeed on first attempt', async () => {
-      const operation = jest.fn().mockResolvedValue('success');
+      const operation = vi.fn().mockResolvedValue('success');
       const result = await retry(operation);
 
       expect(result).toBe('success');
@@ -292,7 +302,7 @@ describe('MCP Utility Functions', () => {
     });
 
     it('should retry on failure and eventually succeed', async () => {
-      const operation = jest
+      const operation = vi
         .fn()
         .mockRejectedValueOnce(new Error('fail1'))
         .mockRejectedValueOnce(new Error('fail2'))
@@ -305,7 +315,7 @@ describe('MCP Utility Functions', () => {
     });
 
     it('should throw last error after max attempts', async () => {
-      const operation = jest.fn().mockRejectedValue(new Error('persistent failure'));
+      const operation = vi.fn().mockRejectedValue(new Error('persistent failure'));
 
       await expect(retry(operation, { maxAttempts: 2, baseDelay: 10 })).rejects.toThrow(
         'persistent failure',
@@ -315,7 +325,7 @@ describe('MCP Utility Functions', () => {
     });
 
     it('should use exponential backoff', async () => {
-      const operation = jest
+      const operation = vi
         .fn()
         .mockRejectedValueOnce(new Error('fail1'))
         .mockRejectedValueOnce(new Error('fail2'))
@@ -324,13 +334,15 @@ describe('MCP Utility Functions', () => {
       const startTime = Date.now();
 
       // Mock Date.now to control timing
-      const mockDateNow = jest.spyOn(Date, 'now');
+      const mockDateNow = vi.spyOn(Date, 'now');
       let timeOffset = 0;
-      mockDateNow.mockImplementation(() => startTime + timeOffset);
+      mockDateNow.mockImplementation(function () {
+        return startTime + timeOffset;
+      });
 
       // Mock setTimeout to simulate delays
-      const mockSetTimeout = jest.spyOn(global, 'setTimeout');
-      mockSetTimeout.mockImplementation((callback, delay) => {
+      const mockSetTimeout = vi.spyOn(global, 'setTimeout');
+      mockSetTimeout.mockImplementation(function (callback, delay) {
         timeOffset += delay ?? 0;
         callback();
         return {} as any;
@@ -346,13 +358,13 @@ describe('MCP Utility Functions', () => {
     });
 
     it('should respect max delay', async () => {
-      const operation = jest
+      const operation = vi
         .fn()
         .mockRejectedValueOnce(new Error('fail1'))
         .mockResolvedValue('success');
 
-      const mockSetTimeout = jest.spyOn(global, 'setTimeout');
-      mockSetTimeout.mockImplementation((callback) => {
+      const mockSetTimeout = vi.spyOn(global, 'setTimeout');
+      mockSetTimeout.mockImplementation(function (callback) {
         callback();
         return {} as any;
       });
@@ -422,13 +434,28 @@ describe('MCP Utility Functions', () => {
       expect(result).toHaveLength(20);
     });
 
-    it('should handle max length less than ellipsis length', () => {
-      const text = 'Hello';
-      const result = truncateText(text, 2);
+    it('should truncate without ellipsis when max length is 3 or less', () => {
+      expect(truncateText('Hello', 3)).toBe('Hel');
+      expect(truncateText('Hello', 2)).toBe('He');
+      expect(truncateText('Hello', 1)).toBe('H');
+    });
 
-      // When maxLength < 3, slice(0, negative) gives unexpected results
-      // This is an edge case in the implementation - it returns "Hell..."
-      expect(result).toBe('Hell...');
+    it('should use ellipsis starting at max length 4', () => {
+      const result = truncateText('Hello World', 4);
+      expect(result).toBe('H...');
+      expect(result).toHaveLength(4);
+    });
+
+    it('should return empty string when max length is zero', () => {
+      const result = truncateText('Hello', 0);
+
+      expect(result).toBe('');
+    });
+
+    it('should return empty string when max length is negative', () => {
+      const result = truncateText('Hello', -1);
+
+      expect(result).toBe('');
     });
 
     it('should handle empty string', () => {

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types';
+import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
 export interface EvalConfigState {
   config: Partial<UnifiedConfig>;

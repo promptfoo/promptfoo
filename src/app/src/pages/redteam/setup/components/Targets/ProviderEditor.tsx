@@ -1,20 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
-import KeyboardArrowLeftIcon from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Link from '@mui/material/Link';
-import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getProviderType } from './helpers';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderTypeSelector from './ProviderTypeSelector';
 
 import type { ProviderOptions } from '../../types';
-import type { ProviderConfigEditorRef } from './ProviderConfigEditor';
 
 export function defaultHttpTarget(): ProviderOptions {
   return {
@@ -43,12 +37,12 @@ interface ProviderProps {
     disableNameField?: boolean;
     disableTitle?: boolean;
     actionButtonText?: string;
-    defaultRequestTransform?: string;
-    hideErrors?: boolean;
     disableModelSelection?: boolean;
   };
   setError?: (error: string | null) => void;
   validateAll?: boolean; // Flag to force validation of all fields
+  onTargetTested?: (success: boolean) => void;
+  onSessionTested?: (success: boolean) => void;
 }
 
 export default function ProviderEditor({
@@ -61,25 +55,28 @@ export default function ProviderEditor({
   opts = {},
   setError,
   validateAll = false,
+  onTargetTested,
+  onSessionTested,
 }: ProviderProps) {
-  const theme = useTheme();
   const {
     disableNameField = false,
     description,
     disableTitle = false,
     actionButtonText,
     availableProviderIds,
-    defaultRequestTransform,
     disableModelSelection = false,
-    hideErrors = false,
   } = opts;
 
-  const configEditorRef = useRef<ProviderConfigEditorRef>(null);
+  const validateRef = useRef<(() => boolean) | null>(null);
   const [validationErrors, setValidationErrors] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState<boolean>(false);
   const [providerType, setProviderType] = useState<string | undefined>(
     getProviderType(provider?.id) ?? availableProviderIds?.[0],
   );
+
+  const handleValidationRequest = useCallback((validator: () => boolean) => {
+    validateRef.current = validator;
+  }, []);
 
   // Sync providerType with provider changes
   useEffect(() => {
@@ -103,42 +100,41 @@ export default function ProviderEditor({
   }
 
   return (
-    <Stack direction="column" spacing={3}>
-      {!disableTitle && (
-        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-          Select Red Team Provider
-        </Typography>
-      )}
+    <div className="flex flex-col gap-6">
+      {!disableTitle && <h2 className="mb-6 text-2xl font-bold">Select Red Team Provider</h2>}
 
-      <Typography variant="body1">
+      <p className="text-base">
         {description ||
           'A target is the specific LLM or endpoint you want to evaluate in your red teaming process.'}{' '}
         For more information on available targets and how to configure them, please visit our{' '}
-        <Link href="https://www.promptfoo.dev/docs/providers/" target="_blank" rel="noopener">
+        <a
+          href="https://www.promptfoo.dev/docs/providers/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
           documentation
-        </Link>
+        </a>
         .
-      </Typography>
+      </p>
 
       {!disableNameField && (
-        <TextField
-          fullWidth
-          sx={{ mb: 2 }}
-          label="Provider Name"
-          value={provider?.label ?? ''}
-          placeholder="e.g. 'customer-service-agent'"
-          onChange={(e) => {
-            if (provider) {
-              setProvider({ ...provider, label: e.target.value });
-            }
-          }}
-          margin="normal"
-          required
-          autoFocus
-          InputLabelProps={{
-            shrink: true,
-          }}
-        />
+        <div className="mb-4 mt-4">
+          <Label htmlFor="provider-name" className="mb-2 block">
+            Provider Name <span className="text-destructive">*</span>
+          </Label>
+          <Input
+            id="provider-name"
+            value={provider?.label ?? ''}
+            placeholder="e.g. 'customer-service-agent'"
+            onChange={(e) => {
+              if (provider) {
+                setProvider({ ...provider, label: e.target.value });
+              }
+            }}
+            autoFocus
+          />
+        </div>
       )}
 
       {/* Provider Type Selection Section */}
@@ -152,82 +148,53 @@ export default function ProviderEditor({
 
       {/* Provider Configuration Section */}
       <ProviderConfigEditor
-        ref={configEditorRef}
         provider={provider}
         setProvider={setProvider}
         extensions={extensions}
         onExtensionsChange={onExtensionsChange}
-        opts={{
-          defaultRequestTransform,
-          hideErrors,
-          disableModelSelection,
-        }}
         setError={handleError}
         validateAll={validateAll || shouldValidate}
-        onValidate={(isValid) => {
+        onValidate={() => {
           // Validation errors will be displayed through the handleError function
         }}
+        onValidationRequest={handleValidationRequest}
         providerType={providerType}
+        onTargetTested={onTargetTested}
+        onSessionTested={onSessionTested}
       />
 
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: validationErrors ? 'space-between' : 'flex-end',
-          mt: 4,
-          width: '100%',
-          position: 'relative',
-        }}
+      <div
+        className={`mt-8 flex w-full ${validationErrors ? 'justify-between' : 'justify-end'} relative`}
       >
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 2,
-            ...(validationErrors && {
-              width: '100%',
-              justifyContent: 'space-between',
-            }),
-          }}
-        >
+        <div className={`flex gap-4 ${validationErrors ? 'w-full justify-between' : ''}`}>
           {onBack && (
-            <Button
-              variant="outlined"
-              startIcon={<KeyboardArrowLeftIcon />}
-              onClick={onBack}
-              sx={{ px: 4, py: 1 }}
-            >
+            <Button variant="outline" onClick={onBack} className="px-6 py-2">
+              <ChevronLeft className="mr-2 size-4" />
               Back
             </Button>
           )}
           {onActionButtonClick && (
             <Button
-              variant="contained"
               onClick={() => {
                 // Enable validation when button is clicked
                 setShouldValidate(true);
 
-                // Use the ref to validate
-                const isValid = configEditorRef.current?.validate() ?? false;
+                // Call the validation function
+                const isValid = validateRef.current?.() ?? false;
 
                 // Only proceed if there are no errors
                 if (isValid && !validationErrors) {
                   onActionButtonClick();
                 }
               }}
-              endIcon={<KeyboardArrowRightIcon />}
-              sx={{
-                backgroundColor: theme.palette.primary.main,
-                '&:hover': { backgroundColor: theme.palette.primary.dark },
-                '&:disabled': { backgroundColor: theme.palette.action.disabledBackground },
-                px: 4,
-                py: 1,
-              }}
+              className="px-6 py-2"
             >
               {actionButtonText || 'Next'}
+              <ChevronRight className="ml-2 size-4" />
             </Button>
           )}
-        </Box>
-      </Box>
-    </Stack>
+        </div>
+      </div>
+    </div>
   );
 }

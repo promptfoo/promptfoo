@@ -8,7 +8,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import type { Options as PythonShellOptions } from 'python-shell';
 
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
+import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
 /**
  * Python prompt function. Runs a specific function from the python file.
@@ -21,9 +21,9 @@ export const pythonPromptFunction = async (
   filePath: string,
   functionName: string,
   context: {
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider?: ApiProvider;
-    config?: Record<string, any>;
+    config?: unknown;
   },
 ) => {
   invariant(context.provider?.id, 'provider.id is required');
@@ -49,9 +49,9 @@ export const pythonPromptFunction = async (
 export const pythonPromptFunctionLegacy = async (
   filePath: string,
   context: {
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider?: ApiProvider;
-    config?: Record<string, any>;
+    config?: Record<string, unknown>;
   },
 ): Promise<string> => {
   invariant(context?.provider?.id, 'provider.id is required');

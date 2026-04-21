@@ -1,16 +1,19 @@
+import crypto from 'node:crypto';
+
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type { EnvVarKey } from '../../envars';
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiModerationProvider,
   ModerationFlag,
   ProviderModerationResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
+} from '../../types/index';
 
 const AZURE_MODERATION_MODELS = [
   { id: 'text-content-safety', maxTokens: 10000, capabilities: ['text'] },
@@ -99,8 +102,34 @@ export function handleApiError(err: any, data?: any): ProviderModerationResponse
   return { error: err.message || 'Unknown error', flags: [] };
 }
 
-export function getModerationCacheKey(modelName: string, config: any, content: string): string {
-  return `azure-moderation:${modelName}:${JSON.stringify(content)}`;
+export function getModerationCacheKey(
+  modelName: string,
+  config: AzureModerationConfig,
+  content: string,
+): string {
+  const cacheConfig = {
+    endpoint: config.endpoint,
+    apiVersion: config.apiVersion,
+    headersHash:
+      config.headers && Object.keys(config.headers).length > 0
+        ? crypto
+            .createHash('sha256')
+            .update(
+              JSON.stringify(
+                Object.keys(config.headers)
+                  .sort()
+                  .map((k) => [k, config.headers![k]]),
+              ),
+            )
+            .digest('hex')
+            .slice(0, 16)
+        : undefined,
+    blocklistNames: config.blocklistNames || [],
+    haltOnBlocklistHit: config.haltOnBlocklistHit ?? false,
+    passthrough: config.passthrough || {},
+  };
+
+  return `azure-moderation:${modelName}:${JSON.stringify(cacheConfig)}:${JSON.stringify(content)}`;
 }
 
 export class AzureModerationProvider extends AzureGenericProvider implements ApiModerationProvider {
@@ -136,6 +165,12 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     if (!AzureModerationProvider.MODERATION_MODEL_IDS.includes(modelName)) {
       logger.warn(`Using unknown Azure moderation model: ${modelName}`);
     }
+
+    if (config?.blocklistNames != null && !Array.isArray(config.blocklistNames)) {
+      logger.warn(
+        `Azure moderation config blocklistNames should be an array, got ${typeof config.blocklistNames}`,
+      );
+    }
   }
 
   getContentSafetyApiKey(): string | undefined {
@@ -156,7 +191,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
   }
 
   async callModerationApi(
-    userPrompt: string,
+    _userPrompt: string,
     assistantResponse: string,
   ): Promise<ProviderModerationResponse> {
     await this.ensureInitialized();
@@ -189,13 +224,17 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
     let cacheKey = '';
 
     if (useCache) {
-      cacheKey = getModerationCacheKey(this.modelName, this.configWithHeaders, assistantResponse);
+      cacheKey = getModerationCacheKey(
+        this.modelName,
+        { ...this.configWithHeaders, endpoint: this.endpoint, apiVersion: this.apiVersion },
+        assistantResponse,
+      );
       const cache = await getCache();
       const cachedResponse = await cache.get(cacheKey);
 
       if (cachedResponse) {
         logger.debug('Returning cached Azure moderation response');
-        return cachedResponse;
+        return { ...cachedResponse, cached: true };
       }
     }
 
@@ -221,7 +260,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-      const response = await fetch(url, {
+      const response = await fetchWithProxy(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),

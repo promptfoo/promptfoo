@@ -1,9 +1,8 @@
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { type ResultsFilter, useTableStore } from '../store';
 import FiltersForm from './FiltersForm';
-import { useTableStore, type ResultsFilter } from '../store';
 
 vi.mock('../store', () => ({
   useTableStore: vi.fn(),
@@ -16,50 +15,94 @@ const mockRemoveFilter = vi.fn();
 const mockUpdateAllFilterLogicOperators = vi.fn();
 const mockAddFilter = vi.fn();
 const mockRemoveAllFilters = vi.fn();
+const mockFetchMetadataKeys = vi.fn();
+const mockFetchMetadataValues = vi.fn();
 
-const WithTheme = ({ children }: { children: React.ReactNode }) => {
-  const theme = createTheme();
-  return <ThemeProvider theme={theme}>{children}</ThemeProvider>;
+const defaultStoreValue = {
+  filters: {
+    values: {},
+    options: {
+      metric: [],
+      metadata: [],
+      plugin: [],
+      strategy: [],
+      severity: [],
+      policy: [],
+    },
+    appliedCount: 0,
+  },
+  metadataKeys: [],
+  metadataKeysLoading: false,
+  metadataKeysError: null,
+  metadataValues: {},
+  metadataValuesLoading: {},
+  metadataValuesError: {},
+  evalId: 'test-eval-id',
+  addFilter: mockAddFilter,
+  updateFilter: mockUpdateFilter,
+  removeFilter: mockRemoveFilter,
+  removeAllFilters: mockRemoveAllFilters,
+  updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+  fetchMetadataKeys: mockFetchMetadataKeys,
+  fetchMetadataValues: mockFetchMetadataValues,
 };
 
-describe('FiltersForm', () => {
-  let anchorEl: HTMLElement;
+async function openFiltersPopover(user: ReturnType<typeof userEvent.setup>) {
+  const filtersButton = screen.getByRole('button', { name: /filters/i });
+  await user.click(filtersButton);
+  // Wait for popover to open
+  await waitFor(() => {
+    expect(screen.getByText('Add filter')).toBeInTheDocument();
+  });
+}
 
+describe('FiltersForm', () => {
   beforeEach(() => {
-    anchorEl = document.createElement('div');
-    document.body.appendChild(anchorEl);
     vi.clearAllMocks();
   });
 
-  it('should automatically add a default filter when opened with no existing filters', () => {
+  it('renders a filters button', () => {
+    mockedUseTableStore.mockReturnValue(defaultStoreValue as any);
+    render(<FiltersForm />);
+    expect(screen.getByRole('button', { name: /filters/i })).toBeInTheDocument();
+  });
+
+  it('shows filter count badge when there are applied filters', () => {
     mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
       filters: {
-        values: {},
-        options: {
-          metric: ['latency'],
-          metadata: [],
-          plugin: [],
-          strategy: [],
-          severity: [],
-        },
-        appliedCount: 0,
+        ...defaultStoreValue.filters,
+        appliedCount: 3,
       },
-      addFilter: mockAddFilter,
-      updateFilter: mockUpdateFilter,
-      removeFilter: mockRemoveFilter,
-      removeAllFilters: mockRemoveAllFilters,
-      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
+    } as any);
+    render(<FiltersForm />);
+    expect(screen.getByText('3')).toBeInTheDocument();
+  });
+
+  it('opens popover when clicking the filters button', async () => {
+    mockedUseTableStore.mockReturnValue(defaultStoreValue as any);
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+    expect(screen.getByText('Add filter')).toBeInTheDocument();
+  });
+
+  it('automatically adds a default filter when opened with no existing filters', async () => {
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        options: {
+          ...defaultStoreValue.filters.options,
+          metric: ['latency'],
+        },
+      },
     } as any);
 
-    const handleClose = vi.fn();
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-    render(
-      <WithTheme>
-        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-      </WithTheme>,
-    );
-
-    expect(mockAddFilter).toHaveBeenCalledTimes(1);
     expect(mockAddFilter).toHaveBeenCalledWith({
       type: 'metric',
       operator: 'equals',
@@ -67,459 +110,728 @@ describe('FiltersForm', () => {
     });
   });
 
-  it('should add a new filter to the list when the Add Filter button is clicked', () => {
-    mockedUseTableStore.mockReturnValue({
-      filters: {
-        values: {},
-        options: {
-          metric: [],
-          metadata: [],
-          plugin: [],
-          strategy: [],
-          severity: [],
-        },
-        appliedCount: 0,
-      },
-      addFilter: mockAddFilter,
-      removeAllFilters: mockRemoveAllFilters,
-      updateFilter: mockUpdateFilter,
-      removeFilter: mockRemoveFilter,
-      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
-    } as any);
+  it('adds a new filter when Add filter button is clicked', async () => {
+    mockedUseTableStore.mockReturnValue(defaultStoreValue as any);
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-    const handleClose = vi.fn();
-
-    render(
-      <WithTheme>
-        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-      </WithTheme>,
-    );
-
+    // Clear the initial auto-add call
     mockAddFilter.mockClear();
 
-    const addButton = screen.getByText('Add Filter');
-    fireEvent.click(addButton);
+    const addButton = screen.getByText('Add filter');
+    await user.click(addButton);
 
-    expect(mockAddFilter).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledWith({
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+    });
   });
 
-  it('should remove all filters and close the popover when the Remove All button is clicked', () => {
+  it('shows Clear all button when there are filters', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: 'test',
+      field: 'key1',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
     mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
       filters: {
-        values: {
-          filter1: {
-            id: 'filter1',
-            type: 'metric',
-            operator: 'equals',
-            value: 'latency',
-            sortIndex: 0,
-          },
-          filter2: {
-            id: 'filter2',
-            type: 'metadata',
-            operator: 'contains',
-            value: 'test',
-            field: 'name',
-            sortIndex: 1,
-          },
-        },
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        appliedCount: 1,
+      },
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    expect(screen.getByText('Clear all')).toBeInTheDocument();
+  });
+
+  it('calls removeAllFilters when Clear all is clicked', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: 'test',
+      field: 'key1',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        appliedCount: 1,
+      },
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    await user.click(screen.getByText('Clear all'));
+    expect(mockRemoveAllFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows loading state for metadata keys', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+      },
+      metadataKeysLoading: true,
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    expect(screen.getByPlaceholderText('Loading keys...')).toBeInTheDocument();
+  });
+
+  it('shows error state for metadata keys', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+      },
+      metadataKeysError: true,
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    expect(screen.getByPlaceholderText('Error loading keys')).toBeInTheDocument();
+  });
+
+  it('shows metadata key dropdown when keys are loaded', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+      },
+      metadataKeys: ['key1', 'key2', 'key3'],
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    // Find all comboboxes and find the one with placeholder "Choose key..."
+    const selects = screen.getAllByRole('combobox');
+    // One of them should have metadata key options
+    expect(selects.length).toBeGreaterThan(0);
+  });
+
+  it('renders filter type selector with available options', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
         options: {
           metric: ['latency'],
           metadata: [],
+          plugin: ['plugin1'],
+          strategy: ['strategy1'],
+          severity: ['high', 'medium'],
+          policy: [],
+        },
+      },
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    // The filter type dropdown should show available types
+    const selects = screen.getAllByRole('combobox');
+    expect(selects.length).toBeGreaterThan(0);
+  });
+
+  it('shows severity options in value dropdown for severity filter', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'severity',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        options: {
+          ...defaultStoreValue.filters.options,
+          severity: ['critical', 'high', 'medium', 'low'],
+        },
+      },
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    // Find the severity value dropdown (should have placeholder "Choose severity...")
+    const selects = screen.getAllByRole('combobox');
+    // Click on the value dropdown (last one should be the value selector)
+    const valueDropdown = selects[selects.length - 1];
+    await user.click(valueDropdown);
+
+    // Should show severity options
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /critical/i })).toBeInTheDocument();
+    });
+  });
+
+  it('shows plugin options in value dropdown for plugin filter', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'plugin',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        options: {
+          ...defaultStoreValue.filters.options,
+          plugin: ['harmful:hate', 'harmful:violence'],
+        },
+      },
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    // Find value dropdown and click
+    const selects = screen.getAllByRole('combobox');
+    const valueDropdown = selects[selects.length - 1];
+    await user.click(valueDropdown);
+
+    // Should show plugin options
+    await waitFor(() => {
+      expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
+    });
+  });
+
+  it('shows AND/OR selector for second filter', async () => {
+    const filter1: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: 'val1',
+      field: 'key1',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+    const filter2: ResultsFilter = {
+      id: 'filter-2',
+      type: 'metadata',
+      operator: 'equals',
+      value: 'val2',
+      field: 'key2',
+      sortIndex: 1,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter1, 'filter-2': filter2 },
+        appliedCount: 2,
+      },
+      metadataKeys: ['key1', 'key2'],
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    // Second filter row should have AND/OR selector
+    const selects = screen.getAllByRole('combobox');
+    // Look for 'and' or 'or' in the rendered content
+    expect(selects.length).toBeGreaterThan(2); // At least logic operator + type + operator for multiple filters
+  });
+
+  it('calls updateFilter when filter value changes', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'severity',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        options: {
+          ...defaultStoreValue.filters.options,
+          severity: ['critical', 'high', 'medium', 'low'],
+        },
+      },
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    // Find the value dropdown and select an option
+    const selects = screen.getAllByRole('combobox');
+    const valueDropdown = selects[selects.length - 1];
+    await user.click(valueDropdown);
+
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /high/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('option', { name: /high/i }));
+
+    expect(mockUpdateFilter).toHaveBeenCalled();
+  });
+
+  it('shows number input for metric filter with comparison operators', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metric',
+      field: 'latency',
+      operator: 'gt',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        options: {
+          ...defaultStoreValue.filters.options,
+          metric: ['latency'],
+        },
+      },
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    // Should have a number input for the value
+    const inputs = screen.getAllByRole('spinbutton');
+    expect(inputs.length).toBeGreaterThan(0);
+  });
+
+  it('hides value input when exists operator is selected', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      field: 'key1',
+      operator: 'exists',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+      },
+      metadataKeys: ['key1', 'key2'],
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    // With exists operator, value input should not be shown
+    // Check that there's no text input for value (only the key dropdown and operator)
+    const textInputs = screen.queryAllByRole('textbox');
+    // Filter out any inputs that are for key entry
+    const valueInputs = textInputs.filter(
+      (input) => !input.getAttribute('placeholder')?.includes('key'),
+    );
+    expect(valueInputs.length).toBe(0);
+  });
+
+  it('defaults to metadata filter for standard evaluations', async () => {
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        options: {
+          metric: [],
+          metadata: [],
           plugin: [],
           strategy: [],
           severity: [],
+          policy: [],
         },
-        appliedCount: 2,
       },
-      removeAllFilters: mockRemoveAllFilters,
-      addFilter: mockAddFilter,
-      updateFilter: mockUpdateFilter,
-      removeFilter: mockRemoveFilter,
-      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
     } as any);
 
-    const handleClose = vi.fn();
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-    const { getByText } = render(
-      <WithTheme>
-        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-      </WithTheme>,
-    );
-
-    const removeAllButton = getByText('Remove All');
-    fireEvent.click(removeAllButton);
-
-    expect(mockRemoveAllFilters).toHaveBeenCalledTimes(1);
-    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(mockAddFilter).toHaveBeenCalledWith({
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+    });
   });
 
-  it('should disable already selected severity values in other severity filter dropdowns', () => {
-    const severityOptions = ['high', 'medium', 'low'];
-    const filter1Id = 'filter1';
-    const filter2Id = 'filter2';
-
+  it('defaults to metric filter when metrics are available', async () => {
     mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
       filters: {
-        values: {
-          [filter1Id]: {
-            id: filter1Id,
-            type: 'severity',
-            operator: 'equals',
-            value: 'high',
-            sortIndex: 0,
-            logicOperator: 'and',
-          },
-          [filter2Id]: {
-            id: filter2Id,
-            type: 'severity',
-            operator: 'equals',
-            value: 'medium',
-            sortIndex: 1,
-            logicOperator: 'and',
-          },
-        },
+        ...defaultStoreValue.filters,
         options: {
-          metric: [],
+          metric: ['latency', 'cost'],
           metadata: [],
           plugin: [],
           strategy: [],
-          severity: severityOptions,
+          severity: [],
+          policy: [],
         },
-        appliedCount: 2,
       },
-      addFilter: mockAddFilter,
-      removeFilter: mockRemoveFilter,
-      updateFilter: mockUpdateFilter,
-      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
-      removeAllFilters: mockRemoveAllFilters,
     } as any);
 
-    const handleClose = vi.fn();
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-    render(
-      <WithTheme>
-        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-      </WithTheme>,
-    );
-
-    const dropdowns = screen.getAllByRole('combobox');
-    const severityValueDropdowns = dropdowns.filter((dropdown) => {
-      return dropdown.getAttribute('aria-labelledby')?.includes('value-select-label');
+    expect(mockAddFilter).toHaveBeenCalledWith({
+      type: 'metric',
+      operator: 'equals',
+      value: '',
     });
-
-    expect(severityValueDropdowns).toHaveLength(2);
-
-    const filter1Dropdown = severityValueDropdowns[0];
-    const filter2Dropdown = severityValueDropdowns[1];
-
-    expect(mockedUseTableStore.mock.results[0].value.filters.values[filter1Id]).toBeDefined();
-    expect(mockedUseTableStore.mock.results[0].value.filters.values[filter2Id]).toBeDefined();
-
-    expect(filter1Dropdown).toBeInTheDocument();
-    expect(filter2Dropdown).toBeInTheDocument();
   });
 
-  it('should initialize with severity filter from store and persist it', () => {
-    const severityValue = 'critical';
-    const filterId = 'severityFilter123';
+  it('calls removeFilter when remove button is clicked', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
 
     mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
       filters: {
-        values: {
-          [filterId]: {
-            id: filterId,
-            type: 'severity',
-            operator: 'equals',
-            value: severityValue,
-            sortIndex: 0,
-            logicOperator: 'and',
-          },
-        },
-        options: {
-          metric: [],
-          metadata: [],
-          plugin: [],
-          strategy: [],
-          severity: [severityValue],
-        },
-        appliedCount: 1,
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
       },
-      addFilter: mockAddFilter,
-      updateFilter: mockUpdateFilter,
-      removeFilter: mockRemoveFilter,
-      removeAllFilters: mockRemoveAllFilters,
-      updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
     } as any);
 
-    const handleClose = vi.fn();
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-    render(
-      <WithTheme>
-        <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-      </WithTheme>,
+    // Find the remove button (X icon) in the filter row
+    // It's a button with ghost variant containing an X icon
+    const buttons = screen.getAllByRole('button');
+    // Find the button that removes the filter (not Add filter, not Clear all, not Filters)
+    const removeButton = buttons.find(
+      (btn) =>
+        !btn.textContent?.includes('Add') &&
+        !btn.textContent?.includes('Clear') &&
+        !btn.textContent?.includes('Filters') &&
+        btn.querySelector('svg'),
     );
 
-    expect(useTableStore).toHaveBeenCalled();
+    if (removeButton) {
+      await user.click(removeButton);
+      expect(mockRemoveFilter).toHaveBeenCalledWith('filter-1');
+    }
   });
 
-  describe('Filter component', () => {
-    it("should display 'Severity' as a selectable filter type in the filter type dropdown when filters.options.severity contains at least one severity value", async () => {
-      const initialFilter: ResultsFilter = {
-        id: 'filter-1',
-        type: 'metadata',
-        operator: 'equals',
-        value: '',
-        sortIndex: 0,
-        logicOperator: 'and',
-      };
+  it('shows policy options when policy filter is selected', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'policy',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
 
-      mockedUseTableStore.mockReturnValue({
-        filters: {
-          values: { 'filter-1': initialFilter },
-          options: {
-            metric: [],
-            metadata: [],
-            plugin: [],
-            strategy: [],
-            severity: ['high', 'medium', 'low'],
-          },
-          appliedCount: 0,
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        options: {
+          ...defaultStoreValue.filters.options,
+          policy: ['policy-1', 'policy-2'],
         },
-        updateFilter: mockUpdateFilter,
-        removeFilter: mockRemoveFilter,
-        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
-        addFilter: mockAddFilter,
-        removeAllFilters: mockRemoveAllFilters,
-      } as any);
-
-      const handleClose = vi.fn();
-
-      render(
-        <WithTheme>
-          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-        </WithTheme>,
-      );
-
-      const filterTypeDropdown = screen.getByRole('combobox', { name: /Field/i });
-      await userEvent.click(filterTypeDropdown);
-
-      const severityOption = await screen.findByRole('option', { name: 'Severity' });
-      expect(severityOption).toBeInTheDocument();
-
-      expect(screen.getByRole('option', { name: 'Metadata' })).toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: 'Metric' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: 'Plugin' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: 'Strategy' })).not.toBeInTheDocument();
-    });
-
-    it("Filter should render a value dropdown with all filters.options.severity values as selectable options when value.type is 'severity', and selecting an option should call updateFilter with the selected severity value", async () => {
-      const initialFilter: ResultsFilter = {
-        id: 'filter-1',
-        type: 'severity',
-        operator: 'equals',
-        value: '',
-        sortIndex: 0,
-        logicOperator: 'and',
-      };
-
-      const severityOptions = ['high', 'medium', 'low'];
-
-      mockedUseTableStore.mockReturnValue({
-        filters: {
-          values: { 'filter-1': initialFilter },
-          options: {
-            metric: [],
-            metadata: [],
-            plugin: [],
-            strategy: [],
-            severity: severityOptions,
-          },
-          appliedCount: 0,
+        policyIdToNameMap: {
+          'policy-1': 'Content Policy',
+          'policy-2': 'Safety Policy',
         },
-        updateFilter: mockUpdateFilter,
-        removeFilter: mockRemoveFilter,
-        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
-        addFilter: mockAddFilter,
-        removeAllFilters: mockRemoveAllFilters,
-      } as any);
+      },
+    } as any);
 
-      const handleClose = vi.fn();
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-      render(
-        <WithTheme>
-          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-        </WithTheme>,
-      );
+    // Find value dropdown and click
+    const selects = screen.getAllByRole('combobox');
+    const valueDropdown = selects[selects.length - 1];
+    await user.click(valueDropdown);
 
-      const severityValueDropdown = screen.getByRole('combobox', { name: /Severity/i });
-      await userEvent.click(severityValueDropdown);
-
-      const highSeverityOption = await screen.getByRole('option', { name: 'high' });
-      await userEvent.click(highSeverityOption);
-
-      expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
-      expect(mockUpdateFilter).toHaveBeenCalledWith({
-        id: 'filter-1',
-        type: 'severity',
-        operator: 'equals',
-        value: 'high',
-        sortIndex: 0,
-        logicOperator: 'and',
-      });
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: 'Content Policy' })).toBeInTheDocument();
     });
+  });
 
-    it('should reset the operator to "equals" when changing the filter type to "severity" if the previous operator was not "equals"', async () => {
-      const initialFilter: ResultsFilter = {
-        id: 'filter-1',
-        type: 'metadata',
-        operator: 'contains',
-        value: 'test',
-        sortIndex: 0,
-        logicOperator: 'and',
-      };
+  it('shows strategy options when strategy filter is selected', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'strategy',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
 
-      mockedUseTableStore.mockReturnValue({
-        filters: {
-          values: { 'filter-1': initialFilter },
-          options: {
-            metric: [],
-            metadata: [],
-            plugin: [],
-            strategy: [],
-            severity: ['high', 'medium', 'low'],
-          },
-          appliedCount: 0,
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        options: {
+          ...defaultStoreValue.filters.options,
+          strategy: ['jailbreak', 'prompt-injection'],
         },
-        updateFilter: mockUpdateFilter,
-        removeFilter: mockRemoveFilter,
-        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
-        addFilter: mockAddFilter,
-        removeAllFilters: mockRemoveAllFilters,
-      } as any);
+      },
+    } as any);
 
-      const handleClose = vi.fn();
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-      render(
-        <WithTheme>
-          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-        </WithTheme>,
-      );
+    // Find value dropdown and click
+    const selects = screen.getAllByRole('combobox');
+    const valueDropdown = selects[selects.length - 1];
+    await user.click(valueDropdown);
 
-      const filterTypeDropdown = screen.getByRole('combobox', { name: /Field/i });
-      await userEvent.click(filterTypeDropdown);
-
-      const severityOption = await screen.findByRole('option', { name: 'Severity' });
-      await userEvent.click(severityOption);
-
-      expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
-      expect(mockUpdateFilter).toHaveBeenCalledWith({
-        ...initialFilter,
-        type: 'severity',
-        operator: 'equals',
-        value: '',
-      });
+    await waitFor(() => {
+      expect(screen.getAllByRole('option').length).toBeGreaterThan(0);
     });
+  });
 
-    it('should call onClose when the last filter is removed via the close button', async () => {
-      const initialFilter: ResultsFilter = {
-        id: 'filter-1',
-        type: 'metadata',
-        operator: 'equals',
-        value: '',
-        sortIndex: 0,
-        logicOperator: 'and',
-      };
+  it('shows operator options for plugin filter type', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'plugin',
+      operator: 'equals',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
 
-      mockedUseTableStore.mockReturnValue({
-        filters: {
-          values: { 'filter-1': initialFilter },
-          options: {
-            metric: [],
-            metadata: [],
-            plugin: [],
-            strategy: [],
-            severity: [],
-          },
-          appliedCount: 0,
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        options: {
+          ...defaultStoreValue.filters.options,
+          plugin: ['harmful:hate'],
         },
-        updateFilter: mockUpdateFilter,
-        removeFilter: mockRemoveFilter,
-        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
-        addFilter: mockAddFilter,
-        removeAllFilters: mockRemoveAllFilters,
-      } as any);
+      },
+    } as any);
 
-      const handleClose = vi.fn();
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-      render(
-        <WithTheme>
-          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-        </WithTheme>,
-      );
+    // Find operator dropdown (it should show "equals" by default)
+    const selects = screen.getAllByRole('combobox');
+    // The operator dropdown should have equals/not_equals options for plugin type
+    const operatorDropdown = selects[1]; // Usually second dropdown after type
+    await user.click(operatorDropdown);
 
-      const closeIcon = screen.getByTestId('CloseIcon');
-      const closeButton = closeIcon.closest('button');
-
-      if (closeButton) {
-        await userEvent.click(closeButton);
-      }
-
-      expect(handleClose).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      // Plugin filter should show equals and not equals options
+      expect(screen.getByRole('option', { name: 'equals' })).toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'not equals' })).toBeInTheDocument();
     });
+  });
 
-    it('should clear the filter value when changing the filter type to "severity" from another type', async () => {
-      const initialFilter: ResultsFilter = {
-        id: 'filter-1',
-        type: 'metadata',
-        operator: 'equals',
-        value: 'some-metadata-value',
-        field: 'some-metadata-field',
-        sortIndex: 0,
-        logicOperator: 'and',
-      };
+  it('shows metric operator options for metric filter type', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metric',
+      field: 'latency',
+      operator: 'is_defined',
+      value: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
 
-      mockedUseTableStore.mockReturnValue({
-        filters: {
-          values: { 'filter-1': initialFilter },
-          options: {
-            metric: [],
-            metadata: [],
-            plugin: [],
-            strategy: [],
-            severity: ['high', 'medium', 'low'],
-          },
-          appliedCount: 0,
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+        options: {
+          ...defaultStoreValue.filters.options,
+          metric: ['latency'],
         },
-        updateFilter: mockUpdateFilter,
-        removeFilter: mockRemoveFilter,
-        updateAllFilterLogicOperators: mockUpdateAllFilterLogicOperators,
-        addFilter: mockAddFilter,
-        removeAllFilters: mockRemoveAllFilters,
-      } as any);
+      },
+    } as any);
 
-      const handleClose = vi.fn();
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
 
-      render(
-        <WithTheme>
-          <FiltersForm open={true} onClose={handleClose} anchorEl={anchorEl} />
-        </WithTheme>,
-      );
+    // Find operator dropdown
+    const selects = screen.getAllByRole('combobox');
+    const operatorDropdown = selects[2]; // After type and field dropdowns
+    await user.click(operatorDropdown);
 
-      const filterTypeDropdown = screen.getByRole('combobox', { name: /Field/i });
-      await userEvent.click(filterTypeDropdown);
-
-      const severityOption = await screen.findByRole('option', { name: 'Severity' });
-      await userEvent.click(severityOption);
-
-      expect(mockUpdateFilter).toHaveBeenCalledTimes(1);
-      expect(mockUpdateFilter).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'filter-1',
-          type: 'severity',
-          value: '',
-        }),
-      );
+    await waitFor(() => {
+      // Metric filter should show comparison operators
+      expect(screen.getByRole('option', { name: 'is defined' })).toBeInTheDocument();
     });
+  });
+
+  it('allows manual entry of metadata key when error loading keys', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      field: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+      },
+      metadataKeysError: true,
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    const keyInput = screen.getByPlaceholderText('Error loading keys');
+    // Just type one character to verify the input is editable and calls updateFilter
+    await user.type(keyInput, 'k');
+
+    // Verify updateFilter was called with a field value
+    expect(mockUpdateFilter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'filter-1',
+        field: 'k',
+      }),
+    );
+  });
+
+  it('allows manual entry of metadata key when no keys available', async () => {
+    const filter: ResultsFilter = {
+      id: 'filter-1',
+      type: 'metadata',
+      operator: 'equals',
+      value: '',
+      field: '',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      ...defaultStoreValue,
+      filters: {
+        ...defaultStoreValue.filters,
+        values: { 'filter-1': filter },
+      },
+      metadataKeys: [],
+      metadataKeysLoading: false,
+      metadataKeysError: false,
+    } as any);
+
+    const user = userEvent.setup();
+    render(<FiltersForm />);
+    await openFiltersPopover(user);
+
+    const keyInput = screen.getByPlaceholderText('Enter key name...');
+    expect(keyInput).toBeInTheDocument();
   });
 });

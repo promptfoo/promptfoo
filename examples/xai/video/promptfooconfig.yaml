@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: xAI Grok Imagine Video Generation
+
+providers:
+  - id: xai:video:grok-imagine-video
+    config:
+      duration: 3
+      aspect_ratio: '16:9'
+      resolution: '720p'
+
+prompts:
+  - 'Generate a video of: {{scene}}'
+
+tests:
+  - vars:
+      scene: a red ball bouncing
+    assert:
+      - type: cost
+        threshold: 1.0

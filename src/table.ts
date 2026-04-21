@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
-import { type EvaluateTable, ResultFailureReason } from './types';
+import { type EvaluateTable, ResultFailureReason } from './types/index';
 import { ellipsize } from './util/text';
 
 export function generateTable(
@@ -27,21 +27,20 @@ export function generateTable(
   for (const row of evaluateTable.body.slice(0, maxRows)) {
     table.push([
       ...row.vars.map((v) => ellipsize(v, tableCellMaxLength)),
-      ...row.outputs.map(({ pass, score, text, failureReason: failureType }) => {
+      ...row.outputs.map(({ pass, text, failureReason: failureType }) => {
         text = ellipsize(text, tableCellMaxLength);
         if (pass) {
           return chalk.green('[PASS] ') + text;
-        } else if (!pass) {
-          // color everything red up until '---'
-          return (
-            chalk.red(failureType === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +
-            text
-              .split('---')
-              .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
-              .join('---')
-          );
         }
-        return text;
+
+        // Color everything red up until '---'.
+        return (
+          chalk.red(failureType === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +
+          text
+            .split('---')
+            .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
+            .join('---')
+        );
       }),
     ]);
   }
@@ -70,5 +69,5 @@ export function wrapTable(
   for (const row of rows) {
     table.push(Object.values(row));
   }
-  return table;
+  return table.toString();
 }

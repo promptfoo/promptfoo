@@ -1,7 +1,7 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
-import NodeCache from 'node-cache';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { LRUCache } from 'lru-cache';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import {
   datasetsTable,
   evalResultsTable,
@@ -26,7 +26,7 @@ import {
   type TestCasesWithMetadata,
   type TestCasesWithMetadataPrompt,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
 
@@ -455,6 +455,21 @@ export async function deleteEval(evalId: string) {
 }
 
 /**
+ * Deletes evals by their IDs.
+ * @param ids - The IDs of the evals to delete.
+ */
+export function deleteEvals(ids: string[]) {
+  const db = getDb();
+  db.transaction(() => {
+    db.delete(evalsToPromptsTable).where(inArray(evalsToPromptsTable.evalId, ids)).run();
+    db.delete(evalsToDatasetsTable).where(inArray(evalsToDatasetsTable.evalId, ids)).run();
+    db.delete(evalsToTagsTable).where(inArray(evalsToTagsTable.evalId, ids)).run();
+    db.delete(evalResultsTable).where(inArray(evalResultsTable.evalId, ids)).run();
+    db.delete(evalsTable).where(inArray(evalsTable.id, ids)).run();
+  });
+}
+
+/**
  * Deletes all evaluations and related records with foreign keys from the database.
  * @async
  * @returns {Promise<void>}
@@ -483,7 +498,13 @@ export type StandaloneEval = CompletedPrompt & {
   uuid: string;
 };
 
-const standaloneEvalCache = new NodeCache({ stdTTL: 60 * 60 * 2 }); // Cache for 2 hours
+const standaloneEvalCache = new LRUCache<string, StandaloneEval[]>({
+  ttl: 60 * 60 * 2 * 1000, // 2 hours in milliseconds
+  // Cache entries are keyed by (limit, tag, description) filter combinations.
+  // 2000 handles heavy automation scenarios while keeping memory bounded (~few MB).
+  // On eviction, the next request simply re-queries the DB with minimal latency impact.
+  max: 2000,
+});
 
 export async function getStandaloneEvals({
   limit = DEFAULT_QUERY_LIMIT,
@@ -494,8 +515,8 @@ export async function getStandaloneEvals({
   tag?: { key: string; value: string };
   description?: string;
 } = {}): Promise<StandaloneEval[]> {
-  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}`;
-  const cachedResult = standaloneEvalCache.get<StandaloneEval[]>(cacheKey);
+  const cacheKey = `standalone_evals_${limit}_${tag?.key}_${tag?.value}_${description}`;
+  const cachedResult = standaloneEvalCache.get(cacheKey);
 
   if (cachedResult) {
     return cachedResult;
@@ -561,7 +582,10 @@ export async function getStandaloneEvals({
     // @ts-ignore
     return eval_.getPrompts().map((col, index) => {
       // Compute some stats - keep original logic exactly
-      const pluginCounts = table.body.reduce(
+      const pluginCounts = table.body.reduce<{
+        pluginPassCount: Record<string, number>;
+        pluginFailCount: Record<string, number>;
+      }>(
         // @ts-ignore
         (acc, row) => {
           const pluginId = row.test.metadata?.pluginId;
@@ -572,10 +596,7 @@ export async function getStandaloneEvals({
           }
           return acc;
         },
-        { pluginPassCount: {}, pluginFailCount: {} } as {
-          pluginPassCount: Record<string, number>;
-          pluginFailCount: Record<string, number>;
-        },
+        { pluginPassCount: {}, pluginFailCount: {} },
       );
 
       return {

@@ -1,3 +1,5 @@
+import dedent from 'dedent';
+
 export const AGENT_FRAMEWORKS = [
   'langchain',
   'autogen',
@@ -78,4 +80,19 @@ def call_api(prompt, options, context):
         #     "completion": 70
         # }
     }
+`;
+
+export const DEFAULT_WEBSOCKET_TIMEOUT_MS = 300000;
+export const DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE = 'data.message';
+export const DEFAULT_WEBSOCKET_STREAM_RESPONSE = dedent`
+  (accumulator, event, context) => {
+    const { message, type } = JSON.parse(event.data);
+    if(type === "message"){
+      return [{output: message},true]
+    }
+    if(type === "error"){
+      return [{error: message},true]
+    }
+    return [accumulator, false];
+  }
 `;

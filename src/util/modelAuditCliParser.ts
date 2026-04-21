@@ -33,6 +33,14 @@ export const ModelAuditCliOptionsSchema = z.object({
   // Preview/debugging
   dryRun: z.boolean().optional(),
   cache: z.boolean().optional(), // when false, adds --no-cache
+  stream: z.boolean().optional(), // scan and delete files immediately
+  scanners: z.array(z.string()).optional(),
+  excludeScanner: z.array(z.string()).optional(),
+  listScanners: z.boolean().optional(),
+
+  // Sharing options (promptfoo-only, not passed to modelaudit)
+  share: z.boolean().optional(),
+  noShare: z.boolean().optional(),
 });
 
 export type ModelAuditCliOptions = z.infer<typeof ModelAuditCliOptionsSchema>;
@@ -45,7 +53,7 @@ export const ValidatedModelAuditArgsSchema = z.object({
 export type ValidatedModelAuditArgs = z.infer<typeof ValidatedModelAuditArgsSchema>;
 
 /**
- * Valid ModelAudit CLI options as of version 0.2.5
+ * Valid ModelAudit CLI options as of version 0.2.37
  */
 export const VALID_MODELAUDIT_OPTIONS = new Set([
   '--format',
@@ -66,6 +74,10 @@ export const VALID_MODELAUDIT_OPTIONS = new Set([
   '--max-size',
   '--dry-run',
   '--no-cache',
+  '--stream',
+  '--scanners',
+  '--exclude-scanner',
+  '--list-scanners',
 ]);
 
 /**
@@ -82,7 +94,6 @@ export const DEPRECATED_OPTIONS_MAP: Record<string, string | null> = {
   '--preview': '--dry-run',
   '--all-files': null, // No equivalent
   '--selective': null, // No equivalent
-  '--stream': null, // No equivalent
   '--skip-files': null, // No equivalent
   '--no-skip-files': null, // No equivalent
   '--strict-license': '--strict',
@@ -95,14 +106,17 @@ export const DEPRECATED_OPTIONS_MAP: Record<string, string | null> = {
 
 /**
  * Configuration mapping from option keys to CLI arguments
+ * Note: 'share' and 'noShare' are omitted as they are promptfoo-only options
  */
-const CLI_ARG_MAP: Record<
-  keyof ModelAuditCliOptions,
-  {
-    flag: string;
-    type: 'boolean' | 'string' | 'number' | 'array' | 'inverted-boolean';
-    transform?: (value: any) => string;
-  }
+const CLI_ARG_MAP: Partial<
+  Record<
+    keyof ModelAuditCliOptions,
+    {
+      flag: string;
+      type: 'boolean' | 'string' | 'number' | 'array' | 'inverted-boolean';
+      transform?: (value: any) => string;
+    }
+  >
 > = {
   blacklist: { flag: '--blacklist', type: 'array' },
   format: { flag: '--format', type: 'string' },
@@ -116,6 +130,10 @@ const CLI_ARG_MAP: Record<
   maxSize: { flag: '--max-size', type: 'string' },
   dryRun: { flag: '--dry-run', type: 'boolean' },
   cache: { flag: '--no-cache', type: 'inverted-boolean' },
+  stream: { flag: '--stream', type: 'boolean' },
+  scanners: { flag: '--scanners', type: 'array' },
+  excludeScanner: { flag: '--exclude-scanner', type: 'array' },
+  listScanners: { flag: '--list-scanners', type: 'boolean' },
 };
 
 /**
@@ -131,7 +149,7 @@ export function parseModelAuditArgs(paths: string[], options: unknown): Validate
   >) {
     const value = validatedOptions[key];
 
-    if (value === undefined || value === null) {
+    if (value === undefined || value === null || !config) {
       continue;
     }
 

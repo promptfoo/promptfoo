@@ -1,13 +1,15 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRelevance } from '../../src/assertions/contextRelevance';
 import * as contextUtils from '../../src/assertions/contextUtils';
-import { matchesContextRelevance } from '../../src/matchers';
+import { matchesContextRelevance } from '../../src/matchers/rag';
+import { createMockProvider } from '../factories/provider';
 
-jest.mock('../../src/matchers');
-jest.mock('../../src/assertions/contextUtils');
+vi.mock('../../src/matchers/rag');
+vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextRelevance', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass when context relevance is above threshold', async () => {
@@ -23,8 +25,8 @@ describe('handleContextRelevance', () => {
         score: 0.5,
       },
     };
-    jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const result = await handleContextRelevance({
       assertion: {
@@ -41,7 +43,7 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {
           query: 'What is the capital of France?',
@@ -55,7 +57,7 @@ describe('handleContextRelevance', () => {
           options: {},
         },
         logProbs: undefined,
-        provider: { id: () => 'id', config: {}, callApi: jest.fn() },
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
       inverse: false,
@@ -79,6 +81,7 @@ describe('handleContextRelevance', () => {
       'test context',
       0.8,
       {},
+      undefined,
     );
   });
 
@@ -95,8 +98,8 @@ describe('handleContextRelevance', () => {
         score: 0,
       },
     };
-    jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('irrelevant context');
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('irrelevant context');
 
     const result = await handleContextRelevance({
       assertion: {
@@ -113,7 +116,7 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: {
           query: 'What is the capital of France?',
@@ -127,7 +130,7 @@ describe('handleContextRelevance', () => {
           options: {},
         },
         logProbs: undefined,
-        provider: { id: () => 'id', config: {}, callApi: jest.fn() },
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
       inverse: false,
@@ -151,13 +154,14 @@ describe('handleContextRelevance', () => {
       'irrelevant context',
       0.7,
       {},
+      undefined,
     );
   });
 
   it('should use default threshold of 0 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect relevance' };
-    jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const result = await handleContextRelevance({
       assertion: {
@@ -173,12 +177,12 @@ describe('handleContextRelevance', () => {
       output: 'test output',
       prompt: 'test prompt',
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'test prompt',
         vars: { query: 'test query', context: 'test context' },
         test: { vars: { query: 'test query', context: 'test context' }, options: {} },
         logProbs: undefined,
-        provider: { id: () => 'id', config: {}, callApi: jest.fn() },
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
       inverse: false,
@@ -186,7 +190,13 @@ describe('handleContextRelevance', () => {
       providerResponse: { output: 'out', tokenUsage: {} },
     } as any);
 
-    expect(matchesContextRelevance).toHaveBeenCalledWith('test query', 'test context', 0, {});
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'test query',
+      'test context',
+      0,
+      {},
+      undefined,
+    );
     expect(result.metadata).toEqual({
       context: 'test context',
     });
@@ -203,12 +213,12 @@ describe('handleContextRelevance', () => {
         output: 'test output',
         prompt: 'test prompt',
         baseType: 'context-relevance',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: {},
           test: { vars: undefined, options: {} },
           logProbs: undefined,
-          provider: { id: () => 'id', config: {}, callApi: jest.fn() },
+          provider: createMockProvider({ id: 'id', config: {} }),
           providerResponse: { output: 'out', tokenUsage: {} },
         },
         inverse: false,
@@ -231,12 +241,12 @@ describe('handleContextRelevance', () => {
         output: 'test output',
         prompt: 'test prompt',
         baseType: 'context-relevance',
-        context: {
+        assertionValueContext: {
           prompt: 'test prompt',
           vars: { context: 'test context' },
           test: { vars: { context: 'test context' }, options: {} },
           logProbs: undefined,
-          provider: { id: () => 'id', config: {}, callApi: jest.fn() },
+          provider: createMockProvider({ id: 'id', config: {} }),
           providerResponse: { output: 'out', tokenUsage: {} },
         },
         inverse: false,
@@ -250,8 +260,8 @@ describe('handleContextRelevance', () => {
 
   it('should use contextTransform when provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'ok' };
-    jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('cx');
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('cx');
 
     const result = await handleContextRelevance({
       assertion: {
@@ -263,12 +273,12 @@ describe('handleContextRelevance', () => {
         options: {},
       },
       baseType: 'context-relevance',
-      context: {
+      assertionValueContext: {
         prompt: 'p',
         vars: {},
         test: { vars: { query: 'q' }, options: {} },
         logProbs: undefined,
-        provider: { id: () => 'id', config: {}, callApi: jest.fn() },
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
       inverse: false,
@@ -286,7 +296,7 @@ describe('handleContextRelevance', () => {
       undefined,
       { output: 'out', tokenUsage: {} },
     );
-    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {});
+    expect(matchesContextRelevance).toHaveBeenCalledWith('q', 'cx', 0, {}, undefined);
     expect(result.metadata).toEqual({
       context: 'cx',
     });

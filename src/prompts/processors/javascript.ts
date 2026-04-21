@@ -1,12 +1,12 @@
 import { importModule } from '../../esm';
 import invariant from '../../util/invariant';
 
-import type { ApiProvider, Prompt, PromptFunctionContext } from '../../types';
+import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
 export const transformContext = (context: {
-  vars: Record<string, string | object>;
+  vars: Record<string, VarValue>;
   provider?: ApiProvider;
-  config?: Record<string, any>;
+  config?: Record<string, unknown>;
 }): PromptFunctionContext => {
   invariant(context.provider, 'Provider is required');
   return {

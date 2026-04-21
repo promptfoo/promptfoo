@@ -1,7 +1,7 @@
-import { matchesPiScore } from '../matchers';
+import { matchesPiScore } from '../matchers/llmGrading';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handlePiScorer = async ({
   assertion,

@@ -18,7 +18,7 @@ describe('useToast', () => {
     };
 
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <ToastContext.Provider value={mockContextValue}>{children}</ToastContext.Provider>
+      <ToastContext value={mockContextValue}>{children}</ToastContext>
     );
 
     const { result } = renderHook(() => useToast(), { wrapper });

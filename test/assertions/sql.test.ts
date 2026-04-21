@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { handleIsSql } from '../../src/assertions/sql';
 
-import type { Assertion, AssertionParams, GradingResult } from '../../src/types';
+import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
 const assertion: Assertion = {
   type: 'is-sql',
@@ -276,7 +277,7 @@ describe('is-sql assertion', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: `SQL validation failed: authority = 'select::null::employees' is required in table whiteList to execute SQL = 'SELECT * FROM employees'.`,
+        reason: `SQL references unauthorized table(s). Found: [select::null::employees]. Allowed: [(select|update|insert|delete)::null::departments].`,
         assertion,
       });
     });
@@ -316,7 +317,7 @@ describe('is-sql assertion', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: `SQL validation failed: authority = 'select::null::id' is required in column whiteList to execute SQL = 'SELECT id FROM t'.`,
+        reason: `SQL references unauthorized column(s). Found: [select::null::id]. Allowed: [select::null::name, update::null::id].`,
         assertion,
       });
     });
@@ -399,6 +400,102 @@ describe('is-sql assertion', () => {
         reason: 'Assertion passed',
         assertion,
       });
+    });
+
+    // Issue #1491: Verify correct behavior when table name differs from expected
+    it('should fail when SQL uses wrong table name (issue #1491)', async () => {
+      const renderedValue = {
+        databaseType: 'MySQL',
+        allowedTables: ['select::null::data_table'],
+      };
+      // LLM generated SQL with "data" instead of "data_table"
+      const outputString = `SELECT * FROM data WHERE id = 1`;
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('SQL references unauthorized table(s)');
+      expect(result.reason).toContain('select::null::data');
+      expect(result.reason).toContain('select::null::data_table');
+    });
+
+    it('should pass when SQL correctly uses allowed table name', async () => {
+      const renderedValue = {
+        databaseType: 'MySQL',
+        allowedTables: ['select::null::data_table'],
+      };
+      const outputString = `SELECT * FROM data_table WHERE id = 1`;
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should handle double-quoted table names in PostgreSQL mode', async () => {
+      const renderedValue = {
+        databaseType: 'PostgreSQL',
+        allowedTables: ['select::null::data_table'],
+      };
+      const outputString = `SELECT * FROM "data_table" WHERE id = 1`;
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion,
+      });
+    });
+
+    it('should fail when double-quoted table name differs from allowed', async () => {
+      const renderedValue = {
+        databaseType: 'PostgreSQL',
+        allowedTables: ['select::null::data_table'],
+      };
+      // Using "data" instead of "data_table"
+      const outputString = `SELECT * FROM "data" WHERE id = 1`;
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('SQL references unauthorized table(s)');
+      expect(result.reason).toContain('select::null::data');
+    });
+
+    it('should handle multiple tables with some unauthorized', async () => {
+      const renderedValue = {
+        databaseType: 'MySQL',
+        allowedTables: ['select::null::users'],
+      };
+      // Query joins with an unauthorized table
+      const outputString = `SELECT u.name, p.title FROM users u, posts p WHERE u.id = p.user_id`;
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('SQL references unauthorized table(s)');
+      expect(result.reason).toContain('select::null::posts');
     });
   });
 });

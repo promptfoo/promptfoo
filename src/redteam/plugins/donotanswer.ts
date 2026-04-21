@@ -3,15 +3,15 @@ import fs from 'fs';
 import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
-import { fetchWithTimeout } from '../../util/fetch';
+import { fetchWithTimeout } from '../../util/fetch/index';
 import { RedteamPluginBase } from './base';
 
-import type { Assertion, TestCase } from '../../types';
+import type { Assertion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:donotanswer';
 
 const PRODUCTION_DATASET_URL =
-  'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/donotanswer/dataset/do_not_answer_data.csv';
+  'https://raw.githubusercontent.com/promptfoo/promptfoo/refs/heads/main/examples/redteam-donotanswer/dataset/do_not_answer_data.csv';
 
 // Development URL - for local testing
 // const DEV_DATASET_URL =

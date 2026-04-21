@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 import { ImageDatasetManager } from './imageDatasetUtils';
 
-import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types';
+import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
 
 /**
  * Configuration for image dataset plugins
@@ -34,7 +34,7 @@ export abstract class ImageDatasetPluginBase<
    * Validate plugin configuration
    * Override in subclasses to add specific validation
    */
-  protected validateConfig(config?: TConfig): void {
+  protected validateConfig(_config?: TConfig): void {
     // Base implementation - subclasses can override
   }
 
@@ -48,7 +48,7 @@ export abstract class ImageDatasetPluginBase<
   /**
    * Get assertions for a test case
    */
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: this.pluginId as Assertion['type'],

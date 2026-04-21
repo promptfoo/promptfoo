@@ -1,15 +1,25 @@
-import { runAssertion } from '../../src/assertions';
-import { getTraceStore } from '../../src/tracing/store';
+import * as path from 'path';
 
-import type { Assertion, AtomicTestCase, GradingResult, ProviderResponse } from '../../src/types';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
+import cliState from '../../src/cliState';
+import { getTraceStore } from '../../src/tracing/store';
+import { mockProcessEnv } from '../util/utils';
+
+import type {
+  Assertion,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
 // Mock the trace store
-jest.mock('../../src/tracing/store');
+vi.mock('../../src/tracing/store');
 
 // Mock Python execution
-jest.mock('../../src/python/wrapper', () => ({
-  runPythonCode: jest.fn((code: string, functionName: string, args: any[]) => {
+vi.mock('../../src/python/wrapper', () => ({
+  runPythonCode: vi.fn((code: string, _functionName: string, args: any[]) => {
     // Simple Python interpreter mock for our test cases
     const [_output, context] = args;
 
@@ -49,13 +59,42 @@ jest.mock('../../src/python/wrapper', () => ({
 }));
 
 describe('trace assertions', () => {
+  const originalBasePath = cliState.basePath;
+  const originalTraceFetchEnv = {
+    PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS,
+    PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS,
+    PROMPTFOO_TRACE_FETCH_STABLE_POLLS: process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS,
+  };
   const mockTraceStore = {
-    getTrace: jest.fn(),
+    getTrace: vi.fn(),
+  };
+
+  const restoreTraceFetchEnv = () => {
+    for (const [name, value] of Object.entries(originalTraceFetchEnv)) {
+      if (value === undefined) {
+        mockProcessEnv({ [name]: undefined });
+      } else {
+        mockProcessEnv({ [name]: value });
+      }
+    }
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    (getTraceStore as jest.Mock).mockReturnValue(mockTraceStore);
+    mockTraceStore.getTrace.mockReset();
+    vi.clearAllMocks();
+    restoreTraceFetchEnv();
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
+    vi.mocked(getTraceStore).mockReturnValue(
+      mockTraceStore as unknown as ReturnType<typeof getTraceStore>,
+    );
+  });
+
+  afterEach(() => {
+    cliState.basePath = originalBasePath;
+    restoreTraceFetchEnv();
+    vi.resetAllMocks();
+    vi.useRealTimers();
   });
 
   const mockTest: AtomicTestCase = {
@@ -68,6 +107,9 @@ describe('trace assertions', () => {
 
   const mockTraceData: TraceData = {
     traceId: 'test-trace-id',
+    evaluationId: 'test-evaluation-id',
+    testCaseId: 'test-test-case-id',
+    metadata: { test: 'value' },
     spans: [
       {
         spanId: 'span-1',
@@ -89,6 +131,15 @@ describe('trace assertions', () => {
   };
 
   describe('javascript assertions with trace', () => {
+    it('should treat ruby assertions as trace-aware', () => {
+      expect(
+        assertionUsesTrace({
+          type: 'ruby',
+          value: 'context.trace && context.trace.spans.length > 0',
+        }),
+      ).toBe(true);
+    });
+
     it('should pass trace data to javascript assertion', async () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
 
@@ -109,7 +160,90 @@ describe('trace assertions', () => {
       });
 
       expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id');
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+        sanitizeAttributes: false,
+      });
+    });
+
+    it('should retry until trace spans are available', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '3' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
+
+      mockTraceStore.getTrace
+        .mockResolvedValueOnce({
+          ...mockTraceData,
+          spans: [],
+        })
+        .mockResolvedValueOnce(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.trace?.spans?.length === 2',
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it('should use default retry timing when trace fetch env vars are unset', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: undefined });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: undefined });
+      vi.useFakeTimers();
+
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const resultPromise = runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'context.trace?.spans?.length === 2',
+        },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      await vi.advanceTimersByTimeAsync(250);
+      const result = await resultPromise;
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it('should wait for span count to stabilize', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '4' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '2' });
+
+      mockTraceStore.getTrace
+        .mockResolvedValueOnce({
+          ...mockTraceData,
+          spans: [mockTraceData.spans[0]],
+        })
+        .mockResolvedValueOnce(mockTraceData)
+        .mockResolvedValueOnce(mockTraceData);
+
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'context.trace?.spans?.length === 2',
+      };
+
+      const result: GradingResult = await runAssertion({
+        assertion,
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(3);
     });
 
     it('should handle missing trace gracefully', async () => {
@@ -125,6 +259,55 @@ describe('trace assertions', () => {
         test: mockTest,
         providerResponse: mockProviderResponse,
         traceId: 'non-existent-trace',
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should reuse a preloaded missing trace instead of retrying once per assertion', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '2' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
+
+      mockTraceStore.getTrace.mockResolvedValue(null);
+
+      const result = await runAssertions({
+        test: {
+          ...mockTest,
+          assert: [
+            {
+              type: 'javascript',
+              value: 'context.trace === undefined',
+            },
+            {
+              type: 'javascript',
+              value: 'context.trace === undefined',
+            },
+          ],
+        },
+        providerResponse: mockProviderResponse,
+        traceId: 'non-existent-trace',
+      });
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
+    it('should pass trace data to file:// scripts for non-trace assertion types', async () => {
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+      cliState.basePath = path.resolve(__dirname, '../fixtures/file-script-assertions');
+
+      const result: GradingResult = await runAssertion({
+        assertion: {
+          type: 'equals',
+          value: 'file://rubric-generator.cjs:traceSpanName',
+        },
+        test: mockTest,
+        providerResponse: {
+          ...mockProviderResponse,
+          output: 'http.request',
+        },
+        traceId: 'test-trace-id',
       });
 
       expect(result.pass).toBe(true);
@@ -155,6 +338,9 @@ describe('trace assertions', () => {
     it('should detect error spans', async () => {
       const traceWithError: TraceData = {
         traceId: 'error-trace',
+        evaluationId: 'test-evaluation-id',
+        testCaseId: 'test-test-case-id',
+        metadata: { test: 'value' },
         spans: [
           ...mockTraceData.spans,
           {
@@ -295,7 +481,9 @@ return {
       });
 
       expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id');
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+        sanitizeAttributes: false,
+      });
     });
   });
 });

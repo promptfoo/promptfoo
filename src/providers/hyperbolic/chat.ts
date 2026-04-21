@@ -2,7 +2,7 @@ import logger from '../../logger';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 
-import type { ApiProvider, ProviderOptions } from '../../types';
+import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
 
 type HyperbolicConfig = OpenAiCompletionOptions;
@@ -217,8 +217,8 @@ export function calculateHyperbolicCost(
     return undefined;
   }
 
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
+  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
 
   const inputCostTotal = inputCost * promptTokens;
   const outputCostTotal = outputCost * completionTokens;

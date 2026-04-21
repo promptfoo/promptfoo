@@ -1,11 +1,11 @@
 import cliProgress from 'cli-progress';
 import dedent from 'dedent';
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import cliState from '../cliState';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
 
-import type { TestCase, Vars } from '../types';
+import type { TestCase, Vars } from '../types/index';
 
 /**
  * Safely casts HuggingFace row data to Vars type
@@ -14,6 +14,7 @@ import type { TestCase, Vars } from '../types';
 function castRowToVars(row: Record<string, unknown>): Vars {
   return row as Record<
     string,
+    // biome-ignore lint/suspicious/noExplicitAny: FIXME
     string | number | boolean | any[] | Record<string, any> | (string | number | boolean)[]
   >;
 }
@@ -117,9 +118,9 @@ interface HuggingFaceResponse {
  */
 interface ConcurrentFetchResult {
   offset: number;
-  response: any;
+  response: FetchWithCacheResult<HuggingFaceResponse> | null;
   success: boolean;
-  error?: Error;
+  error?: unknown;
 }
 
 export function parseDatasetPath(path: string): {
@@ -164,6 +165,7 @@ export async function fetchHuggingFaceDataset(
   let pageSize = 100; // Number of rows per request (adaptive)
   const queryParamLimit = queryParams.get('limit');
   const userLimit = limit ?? (queryParamLimit ? Number.parseInt(queryParamLimit, 10) : undefined);
+  let totalRows: number | undefined;
 
   // Honor explicit 0 limit and avoid network traffic
   if (userLimit === 0) {
@@ -235,10 +237,26 @@ export async function fetchHuggingFaceDataset(
       // Create a new URLSearchParams for this request
       const requestParams = new URLSearchParams(queryParams);
       requestParams.set('offset', offset.toString());
-      requestParams.set(
-        'length',
-        Math.min(pageSize, userLimit ? userLimit - offset : pageSize).toString(),
-      );
+
+      const remainingUserLimit =
+        userLimit === undefined ? undefined : Math.max(userLimit - offset, 0);
+      const remainingDatasetRows =
+        totalRows === undefined ? undefined : Math.max(totalRows - offset, 0);
+      const requestedLength =
+        remainingUserLimit === undefined
+          ? remainingDatasetRows === undefined
+            ? pageSize
+            : Math.min(pageSize, remainingDatasetRows)
+          : Math.min(pageSize, remainingUserLimit);
+
+      if (requestedLength <= 0) {
+        logger.debug(
+          `[HF Dataset] No remaining rows to fetch for ${owner}/${repo} (offset ${offset})`,
+        );
+        break;
+      }
+
+      requestParams.set('length', requestedLength.toString());
 
       const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
       logger.debug(`[HF Dataset] Fetching page from ${url}`);
@@ -257,6 +275,22 @@ export async function fetchHuggingFaceDataset(
       const response = await fetchWithCache(url, { headers });
 
       if (response.status < 200 || response.status >= 300) {
+        if (response.status === 422) {
+          const previousPageSize = pageSize;
+          pageSize = Math.max(1, Math.floor(pageSize / 2));
+          logger.warn(
+            `[HF Dataset] ${owner}/${repo}: received 422 Unprocessable Entity at offset ${offset} (requested length ${requestedLength}). Reducing page size from ${previousPageSize} to ${pageSize} and retrying.`,
+          );
+
+          if (pageSize === previousPageSize) {
+            const error = `[HF Dataset] Failed to fetch dataset: ${response.statusText} after reducing page size.\nFetched ${url}`;
+            logger.error(error);
+            throw new Error(error);
+          }
+
+          continue;
+        }
+
         const error = `[HF Dataset] Failed to fetch dataset: ${response.statusText}.\nFetched ${url}`;
         logger.error(error);
         throw new Error(error);
@@ -274,6 +308,8 @@ export async function fetchHuggingFaceDataset(
         logger.info(
           `[HF Dataset] ${owner}/${repo} [${split}/${config}]: ${data.num_rows_total} rows${limitStr}${cacheStr}`,
         );
+
+        totalRows = data.num_rows_total;
 
         // Initialize progress bar now that we know the total row count
         progressBar.initialize(data.num_rows_total, userLimit);
@@ -318,6 +354,10 @@ export async function fetchHuggingFaceDataset(
         logger.debug(
           `[HF Dataset] Received ${data.rows.length} rows (${tests.length + data.rows.length}/${userLimit || data.num_rows_total})`,
         );
+
+        if (totalRows === undefined) {
+          totalRows = data.num_rows_total;
+        }
       }
 
       // Convert HuggingFace rows to test cases
@@ -359,8 +399,8 @@ export async function fetchHuggingFaceDataset(
         const maxConcurrent = Math.min(MAX_CONCURRENT_REQUESTS, pagesRemaining);
         const concurrentPromises: Promise<ConcurrentFetchResult>[] = [];
 
-        for (let i = 1; i < maxConcurrent; i++) {
-          // Start from next page
+        for (let i = 0; i < maxConcurrent - 1; i++) {
+          // Start from the next page and prefetch additional pages
           const futureOffset = offset + i * pageSize;
           const futureParams = new URLSearchParams(queryParams);
           futureParams.set('offset', futureOffset.toString());
@@ -368,20 +408,19 @@ export async function fetchHuggingFaceDataset(
 
           const futureUrl = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${futureParams.toString()}`;
 
-          concurrentPromises.push(
-            fetchWithCache(futureUrl, { headers })
-              .then((resp) => ({
-                offset: futureOffset,
-                response: resp,
-                success: resp.status >= 200 && resp.status < 300,
-              }))
-              .catch((err) => ({
-                offset: futureOffset,
-                response: null,
-                success: false,
-                error: err,
-              })),
-          );
+          const p = fetchWithCache<HuggingFaceResponse>(futureUrl, { headers })
+            .then((resp) => ({
+              offset: futureOffset,
+              response: resp,
+              success: resp.status >= 200 && resp.status < 300,
+            }))
+            .catch((err) => ({
+              offset: futureOffset,
+              response: null,
+              success: false,
+              error: err,
+            }));
+          concurrentPromises.push(p);
         }
 
         if (concurrentPromises.length > 0) {
@@ -391,26 +430,50 @@ export async function fetchHuggingFaceDataset(
           // Process concurrent results in order
           let concurrentRowCount = 0;
           for (const result of concurrentResults) {
-            if (result.status === 'fulfilled' && result.value.success) {
-              const concurrentData = result.value.response.data as HuggingFaceResponse;
-              for (const { row } of concurrentData.rows) {
-                if (tests.length >= totalNeeded) {
-                  break;
-                }
-                tests.push({
-                  vars: castRowToVars(row),
-                  options: { disableVarExpansion: true },
-                });
-                concurrentRowCount++;
+            if (result.status === 'rejected') {
+              logger.warn(`[HF Dataset] Concurrent fetch promise rejected`, {
+                reason: result.reason,
+              });
+              continue;
+            }
+
+            if (!result.value.success) {
+              const errorInfo = result.value.error
+                ? String(result.value.error)
+                : `HTTP ${result.value.response?.status ?? 'unknown'}`;
+              logger.warn(
+                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} failed: ${errorInfo}`,
+              );
+              continue;
+            }
+
+            const concurrentData = result.value.response?.data;
+            if (!concurrentData) {
+              logger.warn(
+                `[HF Dataset] Concurrent fetch at offset ${result.value.offset} returned success but no data`,
+              );
+              continue;
+            }
+            if (totalRows === undefined && typeof concurrentData.num_rows_total === 'number') {
+              totalRows = concurrentData.num_rows_total;
+            }
+            for (const { row } of concurrentData.rows) {
+              if (tests.length >= totalNeeded) {
+                break;
               }
+              tests.push({
+                vars: castRowToVars(row),
+                options: { disableVarExpansion: true },
+              });
+              concurrentRowCount++;
             }
           }
 
           // Update progress with concurrent results
           progressBar.update(concurrentRowCount);
 
-          // Skip ahead by the concurrent pages we fetched
-          offset += concurrentPromises.length * pageSize;
+          // Skip ahead by the actual number of rows fetched concurrently
+          offset += concurrentRowCount;
           logger.debug(
             `[HF Dataset] Processed ${concurrentPromises.length} concurrent pages, now at offset ${offset}`,
           );

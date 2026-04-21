@@ -1,22 +1,26 @@
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
-import { writeOutput } from '../../src/util';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { writeOutput } from '../../src/util/index';
+import { createTempDir, removeTempDir } from './utils';
 
 // Mock dependencies
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn().mockReturnValue({
-    select: jest.fn(),
-    insert: jest.fn(),
-    transaction: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn().mockReturnValue({
+    select: vi.fn(),
+    insert: vi.fn(),
+    transaction: vi.fn(),
   }),
 }));
 
-jest.mock('../../src/logger', () => ({
-  info: jest.fn(),
-  debug: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    info: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+  },
 }));
 
 describe('JSON export with improved error handling', () => {
@@ -25,7 +29,7 @@ describe('JSON export with improved error handling', () => {
   let mockEval: any;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-json-test-'));
+    tempDir = createTempDir('promptfoo-json-test-');
     tempFilePath = path.join(tempDir, 'test-export.json');
 
     mockEval = {
@@ -37,17 +41,14 @@ describe('JSON export with improved error handling', () => {
         { raw: 'Test prompt 1', label: 'prompt1' },
         { raw: 'Test prompt 2', label: 'prompt2' },
       ],
-      toEvaluateSummary: jest.fn(),
-      getResultsCount: jest.fn(),
+      toEvaluateSummary: vi.fn(),
+      getResultsCount: vi.fn(),
     };
   });
 
   afterEach(() => {
-    if (fs.existsSync(tempFilePath)) {
-      fs.unlinkSync(tempFilePath);
-    }
-    fs.rmSync(tempDir, { recursive: true, force: true });
-    jest.clearAllMocks();
+    removeTempDir(tempDir);
+    vi.clearAllMocks();
   });
 
   describe('normal JSON export', () => {

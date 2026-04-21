@@ -1,22 +1,27 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
-import * as fetchModule from '../../src/util/fetch';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
+import * as fetchModule from '../../src/util/fetch/index';
+import { mockProcessEnv } from '../util/utils';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 
-jest.mock('../../src/util', () => ({
-  maybeLoadFromExternalFile: jest.fn((x) => x),
-  renderVarsInObject: jest.fn((x) => x),
-}));
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn((x) => x),
+    renderVarsInObject: vi.fn((x) => x),
+  };
+});
 
-jest.mock('../../src/util/fetch');
+vi.mock('../../src/util/fetch');
 
 describe('OpenRouter', () => {
-  const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
+  const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   afterEach(async () => {
     await clearCache();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('OpenRouterProvider', () => {
@@ -55,13 +60,190 @@ describe('OpenRouter', () => {
       });
     });
 
+    it('should preserve custom apiBaseUrl and apiKeyEnvar overrides', () => {
+      const restoreEnv = mockProcessEnv({ CUSTOM_OPENROUTER_KEY: 'custom-test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiBaseUrl: 'https://proxy.example.com/openrouter/api/v1',
+            apiKeyEnvar: 'CUSTOM_OPENROUTER_KEY',
+          },
+        });
+
+        expect(provider.config.apiBaseUrl).toBe('https://proxy.example.com/openrouter/api/v1');
+        expect(provider.config.apiKeyEnvar).toBe('CUSTOM_OPENROUTER_KEY');
+        expect(provider.getApiKey()).toBe('custom-test-key');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should fall back to the default apiBaseUrl and apiKeyEnvar when none are configured', () => {
+      const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+      expect(provider.config.apiBaseUrl).toBe(OPENROUTER_API_BASE);
+      expect(provider.config.apiKeyEnvar).toBe('OPENROUTER_API_KEY');
+    });
+
+    it('should fall back to the default when apiBaseUrl or apiKeyEnvar is an empty string', () => {
+      const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+        config: {
+          apiBaseUrl: '',
+          apiKeyEnvar: '',
+        },
+      });
+
+      expect(provider.config.apiBaseUrl).toBe(OPENROUTER_API_BASE);
+      expect(provider.config.apiKeyEnvar).toBe('OPENROUTER_API_KEY');
+    });
+
+    it('should call the configured apiBaseUrl instead of the default OpenRouter host', async () => {
+      const restoreEnv = mockProcessEnv({ CUSTOM_OPENROUTER_KEY: 'custom-test-key' });
+
+      try {
+        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1';
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiBaseUrl: customApiBaseUrl,
+            apiKeyEnvar: 'CUSTOM_OPENROUTER_KEY',
+          },
+        });
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await provider.callApi('Test prompt');
+
+        const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+        expect((init as RequestInit | undefined)?.headers).toMatchObject({
+          Authorization: 'Bearer custom-test-key',
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should call the default OpenRouter host when no apiBaseUrl override is configured', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'default-test-key' });
+
+      try {
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {});
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Default host output' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await provider.callApi('Test prompt');
+
+        const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${OPENROUTER_API_BASE}/chat/completions`);
+        expect((init as RequestInit | undefined)?.headers).toMatchObject({
+          Authorization: 'Bearer default-test-key',
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should preserve a trailing slash on the configured apiBaseUrl as-is', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1/';
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiBaseUrl: customApiBaseUrl,
+          },
+        });
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await provider.callApi('Test prompt');
+
+        const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should combine apiBaseUrl override with passthrough options on the request body', async () => {
+      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+
+      try {
+        const customApiBaseUrl = 'https://proxy.example.com/openrouter/api/v1';
+        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+          config: {
+            apiBaseUrl: customApiBaseUrl,
+            route: 'fallback',
+            models: ['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4.6'],
+          },
+        });
+
+        const response = new Response(
+          JSON.stringify({
+            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          }),
+          {
+            status: 200,
+            statusText: 'OK',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          },
+        );
+        mockedFetchWithRetries.mockResolvedValueOnce(response);
+
+        await provider.callApi('Test prompt');
+
+        const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
+        expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+        const body = JSON.parse((init as RequestInit | undefined)?.body as string);
+        expect(body.route).toBe('fallback');
+        expect(body.models).toEqual(['google/gemini-2.5-pro', 'anthropic/claude-sonnet-4.6']);
+      } finally {
+        restoreEnv();
+      }
+    });
+
     describe('Thinking tokens handling', () => {
       beforeEach(() => {
-        process.env.OPENROUTER_API_KEY = 'test-key';
+        mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
       });
 
       afterEach(() => {
-        delete process.env.OPENROUTER_API_KEY;
+        mockProcessEnv({ OPENROUTER_API_KEY: undefined });
       });
 
       it('should handle reasoning field correctly when both reasoning and content are present', async () => {
@@ -91,7 +273,12 @@ describe('OpenRouter', () => {
         // Should include both thinking and content when showThinking is true (default)
         const expectedOutput = `Thinking: I need to analyze the given text and provide a summary in the requested format. The text states that "The quick brown fox jumps over the lazy dog" is a pangram that contains all letters of the alphabet. Let me format this according to the XML structure requested.\n\n<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>`;
         expect(result.output).toBe(expectedOutput);
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should hide reasoning when showThinking is false', async () => {
@@ -128,7 +315,12 @@ describe('OpenRouter', () => {
         expect(result.output).toBe(
           '<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>',
         );
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should handle responses with only reasoning and no content', async () => {
@@ -155,11 +347,16 @@ describe('OpenRouter', () => {
 
         // Should show reasoning when content is null
         expect(result.output).toBe('This is the thinking process for the response.');
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should handle models with reasoning field', async () => {
-        const nonGeminiProvider = new OpenRouterProvider('anthropic/claude-3.5-sonnet', {});
+        const nonGeminiProvider = new OpenRouterProvider('anthropic/claude-opus-4.7', {});
 
         const mockResponse = {
           choices: [
@@ -186,11 +383,16 @@ describe('OpenRouter', () => {
         const expectedOutput =
           'Thinking: Thinking about the best way to respond to this query\n\nRegular response with reasoning';
         expect(result.output).toBe(expectedOutput);
-        expect(result.tokenUsage).toEqual({ total: 30, prompt: 10, completion: 20 });
+        expect(result.tokenUsage).toEqual({
+          total: 30,
+          prompt: 10,
+          completion: 20,
+          numRequests: 1,
+        });
       });
 
       it('should handle models without reasoning field', async () => {
-        const provider = new OpenRouterProvider('anthropic/claude-3.5-sonnet', {});
+        const provider = new OpenRouterProvider('anthropic/claude-opus-4.7', {});
 
         const mockResponse = {
           choices: [
@@ -213,7 +415,12 @@ describe('OpenRouter', () => {
         const result = await provider.callApi('Test prompt');
 
         expect(result.output).toBe('Regular response without reasoning');
-        expect(result.tokenUsage).toEqual({ total: 30, prompt: 10, completion: 20 });
+        expect(result.tokenUsage).toEqual({
+          total: 30,
+          prompt: 10,
+          completion: 20,
+          numRequests: 1,
+        });
       });
 
       it('should handle empty reasoning field', async () => {
@@ -240,7 +447,12 @@ describe('OpenRouter', () => {
 
         // Should not add "Thinking:" prefix for empty reasoning
         expect(result.output).toBe('Response with empty reasoning');
-        expect(result.tokenUsage).toEqual({ total: 30, prompt: 10, completion: 20 });
+        expect(result.tokenUsage).toEqual({
+          total: 30,
+          prompt: 10,
+          completion: 20,
+          numRequests: 1,
+        });
       });
 
       it('should handle tool calls without including reasoning when showThinking is false', async () => {
@@ -284,7 +496,12 @@ describe('OpenRouter', () => {
 
         // Should return tool_calls directly without any reasoning
         expect(result.output).toEqual([mockToolCall]);
-        expect(result.tokenUsage).toEqual({ total: 60, prompt: 25, completion: 35 });
+        expect(result.tokenUsage).toEqual({
+          total: 60,
+          prompt: 25,
+          completion: 35,
+          numRequests: 1,
+        });
       });
 
       it('should handle function calls without including reasoning when showThinking is false', async () => {
@@ -322,7 +539,12 @@ describe('OpenRouter', () => {
 
         // Should return function_call directly without any reasoning
         expect(result.output).toEqual(mockFunctionCall);
-        expect(result.tokenUsage).toEqual({ total: 45, prompt: 15, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 45,
+          prompt: 15,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should handle tool calls without including reasoning even when showThinking is true', async () => {
@@ -361,7 +583,12 @@ describe('OpenRouter', () => {
 
         // Tool calls should never include reasoning, regardless of showThinking setting
         expect(result.output).toEqual([mockToolCall]);
-        expect(result.tokenUsage).toEqual({ total: 55, prompt: 20, completion: 35 });
+        expect(result.tokenUsage).toEqual({
+          total: 55,
+          prompt: 20,
+          completion: 35,
+          numRequests: 1,
+        });
       });
 
       it('should handle tool calls when content is empty string', async () => {
@@ -397,7 +624,12 @@ describe('OpenRouter', () => {
 
         // Should return tool_calls when content is empty string
         expect(result.output).toEqual([mockToolCall]);
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should handle tool calls when content is whitespace only', async () => {
@@ -433,7 +665,12 @@ describe('OpenRouter', () => {
 
         // Should return tool_calls when content is only whitespace
         expect(result.output).toEqual([mockToolCall]);
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should handle function calls when content is whitespace only', async () => {
@@ -465,7 +702,12 @@ describe('OpenRouter', () => {
 
         // Should return function_call when content is only whitespace
         expect(result.output).toEqual(mockFunctionCall);
-        expect(result.tokenUsage).toEqual({ total: 40, prompt: 15, completion: 25 });
+        expect(result.tokenUsage).toEqual({
+          total: 40,
+          prompt: 15,
+          completion: 25,
+          numRequests: 1,
+        });
       });
 
       it('should handle tool calls with reasoning when content is whitespace only', async () => {
@@ -502,7 +744,12 @@ describe('OpenRouter', () => {
 
         // Should return tool_calls, ignoring reasoning when there are tool calls
         expect(result.output).toEqual([mockToolCall]);
-        expect(result.tokenUsage).toEqual({ total: 60, prompt: 25, completion: 35 });
+        expect(result.tokenUsage).toEqual({
+          total: 60,
+          prompt: 25,
+          completion: 35,
+          numRequests: 1,
+        });
       });
 
       it('should prioritize tool calls over content+reasoning when all three are present (fixes Qwen thinking models)', async () => {
@@ -548,7 +795,12 @@ describe('OpenRouter', () => {
 
         // Should prioritize tool_calls and ignore content+reasoning when showThinking is false
         expect(result.output).toEqual([mockToolCall]);
-        expect(result.tokenUsage).toEqual({ total: 100, prompt: 50, completion: 50 });
+        expect(result.tokenUsage).toEqual({
+          total: 100,
+          prompt: 50,
+          completion: 50,
+          numRequests: 1,
+        });
       });
 
       it('should prioritize tool calls over content+reasoning even when showThinking is true', async () => {
@@ -588,7 +840,12 @@ describe('OpenRouter', () => {
 
         // Tool calls should always take priority, regardless of showThinking setting
         expect(result.output).toEqual([mockToolCall]);
-        expect(result.tokenUsage).toEqual({ total: 80, prompt: 40, completion: 40 });
+        expect(result.tokenUsage).toEqual({
+          total: 80,
+          prompt: 40,
+          completion: 40,
+          numRequests: 1,
+        });
       });
 
       it('should handle responses with empty content and reasoning when showThinking is false', async () => {
@@ -620,7 +877,12 @@ describe('OpenRouter', () => {
 
         // Should return empty string when content is empty and showThinking is false
         expect(result.output).toBe('');
-        expect(result.tokenUsage).toEqual({ total: 30, prompt: 15, completion: 15 });
+        expect(result.tokenUsage).toEqual({
+          total: 30,
+          prompt: 15,
+          completion: 15,
+          numRequests: 1,
+        });
       });
 
       it('should handle responses with only reasoning and no content/tools when showThinking is false', async () => {
@@ -651,7 +913,12 @@ describe('OpenRouter', () => {
 
         // Should return empty string when only reasoning is available and showThinking is false
         expect(result.output).toBe('');
-        expect(result.tokenUsage).toEqual({ total: 25, prompt: 10, completion: 15 });
+        expect(result.tokenUsage).toEqual({
+          total: 25,
+          prompt: 10,
+          completion: 15,
+          numRequests: 1,
+        });
       });
 
       it('should handle API errors', async () => {
@@ -677,7 +944,7 @@ describe('OpenRouter', () => {
         const providerWithOptions = new OpenRouterProvider('google/gemini-2.5-pro', {
           config: {
             transforms: ['strip-xml-tags'],
-            models: ['google/gemini-2.5-pro', 'anthropic/claude-3.5-sonnet'],
+            models: ['google/gemini-2.5-pro', 'anthropic/claude-opus-4.7'],
             route: 'fallback',
             provider: {
               order: ['google', 'anthropic'],
@@ -706,10 +973,7 @@ describe('OpenRouter', () => {
         const requestBody = JSON.parse((lastCall[1] as { body: string }).body);
 
         expect(requestBody.transforms).toEqual(['strip-xml-tags']);
-        expect(requestBody.models).toEqual([
-          'google/gemini-2.5-pro',
-          'anthropic/claude-3.5-sonnet',
-        ]);
+        expect(requestBody.models).toEqual(['google/gemini-2.5-pro', 'anthropic/claude-opus-4.7']);
         expect(requestBody.route).toBe('fallback');
         expect(requestBody.provider).toEqual({ order: ['google', 'anthropic'] });
       });
@@ -717,11 +981,11 @@ describe('OpenRouter', () => {
 
     describe('JSON schema response format handling', () => {
       beforeEach(() => {
-        process.env.OPENROUTER_API_KEY = 'test-key';
+        mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
       });
 
       afterEach(() => {
-        delete process.env.OPENROUTER_API_KEY;
+        mockProcessEnv({ OPENROUTER_API_KEY: undefined });
       });
 
       it('should parse JSON output when response_format.type is json_schema', async () => {
@@ -768,7 +1032,12 @@ describe('OpenRouter', () => {
           name: 'John Doe',
           age: 30,
         });
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should handle invalid JSON gracefully when response_format.type is json_schema', async () => {
@@ -811,7 +1080,12 @@ describe('OpenRouter', () => {
 
         // Should return the original string when JSON parsing fails
         expect(result.output).toBe('This is not valid JSON { broken: }');
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should not parse JSON when response_format.type is not json_schema', async () => {
@@ -839,7 +1113,12 @@ describe('OpenRouter', () => {
 
         // Should return the string as-is without parsing
         expect(result.output).toBe('{"name": "John Doe", "age": 30}');
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
 
       it('should handle json_schema with reasoning field', async () => {
@@ -885,7 +1164,12 @@ describe('OpenRouter', () => {
         // The output is built as "Thinking: ...\n\n{content}" and then parsed
         // Since the combined string is not valid JSON, it should return as-is
         expect(result.output).toStrictEqual({ result: 'success' });
-        expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
+        expect(result.tokenUsage).toEqual({
+          total: 50,
+          prompt: 20,
+          completion: 30,
+          numRequests: 1,
+        });
       });
     });
   });

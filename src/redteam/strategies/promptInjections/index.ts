@@ -1,13 +1,14 @@
-import type { TestCase } from '../../../types';
+import data from './data';
+
+import type { TestCase } from '../../../types/index';
 
 export async function addInjections(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
 ): Promise<TestCase[]> {
-  const sampleSize = config.sample || 1;
+  const sampleSize = config.sample ?? 1;
   const harmfulOnly = config.harmfulOnly || false;
-  const data: string[] = (await import('./data.json')).default;
   const injections =
     sampleSize === 1
       ? // Take skeleton key (the first one) by default
@@ -37,7 +38,7 @@ export async function addInjections(
         },
         metadata: {
           ...testCase.metadata,
-          strategyId: 'prompt-injection',
+          strategyId: 'jailbreak-templates',
           originalText,
         },
       };

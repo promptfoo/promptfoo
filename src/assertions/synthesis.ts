@@ -1,13 +1,14 @@
 import dedent from 'dedent';
+import cliState from '../cliState';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
 import { getDefaultProviders } from '../providers/defaults';
+import { loadApiProvider } from '../providers/index';
 import { sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';
 import type { SingleBar } from 'cli-progress';
 
-import type { ApiProvider, Assertion, TestCase, TestSuite } from '../types';
+import type { ApiProvider, Assertion, TestCase, TestSuite } from '../types/index';
 
 interface SynthesizeOptions {
   instructions?: string;
@@ -457,7 +458,7 @@ export async function synthesize({
   if (typeof provider === 'undefined') {
     providerModel = (await getDefaultProviders()).synthesizeProvider;
   } else {
-    providerModel = await loadApiProvider(provider);
+    providerModel = await loadApiProvider(provider, { basePath: cliState.basePath });
   }
   let newQuestionsPrompt = generateNewQuestionsPrompt(prompts, tests, numQuestions);
   if (instructions) {

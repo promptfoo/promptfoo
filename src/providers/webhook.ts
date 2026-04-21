@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types';
+import type { ApiProvider, ProviderResponse } from '../types/index';
 
 export class WebhookProvider implements ApiProvider {
   webhookUrl: string;
@@ -30,9 +30,15 @@ export class WebhookProvider implements ApiProvider {
       params.config = this.config;
     }
 
-    let response;
+    interface WebhookResponse {
+      output?: string;
+    }
+
+    let data,
+      cached = false,
+      latencyMs: number | undefined;
     try {
-      response = await fetchWithCache(
+      ({ data, cached, latencyMs } = await fetchWithCache<WebhookResponse>(
         this.webhookUrl,
         {
           method: 'POST',
@@ -43,22 +49,22 @@ export class WebhookProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-      );
+      ));
     } catch (err) {
       return {
         error: `Webhook call error: ${String(err)}`,
       };
     }
 
-    if (response.data && typeof response.data.output === 'string') {
+    if (data && typeof data.output === 'string') {
       return {
-        output: response.data.output,
+        output: data.output,
+        cached,
+        latencyMs,
       };
     } else {
       return {
-        error: `Webhook response error: Unexpected response format: ${JSON.stringify(
-          response.data,
-        )}`,
+        error: `Webhook response error: Unexpected response format: ${JSON.stringify(data)}`,
       };
     }
   }

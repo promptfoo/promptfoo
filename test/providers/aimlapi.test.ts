@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
   clearAimlApiModelsCache,
@@ -8,12 +9,12 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-jest.mock('../../src/providers/openai');
-jest.mock('../../src/cache');
+vi.mock('../../src/providers/openai');
+vi.mock('../../src/cache');
 
 describe('createAimlApiProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('creates chat completion provider when type is chat', () => {
@@ -43,12 +44,12 @@ describe('createAimlApiProvider', () => {
 
 describe('fetchAimlApiModels', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     clearAimlApiModelsCache();
   });
 
   it('fetches models from endpoint', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       data: { data: [{ id: 'model-a' }, { id: 'model-b' }] },
       cached: false,
       status: 200,
@@ -66,7 +67,7 @@ describe('fetchAimlApiModels', () => {
   });
 
   it('uses cache on subsequent calls', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       data: { data: [{ id: 'model-x' }] },
       cached: false,
       status: 200,
@@ -74,7 +75,7 @@ describe('fetchAimlApiModels', () => {
     } as any);
 
     const first = await fetchAimlApiModels();
-    jest.mocked(fetchWithCache).mockClear();
+    vi.mocked(fetchWithCache).mockClear();
     const second = await fetchAimlApiModels();
 
     expect(first).toEqual(second);

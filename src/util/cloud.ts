@@ -1,14 +1,16 @@
+import dedent from 'dedent';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { ProviderOptionsSchema } from '../validators/providers';
-import { fetchWithProxy } from './fetch';
+import { fetchWithProxy } from './fetch/index';
 import invariant from './invariant';
 import { checkServerFeatureSupport } from './server';
+import { isUuid } from './uuid';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
-import type { UnifiedConfig } from '../types';
+import type { UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -78,6 +80,136 @@ export async function getProviderFromCloud(id: string): Promise<ProviderOptions 
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+async function fetchCloudConfig(path: string): Promise<unknown> {
+  const response = await makeRequest(path, 'GET');
+  if (!response.ok) {
+    const errorMessage = typeof response.text === 'function' ? await response.text() : '';
+    logger.error(
+      `[Cloud] Failed to fetch config from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
+    );
+    throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+function looksLikeEvalConfig(config: Record<string, unknown>): boolean {
+  return (
+    'providers' in config ||
+    'providerIds' in config ||
+    'prompts' in config ||
+    'tests' in config ||
+    'testCases' in config
+  );
+}
+
+function extractEvalConfigPayload(body: unknown): Record<string, unknown> {
+  if (!isRecord(body)) {
+    throw new Error('Invalid cloud eval config response: expected a JSON object.');
+  }
+
+  const bodyConfig = isRecord(body.config) ? body.config : undefined;
+  if (!bodyConfig) {
+    if (looksLikeEvalConfig(body)) {
+      return body;
+    }
+    throw new Error('Invalid cloud eval config response: missing "config" object.');
+  }
+
+  const nestedConfig = isRecord(bodyConfig.config) ? bodyConfig.config : undefined;
+  if (!nestedConfig) {
+    return {
+      ...bodyConfig,
+      ...(typeof bodyConfig.name !== 'string' && typeof body.name === 'string'
+        ? { name: body.name }
+        : {}),
+    };
+  }
+
+  return {
+    ...nestedConfig,
+    ...(typeof nestedConfig.name !== 'string' && typeof bodyConfig.name === 'string'
+      ? { name: bodyConfig.name }
+      : {}),
+  };
+}
+
+function normalizeCloudEvalProvider(provider: unknown): unknown {
+  if (typeof provider !== 'string') {
+    return provider;
+  }
+  if (provider.startsWith(CLOUD_PROVIDER_PREFIX) || !isUuid(provider)) {
+    return provider;
+  }
+  return `${CLOUD_PROVIDER_PREFIX}${provider}`;
+}
+
+function normalizeCloudEvalPrompt(prompt: unknown): string {
+  if (typeof prompt === 'string') {
+    return prompt;
+  }
+  if (isRecord(prompt)) {
+    if (typeof prompt.content === 'string') {
+      return prompt.content;
+    }
+    if (typeof prompt.raw === 'string') {
+      return prompt.raw;
+    }
+  }
+  return String(prompt ?? '');
+}
+
+function normalizeEvalConfig(config: Record<string, unknown>): UnifiedConfig {
+  const providers = Array.isArray(config.providers)
+    ? config.providers
+    : Array.isArray(config.providerIds)
+      ? config.providerIds
+      : [];
+  const prompts = Array.isArray(config.prompts) ? config.prompts : [];
+  const tests = Array.isArray(config.tests)
+    ? config.tests
+    : Array.isArray(config.testCases)
+      ? config.testCases
+      : [];
+
+  const commandLineOptions = {
+    ...(isRecord(config.commandLineOptions) ? config.commandLineOptions : {}),
+    ...(config.maxConcurrency == null ? {} : { maxConcurrency: config.maxConcurrency }),
+    ...(config.delay == null ? {} : { delay: config.delay }),
+    ...(config.verbose == null ? {} : { verbose: config.verbose }),
+  };
+
+  const normalizedConfig: Record<string, unknown> = {
+    ...config,
+    providers: providers.map(normalizeCloudEvalProvider),
+    prompts: prompts.map(normalizeCloudEvalPrompt),
+    tests,
+  };
+
+  if (Object.keys(commandLineOptions).length > 0) {
+    normalizedConfig.commandLineOptions = commandLineOptions;
+  } else {
+    delete normalizedConfig.commandLineOptions;
+  }
+
+  if (typeof config.description === 'string' && config.description.trim().length > 0) {
+    normalizedConfig.description = config.description;
+  } else if (typeof config.name === 'string' && config.name.trim().length > 0) {
+    normalizedConfig.description = config.name;
+  }
+
+  delete normalizedConfig.providerIds;
+  delete normalizedConfig.testCases;
+  delete normalizedConfig.maxConcurrency;
+  delete normalizedConfig.delay;
+  delete normalizedConfig.verbose;
+
+  return normalizedConfig as UnifiedConfig;
+}
+
 /**
  * Fetches a unified configuration from PromptFoo Cloud for red team operations.
  * @param id - The unique identifier of the cloud configuration
@@ -92,24 +224,43 @@ export async function getConfigFromCloud(id: string, providerId?: string): Promi
     );
   }
   try {
-    const response = await makeRequest(
+    const body = await fetchCloudConfig(
       `redteam/configs/${id}/unified${providerId ? `?providerId=${providerId}` : ''}`,
-      'GET',
     );
-    if (!response.ok) {
-      const errorMessage = await response.text();
-      logger.error(
-        `[Cloud] Failed to fetch config from cloud: ${errorMessage}. HTTP Status: ${response.status} -- ${response.statusText}.`,
-      );
-      throw new Error(`Failed to fetch config from cloud: ${response.statusText}`);
-    }
-    const body = await response.json();
     logger.info(`Config fetched from cloud: ${id}`);
-    return body;
+    return body as UnifiedConfig;
   } catch (e) {
     logger.error(`Failed to fetch config from cloud: ${id}.`);
     logger.error(String(e));
     throw new Error(`Failed to fetch config from cloud: ${id}.`);
+  }
+}
+
+/**
+ * Fetches an eval configuration from PromptFoo Cloud by ID.
+ * The response may contain legacy eval fields, which are normalized into UnifiedConfig.
+ * @param id - The unique identifier of the cloud eval configuration
+ * @returns Promise resolving to a normalized unified configuration object
+ * @throws Error if cloud is not enabled, config not found, or response shape is invalid
+ */
+export async function getEvalConfigFromCloud(id: string): Promise<UnifiedConfig> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch Config ${id} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+  try {
+    const body = await fetchCloudConfig(`configs/${id}`);
+    const config = normalizeEvalConfig(extractEvalConfigPayload(body));
+    logger.info(`Eval config fetched from cloud: ${id}`);
+    return config;
+  } catch (e) {
+    logger.error(`Failed to fetch eval config from cloud: ${id}.`);
+    logger.error(String(e));
+    if (e instanceof Error) {
+      throw e;
+    }
+    throw new Error(String(e));
   }
 }
 
@@ -201,25 +352,186 @@ export async function getPluginSeverityOverridesFromCloud(cloudProviderId: strin
 }
 
 /**
- * Retrieves the default team for the current user from Promptfoo Cloud.
- * The default team is determined as the oldest team by creation date.
- * @returns Promise resolving to an object with team id and name
- * @throws Error if the request fails or no teams are found
+ * Retrieves all teams for the current user from Promptfoo Cloud.
+ * @returns Promise resolving to an array of team objects
+ * @throws Error if the request fails
  */
-export async function getDefaultTeam(): Promise<{ id: string; name: string }> {
-  const response = await makeRequest(`/users/me/teams`, 'GET');
+export async function getUserTeams(
+  apiHost?: string,
+  apiKey?: string,
+): Promise<
+  Array<{
+    id: string;
+    name: string;
+    slug: string;
+    organizationId: string;
+    createdAt: string;
+    updatedAt: string;
+  }>
+> {
+  const response =
+    apiHost && apiKey
+      ? await fetchWithProxy(`${apiHost}/api/v1/users/me/teams`, {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+        })
+      : await makeRequest(`/users/me/teams`, 'GET');
   if (!response.ok) {
-    throw new Error(`Failed to get default team id: ${response.statusText}`);
+    throw new Error(`Failed to get user teams: ${response.statusText}`);
   }
 
   const body = await response.json();
+  return body;
+}
+
+/**
+ * Retrieves the default team for the current user from Promptfoo Cloud.
+ * The default team is determined as the oldest team by creation date.
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the request fails or no teams are found
+ */
+export async function getDefaultTeam(): Promise<{
+  id: string;
+  name: string;
+  organizationId: string;
+  createdAt: string;
+}> {
+  const teams = await getUserTeams();
+
+  if (teams.length === 0) {
+    throw new Error('No teams found for user');
+  }
 
   // get the oldest team -- this matches the logic of the enterprise app
-  const oldestTeam = body.sort((a: { createdAt: string }, b: { createdAt: string }) => {
+  const oldestTeam = teams.sort((a, b) => {
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   })[0];
 
-  return oldestTeam;
+  return {
+    id: oldestTeam.id,
+    name: oldestTeam.name,
+    organizationId: oldestTeam.organizationId,
+    createdAt: oldestTeam.createdAt,
+  };
+}
+
+/**
+ * Retrieves a team by its ID.
+ * @param teamId - The team ID to look up
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the team is not found or not accessible
+ */
+export async function getTeamById(
+  teamId: string,
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
+  const teams = await getUserTeams();
+  const team = teams.find((t) => t.id === teamId);
+
+  if (!team) {
+    throw new Error(`Team with ID '${teamId}' not found or not accessible`);
+  }
+
+  return {
+    id: team.id,
+    name: team.name,
+    organizationId: team.organizationId,
+    createdAt: team.createdAt,
+  };
+}
+
+/**
+ * Resolves a team identifier (name, slug, or ID) to a team object.
+ * @param identifier - The team name, slug, or ID
+ * @returns Promise resolving to an object with team id, name, organizationId, and createdAt
+ * @throws Error if the team is not found
+ */
+export async function resolveTeamFromIdentifier(
+  identifier: string,
+): Promise<{ id: string; name: string; organizationId: string; createdAt: string }> {
+  const teams = await getUserTeams();
+
+  // Try exact ID match first
+  let team = teams.find((t) => t.id === identifier);
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  // Try name match (case-insensitive)
+  team = teams.find((t) => t.name.toLowerCase() === identifier.toLowerCase());
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  // Try slug match
+  team = teams.find((t) => t.slug === identifier);
+  if (team) {
+    return {
+      id: team.id,
+      name: team.name,
+      organizationId: team.organizationId,
+      createdAt: team.createdAt,
+    };
+  }
+
+  const availableTeams = teams.map((t) => t.name).join(', ');
+  throw new Error(`Team '${identifier}' not found. Available teams: ${availableTeams}`);
+}
+
+/**
+ * Resolves the current team context, checking stored preferences first.
+ * @param teamIdentifier - Optional explicit team identifier to use
+ * @param fallbackToDefault - Whether to fall back to server default team
+ * @returns Promise resolving to an object with team id and name
+ * @throws Error if no team can be resolved
+ */
+export async function resolveTeamId(
+  teamIdentifier?: string,
+  fallbackToDefault = true,
+): Promise<{ id: string; name: string }> {
+  // 1. Use explicit team identifier if provided
+  if (teamIdentifier) {
+    logger.debug(`[Team Resolution] Using explicit team identifier: ${teamIdentifier}`);
+    return await resolveTeamFromIdentifier(teamIdentifier);
+  }
+
+  // 2. Use stored current team preference (scoped to current organization)
+  const currentOrganizationId = cloudConfig.getCurrentOrganizationId();
+  const currentTeamId = cloudConfig.getCurrentTeamId(currentOrganizationId);
+  if (currentTeamId) {
+    try {
+      logger.debug(`[Team Resolution] Using stored team ID: ${currentTeamId}`);
+      return await getTeamById(currentTeamId);
+    } catch (_error) {
+      logger.warn(
+        `[Team Resolution] Stored team ${currentTeamId} no longer accessible, falling back`,
+      );
+    }
+  }
+
+  // 3. Fall back to server default (oldest team)
+  if (fallbackToDefault) {
+    logger.debug(`[Team Resolution] Using server default team`);
+    const defaultTeam = await getDefaultTeam();
+    // Store the default team for future use (scoped to organization)
+    cloudConfig.setCurrentTeamId(defaultTeam.id, defaultTeam.organizationId);
+    logger.info(
+      `Using team: ${defaultTeam.name} (use 'promptfoo auth teams set <name>' to change)`,
+    );
+    return defaultTeam;
+  }
+
+  throw new Error('No team specified and no default available');
 }
 
 /**
@@ -273,8 +585,15 @@ export async function checkCloudPermissions(config: Partial<UnifiedConfig>): Pro
       );
       return;
     }
+    // Strip large fields not needed for permission validation.
+    // The server only needs providers, metadata, and whether redteam exists.
+    const { tests, scenarios, defaultTest, evaluateOptions, ...minimalConfig } = config;
+    if (minimalConfig.redteam) {
+      minimalConfig.redteam = {} as typeof minimalConfig.redteam;
+    }
+
     const response = await makeRequest('permissions/check', 'POST', {
-      config,
+      config: minimalConfig,
     });
 
     if (!response.ok) {
@@ -397,10 +716,11 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     const body = await response.json();
 
     const policiesById = new Map();
-    body.forEach((policy: { id: string; text: string; severity: Severity }) => {
+    body.forEach((policy: { id: string; text: string; severity: Severity; name: string }) => {
       policiesById.set(policy.id, {
         text: policy.text,
         severity: policy.severity,
+        name: policy.name,
       });
     });
 
@@ -409,5 +729,142 @@ export async function getPoliciesFromCloud(ids: string[], teamId: string): Promi
     logger.error(`Failed to fetch policies from cloud.`);
     logger.error(String(e));
     throw new Error(`Failed to fetch policies from cloud.`);
+  }
+}
+
+/**
+ * Validates linkedTargetId format and existence.
+ * linkedTargetId is a Promptfoo Cloud feature that links custom provider results
+ * to an existing target instead of creating duplicates.
+ *
+ * Validates the prefix and checks existence in cloud. Format validation
+ * (e.g., UUID format) is deferred to the cloud API for simplicity.
+ *
+ * @param linkedTargetId - The linkedTargetId to validate
+ * @throws Error if validation fails
+ */
+export async function validateLinkedTargetId(linkedTargetId: string): Promise<void> {
+  // Validate format: promptfoo://provider/{id}
+  if (!isCloudProvider(linkedTargetId)) {
+    const apiHost = cloudConfig.getApiHost();
+    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+
+    throw new Error(
+      dedent`
+        Invalid linkedTargetId format: "${linkedTargetId}"
+
+        linkedTargetId must start with "${CLOUD_PROVIDER_PREFIX}" followed by a target ID.
+        Example: ${CLOUD_PROVIDER_PREFIX}12345678-1234-1234-1234-123456789abc
+
+        linkedTargetId links your local provider configuration to a cloud target, allowing you to:
+        - Consolidate findings from multiple eval runs
+        - Track performance and vulnerabilities over time
+        - View comprehensive reporting in the cloud dashboard
+
+        To get a valid linkedTargetId:
+        1. Log in to Promptfoo Cloud: ${appHost}
+        2. Navigate to Targets page: ${appHost}/redteam/targets
+        3. Find the target you want to link to and copy its ID
+        4. Format as: ${CLOUD_PROVIDER_PREFIX}<target-id>
+      `,
+    );
+  }
+
+  // Check existence in cloud (if enabled)
+  if (!cloudConfig.isEnabled()) {
+    logger.warn('[Cloud] linkedTargetId specified but cloud is not configured', {
+      linkedTargetId,
+      suggestion: "Run 'promptfoo auth login' to enable cloud features",
+    });
+    return;
+  }
+
+  const providerId = getCloudDatabaseId(linkedTargetId);
+  try {
+    logger.debug('[Cloud] Validating linkedTargetId exists in cloud', {
+      linkedTargetId,
+      providerId,
+    });
+    await getProviderFromCloud(providerId);
+    logger.debug('[Cloud] linkedTargetId validation successful', {
+      linkedTargetId,
+    });
+  } catch (error) {
+    logger.error('[Cloud] linkedTargetId validation failed', {
+      linkedTargetId,
+      error,
+    });
+    const apiHost = cloudConfig.getApiHost();
+    const appHost = apiHost.replace('/api', '').replace(':3201', '');
+
+    throw new Error(
+      dedent`
+        linkedTargetId not found: "${linkedTargetId}"
+
+        This target doesn't exist in your Promptfoo Cloud organization or you don't have access to it.
+
+        Troubleshooting steps:
+        1. Verify you're logged in to the correct organization
+           Run: promptfoo auth status
+
+        2. Check that the target exists in your cloud dashboard:
+           ${appHost}/redteam/targets
+
+        3. Ensure you have permission to access this target
+           (Targets are scoped to your organization)
+
+        4. Verify the target ID is correct and hasn't been deleted
+      `,
+    );
+  }
+}
+
+/**
+ * Fetches the current organization and optional team context for display.
+ * Returns null if cloud is not enabled or if fetching fails.
+ * @returns Promise resolving to organization name and optional team name, or null
+ */
+export async function getOrgContext(): Promise<{
+  organizationName: string;
+  teamName?: string;
+} | null> {
+  if (!cloudConfig.isEnabled()) {
+    return null;
+  }
+
+  try {
+    const apiHost = cloudConfig.getApiHost();
+    const apiKey = cloudConfig.getApiKey();
+    const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const { organization } = await response.json();
+    const currentTeamId = cloudConfig.getCurrentTeamId(organization.id);
+
+    // Only include team name if it differs from organization name
+    let teamName: string | undefined;
+    if (currentTeamId) {
+      try {
+        const team = await getTeamById(currentTeamId);
+        if (team.name !== organization.name) {
+          teamName = team.name;
+        }
+      } catch {
+        // Team lookup failed, continue without team name
+      }
+    }
+
+    return {
+      organizationName: organization.name,
+      teamName,
+    };
+  } catch {
+    // Silently fail and return null
+    return null;
   }
 }

@@ -5,9 +5,13 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
 
 async function generateLikertPrompts(
   testCases: TestCase[],
@@ -48,7 +52,12 @@ async function generateLikertPrompts(
         email: getUserEmail(),
       };
 
-      const { data } = await fetchWithCache(
+      interface LikertGenerationResponse {
+        error?: string;
+        modifiedPrompts?: string[];
+      }
+
+      const { data } = await fetchWithCache<LikertGenerationResponse>(
         getRemoteGenerationUrl(),
         {
           method: 'POST',
@@ -65,7 +74,10 @@ async function generateLikertPrompts(
           data,
         )}`,
       );
-      if (data.error) {
+      // Runtime check is necessary because both properties are optional in LikertGenerationResponse.
+      // The remote API could return {} or {error: "..."} without modifiedPrompts, and line 80 directly
+      // accesses data.modifiedPrompts.map() which would throw if undefined.
+      if (data.error || !data.modifiedPrompts) {
         logger.error(`[jailbreak:likert] Error in Likert generation: ${data.error}}`);
         logger.debug(`[jailbreak:likert] Response: ${JSON.stringify(data)}`);
         return;
@@ -120,7 +132,7 @@ export async function addLikertTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
-    throw new Error('Likert jailbreak strategy requires remote generation to be enabled');
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('Likert jailbreak strategy'));
   }
 
   const likertTestCases = await generateLikertPrompts(testCases, injectVar, config);

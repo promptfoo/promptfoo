@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Regression test - defaultTest llm-rubric vars'
+
+prompts:
+  - 'static model output'
+
+providers:
+  - echo
+
+defaultTest: file://defaulttest-llm-rubric-vars-default.yaml
+
+tests:
+  - file://defaulttest-llm-rubric-vars-tests.yaml

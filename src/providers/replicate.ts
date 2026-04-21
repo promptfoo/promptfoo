@@ -1,12 +1,14 @@
-import { getCache, isCacheEnabled, fetchWithCache } from '../cache';
+import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { parseChatPrompt } from './shared';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiModerationProvider,
   ApiProvider,
@@ -15,8 +17,7 @@ import type {
   ModerationFlag,
   ProviderModerationResponse,
   ProviderResponse,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
+} from '../types/index';
 
 interface ReplicateCompletionOptions {
   apiKey?: string;
@@ -87,7 +88,47 @@ export class ReplicateProvider implements ApiProvider {
     return `[Replicate Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  getApiKey(): string | undefined {
+    return this.apiKey;
+  }
+
+  requiresApiKey(): boolean {
+    return true;
+  }
+
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system: 'replicate',
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.top_p,
+      maxTokens: this.config.max_tokens ?? this.config.max_length ?? this.config.max_new_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+  }
+
+  protected async callApiInternal(prompt: string): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or or add `apiKey` to the provider config.',
@@ -112,7 +153,7 @@ export class ReplicateProvider implements ApiProvider {
 
       if (cachedResponse) {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return JSON.parse(cachedResponse as string);
+        return { ...JSON.parse(cachedResponse as string), cached: true };
       }
     }
 
@@ -127,15 +168,15 @@ export class ReplicateProvider implements ApiProvider {
     let response;
     try {
       const inputOptions = {
-        max_length: this.config.max_length || getEnvInt('REPLICATE_MAX_LENGTH'),
-        max_new_tokens: this.config.max_new_tokens || getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
-        temperature: this.config.temperature || getEnvFloat('REPLICATE_TEMPERATURE'),
-        top_p: this.config.top_p || getEnvFloat('REPLICATE_TOP_P'),
-        top_k: this.config.top_k || getEnvInt('REPLICATE_TOP_K'),
+        max_length: this.config.max_length ?? getEnvInt('REPLICATE_MAX_LENGTH'),
+        max_new_tokens: this.config.max_new_tokens ?? getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
+        temperature: this.config.temperature ?? getEnvFloat('REPLICATE_TEMPERATURE'),
+        top_p: this.config.top_p ?? getEnvFloat('REPLICATE_TOP_P'),
+        top_k: this.config.top_k ?? getEnvInt('REPLICATE_TOP_K'),
         repetition_penalty:
-          this.config.repetition_penalty || getEnvFloat('REPLICATE_REPETITION_PENALTY'),
-        stop_sequences: this.config.stop_sequences || getEnvString('REPLICATE_STOP_SEQUENCES'),
-        seed: this.config.seed || getEnvInt('REPLICATE_SEED'),
+          this.config.repetition_penalty ?? getEnvFloat('REPLICATE_REPETITION_PENALTY'),
+        stop_sequences: this.config.stop_sequences ?? getEnvString('REPLICATE_STOP_SEQUENCES'),
+        seed: this.config.seed ?? getEnvInt('REPLICATE_SEED'),
         system_prompt: systemPrompt,
         prompt: userPrompt,
       };
@@ -187,10 +228,18 @@ export class ReplicateProvider implements ApiProvider {
 
     if (typeof response === 'string') {
       // It's text
-      return {
+      const ret = {
         output: response,
         tokenUsage: createEmptyTokenUsage(),
       };
+      if (cache && cacheKey) {
+        try {
+          await cache.set(cacheKey, JSON.stringify(ret));
+        } catch (err) {
+          logger.error(`Failed to cache response: ${String(err)}`);
+        }
+      }
+      return ret;
     } else if (Array.isArray(response)) {
       // It's a list of generative outputs
       if (response.every((item) => typeof item === 'string')) {
@@ -339,7 +388,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const cache = getCache();
     const cacheKey = `replicate:image:${safeJsonStringify({ context, prompt })}`;

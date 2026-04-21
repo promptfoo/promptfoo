@@ -5,7 +5,7 @@ import yaml from 'js-yaml';
 import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
-import { type Assertion, type TestCase } from '../types';
+import { type Assertion, type TestCase } from '../types/index';
 
 const clone = Clone();
 
@@ -39,7 +39,8 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
 export async function loadFromJavaScriptFile(
   filePath: string,
   functionName: string | undefined,
-  args: any[],
+  args: unknown[],
+  // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
 ): Promise<any> {
   const requiredModule = await importModule(filePath, functionName);
   if (functionName && typeof requiredModule[functionName] === 'function') {

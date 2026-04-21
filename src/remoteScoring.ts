@@ -3,7 +3,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 
-import type { GradingResult } from './types';
+import type { GradingResult } from './types/index';
 
 type PiQuestion = {
   question: string;
@@ -49,7 +49,7 @@ export async function doRemoteScoringWithPi(
     if (apiKey) {
       const body = JSON.stringify(payload);
       logger.debug(`Performing remote scoring with pi: ${body}`);
-      const { data } = await fetchWithCache(
+      const { data } = await fetchWithCache<WithPiGradingResult>(
         WITHPI_API_URL,
         {
           method: 'POST',

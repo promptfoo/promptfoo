@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
 
@@ -7,41 +8,114 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
-import { fromError } from 'zod-validation-error';
-import { readAssertions } from '../../assertions';
+import { z } from 'zod';
+import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
+import { filterPrompts } from '../../commands/eval/filterPrompts';
+import { filterProviderConfigs, getProviderIdAndLabel } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { readPrompts, readProviderPromptMap } from '../../prompts';
-import { loadApiProviders } from '../../providers';
+import { readPrompts, readProviderPromptMap } from '../../prompts/index';
+import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
+  CommandLineOptionsSchema,
+  EvaluateOptionsSchema,
   type Prompt,
   type ProviderOptions,
+  ProvidersSchema,
   type RedteamPluginObject,
   type RedteamStrategyObject,
   type Scenario,
   type TestCase,
   type TestSuite,
+  TestSuiteConfigSchema,
   type UnifiedConfig,
   UnifiedConfigSchema,
-} from '../../types';
-import { isRunningUnderNpx, readFilters } from '../../util';
+} from '../../types/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
+import { validateTestPromptReferences } from '../validateTestPromptReferences';
+import { validateTestProviderReferences } from '../validateTestProviderReferences';
+import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
 /**
  * Type guard to check if a test case has vars property
  */
 function isTestCaseWithVars(test: unknown): test is { vars: Record<string, unknown> } {
   return typeof test === 'object' && test !== null && 'vars' in test;
+}
+
+function firstTargetHasInputs(providers: UnifiedConfig['providers'] | undefined): boolean {
+  if (!Array.isArray(providers)) {
+    return false;
+  }
+
+  const firstProvider = providers[0];
+  if (typeof firstProvider !== 'object' || firstProvider === null || !('inputs' in firstProvider)) {
+    return false;
+  }
+
+  const inputs = firstProvider.inputs;
+  return typeof inputs === 'object' && inputs !== null && Object.keys(inputs).length > 0;
+}
+
+/**
+ * When --providers is used alongside a config file that has providers defined,
+ * maps each CLI provider token to a matching config provider (preserving its config
+ * options like num_ctx, temperature). Unmatched tokens are kept as bare strings.
+ *
+ * Matching priority per token:
+ * 1. Exact match on provider id
+ * 2. Exact match on provider label
+ * 3. Provider-prefix match: config id ends with `:cliProvider` (e.g. CLI `llama3.1:8b`
+ *    matches config `ollama:llama3.1:8b`). First match wins if multiple configs share a suffix.
+ * 4. No match: keep raw CLI string for fresh provider creation
+ */
+export function resolveCliProvidersWithConfig(
+  cliProviders: string[],
+  configProviders: UnifiedConfig['providers'],
+): UnifiedConfig['providers'] {
+  if (!configProviders || !Array.isArray(configProviders)) {
+    return cliProviders;
+  }
+
+  // Pre-compute id/label for each config provider once, rather than
+  // re-calling getProviderIdAndLabel on every find() iteration.
+  const indexed = configProviders.map((cp, i) => ({
+    provider: cp,
+    ...getProviderIdAndLabel(cp, i),
+  }));
+
+  return cliProviders.map((cliProvider) => {
+    // Separate passes enforce documented priority so an exact id match
+    // is always preferred over a suffix match earlier in the array.
+    const exactId = indexed.find((entry) => entry.id === cliProvider);
+    if (exactId) {
+      return exactId.provider;
+    }
+
+    const exactLabel = indexed.find((entry) => entry.label === cliProvider);
+    if (exactLabel) {
+      return exactLabel.provider;
+    }
+
+    const prefixMatch = indexed.find((entry) => entry.id.endsWith(':' + cliProvider));
+    if (prefixMatch) {
+      return prefixMatch.provider;
+    }
+
+    return cliProvider;
+  });
 }
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -155,6 +229,41 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   return config;
 }
 
+/**
+ * Renders environment variable templates in a config object using two-pass rendering.
+ * This handles nested templates in config.env (fixes #7079).
+ *
+ * Pass 1: Render config.env values using only process.env (isolated from cliState)
+ * Pass 2: Render full config using pre-rendered config.env as overrides
+ *
+ * @param config - The config object to render
+ * @returns The config with env templates rendered
+ */
+function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
+  // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
+  const processEnvDisabled = getEnvBool(
+    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+  );
+  const baseEnvForFirstPass = processEnvDisabled ? {} : process.env;
+
+  // First pass: render config.env values using only process.env (replaceBase=true)
+  // This avoids pulling stale cliState.config?.env in watch/reload scenarios
+  const rawConfigEnv = config.env;
+  const renderedConfigEnv = rawConfigEnv
+    ? (renderEnvOnlyInObject(rawConfigEnv, baseEnvForFirstPass, true) as Record<string, string>)
+    : undefined;
+
+  // Filter out undefined values from renderedConfigEnv (common in JS configs: env: { FOO: process.env.FOO })
+  // Note: To explicitly mask a process.env var, use empty string instead of undefined
+  const filteredConfigEnv = renderedConfigEnv
+    ? Object.fromEntries(Object.entries(renderedConfigEnv).filter(([, v]) => v !== undefined))
+    : undefined;
+
+  // Second pass: render full config using pre-rendered config.env as overrides
+  return renderEnvOnlyInObject(config, filteredConfigEnv);
+}
+
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   let ret: UnifiedConfig & {
     targets?: UnifiedConfig['providers'];
@@ -163,28 +272,54 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   };
   const ext = path.parse(configPath).ext;
   if (ext === '.json' || ext === '.yaml' || ext === '.yml') {
-    const rawConfig = yaml.load(fs.readFileSync(configPath, 'utf-8')) ?? {};
+    const rawConfig = yaml.load(await fsPromises.readFile(configPath, 'utf-8')) ?? {};
     const dereferencedConfig = await dereferenceConfig(rawConfig as UnifiedConfig);
+
+    // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
+    // This allows env vars to be used in paths and other config values.
+    // Runtime templates like {{ vars.x }} are preserved for later evaluation.
+    const renderedConfig = renderConfigEnvTemplates(dereferencedConfig as UnifiedConfig);
+
     // Validator requires `prompts`, but prompts is not actually required for redteam.
-    const UnifiedConfigSchemaWithoutPrompts = UnifiedConfigSchema.innerType()
-      .innerType()
-      .extend({ prompts: UnifiedConfigSchema.innerType().innerType().shape.prompts.optional() });
-    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(dereferencedConfig);
+    // We create a relaxed schema for validation that makes prompts optional
+    const UnifiedConfigSchemaWithoutPrompts = TestSuiteConfigSchema.extend({
+      evaluateOptions: EvaluateOptionsSchema.optional(),
+      commandLineOptions: CommandLineOptionsSchema.partial().optional(),
+      providers: ProvidersSchema.optional(),
+      targets: ProvidersSchema.optional(),
+      prompts: TestSuiteConfigSchema.shape.prompts.optional(),
+    }).refine(
+      (data) => {
+        const hasTargets = data.targets !== undefined;
+        const hasProviders = data.providers !== undefined;
+        return (hasTargets && !hasProviders) || (!hasTargets && hasProviders);
+      },
+      {
+        message: "Exactly one of 'targets' or 'providers' must be provided, but not both",
+      },
+    );
+    const validationResult = UnifiedConfigSchemaWithoutPrompts.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
-        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
-    ret = dereferencedConfig;
+    ret = renderedConfig;
   } else if (isJavascriptFile(configPath)) {
+    // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
     const imported = await importModule(configPath);
-    const validationResult = UnifiedConfigSchema.safeParse(imported);
+
+    // Render environment variable templates for JS configs too.
+    // This ensures consistent behavior across config file types.
+    const renderedConfig = renderConfigEnvTemplates(imported as UnifiedConfig);
+
+    const validationResult = UnifiedConfigSchema.safeParse(renderedConfig);
     if (!validationResult.success) {
       logger.warn(
-        `Invalid configuration file ${configPath}:\n${fromError(validationResult.error).message}`,
+        `Invalid configuration file ${configPath}:\n${z.prettifyError(validationResult.error)}`,
       );
     }
-    ret = imported as UnifiedConfig;
+    ret = renderedConfig;
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
@@ -218,8 +353,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
         ret.tests.some(
           (test) => isTestCaseWithVars(test) && Object.keys(test.vars || {}).includes('prompt'),
         ));
+    const usesMultiInputTargets = firstTargetHasInputs(ret.providers);
 
-    if (!hasAnyPrompt) {
+    if (!hasAnyPrompt && !usesMultiInputTargets) {
       logger.warn(
         `Warning: Expected top-level "prompts" property in config or a test variable named "prompt"`,
       );
@@ -230,10 +366,16 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
 }
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
-  if (!fs.existsSync(configPath)) {
-    return undefined;
+  try {
+    return await readConfig(configPath);
+  } catch (error) {
+    // If file doesn't exist, return undefined
+    // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return undefined;
+    }
+    throw error;
   }
-  return readConfig(configPath);
 }
 
 /**
@@ -246,11 +388,15 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   const configs: UnifiedConfig[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
+
     const globPaths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
+
     if (globPaths.length === 0) {
-      throw new Error(`No configuration file found at ${configPath}`);
+      throw new Error(
+        `No configuration file found at ${configPath}. Run "${promptfooCommand('init')}" to create one or pass --config path/to/promptfooconfig.yaml.`,
+      );
     }
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
@@ -463,7 +609,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
 
       const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
-      return sharingConfig ? sharingConfig.sharing : false;
+      return sharingConfig ? sharingConfig.sharing : undefined;
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
@@ -552,19 +698,22 @@ export async function resolveConfigs(
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
-    providers: cmdObj.providers || fileConfig.providers || defaultConfig.providers || [],
+    providers: fileConfig.providers || defaultConfig.providers || [],
     tests: cmdObj.tests || cmdObj.vars || fileConfig.tests || defaultConfig.tests || [],
     scenarios: fileConfig.scenarios || defaultConfig.scenarios,
     env: fileConfig.env || defaultConfig.env,
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
-      : (fileConfig.sharing ?? defaultConfig.sharing ?? false),
+      : (fileConfig.sharing ?? defaultConfig.sharing),
     defaultTest: processedDefaultTest
       ? await readTest(processedDefaultTest, basePath, true)
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
-    extensions: fileConfig.extensions || defaultConfig.extensions || [],
+    extensions: [
+      ...(cmdObj.extension || []),
+      ...(fileConfig.extensions || defaultConfig.extensions || []),
+    ],
     metadata: fileConfig.metadata || defaultConfig.metadata,
     redteam: fileConfig.redteam || defaultConfig.redteam,
     tracing: fileConfig.tracing || defaultConfig.tracing,
@@ -572,22 +721,25 @@ export async function resolveConfigs(
   };
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
-  const hasProviders = [config.providers].flat().filter(Boolean).length > 0;
+  const hasProviders =
+    (cmdObj.providers && cmdObj.providers.length > 0) ||
+    [config.providers].flat().filter(Boolean).length > 0;
   const hasConfigFile = Boolean(configPaths);
 
   if (!hasConfigFile && !hasPrompts && !hasProviders && !isCI()) {
-    const runCommand = isRunningUnderNpx() ? 'npx promptfoo' : 'promptfoo';
-
+    const extList = DEFAULT_CONFIG_EXTENSIONS.join(', ');
     logger.warn(dedent`
       ${chalk.yellow.bold('⚠️  No promptfooconfig found')}
 
+      ${chalk.white(`Searched in ${chalk.bold(process.cwd())} for promptfooconfig.{${extList}}`)}
+
       ${chalk.white('Try running with:')}
 
-      ${chalk.cyan(`${runCommand} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
+      ${chalk.cyan(`${promptfooCommand('')} eval -c ${chalk.bold('path/to/promptfooconfig.yaml')}`)}
 
       ${chalk.white('Or create a config with:')}
 
-      ${chalk.green(`${runCommand} init`)}
+      ${chalk.green(promptfooCommand('init'))}
     `);
     process.exit(1);
   }
@@ -607,9 +759,51 @@ export async function resolveConfigs(
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
+
+  // Resolve provider configs: loads file:// references while preserving non-file providers.
+  // This enables:
+  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
+  // 2. Filtering by resolved provider ids/labels (not just file paths)
+  // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
+  const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
+
+  // When --providers flag is used, match CLI tokens against resolved providers
+  // (after file:// expansion) so that file-based provider configs are also matched.
+  const cliFilteredProviderConfigs =
+    (cmdObj.providers
+      ? resolveCliProvidersWithConfig(cmdObj.providers, resolvedProviderConfigs)
+      : resolvedProviderConfigs) ?? [];
+
+  // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
+  // Filtering on resolved configs allows matching by provider id/label from file-based providers.
+  const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
+  const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption);
+
+  if (
+    filterOption &&
+    Array.isArray(filteredProviderConfigs) &&
+    filteredProviderConfigs.length === 0
+  ) {
+    logger.warn(
+      `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
+    );
+  }
+
   // Parse prompts, providers, and tests
-  const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-  const parsedProviders = await loadApiProviders(config.providers, {
+  // Pass filtered resolved configs to avoid re-reading files
+  let parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
+
+  // Filter prompts if --filter-prompts option is provided
+  if (cmdObj.filterPrompts) {
+    parsedPrompts = filterPrompts(parsedPrompts, cmdObj.filterPrompts);
+    if (parsedPrompts.length === 0) {
+      logger.warn(
+        `No prompts matched the filter "${cmdObj.filterPrompts}". Check your --filter-prompts value.`,
+      );
+    }
+  }
+
+  const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
   });
@@ -660,10 +854,18 @@ export async function resolveConfigs(
     }
   }
 
-  const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
+  // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
+  // This ensures that `prompts` filters from external provider files are respected (#1307)
+  // and that the map is consistent with the filtered providers
+  const parsedProviderPromptMap = readProviderPromptMap(
+    { providers: filteredProviderConfigs },
+    parsedPrompts,
+  );
 
   if (parsedPrompts.length === 0) {
-    logger.error('No prompts found');
+    logger.error(
+      'No prompts found. Add a `prompts:` entry to your config or pass --prompts path/to/prompt.txt.',
+    );
     process.exit(1);
   }
 
@@ -693,24 +895,50 @@ export async function resolveConfigs(
       fileConfig.nunjucksFilters || defaultConfig.nunjucksFilters || {},
       basePath,
     ),
+    redteam: config.redteam,
     extensions: config.extensions,
     tracing: config.tracing,
   };
 
-  if (testSuite.tests) {
-    validateAssertions(testSuite.tests);
-  }
+  // Validate assertions in tests and defaultTest using Zod schema
+  // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
+  validateAssertions(
+    testSuite.tests || [],
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
+
+  // Validate provider references in tests and scenarios
+  validateTestProviderReferences(
+    testSuite.tests || [],
+    testSuite.providers,
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    testSuite.scenarios,
+  );
+
+  // Validate that all prompt references in tests exist
+  validateTestPromptReferences(
+    testSuite.tests || [],
+    testSuite.prompts,
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
 
   cliState.config = config;
 
   // Extract commandLineOptions from either explicit config files or default config
   let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
 
-  // Resolve relative envPath against the config file directory
-  if (commandLineOptions?.envPath && !path.isAbsolute(commandLineOptions.envPath) && basePath) {
+  // Resolve relative envPath(s) against the config file directory
+  if (commandLineOptions?.envPath && basePath) {
+    const envPaths = Array.isArray(commandLineOptions.envPath)
+      ? commandLineOptions.envPath
+      : [commandLineOptions.envPath];
+
+    const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
+
     commandLineOptions = {
       ...commandLineOptions,
-      envPath: path.resolve(basePath, commandLineOptions.envPath),
+      // Keep as single string if only one path, array otherwise
+      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
     };
   }
 

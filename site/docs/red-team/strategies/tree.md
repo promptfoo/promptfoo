@@ -81,9 +81,10 @@ This approach can cover a wide range of inputs and identify weaknesses that migh
 
 ## Related Concepts
 
-- [Iterative Jailbreaks](iterative.md) - Similar approach using sequential refinement
-- [Prompt Injections](prompt-injection.md) - Simpler static approach to jailbreaking
-- [Multi-turn Jailbreaks](multi-turn.md) - Using conversation history to bypass constraints
+- [Iterative Jailbreaks](iterative.md) - Sequential refinement approach
+- [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
+- [Prompt Injections](prompt-injection.md) - Direct injection techniques
+- [Multi-turn Jailbreaks](multi-turn.md) - Conversation-based attacks
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
 
