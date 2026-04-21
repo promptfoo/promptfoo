@@ -4,6 +4,7 @@ import {
   wrapProvidersWithRateLimiting,
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
+import { createMockProvider } from '../factories/provider';
 
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
@@ -18,11 +19,10 @@ describe('providerWrapper', () => {
 
     mockExecute = vi.fn();
 
-    mockProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+    mockProvider = createMockProvider({
+      response: { output: 'test output' },
       config: { apiKey: 'test-key' },
-    } as unknown as ApiProvider;
+    });
 
     // Create a mock registry with the execute method
     mockRegistry = {
@@ -91,8 +91,8 @@ describe('providerWrapper', () => {
 
   describe('wrapProvidersWithRateLimiting', () => {
     it('should wrap multiple providers', () => {
-      const provider1 = { ...mockProvider, id: () => 'provider-1' } as ApiProvider;
-      const provider2 = { ...mockProvider, id: () => 'provider-2' } as ApiProvider;
+      const provider1 = createMockProvider({ id: 'provider-1' });
+      const provider2 = createMockProvider({ id: 'provider-2' });
 
       const wrappedProviders = wrapProvidersWithRateLimiting([provider1, provider2], mockRegistry);
 

@@ -504,6 +504,59 @@ describe('retry command', () => {
       expect(evalRecord.prompts[0].metrics?.namedScores).toBeDefined();
       expect(evalRecord.prompts[0].metrics?.namedScores?.accuracy).toBeCloseTo(1.6, 1);
       expect(evalRecord.prompts[0].metrics?.namedScores?.relevance).toBeCloseTo(1.7, 1);
+      expect(evalRecord.prompts[0].metrics?.namedScoresCount?.accuracy).toBe(2);
+      expect(evalRecord.prompts[0].metrics?.namedScoresCount?.relevance).toBe(2);
+    });
+
+    it('should preserve weighted named score totals and assertion counts', async () => {
+      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
+      const db = getDb();
+      const mockProvider = { id: 'test-provider' };
+      const mockPrompt = { raw: 'test', display: 'test', label: 'test', provider: 'test-provider' };
+
+      await evalRecord.addPrompts([mockPrompt]);
+
+      await db.insert(evalResultsTable).values({
+        id: `${evalRecord.id}-weighted-1`,
+        evalId: evalRecord.id,
+        promptIdx: 0,
+        testIdx: 0,
+        prompt: mockPrompt,
+        testCase: { vars: {} },
+        provider: mockProvider,
+        success: false,
+        score: 0.75,
+        failureReason: ResultFailureReason.ASSERT,
+        namedScores: { accuracy: 0.75 },
+        gradingResult: {
+          pass: false,
+          score: 0.75,
+          reason: 'weighted metric',
+          namedScoreWeights: {
+            accuracy: 4,
+          },
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'critical passed',
+              assertion: { type: 'contains', value: 'critical', metric: 'accuracy' },
+            },
+            {
+              pass: false,
+              score: 0,
+              reason: 'optional failed',
+              assertion: { type: 'contains', value: 'missing', metric: 'accuracy' },
+            },
+          ],
+        },
+      });
+
+      await recalculatePromptMetrics(evalRecord);
+
+      expect(evalRecord.prompts[0].metrics?.namedScores?.accuracy).toBeCloseTo(3, 10);
+      expect(evalRecord.prompts[0].metrics?.namedScoresCount?.accuracy).toBe(2);
+      expect(evalRecord.prompts[0].metrics?.namedScoreWeights?.accuracy).toBe(4);
     });
 
     it('should accumulate metrics correctly across multiple batches', async () => {

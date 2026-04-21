@@ -1,6 +1,7 @@
 import React from 'react';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import TruncatedText from './TruncatedText';
 
@@ -39,7 +40,8 @@ describe('TruncatedText', () => {
     expect(screen.queryByText('Show less')).not.toBeInTheDocument();
   });
 
-  it("should expand to show the full text and display the 'Show less' UI when the user clicks the truncated text", () => {
+  it("should expand to show the full text and display the 'Show less' UI when the user clicks the truncated text", async () => {
+    const user = userEvent.setup();
     const longText =
       'This is a very long piece of text that is intended to be truncated by the component.';
     const maxLength = 20;
@@ -53,7 +55,7 @@ describe('TruncatedText', () => {
     expect(truncationToggler).toBeInTheDocument();
     expect(truncationToggler).toHaveStyle('cursor: pointer');
 
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
 
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
@@ -182,7 +184,8 @@ describe('TruncatedText', () => {
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
-  it('should preserve user expanded state when maxLength changes', () => {
+  it('should preserve user expanded state when maxLength changes', async () => {
+    const user = userEvent.setup();
     const longText = 'This is a very long piece of text that exceeds maxLength';
     const { container, rerender } = render(<TruncatedText text={longText} maxLength={20} />);
 
@@ -195,8 +198,7 @@ describe('TruncatedText', () => {
     expect(truncationToggler).toBeInTheDocument();
     expect(truncationToggler).toHaveStyle('cursor: pointer');
 
-    // User clicks to expand
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
 
@@ -386,7 +388,8 @@ describe('TruncatedText', () => {
     expect(mainDiv?.querySelector('img')).toBeInTheDocument();
   });
 
-  it('should preserve expanded state when maxLength is reduced', () => {
+  it('should preserve expanded state when maxLength is reduced', async () => {
+    const user = userEvent.setup();
     const longText = 'This is a very long piece of text that exceeds any reasonable maxLength';
     const { container, rerender } = render(<TruncatedText text={longText} maxLength={30} />);
 
@@ -399,8 +402,7 @@ describe('TruncatedText', () => {
     expect(truncationToggler).toBeInTheDocument();
     expect(truncationToggler).toHaveStyle('cursor: pointer');
 
-    // User clicks to expand
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
     expect(screen.getByText(longText)).toBeInTheDocument();
     expect(screen.getByText('Show less')).toBeInTheDocument();
 
@@ -431,7 +433,8 @@ describe('TruncatedText', () => {
     expect(mainDiv?.textContent || '').toBe('');
   });
 
-  it('should prevent event propagation when the truncation toggler is clicked', () => {
+  it('should prevent event propagation when the truncation toggler is clicked', async () => {
+    const user = userEvent.setup();
     const longText =
       'This is a very long piece of text that is intended to be truncated by the component.';
     const maxLength = 20;
@@ -450,12 +453,13 @@ describe('TruncatedText', () => {
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
 
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
 
     expect(parentClickHandler).not.toHaveBeenCalled();
   });
 
-  it('should prevent click event propagation to parent elements when toggling truncation', () => {
+  it('should prevent click event propagation to parent elements when toggling truncation', async () => {
+    const user = userEvent.setup();
     const longText = 'This is a very long piece of text that is intended to be truncated.';
     const maxLength = 20;
     const parentClickHandler = vi.fn();
@@ -467,7 +471,7 @@ describe('TruncatedText', () => {
     );
 
     const truncationToggler = screen.getByText('...');
-    fireEvent.click(truncationToggler);
+    await user.click(truncationToggler);
 
     expect(parentClickHandler).not.toHaveBeenCalled();
   });
@@ -496,7 +500,8 @@ describe('TruncatedText', () => {
     expect(screen.getByText('...')).toBeInTheDocument();
   });
 
-  it('should reset truncation state when text changes to different content that still exceeds maxLength', () => {
+  it('should reset truncation state when text changes to different content that still exceeds maxLength', async () => {
+    const user = userEvent.setup();
     const longText1 = 'This is a very long piece of text that exceeds maxLength - 1';
     const longText2 = 'This is another very long piece of text that exceeds maxLength - 2';
     const maxLength = 20;
@@ -511,7 +516,7 @@ describe('TruncatedText', () => {
     const truncationToggler = mainDiv?.querySelector('.truncation-toggler');
     expect(truncationToggler).toBeInTheDocument();
 
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
     expect(screen.getByText('Show less')).toBeInTheDocument();
     expect(screen.getByText(longText1)).toBeInTheDocument();
 
@@ -524,7 +529,8 @@ describe('TruncatedText', () => {
     expect(screen.getByText(longText2)).toBeInTheDocument();
   });
 
-  it('should call preventDefault and stopPropagation when the truncation toggler is clicked', () => {
+  it('should call preventDefault and stopPropagation when the truncation toggler is clicked', async () => {
+    const user = userEvent.setup();
     const longText =
       'This is a very long piece of text that is intended to be truncated by the component.';
     const maxLength = 20;
@@ -540,7 +546,7 @@ describe('TruncatedText', () => {
     const preventDefaultSpy = vi.spyOn(Event.prototype, 'preventDefault');
     const stopPropagationSpy = vi.spyOn(Event.prototype, 'stopPropagation');
 
-    fireEvent.click(truncationToggler as Element);
+    await user.click(truncationToggler as Element);
 
     expect(preventDefaultSpy).toHaveBeenCalled();
     expect(stopPropagationSpy).toHaveBeenCalled();

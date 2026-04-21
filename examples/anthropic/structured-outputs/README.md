@@ -1,4 +1,4 @@
-# structured-outputs (Anthropic Structured Outputs)
+# anthropic/structured-outputs (Anthropic Structured Outputs)
 
 This example demonstrates Anthropic's structured outputs feature, which ensures Claude's responses follow a specific schema. It shows both **JSON outputs** for structured data extraction and **strict tool use** for guaranteed schema validation on tool calls.
 
