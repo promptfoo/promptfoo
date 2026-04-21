@@ -270,6 +270,7 @@ pipeline {
 ### Other Platforms
 
 - [Azure Pipelines](/docs/integrations/azure-pipelines)
+- [AWS CodeCommit](/docs/integrations/aws-codecommit)
 - [CircleCI](/docs/integrations/circle-ci)
 - [Bitbucket Pipelines](/docs/integrations/bitbucket-pipelines)
 - [Travis CI](/docs/integrations/travis-ci)

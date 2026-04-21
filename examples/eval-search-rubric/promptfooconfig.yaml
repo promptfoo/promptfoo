@@ -13,8 +13,8 @@ providers:
           name: web_search
           max_uses: 5
 
-  # OpenAI GPT-5.1 with web search tool
-  - id: openai:responses:gpt-5.1
+  # OpenAI GPT-5.4 with web search tool
+  - id: openai:responses:gpt-5.4
     config:
       tools:
         - type: web_search_preview

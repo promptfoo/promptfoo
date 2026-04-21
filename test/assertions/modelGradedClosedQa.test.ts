@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
-import { matchesClosedQa } from '../../src/matchers';
+import { matchesClosedQa } from '../../src/matchers/llmGrading';
 
 import type { AssertionParams } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/llmGrading');
 
 describe('handleModelGradedClosedQa', () => {
   beforeEach(() => {

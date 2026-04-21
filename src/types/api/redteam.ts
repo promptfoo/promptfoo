@@ -15,7 +15,7 @@ export const TestCaseGenerationSchema = z.object({
     id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
       message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
     }) as unknown as z.ZodType<Plugin>,
-    config: PluginConfigSchema.optional().prefault({}),
+    config: PluginConfigSchema.catchall(z.unknown()).optional().prefault({}),
   }),
   strategy: z.object({
     id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {

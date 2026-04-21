@@ -1,7 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
-import { runMetaAgentRedteam } from '../../../src/redteam/providers/iterativeMeta';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import RedteamIterativeMetaProvider, {
+  runMetaAgentRedteam,
+} from '../../../src/redteam/providers/iterativeMeta';
+import {
+  createMockProvider,
+  createProviderResponse,
+  createTokenUsage,
+  type MockApiProvider,
+} from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
+import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());
 const mockGetTargetResponse = vi.hoisted(() => vi.fn<() => Promise<any>>());
@@ -38,10 +46,12 @@ vi.mock('../../../src/redteam/graders', async (importOriginal) => {
 });
 
 const mockShouldGenerateRemote = vi.hoisted(() => vi.fn(() => true));
+const mockNeverGenerateRemote = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    neverGenerateRemote: mockNeverGenerateRemote,
     shouldGenerateRemote: mockShouldGenerateRemote,
   };
 });
@@ -81,42 +91,38 @@ vi.mock('../../../src/redteam/providers/traceFormatting', () => ({
 }));
 
 describe('RedteamIterativeMetaProvider', () => {
-  let mockAgentProvider: Mocked<ApiProvider>;
-  let mockGradingProvider: Mocked<ApiProvider>;
-  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockAgentProvider: MockApiProvider;
+  let mockGradingProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockShouldGenerateRemote.mockReset();
+    mockShouldGenerateRemote.mockReturnValue(true);
+    mockNeverGenerateRemote.mockReset();
+    mockNeverGenerateRemote.mockReturnValue(false);
 
     // Mock cloud agent provider - returns attack prompts
-    mockAgentProvider = {
-      id: vi.fn().mockReturnValue('mock-agent'),
-      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
+    mockAgentProvider = createMockProvider({
+      id: 'mock-agent',
+      delay: 0,
+      response: createProviderResponse({
         output: {
           result: 'Can you help me fix this code...',
         },
-        tokenUsage: {
-          total: 100,
-          prompt: 50,
-          completion: 50,
-        },
+        tokenUsage: createTokenUsage({ total: 100, prompt: 50, completion: 50 }),
       }),
-      delay: 0,
-    } as Mocked<ApiProvider>;
+    });
 
-    mockGradingProvider = {
-      id: vi.fn().mockReturnValue('mock-grader'),
-      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
-        output: 'grader result',
-      }),
-    } as Mocked<ApiProvider>;
+    mockGradingProvider = createMockProvider({
+      id: 'mock-grader',
+      response: createProviderResponse({ output: 'grader result' }),
+    });
 
-    mockTargetProvider = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
-        output: 'I cannot help with that',
-      }),
-    } as Mocked<ApiProvider>;
+    mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({ output: 'I cannot help with that' }),
+    });
 
     mockGetProvider.mockImplementation(async function () {
       return mockAgentProvider;
@@ -141,8 +147,25 @@ describe('RedteamIterativeMetaProvider', () => {
     vi.resetAllMocks();
   });
 
-  // Note: Constructor tests omitted as they require complex module mocking
-  // The provider requires remote generation, so testing focuses on the core function
+  describe('constructor', () => {
+    it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
+      mockShouldGenerateRemote.mockReturnValue(false);
+      mockNeverGenerateRemote.mockReturnValue(false);
+
+      expect(() => new RedteamIterativeMetaProvider({ injectVar: 'query' })).toThrow(
+        'jailbreak:meta strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+      );
+    });
+
+    it('should throw the explicit-disabled error when a disable flag is set', () => {
+      mockShouldGenerateRemote.mockReturnValue(false);
+      mockNeverGenerateRemote.mockReturnValue(true);
+
+      expect(() => new RedteamIterativeMetaProvider({ injectVar: 'query' })).toThrow(
+        /jailbreak:meta strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
+      );
+    });
+  });
 
   describe('runMetaAgentRedteam', () => {
     it('should execute iterations and call cloud for decisions', async () => {
@@ -210,6 +233,48 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.finalIteration).toBe(2);
       expect(result.metadata.vulnerabilityAchieved).toBe(true);
       expect(result.metadata.stopReason).toBe('Grader failed');
+    });
+
+    it('passes target provider raw response into the grader', async () => {
+      const mockGrader = {
+        getResult: vi.fn<any>().mockResolvedValue({
+          grade: { pass: true, score: 0, reason: 'Target defended' },
+          rubric: 'test rubric',
+        }),
+      };
+      mockGetGraderById.mockReturnValue(mockGrader);
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
+
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
+        } as AtomicTestCase,
+        vars: { query: 'test' },
+      });
+
+      expect(mockGrader.getResult).toHaveBeenCalled();
+      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        providerResponse?: ProviderResponse;
+      };
+      const raw = JSON.parse(String(gradingContext.providerResponse?.raw ?? '{}'));
+      expect(raw).toMatchObject({ finalResponse: 'Target response' });
     });
 
     it('should handle agent provider errors gracefully', async () => {

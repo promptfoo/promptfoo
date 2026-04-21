@@ -131,11 +131,21 @@ export class ProviderRateLimitState extends EventEmitter {
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+      /**
+       * Per-call override for `maxRetries` only. Preserves the state's other
+       * policy fields (backoff, jitter) so provider config cannot silently
+       * reset them.
+       */
+      maxRetriesOverride?: number;
     },
   ): Promise<T> {
     this.totalRequests++;
     let attempt = 0;
     let lastError: Error | undefined;
+    const retryPolicy =
+      options.maxRetriesOverride === undefined
+        ? this.retryPolicy
+        : { ...this.retryPolicy, maxRetries: options.maxRetriesOverride };
 
     while (true) {
       // Acquire slot (may wait for rate limit window via queue)
@@ -177,10 +187,10 @@ export class ProviderRateLimitState extends EventEmitter {
           this.handleRateLimit(retryAfterMs);
 
           // Check if we should retry
-          if (shouldRetry(attempt, undefined, true, this.retryPolicy)) {
+          if (shouldRetry(attempt, undefined, true, retryPolicy)) {
             attempt++;
             this.retriedRequests++;
-            const delay = getRetryDelay(attempt, this.retryPolicy, retryAfterMs);
+            const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
 
             this.emit('request:retrying', {
               rateLimitKey: this.rateLimitKey,
@@ -229,10 +239,10 @@ export class ProviderRateLimitState extends EventEmitter {
         }
 
         // Check if we should retry
-        if (shouldRetry(attempt, lastError, isRateLimited, this.retryPolicy)) {
+        if (shouldRetry(attempt, lastError, isRateLimited, retryPolicy)) {
           attempt++;
           this.retriedRequests++;
-          const delay = getRetryDelay(attempt, this.retryPolicy, retryAfterMs);
+          const delay = getRetryDelay(attempt, retryPolicy, retryAfterMs);
 
           this.emit('request:retrying', {
             rateLimitKey: this.rateLimitKey,

@@ -97,7 +97,7 @@ class SimpleTracedProvider {
       );
 
       if (matches) {
-        const [, version, traceId, parentId, traceFlags] = matches;
+        const [, _version, traceId, parentId, traceFlags] = matches;
         console.log('[Provider] Using trace context:', { traceId, parentId });
 
         // Create parent context from Promptfoo's trace
@@ -186,6 +186,11 @@ class SimpleTracedProvider {
                 {
                   'document.index': i,
                   'search.query': userIntent.entities.join(' '),
+                  'tool.name': 'search_corpus',
+                  'tool.arguments': JSON.stringify({
+                    query: userIntent.entities.join(' '),
+                    document_index: i,
+                  }),
                 },
                 async () => {
                   const docSpan = trace.getSpan(context.active());
@@ -305,6 +310,11 @@ class SimpleTracedProvider {
           {
             'generation.type': 'augmented_response',
             'model.name': 'gpt-4',
+            'tool.name': 'compose_answer',
+            'tool.arguments': JSON.stringify({
+              citation_count: documents.length,
+              tone: 'explanatory',
+            }),
           },
           async () => {
             const span = trace.getSpan(context.active());

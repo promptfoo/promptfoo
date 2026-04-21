@@ -73,6 +73,74 @@ providers:
       body: 'model={{model}}&translate={{language}}'
 ```
 
+## Sending multipart/form-data
+
+Use `multipart.parts` when the target API expects form fields or file uploads.
+Promptfoo builds a fresh `FormData` body for every request and automatically sets the
+multipart boundary. Do not set `Content-Type: multipart/form-data` yourself unless
+you are using [raw HTTP request mode](#sending-a-raw-http-request).
+
+### Text fields and generated documents
+
+This example sends the prompt as a `documentQuery` text field and sends a simple
+generated PDF as the `files` upload field:
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: 'http://localhost:8080/api/genai/analyze-file'
+      method: POST
+      headers:
+        X-API-Key: '{{api_key}}'
+      multipart:
+        parts:
+          - kind: file
+            name: files
+            filename: promptfoo-document.pdf
+            source:
+              type: generated
+              format: pdf
+              text: 'Promptfoo generated document for multipart testing.'
+          - kind: field
+            name: documentQuery
+            value: '{{prompt}}'
+      transformResponse: json.summary
+```
+
+The `generated` source creates a deterministic document suitable for transport
+tests. Supported formats are `pdf`, `png`, `jpeg`, and `jpg` (alias for `jpeg`).
+
+### Uploading local files
+
+Use a `path` source to upload a file from the machine running promptfoo. Relative
+paths resolve from the promptfoo config directory.
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: 'http://localhost:8080/api/genai/analyze-file'
+      method: POST
+      multipart:
+        parts:
+          - kind: file
+            name: files
+            filename: sample-report45.pdf
+            contentType: application/pdf
+            source:
+              type: path
+              path: file://fixtures/sample-report45.pdf
+          - kind: field
+            name: documentQuery
+            value: '{{prompt}}'
+      transformResponse: json.summary
+```
+
+Structured multipart requests bypass the HTTP response cache by default.
+`multipart` is mutually exclusive with `request` and `body`, and it cannot be
+used with `GET` or `HEAD`.
+
 ## Sending a raw HTTP request
 
 You can also send a raw HTTP request by specifying the `request` property in the provider configuration. This allows you to have full control over the request, including headers and body.
@@ -1228,6 +1296,105 @@ providers:
 
 The token endpoint must return a JSON response with an `access_token` field. If `expires_in` (lifetime in seconds) is included, the provider uses it to schedule refresh. Otherwise, a 1-hour default is used.
 
+### File-Based Authentication
+
+Use file-based authentication when your token needs custom logic that doesn't fit the built-in auth flows.
+
+The auth file can be written in JavaScript, TypeScript, or Python:
+
+- JavaScript and TypeScript files should export a default function by default
+- Python files should define `get_auth` by default
+- Named exports are supported with `file://path/to/file.ts:functionName`
+
+The auth function receives the standard HTTP provider `callApi` context and must return:
+
+```ts
+{
+  token: string;
+  expiration?: number | null;
+}
+```
+
+- `token` is required
+- `expiration` is optional and should be an absolute Unix timestamp in milliseconds
+- If `expiration` is omitted or `null`, the token is cached for the lifetime of the provider instance
+- If `expiration` is provided, the function is called again when the token is within the same 60-second refresh buffer used by OAuth
+
+The auth function receives the same `callApi` context object that providers receive at runtime, including `vars`, `prompt`, `test`, `originalProvider`, `evaluationId`, `testCaseId`, `traceparent`, `tracestate`, and `repeatIndex`.
+
+Unlike `bearer` and `oauth`, file auth does not automatically attach an `Authorization` header. Instead, the returned values are injected into template variables before the request is rendered so you can place them anywhere in the request:
+
+- headers
+- query params
+- JSON bodies
+- raw requests
+- session endpoint config
+- request transforms
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      method: POST
+      headers:
+        Authorization: 'Bearer {{token}}'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: file
+        path: './auth/get-token.ts'
+```
+
+Available template variables:
+
+- `{{token}}`
+- `{{expiration}}`
+
+If `token` or `expiration` already exist in `vars`, the file auth result overwrites them and emits a warning.
+
+This is intentionally different from OAuth:
+
+- `oauth` automatically adds `Authorization: Bearer <token>`
+- `oauth` does not inject `{{token}}` into template vars
+- `file` injects `{{token}}` and `{{expiration}}` into template vars
+- `file` does not automatically add an `Authorization` header
+
+Example auth files:
+
+```ts
+export default async function getAuth(context) {
+  return {
+    token: context.vars.apiKey,
+    expiration: Date.now() + 55 * 60 * 1000,
+  };
+}
+```
+
+```ts
+export async function buildAuth(context) {
+  return {
+    token: context.vars.sessionToken,
+  };
+}
+```
+
+Use the named export with:
+
+```yaml
+auth:
+  type: file
+  path: file://./auth/get-token.ts:buildAuth
+```
+
+```python
+def get_auth(context):
+    return {
+        "token": context["vars"]["api_key"],
+        "expiration": None,
+    }
+```
+
 ### Digital Signature Authentication
 
 For APIs requiring cryptographic request signing, the HTTP provider supports digital signatures with PEM, JKS (Java KeyStore), and PFX certificate formats. The private key is **never sent to Promptfoo** and remains stored locally.
@@ -1350,6 +1517,13 @@ providers:
 | username     | string   | Yes (password grant)                    | Username for password grant            |
 | password     | string   | Yes (password grant)                    | Password for password grant            |
 | scopes       | string[] | No                                      | OAuth scopes to request                |
+
+#### File Auth Options
+
+| Option | Type   | Required | Description                                           |
+| ------ | ------ | -------- | ----------------------------------------------------- |
+| type   | string | Yes      | Must be `'file'`                                      |
+| path   | string | Yes      | Path to a JavaScript, TypeScript, or Python auth file |
 
 #### Digital Signature Options
 
@@ -1596,13 +1770,14 @@ Supported config options:
 | method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
 | headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
 | body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
+| multipart         | object                  | Multipart form configuration with ordered `parts`. Supports text fields, local file uploads, and generated PDF/PNG/JPEG documents.                                                  |
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
-| auth              | object                  | Authentication configuration (bearer, api_key, basic, or oauth). See [Authentication](#authentication) section.                                                                     |
+| auth              | object                  | Authentication configuration (bearer, api_key, basic, oauth, or file). See [Authentication](#authentication) section.                                                               |
 | signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
 | tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
 

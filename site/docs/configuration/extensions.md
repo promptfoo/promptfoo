@@ -192,7 +192,9 @@ async function extensionHook(hookName, context) {
 module.exports = extensionHook;
 ```
 
-The `beforeAll` and `beforeEach` hooks may mutate specific properties of their context arguments to modify evaluation state. To persist changes, the hook must return the modified context.
+The `beforeAll`, `beforeEach`, and `afterEach` hooks may mutate specific properties of their context arguments to modify evaluation state. To persist changes, the hook must return the modified context.
+
+All merges are **shallow**: returned properties replace existing values at the top level. Nested objects (e.g., `metadata: { nested: { a: 1 } }`) are replaced entirely, not deep-merged.
 
 ## Hook Context Reference
 
@@ -214,3 +216,17 @@ The `beforeAll` and `beforeEach` hooks may mutate specific properties of their c
 | Property       | Type                                                  | Description                    |
 | -------------- | ----------------------------------------------------- | ------------------------------ |
 | `context.test` | [`TestCase`](/docs/configuration/reference#test-case) | The test case to be evaluated. |
+
+### afterEach
+
+| Property                           | Type                     | Description                                             |
+| ---------------------------------- | ------------------------ | ------------------------------------------------------- |
+| `context.result.namedScores`       | `Record<string, number>` | Custom numeric metrics (e.g., `num_turns`, `cost_usd`). |
+| `context.result.metadata`          | `Record<string, any>`    | Structured data (e.g., tool call details, URLs).        |
+| `context.result.response.metadata` | `Record<string, any>`    | Response-level metadata (e.g., session viewer URLs).    |
+
+Fields like `success`, `score`, and `response.output` are **not** overridable from `afterEach`.
+
+### afterAll
+
+The `afterAll` hook is intended for side effects (sending to monitoring, cleanup, etc.) and its return value is not persisted. Use it for read-only operations on the completed evaluation.

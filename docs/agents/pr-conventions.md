@@ -70,13 +70,13 @@ Use the **primary change** to determine type:
 
 ### 1. Feature Domains (HIGHEST PRIORITY)
 
-**`redteam` - MANDATORY for ALL redteam-related changes:**
+**`redteam` - MANDATORY when redteam is the PR's primary change or product surface:**
 
 - Plugins, strategies, grading
 - UI components (setup, report, config dialogs)
 - CLI commands, server endpoints
 - Documentation, examples
-- **ANY change that touches redteam functionality**
+- Redteam-specific tests, fixtures, utilities, and behavior changes
 
 **Other feature domains:** `providers`, `assertions`, `eval`, `api`, `db`
 
@@ -106,15 +106,18 @@ For generic/cross-cutting changes: `chore: bump version 0.119.11`
 
 ## THE REDTEAM RULE
 
-**If a PR is redteam-related in ANY way, use `(redteam)` scope. No exceptions.**
+**If a PR is primarily redteam-related, use `(redteam)` scope.**
 
-This applies even if the change is only in UI, CLI, docs, examples, or server endpoints.
+This applies even if the redteam change is only in UI, CLI, docs, examples, utilities, tests, or server endpoints.
+
+For broad, cross-cutting maintenance PRs, do **not** choose `(redteam)` solely because one touched file lives under `src/redteam/` or because one generic helper is also used by redteam. Use the PR's primary purpose/scope and call out the redteam-adjacent touch in the PR description when it is review-relevant.
 
 ❌ **Wrong:**
 
 ```plaintext
 fix(webui): fix Basic strategy checkbox in red team setup
 feat(cli): add redteam validate command
+chore(redteam): resolve repo-wide lint findings
 ```
 
 ✅ **Correct:**
@@ -122,6 +125,7 @@ feat(cli): add redteam validate command
 ```plaintext
 fix(redteam): fix Basic strategy checkbox in setup UI
 feat(redteam): add validate target CLI command
+chore: resolve repo-wide lint findings
 ```
 
 **Why?** Redteam spans CLI, webui, server, docs, and examples. Consistent scoping makes it easy to find all redteam work.
@@ -129,7 +133,7 @@ feat(redteam): add validate target CLI command
 ## Decision Tree
 
 ```plaintext
-1. Is this redteam-related? → Use (redteam)
+1. Is the PR primarily redteam-related? → Use (redteam)
 2. Is it another feature domain? → Use that scope
 3. Is it localized to one product area? → Use that scope
 4. Is it infrastructure? → Use that scope
@@ -175,15 +179,28 @@ site: update guides                 # Should be docs(site):
 feat(webui): minor styling update   # Minor = chore, not feat
 ```
 
-## Draft Mode Required
+## Draft vs Ready
 
-**Always open PRs in draft mode.** Use the `--draft` flag:
+Open PRs **ready for review** by default:
 
 ```bash
-gh pr create --draft --title "feat(scope): description"
+gh pr create --title "feat(scope): description" --body "..."
 ```
 
-This allows maintainers to review and provide feedback before the PR is marked ready for merge.
+Use `--draft` only when:
+
+- The user explicitly asks for a draft
+- The work is an intentional WIP parked for a hand-off
+- The PR blocks on an external dependency that must land first
+- The PR addresses an unpublished security advisory (see root `AGENTS.md`
+  "Security-Sensitive PRs")
+
+## Commit & PR Attribution
+
+- **Never attribute commits or PR bodies to Claude / Claude Code.** Do not add
+  `Co-Authored-By: Claude…` trailers, "Generated with Claude Code" footers, or
+  similar markers. Use your configured git identity only.
+- Do not add marketing-style suffixes to commit subjects.
 
 ## GitHub Interaction Rules
 
@@ -193,9 +210,10 @@ This allows maintainers to review and provide feedback before the PR is marked r
 
 ## Checklist Before Creating PR
 
-1. Is this redteam-related? → Use `(redteam)` scope
+1. Is this PR primarily redteam-related? → Use `(redteam)` scope
 2. Choose correct type
 3. Choose correct scope using priority order
 4. Breaking change? Add `!` after scope
 5. Run `npm run l && npm run f`
-6. **Open the PR in draft mode** (`--draft`)
+6. Open ready-for-review (omit `--draft`) unless one of the exceptions above applies
+7. Do **not** add Claude attribution trailers or footers
