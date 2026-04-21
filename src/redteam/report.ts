@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { riskCategorySeverityMap, Severity } from './constants';
+import { makeInlinePolicyIdSync } from './plugins/policy/utils';
 import { getShortPluginId } from './util';
 
 /**
@@ -20,28 +21,44 @@ export function getPluginSeverity(pluginId: string, pluginConfig?: Record<string
     : Severity.Low;
 }
 
+const POLICY_PREVIEW_MAX_LENGTH = 20;
+
+function truncateForPreview(text: string): string {
+  const normalized = text.trim().replace(/\n+/g, ' ');
+  return normalized.length > POLICY_PREVIEW_MAX_LENGTH
+    ? normalized.slice(0, POLICY_PREVIEW_MAX_LENGTH) + '...'
+    : normalized;
+}
+
 /**
  * Generates a unique base display ID for a plugin instance.
- * For policy plugins, includes an index number and truncated policy text to differentiate multiple instances.
+ * For policy plugins, includes a stable policy identifier to differentiate multiple instances.
  * @param plugin - The plugin configuration.
- * @param index - Optional index number for plugins with the same base ID (e.g., multiple policy plugins).
  * @returns A unique base display ID for the plugin.
  */
-export function getPluginBaseDisplayId(
-  plugin: { id: string; config?: Record<string, any> },
-  index?: number,
-): string {
-  if (plugin.id === 'policy') {
-    const policyText =
-      typeof plugin.config?.policy === 'string'
-        ? plugin.config.policy.trim().replace(/\n+/g, ' ')
-        : '';
-    const truncated =
-      policyText.length > 40 ? policyText.slice(0, 40) + '...' : policyText || 'custom';
-    // Include index to ensure uniqueness even if policy text snippets are identical
-    return index !== undefined ? `policy #${index}: "${truncated}"` : `policy: "${truncated}"`;
+export function getPluginDisplayId(plugin: { id: string; config?: Record<string, any> }): string {
+  if (plugin.id !== 'policy') {
+    return plugin.id;
   }
-  return plugin.id;
+
+  const policyConfig = plugin.config?.policy;
+
+  if (typeof policyConfig === 'object' && policyConfig !== null && policyConfig.id) {
+    if (policyConfig.name) {
+      return String(policyConfig.name);
+    }
+    const shortId = String(policyConfig.id).replace(/-/g, '').slice(0, 12);
+    const preview = policyConfig.text ? truncateForPreview(String(policyConfig.text)) : '';
+    return preview ? `policy [${shortId}]: ${preview}` : `policy [${shortId}]`;
+  }
+
+  if (typeof policyConfig === 'string') {
+    const hash = makeInlinePolicyIdSync(policyConfig);
+    const preview = truncateForPreview(policyConfig);
+    return `policy [${hash}]: ${preview}`;
+  }
+
+  return 'policy';
 }
 
 /**

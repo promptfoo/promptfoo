@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
+import { makeInlinePolicyIdSync } from '../../src/redteam/plugins/policy/utils';
 import {
   extractSortKey,
   generateReport,
-  getPluginBaseDisplayId,
+  getPluginDisplayId,
   getPluginSeverity,
   getStatus,
   sortReportIds,
@@ -34,52 +35,78 @@ describe('report', () => {
     });
   });
 
-  describe('getPluginBaseDisplayId', () => {
+  describe('getPluginDisplayId', () => {
     it('should return plugin id for non-policy plugins', () => {
-      expect(getPluginBaseDisplayId({ id: 'pii:direct' })).toBe('pii:direct');
-      expect(getPluginBaseDisplayId({ id: 'jailbreak' })).toBe('jailbreak');
+      expect(getPluginDisplayId({ id: 'pii:direct' })).toBe('pii:direct');
+      expect(getPluginDisplayId({ id: 'jailbreak' })).toBe('jailbreak');
     });
 
-    it('should include truncated policy text for policy plugins', () => {
-      const result = getPluginBaseDisplayId({
+    it('should include a stable hash and preview for inline policy plugins', () => {
+      const policy = 'Short policy text';
+      const result = getPluginDisplayId({
         id: 'policy',
-        config: { policy: 'Short policy text' },
+        config: { policy },
       });
-      expect(result).toBe('policy: "Short policy text"');
+      expect(result).toBe(`policy [${makeInlinePolicyIdSync(policy)}]: Short policy text`);
     });
 
-    it('should truncate long policy text to 40 characters', () => {
+    it('should truncate long policy text to 20 characters', () => {
       const longPolicy =
         'This is a very long policy text that should be truncated because it exceeds forty characters';
-      const result = getPluginBaseDisplayId({
+      const result = getPluginDisplayId({
         id: 'policy',
         config: { policy: longPolicy },
       });
-      expect(result).toBe('policy: "This is a very long policy text that sho..."');
+      expect(result).toBe(
+        `policy [${makeInlinePolicyIdSync(longPolicy)}]: This is a very long ...`,
+      );
       expect(result.length).toBeLessThan(60); // Display ID should be reasonable length
     });
 
-    it('should include index when provided for policy plugins', () => {
-      const result = getPluginBaseDisplayId({ id: 'policy', config: { policy: 'Test policy' } }, 3);
-      expect(result).toBe('policy #3: "Test policy"');
+    it('should use cloud policy names when provided', () => {
+      const result = getPluginDisplayId({
+        id: 'policy',
+        config: {
+          policy: {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            name: 'Named cloud policy',
+            text: 'Cloud policy text',
+          },
+        },
+      });
+      expect(result).toBe('Named cloud policy');
+    });
+
+    it('should use cloud policy id prefixes when no name is provided', () => {
+      const result = getPluginDisplayId({
+        id: 'policy',
+        config: {
+          policy: {
+            id: '123e4567-e89b-12d3-a456-426614174000',
+            text: 'Cloud policy text',
+          },
+        },
+      });
+      expect(result).toBe('policy [123e4567e89b]: Cloud policy text');
     });
 
     it('should handle policy plugin without config', () => {
-      const result = getPluginBaseDisplayId({ id: 'policy' });
-      expect(result).toBe('policy: "custom"');
+      const result = getPluginDisplayId({ id: 'policy' });
+      expect(result).toBe('policy');
     });
 
     it('should handle policy plugin with non-string policy', () => {
-      const result = getPluginBaseDisplayId({ id: 'policy', config: { policy: 123 } });
-      expect(result).toBe('policy: "custom"');
+      const result = getPluginDisplayId({ id: 'policy', config: { policy: 123 } });
+      expect(result).toBe('policy');
     });
 
     it('should normalize whitespace in policy text', () => {
-      const result = getPluginBaseDisplayId({
+      const policy = 'Policy\nwith\n\nnewlines';
+      const result = getPluginDisplayId({
         id: 'policy',
-        config: { policy: 'Policy\nwith\n\nnewlines' },
+        config: { policy },
       });
-      expect(result).toBe('policy: "Policy with newlines"');
+      expect(result).toBe(`policy [${makeInlinePolicyIdSync(policy)}]: Policy with newlines`);
     });
   });
 

@@ -19,7 +19,7 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-import { stripAnsi } from '../util/utils';
+import { mockProcessEnv, stripAnsi } from '../util/utils';
 
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
@@ -50,6 +50,10 @@ vi.mock('../../src/redteam/strategies', async () => ({
 
 vi.mock('../../src/util/apiHealth');
 vi.mock('../../src/redteam/remoteGeneration');
+vi.mock('../../src/redteam/sharpAvailability', async () => ({
+  ...(await vi.importActual('../../src/redteam/sharpAvailability')),
+  validateSharpDependency: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../src/redteam/util')),
   extractGoalFromPrompt: vi.fn().mockResolvedValue('mocked goal'),
@@ -118,10 +122,6 @@ describe('synthesize', () => {
       status: 'OK',
       message: 'Cloud API is healthy',
     });
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
   });
 
   // Input handling tests
@@ -243,6 +243,75 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'goat',
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        maxCharsPerMessage: 12,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            maxCharsPerMessage: 12,
+            modifiers: expect.objectContaining({
+              maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+            }),
+          }),
+        }),
+      );
+      expect(mockStrategyAction).toHaveBeenCalledWith(
+        expect.any(Array),
+        'query',
+        expect.objectContaining({
+          maxCharsPerMessage: 12,
+        }),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              pluginId: 'test-plugin',
+              pluginConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+              modifiers: expect.objectContaining({
+                maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              strategyConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+            }),
+          }),
+        ]),
+      );
     });
 
     it('should warn about unregistered plugins', async () => {
@@ -987,21 +1056,21 @@ describe('synthesize', () => {
 
   describe('Logger', () => {
     it('debug log level hides progress bar', async () => {
-      const originalLogLevel = process.env.LOG_LEVEL;
-      process.env.LOG_LEVEL = 'debug';
+      const restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug' });
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
 
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-        targetIds: ['test-provider'],
-      });
-
-      expect(cliProgress.SingleBar).not.toHaveBeenCalled();
-
-      process.env.LOG_LEVEL = originalLogLevel;
+        expect(cliProgress.SingleBar).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -1237,9 +1306,9 @@ describe('synthesize', () => {
 
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
-      // Should have both policies with display format "policy #N: "preview...""
-      expect(cleanReport).toMatch(/policy #\d+: "/);
-      // Inline policies show index number and preview
+      // Should have both policies with display format "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+      // Inline policies show hash and preview
       // Should show both Failed and Success statuses
       expect(cleanReport).toContain('Failed');
       expect(cleanReport).toContain('Success');
@@ -2022,14 +2091,11 @@ describe('Language configuration', () => {
       expect(result.testCases).toHaveLength(4);
 
       // Check that we have tests for both languages
-      const languageCounts = result.testCases.reduce(
-        (acc, tc) => {
-          const lang = tc.metadata?.language || 'en';
-          acc[lang] = (acc[lang] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
+      const languageCounts = result.testCases.reduce<Record<string, number>>((acc, tc) => {
+        const lang = tc.metadata?.language || 'en';
+        acc[lang] = (acc[lang] || 0) + 1;
+        return acc;
+      }, {});
 
       expect(languageCounts).toEqual({
         en: 2,
@@ -2254,8 +2320,8 @@ describe('Language configuration', () => {
     });
   });
 
-  describe('Language-disallowed strategies', () => {
-    it('should filter multilingual test cases for audio strategy', async () => {
+  describe('Multilingual support for media strategies', () => {
+    it('should support multilingual test cases for audio strategy', async () => {
       // Mock strategy action for audio
       const mockAudioAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
@@ -2282,24 +2348,19 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With audio strategy present, language is forced to 'en' early in synthesize
-      // Base tests: 2 tests * 1 language = 2
-      // Audio strategy tests: 2 tests
-      // Total: 4 tests
-      expect(result.testCases.length).toBe(4);
+      // Audio strategy now supports multiple languages
+      // Mock plugin always returns 2 tests (ignores numTests)
+      // Base tests: 2 tests * 3 languages = 6
+      // Audio strategy tests: 6 tests (applies to all base tests)
+      // Total: 12 tests
+      expect(result.testCases.length).toBe(12);
 
-      // Check that audio strategy was applied
+      // Check that audio strategy was applied to all language variants
       const audioTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'audio');
-      expect(audioTests.length).toBe(2);
-
-      // All tests should be in English only
-      const allTests = result.testCases;
-      const languages = allTests.map((tc) => tc.metadata?.language || 'en');
-      expect(new Set(languages).size).toBe(1); // Only one language
-      expect(languages[0]).toBe('en');
+      expect(audioTests.length).toBe(6);
     });
 
-    it('should filter multilingual test cases for video strategy', async () => {
+    it('should support multilingual test cases for video strategy', async () => {
       const mockVideoAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2322,17 +2383,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With video strategy present, language is forced to 'en' early in synthesize
+      // Video strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 1)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 video tests
-      // Total: 2 base + 2 video = 4 tests
+      // Base tests: 2 tests * 2 languages = 4
+      // Strategy transforms: 4 tests → 4 video tests
+      // Total: 4 base + 4 video = 8 tests
       const videoTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'video');
-      expect(videoTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(videoTests.length).toBe(4);
+      expect(result.testCases.length).toBe(8);
     });
 
-    it('should filter multilingual test cases for image strategy', async () => {
+    it('should support multilingual test cases for image strategy', async () => {
       const mockImageAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2355,17 +2416,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With image strategy present, language is forced to 'en' early in synthesize
+      // Image strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 3)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 image tests
-      // Total: 2 base + 2 image = 4 tests
+      // Base tests: 2 tests * 4 languages = 8
+      // Strategy transforms: 8 tests → 8 image tests
+      // Total: 8 base + 8 image = 16 tests
       const imageTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'image');
-      expect(imageTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(imageTests.length).toBe(8);
+      expect(result.testCases.length).toBe(16);
     });
 
-    it('should support multilingual test cases for layer strategy', async () => {
+    it('should support multilingual test cases for jailbreak strategy', async () => {
       const mockJailbreakAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2388,7 +2449,7 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // Layer strategy now supports multiple languages
+      // Jailbreak strategy supports multiple languages
       // Base tests: 2 tests * 2 languages = 4
       // Jailbreak strategy tests: 4 tests (applies to all base tests)
       // Total: 8 tests
@@ -2399,7 +2460,7 @@ describe('Language configuration', () => {
       expect(result.testCases.length).toBe(8);
     });
 
-    it('should filter multilingual test cases for math-prompt strategy', async () => {
+    it('should support multilingual test cases for math-prompt strategy', async () => {
       const mockMathPromptAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2422,17 +2483,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With math-prompt strategy present, language is forced to 'en' early in synthesize
+      // Math-prompt strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 1)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 math tests
-      // Total: 2 base + 2 math = 4 tests
+      // Base tests: 2 tests * 3 languages = 6
+      // Strategy transforms: 6 tests → 6 math tests
+      // Total: 6 base + 6 math = 12 tests
       const mathTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'math-prompt');
-      expect(mathTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(mathTests.length).toBe(6);
+      expect(result.testCases.length).toBe(12);
     });
 
-    it('should NOT filter multilingual test cases for non-disallowed strategies', async () => {
+    it('should support multilingual test cases for rot13 strategy', async () => {
       const mockRot13Action = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2455,7 +2516,7 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // Rot13 is NOT in the disallow list, so it should process all languages
+      // Rot13 supports multilingual test cases
       const rot13Tests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'rot13');
       expect(rot13Tests.length).toBe(4); // 2 tests * 2 languages = 4
     });
@@ -2490,7 +2551,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'policy', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'goat' }],
         targetIds: ['test-provider'],
       });
 
@@ -2528,7 +2589,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'other-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'jailbreak:hydra' }],
         targetIds: ['test-provider'],
       });
 
@@ -2589,7 +2650,7 @@ describe('Language configuration', () => {
           numTests: 1,
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
-          strategies: [],
+          strategies: [{ id: 'jailbreak:meta' }],
           targetIds: ['test-provider'],
         });
 
@@ -3021,11 +3082,11 @@ describe('Language configuration', () => {
       // Strip ANSI codes for easier assertion
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Each policy plugin should have its own row with display format "policy #N: "preview...""
-      // Inline policies show index number and preview
-      expect(cleanReport).toMatch(/policy #\d+: "/);
+      // Each policy plugin should have its own row with display format "policy [hash]: preview..."
+      // Inline policies show hash and preview
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
       // Count unique policy rows (should be 3)
-      const policyMatches = cleanReport.match(/policy #\d+: "/g);
+      const policyMatches = cleanReport.match(/policy \[[a-f0-9]{12}\]:/g);
       expect(policyMatches?.length).toBe(3);
       // Each should show 2 requested, 2 generated
       const twoMatches = cleanReport.match(/\b2\b/g);
@@ -3062,9 +3123,9 @@ describe('Language configuration', () => {
       const cleanReport = stripAnsi(reportMessage || '');
 
       // Each policy should have separate rows for each language
-      // Display format: "(Lang) policy #N: "preview...""
-      const hmongMatches = cleanReport.match(/\(Hmong\) policy #\d+: "/g);
-      const zuluMatches = cleanReport.match(/\(Zulu\) policy #\d+: "/g);
+      // Display format: "(Lang) policy [hash]: preview..."
+      const hmongMatches = cleanReport.match(/\(Hmong\) policy \[[a-f0-9]{12}\]:/g);
+      const zuluMatches = cleanReport.match(/\(Zulu\) policy \[[a-f0-9]{12}\]:/g);
       expect(hmongMatches?.length).toBe(2); // 2 policies in Hmong
       expect(zuluMatches?.length).toBe(2); // 2 policies in Zulu
       // Each should show 1 requested, 1 generated
@@ -3072,23 +3133,31 @@ describe('Language configuration', () => {
       expect(oneMatches?.length).toBeGreaterThanOrEqual(8); // At least 8 occurrences of "1"
     });
 
-    it('should sort report rows numerically by policy number, not alphabetically', async () => {
+    it('should use policy name when available instead of hash + truncated text', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({
         action: mockPluginAction,
         key: 'policy',
       });
 
-      // Create 12 policy plugins to test numeric sorting (1, 2, 3... vs 1, 10, 11, 12, 2...)
-      const plugins = Array.from({ length: 12 }, (_, i) => ({
-        id: 'policy',
-        numTests: 1,
-        config: { policy: `Policy ${i + 1}` },
-      }));
-
       await synthesize({
-        numTests: 1,
-        plugins,
+        numTests: 2,
+        plugins: [
+          // Policy with a name - should display the name
+          {
+            id: 'policy',
+            numTests: 2,
+            config: {
+              policy: {
+                id: 'abc123def456',
+                text: 'Some policy text',
+                name: 'Secret Protection Policy',
+              },
+            },
+          },
+          // Policy without a name - should display hash + truncated text
+          { id: 'policy', numTests: 2, config: { policy: 'Another policy without a name' } },
+        ],
         prompts: ['Test prompt'],
         strategies: [],
         targetIds: ['test-provider'],
@@ -3104,13 +3173,76 @@ describe('Language configuration', () => {
       expect(reportMessage).toBeDefined();
       const cleanReport = stripAnsi(reportMessage || '');
 
-      // Extract the order of policy numbers from the report
-      const policyMatches = cleanReport.match(/policy #(\d+)/g) || [];
-      const policyNumbers = policyMatches.map((m) => parseInt(m.replace('policy #', ''), 10));
+      // Named policy should show just the name (no hash in display)
+      expect(cleanReport).toMatch(/Secret Protection Policy/);
+      expect(cleanReport).not.toMatch(/Secret Protection Policy \[[a-f0-9]/); // No hash after name
+      // Inline policy should show: "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+    });
 
-      // Should be sorted numerically: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
-      // NOT alphabetically: 1, 10, 11, 12, 2, 3, 4, 5, 6, 7, 8, 9
-      expect(policyNumbers).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    it('should work correctly with both built-in plugins and policy plugins', async () => {
+      // Mock different plugins
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockImplementation(function (predicate) {
+        const mockPlugins = [
+          { key: 'policy', action: mockPluginAction },
+          { key: 'hallucination', action: mockPluginAction },
+          { key: 'contracts', action: mockPluginAction },
+        ];
+        if (typeof predicate === 'function') {
+          return mockPlugins.find(predicate);
+        }
+        return undefined;
+      });
+
+      await synthesize({
+        numTests: 2,
+        plugins: [
+          // Built-in plugin - hallucination
+          { id: 'hallucination', numTests: 2 },
+          // Built-in plugin - contracts
+          { id: 'contracts', numTests: 2 },
+          // Policy plugin with name (cloud-style)
+          {
+            id: 'policy',
+            numTests: 2,
+            config: {
+              policy: {
+                id: 'abc123def456',
+                text: 'Never share confidential data',
+                name: 'Data Protection Policy',
+              },
+            },
+          },
+          // Policy plugin without name (inline)
+          { id: 'policy', numTests: 2, config: { policy: 'Always be respectful to users' } },
+        ],
+        prompts: ['Test prompt'],
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      const reportMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
+        );
+
+      expect(reportMessage).toBeDefined();
+      const cleanReport = stripAnsi(reportMessage || '');
+
+      // Built-in plugins should show their ID directly
+      expect(cleanReport).toMatch(/hallucination/);
+      expect(cleanReport).toMatch(/contracts/);
+      // Named policy should show just the name
+      expect(cleanReport).toMatch(/Data Protection Policy/);
+      expect(cleanReport).not.toMatch(/Data Protection Policy \[/); // No ID after name
+      // Inline policy should show "policy [hash]: preview..."
+      expect(cleanReport).toMatch(/policy \[[a-f0-9]{12}\]:/);
+      // Should have 4 plugin rows (hallucination, contracts, named policy, inline policy)
+      const pluginRows = cleanReport.match(/│\s+\d+\s+│\s+Plugin/g);
+      expect(pluginRows?.length).toBe(4);
     });
   });
 

@@ -20,7 +20,6 @@ import {
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
   isFanoutStrategy,
-  isLanguageDisallowedStrategy,
   MEDICAL_PLUGINS,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   MULTI_INPUT_VAR,
@@ -28,8 +27,10 @@ import {
   PII_PLUGINS,
   STRATEGY_COLLECTION_MAPPINGS,
   STRATEGY_COLLECTIONS,
+  TEEN_SAFETY_PLUGINS,
   TELECOM_PLUGINS,
 } from './constants';
+import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
@@ -37,7 +38,12 @@ import { Plugins } from './plugins/index';
 import { isValidPolicyObject } from './plugins/policy/utils';
 import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
-import { generateReport, getPluginBaseDisplayId, getPluginSeverity } from './report';
+import { generateReport, getPluginDisplayId, getPluginSeverity } from './report';
+import {
+  getGeneratedPromptOverLimit,
+  getMaxCharsPerMessageModifierValue,
+  MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
+} from './shared/promptLength';
 import { validateSharpDependency } from './sharpAvailability';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
@@ -73,7 +79,7 @@ function getPolicyText(metadata: TestCase['metadata'] | undefined): string | und
   return undefined;
 }
 
-const MAX_MAX_CONCURRENCY = 20;
+export const MAX_MAX_CONCURRENCY = 20;
 
 /**
  * Resolves top-level file paths in the plugin configuration.
@@ -106,9 +112,43 @@ export function resolvePluginConfig(config: Record<string, any> | undefined): Re
   return config;
 }
 
+function resolvePluginConfigWithMaxChars(
+  config: Record<string, any> | undefined,
+  maxCharsPerMessage?: number,
+): Record<string, any> {
+  return {
+    ...resolvePluginConfig(config),
+    ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
+  };
+}
+
+function buildRedteamModifiers({
+  maxCharsPerMessage,
+  pluginConfig,
+  testGenerationInstructions,
+}: {
+  maxCharsPerMessage?: number;
+  pluginConfig?: Record<string, any>;
+  testGenerationInstructions?: string;
+}): Record<string, string> {
+  const modifiers: Record<string, string> = {
+    ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+    ...((pluginConfig?.modifiers as Record<string, string> | undefined) ?? {}),
+  };
+  const maxCharsPerMessageModifier = getMaxCharsPerMessageModifierValue(
+    maxCharsPerMessage ?? pluginConfig?.maxCharsPerMessage,
+  );
+  if (maxCharsPerMessageModifier) {
+    modifiers[MAX_CHARS_PER_MESSAGE_MODIFIER_KEY] = maxCharsPerMessageModifier;
+  }
+  return modifiers;
+}
+
 const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
+  'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
+  'coding-agent:all': CODING_AGENT_PLUGINS,
   bias: BIAS_PLUGINS,
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
@@ -116,6 +156,7 @@ const categories = {
   insurance: INSURANCE_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   telecom: TELECOM_PLUGINS,
+  'teen-safety': TEEN_SAFETY_PLUGINS,
 } as const;
 
 /**
@@ -142,6 +183,34 @@ function getLanguageForTestCase(test: TestCase | undefined): string | undefined 
   return test.metadata?.language || test.metadata?.modifiers?.language;
 }
 
+function filterOversizedTestCases<T extends TestCase>(
+  testCases: T[],
+  injectVar: string,
+  sourceLabel: string,
+  maxCharsPerMessage?: number,
+): T[] {
+  return testCases.filter((testCase) => {
+    const testCaseMaxCharsPerMessage =
+      maxCharsPerMessage ??
+      (testCase.metadata?.strategyConfig as { maxCharsPerMessage?: number } | undefined)
+        ?.maxCharsPerMessage ??
+      (testCase.metadata?.pluginConfig as { maxCharsPerMessage?: number } | undefined)
+        ?.maxCharsPerMessage;
+    const violation = getGeneratedPromptOverLimit(
+      String(testCase.vars?.[injectVar] ?? ''),
+      testCaseMaxCharsPerMessage,
+    );
+    if (!violation) {
+      return true;
+    }
+
+    logger.warn(
+      `[${sourceLabel}] Dropping generated test case that exceeds maxCharsPerMessage=${violation.limit} (${violation.length} chars)`,
+    );
+    return false;
+  });
+}
+
 /**
  * Adds comprehensive metadata to plugin test cases including language, plugin info, and severity.
  * @param test - The test case to add metadata to.
@@ -154,32 +223,46 @@ function addLanguageToPluginMetadata(
   test: TestCase,
   lang: string | undefined,
   plugin: RedteamPluginObject,
+  maxCharsPerMessage?: number,
   testGenerationInstructions?: string,
 ): TestCase {
   const existingLanguage = getLanguageForTestCase(test);
   const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
+  const includePluginConfig = !(
+    test.metadata &&
+    Object.hasOwn(test.metadata, 'pluginConfig') &&
+    test.metadata.pluginConfig === undefined
+  );
 
   // Use modifiers from the test's pluginConfig first (which may have been computed by appendModifiers),
   // then fall back to the original plugin.config?.modifiers
-  const pluginModifiers =
-    (test.metadata?.pluginConfig?.modifiers as Record<string, string> | undefined) ||
-    (plugin.config?.modifiers as Record<string, string> | undefined) ||
-    {};
+  const pluginModifiers = buildRedteamModifiers({
+    maxCharsPerMessage,
+    pluginConfig:
+      (test.metadata?.pluginConfig as Record<string, any> | undefined) ||
+      plugin.config ||
+      undefined,
+    testGenerationInstructions,
+  });
 
   return {
     ...test,
     metadata: {
+      ...test.metadata,
       pluginId: plugin.id,
-      pluginConfig: resolvePluginConfig(plugin.config),
+      ...(includePluginConfig && {
+        pluginConfig: {
+          ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+          ...((test.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
+        },
+      }),
       severity: plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
       modifiers: {
-        ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
         ...pluginModifiers,
         ...test.metadata?.modifiers,
         // Add language to modifiers if not already present (respect existing)
         ...languageToAdd,
       },
-      ...test.metadata,
       // Hoist language to top-level metadata for backward compatibility and easier access
       ...languageToAdd,
     },
@@ -215,6 +298,7 @@ async function applyStrategies(
   strategies: RedteamStrategyObject[],
   injectVar: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
+  maxCharsPerMessage?: number,
 ): Promise<{
   testCases: TestCaseWithPlugin[];
   strategyResults: Record<string, { requested: number; generated: number }>;
@@ -290,6 +374,7 @@ async function applyStrategies(
       injectVar,
       {
         ...(strategy.config || {}),
+        ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
         // Pass redteam provider from config so agentic strategies (iterative, crescendo, etc.) can use it
         redteamProvider: cliState.config?.redteam?.provider,
         excludeTargetOutputFromAgenticAttackGeneration,
@@ -312,6 +397,13 @@ async function applyStrategies(
       }
     }
 
+    resultTestCases = filterOversizedTestCases(
+      resultTestCases,
+      injectVar,
+      `Strategy ${strategy.id}`,
+      maxCharsPerMessage,
+    );
+
     newTestCases.push(
       ...resultTestCases.map((t) => {
         // Re-extract individual keys from transformed JSON if inputs was used
@@ -326,6 +418,12 @@ async function applyStrategies(
             // If parsing fails, keep original vars
           }
         }
+        const strategyConfig = {
+          ...(strategy.config || {}),
+          ...(maxCharsPerMessage ? { maxCharsPerMessage } : {}),
+          ...(t?.metadata?.strategyConfig || {}),
+        };
+
         return {
           ...t,
           vars: updatedVars,
@@ -339,11 +437,8 @@ async function applyStrategies(
             ...(t?.metadata?.pluginConfig && {
               pluginConfig: t.metadata.pluginConfig,
             }),
-            ...(strategy.config && {
-              strategyConfig: {
-                ...strategy.config,
-                ...(t?.metadata?.strategyConfig || {}),
-              },
+            ...(Object.keys(strategyConfig).length > 0 && {
+              strategyConfig,
             }),
           },
         };
@@ -567,6 +662,7 @@ export async function synthesize({
   injectVar,
   inputs,
   language,
+  maxCharsPerMessage,
   maxConcurrency = 1,
   plugins,
   prompts,
@@ -656,18 +752,13 @@ export async function synthesize({
     return true;
   });
 
+  // Only extract intent/goal when strategies that need it are selected
+  const needsGoalExtraction = strategies.some(
+    (s) => Strategies.find((def) => def.id === s.id)?.requiresGoalExtraction,
+  );
+
   await validateStrategies(strategies);
   await validateSharpDependency(strategies, plugins);
-
-  // If any language-disallowed strategies are present, force language to English only
-  const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
-  if (hasLanguageDisallowedStrategy && language) {
-    const originalLanguage = Array.isArray(language) ? language.join(', ') : language;
-    language = 'en';
-    logger.info(
-      `[Language Override] Detected language-disallowed strategy (audio/video/image/layer/math-prompt). Forcing language to 'en' (was: ${originalLanguage})`,
-    );
-  }
 
   const redteamProvider = await redteamProviderManager.getProvider({
     provider,
@@ -726,8 +817,6 @@ export async function synthesize({
         strategies
           .filter((s) => !['basic', 'retry'].includes(s.id))
           .map((s) => {
-            // For non-basic strategies, we want to show the additional tests they generate
-            let testCount = totalPluginTests;
             // Apply fan-out multiplier if this is a fan-out strategy
             let n = 1;
             if (typeof s.config?.n === 'number') {
@@ -735,7 +824,8 @@ export async function synthesize({
             } else if (isFanoutStrategy(s.id)) {
               n = getDefaultNFanout(s.id);
             }
-            testCount = totalPluginTests * n;
+            // For non-basic strategies, we want to show the additional tests they generate
+            let testCount = totalPluginTests * n;
             // Apply numTests cap if configured (consistent with calculateExpectedStrategyTests)
             const numTestsCap = s.config?.numTests;
             if (
@@ -859,13 +949,18 @@ export async function synthesize({
       }
     } else if (registeredPlugin.validate) {
       try {
+        const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
+          plugin.config,
+          maxCharsPerMessage,
+        );
         registeredPlugin.validate({
           language,
-          modifiers: {
-            ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-            ...(plugin.config?.modifiers || {}),
-          },
-          ...resolvePluginConfig(plugin.config),
+          ...resolvedPluginConfig,
+          modifiers: buildRedteamModifiers({
+            maxCharsPerMessage,
+            pluginConfig: resolvedPluginConfig,
+            testGenerationInstructions,
+          }),
         });
       } catch (error) {
         logger.warn(`Validation failed for plugin ${plugin.id}: ${error}, skipping plugin.`);
@@ -938,11 +1033,7 @@ export async function synthesize({
 
   const pluginResults: Record<string, { requested: number; generated: number }> = {};
   const testCases: TestCaseWithPlugin[] = [];
-  // Track policy plugin indices for unique display IDs (policy #1, policy #2, etc.)
-  let policyIndex = 0;
   await async.forEachLimit(plugins, maxConcurrency, async (plugin) => {
-    // Increment policy index for each policy plugin to ensure unique display IDs
-    const currentPolicyIndex = plugin.id === 'policy' ? ++policyIndex : undefined;
     // Check for abort signal before generating tests
     checkAbort();
 
@@ -980,14 +1071,15 @@ export async function synthesize({
           n: plugin.numTests,
           delayMs: delay || 0,
           config: {
-            ...resolvePluginConfig(plugin.config),
+            ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
             ...(hasMultipleInputs ? { inputs } : {}),
-            modifiers: {
-              ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-              ...(plugin.config?.modifiers || {}),
-            },
+            modifiers: buildRedteamModifiers({
+              maxCharsPerMessage,
+              pluginConfig: plugin.config,
+              testGenerationInstructions,
+            }),
           },
         });
         {
@@ -996,14 +1088,26 @@ export async function synthesize({
           if (Array.isArray(pluginTests) && pluginTests.length > 0) {
             // Add all metadata (language + plugin info) so strategies can access it
             const testsWithMetadata = pluginTests.map((test) =>
-              addLanguageToPluginMetadata(test, lang, plugin, testGenerationInstructions),
+              addLanguageToPluginMetadata(
+                test,
+                lang,
+                plugin,
+                maxCharsPerMessage,
+                testGenerationInstructions,
+              ),
+            );
+            const constrainedTests = filterOversizedTestCases(
+              testsWithMetadata,
+              injectVar,
+              `Plugin ${plugin.id}`,
+              maxCharsPerMessage,
             );
 
             return {
               lang: langKey,
-              tests: testsWithMetadata,
+              tests: constrainedTests,
               requested: plugin.numTests,
-              generated: pluginTests.length,
+              generated: constrainedTests.length,
             };
           }
 
@@ -1046,20 +1150,20 @@ export async function synthesize({
         // Metadata already added in promise resolution above (including pluginId)
         const testCasesWithMetadata = allPluginTests as TestCaseWithPlugin[];
 
-        // Extract goal for this plugin's tests
-        logger.debug(
-          `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
-        );
-        for (const testCase of testCasesWithMetadata) {
-          // Get the prompt from the specific inject variable
-          const promptVar = testCase.vars?.[injectVar];
-          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
+        // Extract goal for this plugin's tests (only needed for agentic strategies)
+        if (needsGoalExtraction) {
+          logger.debug(
+            `Extracting goal for ${testCasesWithMetadata.length} tests from ${plugin.id}...`,
+          );
+          for (const testCase of testCasesWithMetadata) {
+            const promptVar = testCase.vars?.[injectVar];
+            const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          // For policy plugin, pass the policy text to improve intent extraction
-          const policy = getPolicyText(testCase.metadata);
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+            const policy = getPolicyText(testCase.metadata);
+            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-          (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = extractedGoal;
+          }
         }
 
         // Add the results to main test cases array
@@ -1078,7 +1182,7 @@ export async function synthesize({
       const definedLanguages = languages.filter((lang) => lang !== undefined);
 
       // Get the display ID for this plugin (also serves as the unique key)
-      const baseDisplayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
+      const baseDisplayId = getPluginDisplayId(plugin);
 
       if (definedLanguages.length > 1) {
         // Multiple languages - create separate entries for each
@@ -1099,58 +1203,89 @@ export async function synthesize({
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
-        const customPlugin = new CustomPlugin(redteamProvider, purpose, injectVar, plugin.id);
+        const customPlugin = new CustomPlugin(
+          redteamProvider,
+          purpose,
+          injectVar,
+          plugin.id,
+          resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+        );
         const customTests = await customPlugin.generateTests(plugin.numTests, delay);
 
         // Add metadata to each test case
-        const testCasesWithMetadata = customTests.map((t) => ({
-          ...t,
-          metadata: {
-            pluginId: plugin.id,
-            pluginConfig: resolvePluginConfig(plugin.config),
-            severity:
-              plugin.severity || getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-            modifiers: {
-              ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-              ...(plugin.config?.modifiers || {}),
-            },
-            ...(t.metadata || {}),
-          },
-        }));
+        const testCasesWithMetadata = filterOversizedTestCases(
+          customTests.map((t) => {
+            const includePluginConfig = !(
+              t.metadata &&
+              Object.hasOwn(t.metadata, 'pluginConfig') &&
+              t.metadata.pluginConfig === undefined
+            );
+            const pluginConfigWithMaxChars = {
+              ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+              ...((t.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
+            };
+            const modifiers = {
+              ...buildRedteamModifiers({
+                maxCharsPerMessage,
+                pluginConfig: pluginConfigWithMaxChars,
+                testGenerationInstructions,
+              }),
+              ...t.metadata?.modifiers,
+            };
 
-        // Extract goal for this plugin's tests
-        logger.debug(
-          `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
+            return {
+              ...t,
+              metadata: {
+                ...(t.metadata || {}),
+                pluginId: plugin.id,
+                ...(includePluginConfig && {
+                  pluginConfig: pluginConfigWithMaxChars,
+                }),
+                severity:
+                  plugin.severity ||
+                  getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
+                modifiers,
+              },
+            };
+          }),
+          injectVar,
+          `Custom plugin ${plugin.id}`,
+          maxCharsPerMessage,
         );
-        for (const testCase of testCasesWithMetadata) {
-          // Get the prompt from the specific inject variable
-          const promptVar = testCase.vars?.[injectVar];
-          const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          // For policy plugin, pass the policy text to improve intent extraction
-          const policy = getPolicyText(testCase.metadata);
-          const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+        // Extract goal for custom plugin's tests (only needed for agentic strategies)
+        if (needsGoalExtraction) {
+          logger.debug(
+            `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
+          );
+          for (const testCase of testCasesWithMetadata) {
+            const promptVar = testCase.vars?.[injectVar];
+            const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
-          (testCase.metadata as any).goal = extractedGoal;
+            const policy = getPolicyText(testCase.metadata);
+            const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
+
+            (testCase.metadata as any).goal = extractedGoal;
+          }
         }
 
         // Add the results to main test cases array
         testCases.push(...testCasesWithMetadata);
 
         logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
+        const displayId = getPluginDisplayId(plugin);
         pluginResults[displayId] = {
           requested: plugin.numTests,
-          generated: customTests.length,
+          generated: testCasesWithMetadata.length,
         };
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
-        const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
+        const displayId = getPluginDisplayId(plugin);
         pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       }
     } else {
       logger.warn(`Plugin ${plugin.id} not registered, skipping`);
-      const displayId = getPluginBaseDisplayId(plugin, currentPolicyIndex);
+      const displayId = getPluginDisplayId(plugin);
       pluginResults[displayId] = { requested: plugin.numTests, generated: 0 };
       progressBar?.increment(plugin.numTests);
     }
@@ -1177,6 +1312,8 @@ export async function synthesize({
       pluginTestCases,
       [retryStrategy],
       injectVar,
+      undefined,
+      maxCharsPerMessage,
     );
     pluginTestCases.push(...retryTestCases);
     Object.assign(strategyResults, retryResults);
@@ -1198,6 +1335,7 @@ export async function synthesize({
       nonBasicStrategies,
       injectVar,
       excludeTargetOutputFromAgenticAttackGeneration,
+      maxCharsPerMessage,
     );
 
   Object.assign(strategyResults, otherStrategyResults);

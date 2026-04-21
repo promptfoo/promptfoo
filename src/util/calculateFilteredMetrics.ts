@@ -178,6 +178,7 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       },
       namedScores: {},
       namedScoresCount: {},
+      namedScoreWeights: {},
       assertPassCount: 0,
       assertFailCount: 0,
     };
@@ -212,19 +213,43 @@ async function aggregateNamedScores(
 ): Promise<void> {
   const db = getDb();
 
-  // Use SQLite's json_each to parse JSON in database
+  // Use SQLite's json_each to parse JSON in database. When newer results include
+  // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
+  // multiply them back into weighted totals before aggregating prompt metrics.
   const query = sql`
     SELECT
       prompt_idx,
-      json_each.key as metric_name,
-      SUM(CAST(json_each.value AS REAL)) as metric_sum,
-      COUNT(*) as metric_count
-    FROM eval_results,
-      json_each(eval_results.named_scores)
+      score_entries.key as metric_name,
+      SUM(
+        CASE
+          WHEN weight_entries.value IS NOT NULL THEN
+            CAST(score_entries.value AS REAL) * CAST(weight_entries.value AS REAL)
+          ELSE CAST(score_entries.value AS REAL)
+        END
+      ) as metric_sum,
+      COUNT(*) as metric_count,
+      SUM(
+        CASE
+          WHEN weight_entries.value IS NOT NULL THEN CAST(weight_entries.value AS REAL)
+          ELSE 1
+        END
+      ) as metric_weight_total
+    FROM eval_results
+    JOIN json_each(eval_results.named_scores) as score_entries
+    LEFT JOIN json_each(
+      CASE
+        WHEN grading_result IS NOT NULL
+          AND json_valid(grading_result)
+          AND json_type(json_extract(grading_result, '$.namedScoreWeights')) = 'object'
+        THEN json_extract(grading_result, '$.namedScoreWeights')
+        ELSE json('{}')
+      END
+    ) as weight_entries
+      ON weight_entries.key = score_entries.key
     WHERE ${whereSql}
       AND named_scores IS NOT NULL
       AND json_valid(named_scores)
-    GROUP BY prompt_idx, json_each.key
+    GROUP BY prompt_idx, score_entries.key
   `;
 
   const results = (await db.all(query)) as Array<{
@@ -232,6 +257,7 @@ async function aggregateNamedScores(
     metric_name: string;
     metric_sum: number;
     metric_count: number;
+    metric_weight_total: number;
   }>;
 
   // Populate named scores
@@ -240,6 +266,8 @@ async function aggregateNamedScores(
     if (idx >= 0 && idx < metrics.length && metrics[idx]) {
       metrics[idx].namedScores[row.metric_name] = row.metric_sum;
       metrics[idx].namedScoresCount[row.metric_name] = row.metric_count;
+      metrics[idx].namedScoreWeights ||= {};
+      metrics[idx].namedScoreWeights[row.metric_name] = row.metric_weight_total;
     }
   }
 }
@@ -337,6 +365,7 @@ function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
     },
     namedScores: {},
     namedScoresCount: {},
+    namedScoreWeights: {},
     cost: 0,
   }));
 }

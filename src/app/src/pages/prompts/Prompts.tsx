@@ -104,8 +104,11 @@ export default function Prompts({
       {
         accessorKey: 'count',
         header: '# Evals',
-        cell: ({ getValue }) => <span className="text-sm">{getValue<number>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
+        ),
         size: 120,
+        meta: { align: 'right' },
       },
     ],
     [],

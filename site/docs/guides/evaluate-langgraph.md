@@ -32,7 +32,7 @@ By the end of this guide, you'll have a working project setup that connects Lang
 To scaffold the LangGraph + Promptfoo example, you can run:
 
 ```bash
-npx promptfoo@latest init --example langgraph
+npx promptfoo@latest init --example integration-langgraph
 ```
 
 This will:
@@ -51,7 +51,7 @@ Before starting, make sure you have:
 
 - Python 3.9-3.12 tested
 - Node.js v22 LTS or newer
-- OpenAI API access (for GPT-4o, GPT-4.1-mini, and OpenAI's forthcoming o3 mini once released)
+- OpenAI API access (for GPT-5-mini and other OpenAI models)
 - An OpenAI API key
 
 ## Step 1: Initial Setup
@@ -172,7 +172,7 @@ class ResearchState(BaseModel):
     summary: str = ""     # Final summarized result
 
 # Function to create and return the research agent graph
-def get_research_agent(model="gpt-4o"):
+def get_research_agent(model="gpt-5-mini"):
     # Initialize the OpenAI LLM with the specified model and API key
     llm = ChatOpenAI(model=model, api_key=OPENAI_API_KEY)
 

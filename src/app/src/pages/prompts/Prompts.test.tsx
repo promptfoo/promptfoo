@@ -1,4 +1,5 @@
-import { fireEvent, RenderResult, render, screen, within } from '@testing-library/react';
+import { RenderResult, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import Prompts from './Prompts';
@@ -107,6 +108,7 @@ describe('Prompts', () => {
   });
 
   it('should display a DataGrid with the provided data and open the PromptDialog with the correct prompt details when a row is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders({ data: mockPrompts });
 
     // Text appears in both label and prompt columns
@@ -116,8 +118,7 @@ describe('Prompts', () => {
 
     expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
 
-    // Click the first occurrence (which will be in the label column)
-    fireEvent.click(secondPromptCells[0]);
+    await user.click(secondPromptCells[0]);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(dialog).toBeInTheDocument();
@@ -127,16 +128,14 @@ describe('Prompts', () => {
     expect(within(dialog).queryByText('This is the first sample prompt.')).not.toBeInTheDocument();
   });
 
-  it('should handle pagination correctly and open the PromptDialog with the correct prompt details when a row on a different page is clicked', async () => {
+  it('should open the PromptDialog with the correct prompt details when a later virtualized row is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders({ data: mockPromptsLarge });
 
-    const nextPageButton = screen.getByRole('button', { name: 'Next' });
-    fireEvent.click(nextPageButton);
+    const laterPromptCells = await screen.findAllByText('This is prompt number 26.');
+    expect(laterPromptCells.length).toBeGreaterThan(0);
 
-    const promptsOnSecondPage = screen.getAllByText('This is prompt number 26.');
-    expect(promptsOnSecondPage.length).toBeGreaterThan(0);
-
-    fireEvent.click(promptsOnSecondPage[0]);
+    await user.click(laterPromptCells[0]);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(dialog).toBeInTheDocument();
@@ -200,16 +199,17 @@ describe('Prompts', () => {
   });
 
   it('should close the dialog when handleClose is called', async () => {
+    const user = userEvent.setup();
     renderWithProviders({ data: mockPrompts });
 
     const firstPromptCells = screen.getAllByText('This is the first sample prompt.');
-    fireEvent.click(firstPromptCells[0]);
+    await user.click(firstPromptCells[0]);
 
     const dialog = await screen.findByTestId('mock-prompt-dialog');
     expect(dialog).toBeInTheDocument();
 
     const closeButton = screen.getByTestId('close-button');
-    fireEvent.click(closeButton);
+    await user.click(closeButton);
 
     expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
   });
