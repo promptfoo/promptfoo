@@ -12,6 +12,7 @@ import invariant from '../../util/invariant';
 import { sanitizeObject } from '../../util/sanitizer';
 import { shouldShareResults } from '../../util/sharing';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { sendError } from '../utils/errors';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -697,74 +698,85 @@ evalRouter.post(
       return;
     }
 
-    const { id } = paramsResult.data;
-    // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
-    const gradingResult = bodyResult.data as unknown as GradingResult;
-    const result = await EvalResult.findById(id);
-    invariant(result, 'Result not found');
-    const eval_ = await Eval.findById(result.evalId);
-    invariant(eval_, 'Eval not found');
+    try {
+      const { evalId, id } = paramsResult.data;
+      // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
+      const gradingResult = bodyResult.data as unknown as GradingResult;
+      const result = await EvalResult.findById(id);
+      if (!result || result.evalId !== evalId) {
+        res.status(404).json({ error: 'Result not found' });
+        return;
+      }
 
-    // Capture the current state before we change it
-    const hasExistingManualOverride = Boolean(
-      result.gradingResult?.componentResults?.some(
-        (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-      ),
-    );
-    const successChanged = result.success !== gradingResult.pass;
-    const scoreChange = gradingResult.score - result.score;
+      const eval_ = await Eval.findById(evalId);
+      if (!eval_) {
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
 
-    // Update the result
-    result.gradingResult = gradingResult;
-    result.success = gradingResult.pass;
-    result.score = gradingResult.score;
-
-    // Update the prompt metrics
-    const prompt = eval_.prompts[result.promptIdx];
-    invariant(prompt, 'Prompt not found');
-    if (!prompt.metrics) {
-      logger.error(
-        `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
+      // Capture the current state before we change it
+      const hasExistingManualOverride = Boolean(
+        result.gradingResult?.componentResults?.some(
+          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
+        ),
       );
+      const successChanged = result.success !== gradingResult.pass;
+      const scoreChange = gradingResult.score - result.score;
 
-      res.status(400).json({ error: 'Prompt metrics not found' });
-      return;
-    }
+      // Update the result
+      result.gradingResult = gradingResult;
+      result.success = gradingResult.pass;
+      result.score = gradingResult.score;
 
-    if (successChanged) {
-      if (result.success) {
-        // Result changed from fail to pass
-        prompt.metrics.testPassCount += 1;
-        prompt.metrics.testFailCount -= 1;
-        prompt.metrics.assertPassCount += 1;
-        prompt.metrics.score += scoreChange;
-        if (hasExistingManualOverride) {
-          // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-          prompt.metrics.assertFailCount -= 1;
+      // Update the prompt metrics
+      const prompt = eval_.prompts[result.promptIdx];
+      invariant(prompt, 'Prompt not found');
+      if (!prompt.metrics) {
+        logger.error(
+          `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
+        );
+
+        res.status(400).json({ error: 'Prompt metrics not found' });
+        return;
+      }
+
+      if (successChanged) {
+        if (result.success) {
+          // Result changed from fail to pass
+          prompt.metrics.testPassCount += 1;
+          prompt.metrics.testFailCount -= 1;
+          prompt.metrics.assertPassCount += 1;
+          prompt.metrics.score += scoreChange;
+          if (hasExistingManualOverride) {
+            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
+            prompt.metrics.assertFailCount -= 1;
+          }
+        } else {
+          prompt.metrics.testPassCount -= 1;
+          prompt.metrics.testFailCount += 1;
+          prompt.metrics.assertFailCount += 1;
+          prompt.metrics.score += scoreChange;
+          if (hasExistingManualOverride) {
+            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
+            prompt.metrics.assertPassCount -= 1;
+          }
         }
-      } else {
-        prompt.metrics.testPassCount -= 1;
-        prompt.metrics.testFailCount += 1;
-        prompt.metrics.assertFailCount += 1;
-        prompt.metrics.score += scoreChange;
-        if (hasExistingManualOverride) {
-          // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-          prompt.metrics.assertPassCount -= 1;
+      } else if (!hasExistingManualOverride) {
+        // Nothing changed, so the user just added an assertion
+        if (result.success) {
+          prompt.metrics.assertPassCount += 1;
+        } else {
+          prompt.metrics.assertFailCount += 1;
         }
       }
-    } else if (!hasExistingManualOverride) {
-      // Nothing changed, so the user just added an assertion
-      if (result.success) {
-        prompt.metrics.assertPassCount += 1;
-      } else {
-        prompt.metrics.assertFailCount += 1;
-      }
+
+      await eval_.save();
+      await result.save();
+
+      res.json(result);
+    } catch (error) {
+      sendError(res, 500, 'Failed to submit rating', error);
     }
-
-    await eval_.save();
-    await result.save();
-
-    res.json(result);
   },
 );
 
