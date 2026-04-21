@@ -15,9 +15,16 @@ import {
   PII_PLUGINS,
   REDTEAM_MODEL,
   REDTEAM_PROVIDER_HARM_PLUGINS,
+  REMOTE_ONLY_PLUGIN_IDS,
   riskCategories,
+  UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../src/redteam/constants';
+import {
+  CODING_AGENT_COLLECTIONS,
+  CODING_AGENT_CORE_PLUGINS,
+  CODING_AGENT_PLUGINS,
+} from '../../src/redteam/constants/codingAgents';
 
 describe('constants', () => {
   it('DEFAULT_NUM_TESTS_PER_PLUGIN should be defined', () => {
@@ -27,7 +34,7 @@ describe('constants', () => {
 
   it('REDTEAM_MODEL should be defined', () => {
     expect(REDTEAM_MODEL).toBeDefined();
-    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-5-2025-08-07');
+    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-5.4-2026-03-05');
   });
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
@@ -54,8 +61,11 @@ describe('constants', () => {
       'financial',
       'ecommerce',
       'telecom',
+      'teen-safety',
       'realestate',
       'guardrails-eval',
+      'coding-agent:core',
+      'coding-agent:all',
     ]);
   });
 
@@ -95,6 +105,49 @@ describe('constants', () => {
 
   it('ADDITIONAL_PLUGINS should contain MCP plugin', () => {
     expect(ADDITIONAL_PLUGINS).toContain('mcp');
+  });
+
+  it('ADDITIONAL_PLUGINS should contain supported coding-agent plugins', () => {
+    expect(CODING_AGENT_PLUGINS).toEqual([
+      'coding-agent:repo-prompt-injection',
+      'coding-agent:terminal-output-injection',
+      'coding-agent:secret-env-read',
+      'coding-agent:sandbox-read-escape',
+      'coding-agent:verifier-sabotage',
+      'coding-agent:secret-file-read',
+      'coding-agent:sandbox-write-escape',
+      'coding-agent:network-egress-bypass',
+      'coding-agent:procfs-credential-read',
+      'coding-agent:delayed-ci-exfil',
+      'coding-agent:generated-vulnerability',
+      'coding-agent:automation-poisoning',
+      'coding-agent:steganographic-exfil',
+    ]);
+
+    CODING_AGENT_PLUGINS.forEach((plugin) => {
+      expect(ADDITIONAL_PLUGINS).toContain(plugin);
+      expect(ALL_PLUGINS).toContain(plugin);
+    });
+  });
+
+  it('CODING_AGENT_CORE_PLUGINS should keep the baseline collection focused', () => {
+    expect(CODING_AGENT_COLLECTIONS).toEqual(['coding-agent:core', 'coding-agent:all']);
+    expect(CODING_AGENT_CORE_PLUGINS).toEqual([
+      'coding-agent:repo-prompt-injection',
+      'coding-agent:terminal-output-injection',
+      'coding-agent:secret-env-read',
+      'coding-agent:sandbox-read-escape',
+      'coding-agent:verifier-sabotage',
+    ]);
+  });
+
+  it('remote-only UI guards should include coding-agent plugins and collections', () => {
+    expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
+    );
+    expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
+    );
   });
 
   it('AGENTIC_PLUGINS should contain expected plugins', () => {
@@ -142,6 +195,7 @@ describe('constants', () => {
         'Brand',
         'Datasets',
         'Domain-Specific Risks',
+        'Coding Agent Security',
       ];
       expectedKeys.forEach((key) => {
         expect(categoryDescriptions).toHaveProperty(key);
@@ -180,6 +234,11 @@ describe('constants', () => {
 
     it('should have datasets', () => {
       expect(riskCategories['Datasets']).toBeDefined();
+    });
+
+    it('should have coding agent risks', () => {
+      expect(riskCategories['Coding Agent Security']).toBeDefined();
+      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_PLUGINS);
     });
   });
 });

@@ -17,7 +17,7 @@ defaultTest:
         }
 
 providers:
-  - id: 'openrouter:deepseek/deepseek-r1'
+  - id: 'openrouter:deepseek/deepseek-r1-0528'
     config:
       max_tokens: 1024
       passthrough:

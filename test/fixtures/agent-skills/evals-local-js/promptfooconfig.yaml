@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evals local JavaScript provider smoke
+
+prompts:
+  - 'Reply about {{topic}} with PONG and trace id {{trace_id}}.'
+
+providers:
+  - id: file://./provider.mjs
+    label: evals-local-js-provider
+    config:
+      defaultTopic: config-topic
+      defaultTraceId: config-trace
+
+tests:
+  - description: PONG response carries trace id
+    vars:
+      topic: smoke
+      trace_id: eval-123
+    assert:
+      - type: contains
+        value: PONG
+      - type: regex
+        value: trace id eval-123
+      - type: javascript
+        value: output.includes(context.vars.topic)
+    metadata:
+      area: smoke
+  - description: PONG response carries alternate case metadata
+    vars:
+      topic: billing
+      trace_id: eval-456
+    assert:
+      - type: contains
+        value: topic=billing
+      - type: contains
+        value: trace id eval-456
+    metadata:
+      area: billing
+  - description: PONG response uses provider config defaults
+    assert:
+      - type: contains
+        value: topic=config-topic
+      - type: contains
+        value: trace id config-trace
+    metadata:
+      area: config-defaults

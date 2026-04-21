@@ -107,14 +107,14 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     certType !== 'pem' && certType !== 'jks'
                       ? undefined
                       : selectedTarget.config?.tls?.keyPath,
-                  pfx: certType !== 'pfx' ? undefined : selectedTarget.config?.tls?.pfx,
-                  pfxPath: certType !== 'pfx' ? undefined : selectedTarget.config?.tls?.pfxPath,
+                  pfx: certType === 'pfx' ? selectedTarget.config?.tls?.pfx : undefined,
+                  pfxPath: certType === 'pfx' ? selectedTarget.config?.tls?.pfxPath : undefined,
                   passphrase:
                     certType !== 'pfx' && certType !== 'jks' && certType !== 'pem'
                       ? undefined
                       : selectedTarget.config?.tls?.passphrase,
-                  jksPath: certType !== 'jks' ? undefined : selectedTarget.config?.tls?.jksPath,
-                  keyAlias: certType !== 'jks' ? undefined : selectedTarget.config?.tls?.keyAlias,
+                  jksPath: certType === 'jks' ? selectedTarget.config?.tls?.jksPath : undefined,
+                  keyAlias: certType === 'jks' ? selectedTarget.config?.tls?.keyAlias : undefined,
                 });
               }}
             >

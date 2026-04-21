@@ -2,6 +2,21 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+/* Restore default border color from Tailwind v3 behavior.
+   In v4, `border` defaults to `currentColor` instead of a theme color.
+   This sets the default to our theme's border color so that `border`
+   alone produces a subtle gray rather than harsh black. Utility classes
+   like `border-red-500` still override this via @layer utilities. */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentColor);
+  }
+}
+
 /* Configure dark mode to use data-theme attribute */
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
@@ -173,8 +188,6 @@
 
 * {
   box-sizing: border-box;
-  /* Default border color - prevents harsh black borders */
-  border-color: hsl(var(--border));
 }
 
 :root {
