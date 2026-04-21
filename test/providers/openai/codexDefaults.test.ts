@@ -196,13 +196,13 @@ describe('Codex default providers', () => {
       '../../../src/providers/openai/codexDefaults'
     );
 
-    process.env.OPENAI_API_KEY = 'first-openai-key';
+    mockProcessEnv({ OPENAI_API_KEY: 'first-openai-key' });
     const firstProviders = getCodexDefaultProviders();
     expect((firstProviders.gradingProvider as OpenAICodexSDKProvider).getApiKey()).toBe(
       'first-openai-key',
     );
 
-    process.env.OPENAI_API_KEY = 'second-openai-key';
+    mockProcessEnv({ OPENAI_API_KEY: 'second-openai-key' });
     const secondProviders = getCodexDefaultProviders();
 
     expect(secondProviders).not.toBe(firstProviders);
