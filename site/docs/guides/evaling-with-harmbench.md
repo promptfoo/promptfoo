@@ -1,6 +1,6 @@
 ---
 sidebar_label: Evaluating LLM safety with HarmBench
-description: Assess LLM vulnerabilities against 400+ adversarial attacks using HarmBench benchmarks to identify and prevent harmful outputs across 6 risk categories
+description: Assess LLM vulnerabilities against 400 HarmBench behaviors to identify and prevent harmful outputs across 7 risk categories
 ---
 
 # Evaluating LLM safety with HarmBench
@@ -54,7 +54,7 @@ redteam:
           - contextual
 ```
 
-The semantic categories are `chemical_biological`, `copyright`, `cybercrime_intrusion`, `harassment_bullying`, `harmful`, `illegal`, and `misinformation_disinformation`. The functional categories are `standard`, `contextual`, and `copyright`.
+The semantic categories are `chemical_biological`, `copyright`, `cybercrime_intrusion`, `harassment_bullying`, `harmful`, `illegal`, and `misinformation_disinformation`. The functional categories are `standard`, `contextual`, and `copyright`. When you set both filters, Promptfoo uses their intersection.
 
 ## Run the evaluation
 

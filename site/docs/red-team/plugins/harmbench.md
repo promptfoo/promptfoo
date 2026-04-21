@@ -79,6 +79,8 @@ redteam:
           - contextual
 ```
 
+When you set both semantic and functional filters, Promptfoo generates tests from the matching intersection.
+
 The available functional categories are:
 
 - `standard`

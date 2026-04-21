@@ -37,9 +37,17 @@ interface HarmbenchInput {
 }
 
 interface HarmbenchPluginConfig extends PluginConfig {
+  categories?: string[];
+  functionalCategories?: string[];
+}
+
+type NormalizedHarmbenchPluginConfig = Omit<
+  HarmbenchPluginConfig,
+  'categories' | 'functionalCategories'
+> & {
   categories?: HarmbenchCategory[];
   functionalCategories?: HarmbenchFunctionalCategory[];
-}
+};
 
 function normalizeCategoryName(name: string): string {
   return name
@@ -104,7 +112,9 @@ function toCanonicalFunctionalCategory(
   return NORMALIZED_FUNCTIONAL_CATEGORY_MAP.get(normalizeCategoryName(name));
 }
 
-function normalizePluginConfig(config?: HarmbenchPluginConfig): HarmbenchPluginConfig | undefined {
+function normalizePluginConfig(
+  config?: HarmbenchPluginConfig,
+): NormalizedHarmbenchPluginConfig | undefined {
   if (!config) {
     return undefined;
   }
@@ -126,9 +136,20 @@ function normalizePluginConfig(config?: HarmbenchPluginConfig): HarmbenchPluginC
   };
 }
 
+function describeFilters(config: NormalizedHarmbenchPluginConfig): string {
+  return [
+    config.categories?.length ? `categories=${config.categories.join(', ')}` : undefined,
+    config.functionalCategories?.length
+      ? `functionalCategories=${config.functionalCategories.join(', ')}`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join('; ');
+}
+
 async function fetchDataset(
   limit: number,
-  config?: HarmbenchPluginConfig,
+  config?: NormalizedHarmbenchPluginConfig,
 ): Promise<HarmbenchInput[]> {
   try {
     const response = await fetchWithTimeout(DATASET_URL, {}, REQUEST_TIMEOUT_MS);
@@ -165,6 +186,11 @@ async function fetchDataset(
       );
     }
 
+    if (filteredRecords.length === 0 && (config?.categories || config?.functionalCategories)) {
+      logger.warn(`[harmbench] No HarmBench records matched filters: ${describeFilters(config)}`);
+      return [];
+    }
+
     // Shuffle and limit the records
     const shuffledRecords = filteredRecords.sort(() => Math.random() - 0.5).slice(0, limit);
 
@@ -187,7 +213,7 @@ async function fetchDataset(
 export class HarmbenchPlugin extends RedteamPluginBase {
   readonly id = PLUGIN_ID;
   static readonly canGenerateRemote = false;
-  protected pluginConfig?: HarmbenchPluginConfig;
+  protected pluginConfig?: NormalizedHarmbenchPluginConfig;
 
   constructor(provider: any, purpose: string, injectVar: string, config?: HarmbenchPluginConfig) {
     const normalizedConfig = normalizePluginConfig(config);

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import {
   HarmbenchGrader,
   HarmbenchPlugin,
@@ -33,10 +34,14 @@ describe('HarmbenchPlugin', () => {
     plugin = new HarmbenchPlugin(mockProvider, 'test-purpose', 'testVar');
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('normalizes provided category config values', () => {
     const configuredPlugin = new HarmbenchPlugin(mockProvider, 'test-purpose', 'testVar', {
-      categories: ['cybercrime' as any, 'misinformation/disinformation' as any],
-      functionalCategories: ['context' as any],
+      categories: ['cybercrime', 'misinformation/disinformation'],
+      functionalCategories: ['context'],
     });
 
     expect((configuredPlugin as any).pluginConfig?.categories).toEqual([
@@ -96,7 +101,7 @@ describe('HarmbenchPlugin', () => {
     );
 
     const configuredPlugin = new HarmbenchPlugin(mockProvider, 'test-purpose', 'testVar', {
-      categories: ['misinformation' as any],
+      categories: ['misinformation'],
     });
 
     const tests = await configuredPlugin.generateTests(10, 0);
@@ -119,13 +124,41 @@ describe('HarmbenchPlugin', () => {
     );
 
     const configuredPlugin = new HarmbenchPlugin(mockProvider, 'test-purpose', 'testVar', {
-      functionalCategories: ['context' as any],
+      functionalCategories: ['context'],
     });
 
     const tests = await configuredPlugin.generateTests(10, 0);
 
     expect(tests).toHaveLength(1);
     expect(tests[0]?.metadata?.harmbenchFunctionalCategory).toBe('contextual');
+  });
+
+  it('returns no tests with a clear warning when valid filters have no matching intersection', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+    const mockCsvData = `Behavior,FunctionalCategory,SemanticCategory,ContextString,BehaviorID
+"Repeat this book chapter","copyright","copyright","","copyright-1"
+"Use this article to justify a false claim","contextual","misinformation_disinformation","","misinfo-1"`;
+
+    vi.mocked(fetchModule.fetchWithTimeout).mockResolvedValue(
+      new Response(mockCsvData, {
+        status: 200,
+        statusText: 'OK',
+      }),
+    );
+
+    const configuredPlugin = new HarmbenchPlugin(mockProvider, 'test-purpose', 'testVar', {
+      categories: ['copyright'],
+      functionalCategories: ['contextual'],
+    });
+
+    const tests = await configuredPlugin.generateTests(10, 0);
+
+    expect(tests).toEqual([]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[harmbench] No HarmBench records matched filters: categories=copyright; functionalCategories=contextual',
+    );
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 
   it('should handle fetch errors gracefully', async () => {
