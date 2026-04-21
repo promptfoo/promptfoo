@@ -11,7 +11,6 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
-import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
@@ -361,7 +360,12 @@ function hashBytesForCacheKey(bytes: ArrayBuffer | ArrayBufferView) {
     : Buffer.from(bytes);
   return {
     byteLength: buffer.byteLength,
-    sha256: sha256(buffer),
+    hmacSha256: crypto
+      .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
+      .update(`${FETCH_CACHE_SECRET_HMAC_CONTEXT}:bytes`)
+      .update('\0')
+      .update(buffer)
+      .digest('hex'),
   };
 }
 
