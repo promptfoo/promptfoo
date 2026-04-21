@@ -1,80 +1,103 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { fetchWithRetries } from '../../src/util/fetch/index';
+import { createMockProvider } from '../factories/provider';
 import { TestGrader } from '../util/utils';
 
-import type {
-  ApiProvider,
-  Assertion,
-  AtomicTestCase,
-  GradingResult,
-  ProviderResponse,
-} from '../../src/types/index';
+import type { ApiProvider, Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
 // Causes a SIGSEGV in github actions.
-jest.mock('better-sqlite3');
+vi.mock('better-sqlite3');
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('node:module', () => {
+vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
   return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
+    createRequire: vi.fn().mockReturnValue(mockRequire),
   };
 });
 
-jest.mock('../../src/util/fetch/index.ts', () => {
-  const actual = jest.requireActual('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/fetch/index.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/fetch/index')>(
+    '../../src/util/fetch/index.ts',
+  );
   return {
     ...actual,
-    fetchWithRetries: jest.fn(actual.fetchWithRetries),
+    fetchWithRetries: vi.fn(actual.fetchWithRetries),
   };
 });
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
-  promises: {
-    readFile: jest.fn(),
+vi.mock('fs', () => {
+  const fsMock = {
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    promises: {
+      readFile: vi.fn(),
+    },
+  };
+  return {
+    ...fsMock,
+    default: fsMock,
+  };
+});
+
+vi.mock('../../src/esm', () => ({
+  getDirectory: () => '/test/dir',
+  importModule: vi.fn((_filePath: string, functionName?: string) => {
+    return Promise.resolve(functionName ? {} : undefined);
+  }),
+}));
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
+}));
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
+    ...actual,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+});
+
+vi.mock('../../src/cliState', () => ({
+  default: {
+    basePath: '/base/path',
   },
-}));
-
-jest.mock('../../src/esm');
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
-}));
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(jest.requireActual('path').resolve),
-  extname: jest.fn(jest.requireActual('path').extname),
-}));
-
-jest.mock('../../src/cliState', () => ({
   basePath: '/base/path',
 }));
-jest.mock('../../src/matchers', () => {
-  const actual = jest.requireActual('../../src/matchers');
+vi.mock('../../src/matchers/rag', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');
   return {
     ...actual,
-    matchesContextRelevance: jest
+    matchesContextRelevance: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
-    matchesContextFaithfulness: jest
+    matchesContextFaithfulness: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
   };
@@ -83,12 +106,8 @@ jest.mock('../../src/matchers', () => {
 const Grader = new TestGrader();
 
 describe('runAssertion', () => {
-  beforeEach(() => {
-    jest.resetModules();
-  });
-
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   const equalityAssertion: Assertion = {
@@ -352,7 +371,9 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
+    vi.mocked(path.resolve).mockReturnValue('/base/path/output.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key":"value"}';
 
@@ -363,7 +384,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/output.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -376,7 +397,9 @@ describe('runAssertion', () => {
       value: 'file:///output.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
+    vi.mocked(path.resolve).mockReturnValue('/base/path/output.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ key: 'value' }));
 
     const output = '{"key":"not value"}';
 
@@ -387,7 +410,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/output.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/output.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'Expected output "{"key":"not value"}" to equal "{"key":"value"}"',
@@ -490,6 +513,66 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should fail when the not-is-json assertion finds matching schema', async () => {
+    const output = '{"latitude": 80.123, "longitude": -1}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Output is JSON that conforms to the provided schema',
+    });
+  });
+
+  it('should pass when the not-is-json assertion finds non-matching schema', async () => {
+    const output = '{"latitude": "high", "longitude": [-1]}';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the not-is-json assertion with schema receives non-JSON input', async () => {
+    const output = 'this is not json at all';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-is-json',
+        value: isJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
   it('should validate JSON with formats using ajv-formats', async () => {
     const output = '{"date": "2021-08-29"}';
     const schemaWithFormat = {
@@ -551,7 +634,9 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -579,7 +664,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -592,7 +677,9 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -620,7 +707,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
@@ -751,7 +838,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'update::null::employees' is required in table whiteList to execute SQL = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1'.`,
+      reason: `SQL references unauthorized table(s). Found: [update::null::employees]. Allowed: [(select|update|insert|delete)::null::departments].`,
     });
   });
 
@@ -783,7 +870,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'select::null::age' is required in column whiteList to execute SQL = 'SELECT age FROM a WHERE id = 1'.`,
+      reason: `SQL references unauthorized column(s). Found: [select::null::age, select::null::id]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 
@@ -815,7 +902,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'insert::departments::name' is required in column whiteList to execute SQL = 'INSERT INTO departments (name) VALUES ('HR')'.`,
+      reason: `SQL references unauthorized column(s). Found: [insert::departments::name]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 
@@ -831,7 +918,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'update::null::a' is required in table whiteList to execute SQL = 'UPDATE a SET id = 1'.`,
+      reason: `SQL references unauthorized table(s). Found: [update::null::a]. Allowed: [(select|update|insert|delete)::null::departments].`,
     });
   });
 
@@ -847,7 +934,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'delete::null::employees' is required in table whiteList to execute SQL = 'DELETE FROM employees;'. SQL validation failed: authority = 'delete::employees::(.*)' is required in column whiteList to execute SQL = 'DELETE FROM employees;'.`,
+      reason: `SQL references unauthorized table(s). Found: [delete::null::employees]. Allowed: [(select|update|insert|delete)::null::departments]. SQL references unauthorized column(s). Found: [delete::employees::(.*)]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 
@@ -1027,7 +1114,9 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -1055,7 +1144,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
@@ -1068,7 +1157,9 @@ describe('runAssertion', () => {
       value: 'file:///schema.json',
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
+    vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+    vi.mocked(path.extname).mockReturnValue('.json');
+    vi.mocked(fs.readFileSync).mockReturnValue(
       JSON.stringify({
         required: ['latitude', 'longitude'],
         type: 'object',
@@ -1096,7 +1187,7 @@ describe('runAssertion', () => {
       test: {} as AtomicTestCase,
       providerResponse: { output },
     });
-    expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve('/schema.json'), 'utf8');
+    expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
     expect(result).toMatchObject({
       pass: false,
       reason: 'JSON does not conform to the provided schema. Errors: data/latitude must be number',
@@ -1120,6 +1211,66 @@ describe('runAssertion', () => {
           'JSON does not conform to the provided schema. Errors: data/latitude must be number',
       }),
     );
+  });
+
+  it('should fail when the not-contains-json assertion finds matching schema', async () => {
+    const output = 'here is the answer\n\n```{"latitude": 80.123, "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Output contains JSON conforming to the provided schema',
+    });
+  });
+
+  it('should pass when the not-contains-json assertion finds no matching schema', async () => {
+    const output = 'here is the answer\n\n```{"latitude": "not a number", "longitude": -1}```';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass when the not-contains-json assertion with schema finds no JSON at all', async () => {
+    const output = 'here is the answer with no JSON whatsoever';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: {
+        type: 'not-contains-json',
+        value: containsJsonAssertionWithSchema.value,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Assertion passed',
+    });
   });
 
   it('should pass when the javascript assertion passes', async () => {
@@ -1660,7 +1811,7 @@ describe('runAssertion', () => {
   it('should pass when the webhook assertion passes', async () => {
     const output = 'Expected output';
 
-    jest.mocked(fetchWithRetries).mockImplementation(() =>
+    vi.mocked(fetchWithRetries).mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify({ pass: true }), {
           status: 200,
@@ -1684,7 +1835,7 @@ describe('runAssertion', () => {
 
   it('should fail when the webhook assertion fails', async () => {
     const output = 'Different output';
-    jest.mocked(fetchWithRetries).mockImplementation(() =>
+    vi.mocked(fetchWithRetries).mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify({ pass: false }), {
           status: 200,
@@ -1709,7 +1860,7 @@ describe('runAssertion', () => {
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 
-    jest.mocked(fetchWithRetries).mockImplementation(() =>
+    vi.mocked(fetchWithRetries).mockImplementation(() =>
       Promise.resolve(
         new Response('', {
           status: 500,
@@ -1734,6 +1885,11 @@ describe('runAssertion', () => {
   // Test for rouge-n assertion
   const rougeNAssertion: Assertion = {
     type: 'rouge-n',
+    value: 'This is the expected output.',
+    threshold: 0.75,
+  };
+  const notRougeNAssertion: Assertion = {
+    type: 'not-rouge-n',
     value: 'This is the expected output.',
     threshold: 0.75,
   };
@@ -1766,8 +1922,42 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: 'ROUGE-N score 0.17 is less than threshold 0.75',
+      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
     });
+  });
+
+  it('should pass when the not-rouge-n assertion score is below threshold', async () => {
+    const output = 'some different output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notRougeNAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
+    });
+    expect(result.score).toBeCloseTo(0.78, 2);
+  });
+
+  it('should fail when the not-rouge-n assertion score is above threshold', async () => {
+    const output = 'This is the expected output.';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: notRougeNAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'ROUGE-N score 1.00 is greater than or equal to threshold 0.75',
+    });
+    expect(result.score).toBe(0);
   });
 
   // Test for starts-with assertion
@@ -1818,14 +2008,10 @@ describe('runAssertion', () => {
     };
 
     // Test grader fails
-    const BogusGrader: ApiProvider = {
-      id(): string {
-        return 'BogusGrader';
-      },
-      async callApi(): Promise<ProviderResponse> {
-        throw new Error('Should not be called');
-      },
-    };
+    const BogusGrader = createMockProvider({
+      id: 'BogusGrader',
+      callApi: vi.fn<ApiProvider['callApi']>().mockRejectedValue(new Error('Should not be called')),
+    });
     const test: AtomicTestCase = {
       assert: [assertion],
       options: {
@@ -2060,7 +2246,7 @@ describe('runAssertion', () => {
     it('should pass when the perplexity assertion passes', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3]; // Dummy logProbs for testing
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
       const result: GradingResult = await runAssertion({
@@ -2082,7 +2268,7 @@ describe('runAssertion', () => {
     it('should fail when the perplexity assertion fails', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3]; // Dummy logProbs for testing
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
       const result: GradingResult = await runAssertion({
@@ -2104,7 +2290,7 @@ describe('runAssertion', () => {
     it('should PASS when no threshold is specified (default behavior)', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
 
@@ -2124,7 +2310,7 @@ describe('runAssertion', () => {
     it('should respect threshold=0 as a valid threshold', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
 
@@ -2148,7 +2334,7 @@ describe('runAssertion', () => {
     it('should pass when the perplexity-score assertion passes', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
       const result: GradingResult = await runAssertion({
@@ -2170,7 +2356,7 @@ describe('runAssertion', () => {
     it('should fail when the perplexity-score assertion fails', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
       const result: GradingResult = await runAssertion({
@@ -2192,7 +2378,7 @@ describe('runAssertion', () => {
     it('should PASS when no threshold is specified for perplexity-score', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
 
@@ -2212,7 +2398,7 @@ describe('runAssertion', () => {
     it('should respect threshold=0 as valid for perplexity-score', async () => {
       const logProbs = [-0.2, -0.4, -0.1, -0.3];
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ logProbs }),
+        callApi: vi.fn().mockResolvedValue({ logProbs }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', logProbs };
 
@@ -2236,7 +2422,7 @@ describe('runAssertion', () => {
     it('should pass when the cost is below the threshold', async () => {
       const cost = 0.0005;
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ cost }),
+        callApi: vi.fn().mockResolvedValue({ cost }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', cost };
       const result: GradingResult = await runAssertion({
@@ -2258,7 +2444,7 @@ describe('runAssertion', () => {
     it('should fail when the cost exceeds the threshold', async () => {
       const cost = 0.002;
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ cost }),
+        callApi: vi.fn().mockResolvedValue({ cost }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', cost };
       const result: GradingResult = await runAssertion({
@@ -2280,7 +2466,7 @@ describe('runAssertion', () => {
     it('should NOT throw error when threshold is 0', async () => {
       const cost = 0;
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ cost }),
+        callApi: vi.fn().mockResolvedValue({ cost }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', cost };
       const result: GradingResult = await runAssertion({
@@ -2302,7 +2488,7 @@ describe('runAssertion', () => {
     it('should fail when cost exceeds threshold=0', async () => {
       const cost = 0.01;
       const provider = {
-        callApi: jest.fn().mockResolvedValue({ cost }),
+        callApi: vi.fn().mockResolvedValue({ cost }),
       } as unknown as ApiProvider;
       const providerResponse = { output: 'Some output', cost };
       const result: GradingResult = await runAssertion({
@@ -2324,7 +2510,7 @@ describe('runAssertion', () => {
 
   describe('Similarity assertion', () => {
     beforeEach(() => {
-      jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+      vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
         if (text === 'Test output' || text.startsWith('Similar output')) {
           return Promise.resolve({
             embedding: [1, 0, 0],
@@ -2341,7 +2527,7 @@ describe('runAssertion', () => {
     });
 
     afterEach(() => {
-      jest.restoreAllMocks();
+      vi.restoreAllMocks();
     });
 
     it('should pass for a similar assertion with a string value', async () => {
@@ -2422,7 +2608,7 @@ describe('runAssertion', () => {
 
   describe('is-xml', () => {
     const provider = {
-      callApi: jest.fn().mockResolvedValue({ cost: 0.001 }),
+      callApi: vi.fn().mockResolvedValue({ cost: 0.001 }),
     } as unknown as ApiProvider;
 
     it('should pass when the output is valid XML', async () => {
@@ -2648,7 +2834,7 @@ describe('runAssertion', () => {
 
   describe('contains-xml', () => {
     const provider = {
-      callApi: jest.fn().mockResolvedValue({ cost: 0.001 }),
+      callApi: vi.fn().mockResolvedValue({ cost: 0.001 }),
     } as unknown as ApiProvider;
     it('should pass when the output contains valid XML', async () => {
       const output = 'Some text before <root><child>Content</child></root> and after';
@@ -3128,6 +3314,112 @@ describe('runAssertion', () => {
     });
   });
 
+  describe('inline function transforms (Node.js package)', () => {
+    it('should support a function as assertion transform', async () => {
+      const output = 'hello world';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'HELLO WORLD',
+        transform: (output) => String(output).toUpperCase(),
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should pass context to inline function transform', async () => {
+      const output = 'raw output';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'search, calculate',
+        transform: (_output, context: any) => {
+          const tools = context.metadata?.toolCalls ?? [];
+          return tools.map((t: any) => t.name).join(', ');
+        },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: {
+          output,
+          metadata: { toolCalls: [{ name: 'search' }, { name: 'calculate' }] },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should support async function as assertion transform', async () => {
+      const output = 'hello';
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'hello async',
+        transform: async (output) => output + ' async',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should surface synchronous errors thrown by an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: () => {
+          throw new Error('inline transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('inline transform boom');
+    });
+
+    it('should surface async rejections from an inline function transform', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'anything',
+        transform: async () => {
+          throw new Error('async transform boom');
+        },
+      };
+
+      await expect(
+        runAssertion({
+          prompt: 'Some prompt',
+          provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+          assertion,
+          test: {} as AtomicTestCase,
+          providerResponse: { output: 'hello world' },
+        }),
+      ).rejects.toThrow('async transform boom');
+    });
+  });
+
   describe('file references', () => {
     it('should handle file reference in string value', async () => {
       const assertion: Assertion = {
@@ -3136,9 +3428,9 @@ describe('runAssertion', () => {
       };
 
       const expectedContent = 'Expected output';
-      jest.mocked(fs.readFileSync).mockReturnValue(expectedContent);
-      jest.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
-      jest.mocked(path.extname).mockReturnValue('.txt');
+      vi.mocked(fs.readFileSync).mockReturnValue(expectedContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',
@@ -3159,9 +3451,9 @@ describe('runAssertion', () => {
       };
 
       const fileContent = 'file content';
-      jest.mocked(fs.readFileSync).mockReturnValue(fileContent);
-      jest.mocked(path.resolve).mockReturnValue('/base/path/my_expected_output.txt');
-      jest.mocked(path.extname).mockReturnValue('.txt');
+      vi.mocked(fs.readFileSync).mockReturnValue(fileContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/my_expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
 
       await expect(
         runAssertion({
@@ -3205,9 +3497,9 @@ describe('runAssertion', () => {
           key: { type: 'string' },
         },
       });
-      jest.mocked(fs.readFileSync).mockReturnValue(schemaContent);
-      jest.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
-      jest.mocked(path.extname).mockReturnValue('.json');
+      vi.mocked(fs.readFileSync).mockReturnValue(schemaContent);
+      vi.mocked(path.resolve).mockReturnValue('/base/path/schema.json');
+      vi.mocked(path.extname).mockReturnValue('.json');
 
       const result: GradingResult = await runAssertion({
         prompt: 'Some prompt',

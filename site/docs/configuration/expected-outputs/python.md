@@ -8,6 +8,12 @@ description: Create advanced Python validation scripts with complex logic, exter
 
 The `python` assertion allows you to provide a custom Python function to validate the LLM output.
 
+:::tip Python Overview
+
+For an overview of all Python integrations (providers, assertions, test generators, prompts), see the [Python integration guide](/docs/integrations/python).
+
+:::
+
 A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
 
 Example:
@@ -275,6 +281,16 @@ By default, promptfoo will run `python` in your shell. Make sure `python` points
 If a `python` binary is not present, you will see a "python: command not found" error.
 
 To override the Python binary, set the `PROMPTFOO_PYTHON` environment variable. You may set it to a path (such as `/path/to/python3.11`) or just an executable in your PATH (such as `python3.11`).
+
+## Negation
+
+Use `not-python` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-python
+    value: "'error' in output"
+```
 
 ## Other assertion types
 

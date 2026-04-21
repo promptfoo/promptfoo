@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -9,6 +8,9 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
+import { fetchWithRetries } from '../util/fetch/index';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
@@ -18,8 +20,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import { fetchWithRetries } from '../util/fetch/index';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -56,7 +56,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
   async callApi(
     _prompt: string,
     _context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse & { output?: string[] }> {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
@@ -95,6 +95,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
         580000,
         2,
@@ -117,6 +118,10 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
         output: validOutputs,
       };
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       logger.info(`[HarmfulCompletionProvider] ${err}`);
       return {
         error: `[HarmfulCompletionProvider] ${err}`,
@@ -139,7 +144,14 @@ interface PromptfooChatCompletionOptions {
     | 'judge'
     | 'blocking-question-analysis'
     | 'meta-agent-decision'
-    | 'hydra-decision';
+    | 'hydra-decision'
+    | 'voice-crescendo'
+    | 'voice-crescendo-eval';
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   * Keys are variable names, values are descriptions.
+   */
+  inputs?: Record<string, string>;
 }
 
 /**
@@ -164,7 +176,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if remote generation is disabled
     if (neverGenerateRemote()) {
@@ -188,6 +200,8 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       step: context?.prompt.label,
       task: this.options.task,
       email: getUserEmail(),
+      // Pass inputs schema for multi-input mode
+      ...(this.options.inputs && { inputs: this.options.inputs }),
     };
 
     try {
@@ -199,6 +213,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
         REQUEST_TIMEOUT_MS,
       );
@@ -206,7 +221,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const data = await response.json();
 
       if (!data.result) {
-        logger.error(
+        logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
@@ -219,6 +234,10 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         tokenUsage: data.tokenUsage,
       };
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       return {
         error: `API call error: ${String(err)}`,
       };
@@ -259,7 +278,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
   async callApi(
     prompt: string,
     _context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Check if this is a redteam task
     const isRedteamTask = this.taskId === REDTEAM_SIMULATED_USER_TASK_ID;
@@ -309,6 +328,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(body),
+          ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
         REQUEST_TIMEOUT_MS,
       );
@@ -327,6 +347,10 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
         tokenUsage: data.tokenUsage,
       };
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       return {
         error: `API call error: ${String(err)}`,
       };

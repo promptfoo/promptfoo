@@ -7,7 +7,7 @@
  * - PolicyObjectSchema could be moved into this module along w/ `isPolicyMetric` and `isValidPolicyObject`,
  * to co-locate all of the policy validation logic.
  */
-import { validate as isUUID } from 'uuid';
+import { isUuid } from '../../../util/uuid';
 
 /**
  * Checks whether a policy ID is a valid reusable policy ID.
@@ -15,7 +15,7 @@ import { validate as isUUID } from 'uuid';
  * @returns True if the policy ID is a valid reusable policy ID, false otherwise.
  */
 export function isValidReusablePolicyId(id: string): boolean {
-  return isUUID(id);
+  return isUuid(id);
 }
 
 /**

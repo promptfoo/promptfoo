@@ -37,6 +37,10 @@ This agentic approach catches subtle security issues that span multiple files, w
 
 Automatically scan pull requests with findings posted as review comments. This is the recommended way to use the scanner if your code is on GitHub. [Set up the GitHub Action →](./github-action.md)
 
+### VS Code Extension (Enterprise)
+
+Scan code directly in your editor with real-time feedback, inline diagnostics, and quick fixes. Available for enterprise customers. [Learn more →](./vscode-extension.md)
+
 ### CLI Command
 
 Run scans locally or in any CI environment. [Use the CLI →](./cli.md)
@@ -78,5 +82,6 @@ Scans run on Promptfoo Cloud by default. For organizations that need to run scan
 ## See Also
 
 - [GitHub Action](./github-action.md)
+- [VS Code Extension](./vscode-extension.md)
 - [CLI Command](./cli.md)
 - [Promptfoo Scanner GitHub App](https://github.com/apps/promptfoo-scanner)

@@ -1,0 +1,27 @@
+# AGENTS.md
+
+Guidance for AI agents working on GitHub Actions workflows.
+
+## Workflow Security
+
+- Keep actions SHA-pinned. Never use floating tags (`@v4`) or branches (`@main`).
+- **Do not expose write-capable tokens to third-party or PR-controlled code.** If any step runs untrusted code (`npm install`, `npx <tool>`, a formatter, a build tool), that step's `env:` must not contain `GH_TOKEN`, `GITHUB_TOKEN`, `NODE_AUTH_TOKEN`, or equivalent. Split the job into a tokenless do-the-work phase and a credentialed push/API phase.
+- **Mint credentials after — not before — running PR-controlled code.** In any job that both runs PR-controlled code (`npm install`, `npx <tool>`, formatters, build tools) _and_ mints an App token, place `actions/create-github-app-token` in a later step gated by `if:` so the token does not exist in the workflow context during untrusted execution. If that isn't feasible (e.g., `googleapis/release-please-action` needs the token at entry to open the PR), split into two jobs: a tokenless do-the-work job that produces artifacts, and a credentialed push job that consumes them — and do not run other untrusted code in the credentialed job.
+- **Disable git hooks for every credentialed git invocation.** `git` executes `.git/hooks/*` by default, and a PR can plant `pre-push` / `pre-commit` hooks that run with the surrounding step's env. Use `git -c core.hooksPath=/dev/null commit …` and `git -c core.hooksPath=/dev/null push …` whenever a hook would otherwise run under a step that holds a credential.
+- **Treat PR-controlled formatter/tool config as untrusted code.** `.prettierrc.js`, `.eslint.config.js`, `.babelrc.js`, and many others are JavaScript and will execute. Run formatters with `--no-config --no-editorconfig` (or equivalent) so PR-controlled config is ignored. For `npm install`, always pass `--registry=https://registry.npmjs.org/` explicitly so a PR-controlled `.npmrc` cannot redirect the install, and prefer installing into an isolated directory (e.g., `$RUNNER_TEMP/tool-install`) _before_ checking out the PR tree.
+- **Use `persist-credentials: false` on `actions/checkout`** when the workflow subsequently runs code or installs packages on a PR branch. Otherwise `.git/config` holds the token and any code can read it. Reattach credentials just-in-time on the specific git command via `git -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}" …`.
+- **Verify the commit scope before pushing.** When a formatter commits on your behalf, assert `git diff-tree --no-commit-id --name-only -r HEAD` contains only the expected paths before the push step runs.
+- **Treat PR fields as untrusted input.** Branch names, titles, labels, file paths, etc. may contain shell metacharacters. Assign them to env vars (e.g., `HEAD_REF: ${{ github.event.pull_request.head.ref }}`) before referencing in `run:` — never interpolate `${{ … }}` directly into a shell command. actionlint enforces this.
+- **Avoid `pull_request_target`** unless the workflow does not check out or execute PR-controlled code. Prefer `pull_request` with narrow permissions and `persist-credentials: false`.
+- **Gate privileged workflows tighter than a branch-name prefix.** Require same-repo (`head.repo.full_name == github.repository`), the expected bot author (`user.type == 'Bot'` or a specific `user.login`), and only then the branch-naming convention.
+- Set job-level `permissions: contents: read` by default; narrow GITHUB_TOKEN so write is only available via a separately-issued App token scoped to a single step.
+- Add `timeout-minutes` to every job.
+
+## Release Workflows
+
+- Release/publish workflows must use workflow-level `concurrency` with `cancel-in-progress: false` so two pushes to `main` serialize rather than race a publish.
+- Do not run CHANGELOG formatting inside `release-please.yml`. Release-please force-pushes its PR branch when new commits land on `main`, which wipes any formatter commit created inline in the release-please job. Keep release PR formatting in a separate `pull_request`-triggered workflow that self-heals after every force-push — and apply all the Workflow Security rules above, since the PR body/branch is user-controllable.
+- For npm trusted publishing, set `permissions: id-token: write` on the publish job and do not configure long-lived npm tokens. When `actions/setup-node` is configured with `registry-url`, it writes a `${NODE_AUTH_TOKEN}` placeholder into `.npmrc` that prevents OIDC fallthrough — set `NODE_AUTH_TOKEN: ''` on the publish step to neutralize it (see [actions/setup-node#1440](https://github.com/actions/setup-node/issues/1440)).
+- Pin exact versions for any tooling installed at workflow runtime (e.g., `prettier@3.8.1`, not `prettier@^3.8.1`; `npm install -g npm@11.11.0`, not `@latest`). Semver ranges mean a future compromised patch release can alter published artifacts.
+- Least-privilege every job. `publish-npm` does not need `packages: write`; only Docker jobs pushing to ghcr.io do.
+- **`actions/create-github-app-token` `permission-*` inputs are a subset-request, not a grant.** GitHub returns 422 if you request a permission the App installation was not already granted — even a permission release-please-action appears to use (e.g., `issues: write` for label creation). Before adding `permission-*` inputs, confirm every requested permission is already granted to the App installation in the GitHub App settings; otherwise inherit the installation's granted set by omitting the inputs.

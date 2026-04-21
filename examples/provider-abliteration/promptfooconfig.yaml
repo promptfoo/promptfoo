@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Abliteration multimodal provider demo
+
+prompts:
+  - file://prompt.json
+
+providers:
+  - id: abliteration:abliterated-model
+    config:
+      temperature: 0.2
+      max_tokens: 512
+
+tests:
+  - vars:
+      question: "What's in this image?"
+    assert:
+      - type: icontains
+        value: stonehenge

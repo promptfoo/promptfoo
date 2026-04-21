@@ -1,6 +1,10 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MetadataPanel } from './MetadataPanel';
+
 import type { ExpandedMetadataState } from './MetadataPanel';
 
 describe('MetadataPanel', () => {
@@ -16,32 +20,29 @@ describe('MetadataPanel', () => {
     onApplyFilter: mockOnApplyFilter,
   };
 
-  it('should filter out metadata keys present in HIDDEN_METADATA_KEYS, including newly added keys', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should filter out metadata keys present in HIDDEN_METADATA_KEYS', () => {
+    const hiddenMetadata = Object.fromEntries(
+      HIDDEN_METADATA_KEYS.map((key) => [key, `${key} value`]),
+    );
     const mockMetadata = {
       stringKey: 'stringValue',
-      citations: [{ source: 'doc1', content: 'citation content' }],
-      _promptfooFileMetadata: { fileName: 'test.txt', size: 1024 },
-      newHiddenKey: 'hiddenValue',
+      ...hiddenMetadata,
     };
 
-    vi.mock('@app/constants', () => {
-      return {
-        HIDDEN_METADATA_KEYS: ['citations', '_promptfooFileMetadata', 'newHiddenKey'],
-      };
-    });
-
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     expect(screen.getByText('Key')).toBeInTheDocument();
     expect(screen.getByText('Value')).toBeInTheDocument();
     expect(screen.getByText('stringKey')).toBeInTheDocument();
     expect(screen.getByText('stringValue')).toBeInTheDocument();
 
-    expect(screen.queryByText('citations')).not.toBeInTheDocument();
-    expect(screen.queryByText('_promptfooFileMetadata')).not.toBeInTheDocument();
-    expect(screen.queryByText('newHiddenKey')).not.toBeInTheDocument();
-
-    vi.restoreAllMocks();
+    for (const hiddenKey of HIDDEN_METADATA_KEYS) {
+      expect(screen.queryByText(hiddenKey)).not.toBeInTheDocument();
+    }
   });
 
   it('should handle malformed URLs by rendering them as plain text instead of a link', () => {
@@ -50,7 +51,7 @@ describe('MetadataPanel', () => {
       malformedUrlKey: malformedUrl,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     expect(screen.getByText(malformedUrl)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: malformedUrl })).not.toBeInTheDocument();
@@ -67,7 +68,7 @@ describe('MetadataPanel', () => {
       appUrl: 'https://cloud.promptfoo.com',
     };
 
-    render(
+    renderWithProviders(
       <MetadataPanel {...defaultProps} metadata={mockMetadata} cloudConfig={mockCloudConfig} />,
     );
 
@@ -93,7 +94,7 @@ describe('MetadataPanel', () => {
       appUrl: 'https://example.com',
     };
 
-    render(
+    renderWithProviders(
       <MetadataPanel {...defaultProps} metadata={mockMetadata} cloudConfig={mockCloudConfig} />,
     );
 
@@ -103,7 +104,9 @@ describe('MetadataPanel', () => {
   });
 
   it('should return null when metadata is undefined', () => {
-    const { container } = render(<MetadataPanel {...defaultProps} metadata={undefined} />);
+    const { container } = renderWithProviders(
+      <MetadataPanel {...defaultProps} metadata={undefined} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
@@ -116,7 +119,7 @@ describe('MetadataPanel', () => {
       _promptfooFileMetadata: { fileName: 'test.txt', size: 1024 },
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     expect(screen.getByText('Key')).toBeInTheDocument();
     expect(screen.getByText('Value')).toBeInTheDocument();
@@ -140,14 +143,15 @@ describe('MetadataPanel', () => {
       urlKey: 'https://www.example.com',
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const linkElement = screen.getByRole('link', { name: 'https://www.example.com' });
     expect(linkElement).toBeInTheDocument();
     expect(linkElement).toHaveAttribute('href', 'https://www.example.com');
   });
 
-  it('should display a truncated value for long metadata strings and expand on click', () => {
+  it('should display a truncated value for long metadata strings and expand on click', async () => {
+    const user = userEvent.setup();
     const longString = 'This is a very long string. '.repeat(50);
     const mockMetadata = {
       longKey: longString,
@@ -157,7 +161,7 @@ describe('MetadataPanel', () => {
       longKey: { expanded: false, lastClickTime: 0 },
     };
 
-    const { rerender } = render(
+    const { rerender } = renderWithProviders(
       <MetadataPanel
         {...defaultProps}
         metadata={mockMetadata}
@@ -169,7 +173,7 @@ describe('MetadataPanel', () => {
     expect(truncatedValue).toBeInTheDocument();
     expect(truncatedValue.textContent?.length).toBeLessThanOrEqual(300);
 
-    fireEvent.click(truncatedValue);
+    await user.click(truncatedValue);
 
     const updatedExpandedMetadata: ExpandedMetadataState = {
       longKey: { expanded: true, lastClickTime: Date.now() },
@@ -187,7 +191,8 @@ describe('MetadataPanel', () => {
     expect(fullValue).toBeInTheDocument();
   });
 
-  it('should call onCopy with the correct key and value when the copy icon is clicked, and show a checkmark icon if the field is marked as copied', () => {
+  it('should call onCopy with the correct key and value when the copy icon is clicked, and show a checkmark icon if the field is marked as copied', async () => {
+    const user = userEvent.setup();
     const mockMetadata = {
       testKey: 'testValue',
     };
@@ -196,32 +201,35 @@ describe('MetadataPanel', () => {
       testKey: true,
     };
 
-    render(
+    renderWithProviders(
       <MetadataPanel {...defaultProps} metadata={mockMetadata} copiedFields={mockCopiedFields} />,
     );
 
     const copyButton = screen.getByRole('button', { name: 'Copy metadata value for testKey' });
-    fireEvent.click(copyButton);
+    await user.click(copyButton);
 
     expect(mockOnCopy).toHaveBeenCalledWith('testKey', 'testValue');
   });
 
-  it('should call onApplyFilter with the correct field and value when the filter icon is clicked', () => {
+  it('should call onApplyFilter with the correct field and value when the filter icon is clicked', async () => {
+    const user = userEvent.setup();
     const mockMetadata = {
       testField: 'testValue',
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const filterButton = screen.getByRole('button', { name: 'Filter by testField' });
-    fireEvent.click(filterButton);
+    await user.click(filterButton);
 
     expect(mockOnApplyFilter).toHaveBeenCalledWith('testField', 'testValue');
   });
 
   it('should return null when metadata is an empty object', () => {
     const mockMetadata = {};
-    const { container } = render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    const { container } = renderWithProviders(
+      <MetadataPanel {...defaultProps} metadata={mockMetadata} />,
+    );
     expect(container.firstChild).toBeNull();
   });
 
@@ -232,7 +240,7 @@ describe('MetadataPanel', () => {
       urlKey: urlWithSpecialChars,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const linkElement = screen.getByRole('link', { name: urlWithSpecialChars });
     expect(linkElement).toBeInTheDocument();
@@ -245,13 +253,13 @@ describe('MetadataPanel', () => {
       stringKey: 'This is a long string',
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const urlCell = screen.getByText('https://www.example.com/verylongpath').closest('td');
-    expect(urlCell).toHaveStyle('word-break: break-all');
+    expect(urlCell).toHaveClass('break-all');
 
     const stringCell = screen.getByText('This is a long string').closest('td');
-    expect(stringCell).toHaveStyle('word-break: break-word');
+    expect(stringCell).toHaveClass('break-words');
   });
 
   it('should handle rendering in a very narrow container by applying word-break and overflow-wrap styles', () => {
@@ -260,7 +268,7 @@ describe('MetadataPanel', () => {
       longKey: longString,
     };
 
-    render(
+    renderWithProviders(
       <div style={{ width: '100px' }}>
         <MetadataPanel {...defaultProps} metadata={mockMetadata} />
       </div>,
@@ -271,8 +279,8 @@ describe('MetadataPanel', () => {
       .closest('td');
 
     expect(tableCell).toBeInTheDocument();
-    expect(tableCell).toHaveStyle('word-break: break-word');
-    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+    // Tailwind uses 'break-words' class for word-break: break-word
+    expect(tableCell).toHaveClass('break-words');
   });
 
   it('should handle deeply nested JSON objects by wrapping the text within the table cell', () => {
@@ -294,7 +302,7 @@ describe('MetadataPanel', () => {
       nestedObjectKey: nestedJsonObject,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const stringifiedJson = JSON.stringify(nestedJsonObject);
     const tableCell = screen.getByText(new RegExp(`^${stringifiedJson.slice(0, 50)}`), {
@@ -302,8 +310,8 @@ describe('MetadataPanel', () => {
     });
 
     expect(tableCell).toBeInTheDocument();
-    expect(tableCell).toHaveStyle('word-break: break-word');
-    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+    // Tailwind uses 'break-words' class for word-break: break-word
+    expect(tableCell).toHaveClass('break-words');
   });
 
   it('should render long non-URL metadata values with word-break and overflow-wrap styles', () => {
@@ -317,7 +325,7 @@ describe('MetadataPanel', () => {
       longJsonKey: longJsonString,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const valueCell = screen.getByText((content) => {
       return (
@@ -330,8 +338,8 @@ describe('MetadataPanel', () => {
     expect(valueCell).toBeInTheDocument();
 
     const tableCell = valueCell.closest('td');
-    expect(tableCell).toHaveStyle('word-break: break-word');
-    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+    // Tailwind uses 'break-words' class for word-break: break-word
+    expect(tableCell).toHaveClass('break-words');
   });
 
   it('should render long URL values in a way that wraps the text within the table cell, preventing horizontal scrolling, and the cell should have the correct word-break and overflow-wrap styles applied', () => {
@@ -340,13 +348,13 @@ describe('MetadataPanel', () => {
       longUrlKey: longUrl,
     };
 
-    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+    renderWithProviders(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
 
     const linkElement = screen.getByRole('link', { name: longUrl });
     expect(linkElement).toBeInTheDocument();
 
     const tableCell = linkElement.closest('td');
-    expect(tableCell).toHaveStyle('wordBreak: break-all');
-    expect(tableCell).toHaveStyle('overflowWrap: anywhere');
+    // Tailwind uses 'break-all' class for word-break: break-all
+    expect(tableCell).toHaveClass('break-all');
   });
 });

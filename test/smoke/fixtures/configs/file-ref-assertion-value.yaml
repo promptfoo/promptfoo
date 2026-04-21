@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test for #6253: file:// references in assertion values use script output
+description: 'Regression test - file:// references in assertion values'
+
+providers:
+  - echo
+
+prompts:
+  - 'Test DynamicValue here'
+
+tests:
+  - assert:
+      # The file:// reference should execute the script and use its return value
+      - type: contains
+        value: file://../assertions/dynamic-value.js

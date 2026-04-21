@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
+
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
 import styles from './styles.module.css';
 
 export default function HomepageInfo(): React.ReactElement {
-  const [activeTab, setActiveTab] = useState('security');
+  type TabId = 'evaluations' | 'security';
+  const [activeTab, setActiveTab] = useState<TabId>('security');
 
-  const tabs = [
+  const tabs: Array<{ id: TabId; label: string; mobileLabel: string }> = [
     { id: 'evaluations', label: 'Quality evaluations', mobileLabel: 'Evaluations' },
     { id: 'security', label: 'Pre-deployment security scans', mobileLabel: 'Security' },
   ];
 
-  const config = [
+  const config: Array<{ id: TabId; code: string; image: string }> = [
     {
       id: 'evaluations',
       code: `
@@ -23,7 +25,7 @@ prompts:
 
 # And models...
 providers:
-  - openai:gpt-4o
+  - openai:gpt-5
   - anthropic:claude-3.5-sonnet
 
 # ... using these tests
@@ -65,7 +67,7 @@ targets:
     },
   ];
 
-  const activeConfig = config.find((item) => item.id === activeTab);
+  const activeConfig = config.find((item) => item.id === activeTab) ?? config[0];
 
   return (
     <div className={styles.infoContainer}>

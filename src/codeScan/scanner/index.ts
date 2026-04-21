@@ -4,33 +4,32 @@
  * Main entry point for scanner module - orchestrates the complete scan process.
  */
 
-import crypto from 'crypto';
 import path from 'path';
 import type { ChildProcess } from 'child_process';
-import type { Socket } from 'socket.io-client';
 
 import cliState from '../../cliState';
 import logger, { getLogLevel } from '../../logger';
-import type { PullRequestContext } from '../../types/codeScan';
-import type { Config } from '../config/schema';
+import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import {
   loadConfigOrDefault,
   mergeConfigWithOptions,
-  resolveGuidance,
   resolveApiHost,
+  resolveGuidance,
 } from '../config/loader';
-import { resolveAuthCredentials } from '../util/auth';
-import { parseGitHubPr } from '../util/github';
 import { validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
-import { setupMcpBridge } from '../mcp/index';
 import { stopFilesystemMcpServer } from '../mcp/filesystem';
-import type { SocketIoMcpBridge } from '../mcp/transport';
-import { createSocketConnection } from './socket';
+import { setupMcpBridge } from '../mcp/index';
+import { resolveAuthCredentials } from '../util/auth';
+import { parseGitHubPr } from '../util/github';
 import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
-import { buildScanRequest, executeScanRequest } from './request';
+import { buildScanRequest, executeScanRequestWithRetry } from './request';
+
+import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
+import type { Config } from '../config/schema';
+import type { SocketIoMcpBridge } from '../mcp/transport';
 
 /**
  * Options for executing a scan
@@ -56,7 +55,7 @@ export interface ScanOptions {
  *
  * This is the main entry point for the scanner - it orchestrates:
  * - Configuration loading
- * - Socket.IO connection
+ * - Agent client connection (shared Socket.IO layer)
  * - MCP bridge setup (if not diffs-only)
  * - Git diff processing
  * - Scan request execution
@@ -67,7 +66,7 @@ export interface ScanOptions {
  * @param options - Scan options from CLI
  */
 export async function executeScan(repoPath: string, options: ScanOptions): Promise<void> {
-  let socket: Socket | null = null;
+  let client: AgentClient | null = null;
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
@@ -131,32 +130,37 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const abortController = new AbortController();
     cleanupRefs.abortController = abortController; // Update ref for signal handlers
 
-    // Resolve auth credentials for socket.io
-    const auth = resolveAuthCredentials(options.apiKey);
+    // Parse PR context early for auth (if --github-pr provided)
+    // This is needed for fork PR authentication where OIDC is unavailable
+    let parsedPR: { owner: string; repo: string; number: number } | undefined;
+    if (options.githubPr) {
+      const parsed = parseGitHubPr(options.githubPr);
+      if (!parsed) {
+        throw new Error(
+          `Invalid --github-pr format: "${options.githubPr}". Expected format: owner/repo#number (e.g., promptfoo/promptfoo#123)`,
+        );
+      }
+      parsedPR = parsed;
+    }
 
-    // Determine API host URL
-    const apiHost = resolveApiHost(options, config);
-
-    logger.debug(`Promptfoo API host URL: ${apiHost}`);
-
-    // Create Socket.IO connection
+    // Create agent client connection (uses shared Socket.IO layer)
+    // Host and base auth are resolved automatically; code scanning overrides
+    // with custom auth (OIDC + fork PR) and config-driven host.
     if (!showSpinner) {
       logger.debug('Connecting to server...');
     }
 
-    socket = await createSocketConnection(apiHost, auth);
-    cleanupRefs.socket = socket; // Update ref for signal handlers
-
-    // Generate session ID for all scans (used for cancellation and MCP)
-    sessionId = crypto.randomUUID();
-    logger.debug(`Session ID: ${sessionId}`);
-
-    // Emit scan:session to establish session on server
-    socket.emit('scan:session', { sessionId });
+    client = await createAgentClient({
+      agent: 'code-scan',
+      host: resolveApiHost(options, config),
+      auth: resolveAuthCredentials(options.apiKey, parsedPR),
+    });
+    sessionId = client.sessionId;
+    cleanupRefs.socket = client.socket; // Update ref for signal handlers
 
     // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-      const mcpSetup = await setupMcpBridge(socket, absoluteRepoPath, sessionId);
+      const mcpSetup = await setupMcpBridge(client.socket, absoluteRepoPath, sessionId);
       mcpProcess = mcpSetup.mcpProcess;
       mcpBridge = mcpSetup.mcpBridge;
 
@@ -207,7 +211,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Check if there are no files to scan
     if (includedFiles.length === 0) {
       const msg = 'No files to scan';
-      if (showSpinner && spinner) {
+
+      // In JSON mode, output a proper JSON response for programmatic consumption
+      if (options.json) {
+        const response: ScanResponse = { success: true, comments: [], review: msg };
+        logger.info(JSON.stringify(response, null, 2));
+      } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
         logger.info(msg);
@@ -228,38 +237,32 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     logger.debug(`Commits: ${metadata.commitMessages.length}`);
 
     // Build pull request context if --github-pr flag provided
+    // Reuse parsedPR from earlier (already validated for auth)
     let pullRequest: PullRequestContext | undefined = undefined;
-    if (options.githubPr) {
-      const parsed = parseGitHubPr(options.githubPr);
-      if (!parsed) {
-        throw new Error(
-          `Invalid --github-pr format: "${options.githubPr}". Expected format: owner/repo#number (e.g., promptfoo/promptfoo#123)`,
-        );
-      }
-
+    if (parsedPR) {
       // Get current commit SHA
       const currentCommit = await git.revparse(['HEAD']);
 
       pullRequest = {
-        owner: parsed.owner,
-        repo: parsed.repo,
-        number: parsed.number,
+        owner: parsedPR.owner,
+        repo: parsedPR.repo,
+        number: parsedPR.number,
         sha: currentCommit.trim(),
       };
 
       logger.debug(
-        `GitHub PR context: ${parsed.owner}/${parsed.repo}#${parsed.number} (${pullRequest.sha.substring(0, 7)})`,
+        `GitHub PR context: ${parsedPR.owner}/${parsedPR.repo}#${parsedPR.number} (${pullRequest.sha.substring(0, 7)})`,
       );
     }
 
-    // Send scan request via Socket.IO
+    // Send scan request via agent client
     if (!showSpinner) {
       logger.debug('Scanning code...');
     }
 
     const scanRequest = buildScanRequest(files, metadata, config, sessionId, pullRequest, guidance);
 
-    const scanResponse = await executeScanRequest(socket, scanRequest, {
+    const scanResponse = await executeScanRequestWithRetry(client, scanRequest, {
       showSpinner,
       spinner,
       abortController,
@@ -279,7 +282,25 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       githubPr: options.githubPr,
     });
   } catch (error) {
-    const msg = `Scan failed: ${error instanceof Error ? error.message : String(error)}`;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Handle fork PR auth rejection as success (helpful comment posted to PR)
+    if (errorMessage.includes('Fork PR scanning not authorized')) {
+      const msg = 'Fork PR scanning requires maintainer approval. See PR comment for options.';
+      if (showSpinner && spinner) {
+        spinner.succeed(msg);
+      } else {
+        logger.info(msg);
+      }
+
+      cliState.postActionCallback = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        process.exitCode = 0; // Success - not an error condition
+      };
+      return;
+    }
+
+    const msg = `Scan failed: ${errorMessage}`;
     if (showSpinner && spinner) {
       spinner.fail(msg);
     } else {
@@ -296,7 +317,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       }
     };
   } finally {
-    // Cleanup: Stop MCP bridge and server, disconnect socket
+    // Cleanup: Stop MCP bridge and server, disconnect client
     if (mcpBridge) {
       await mcpBridge.disconnect().catch(() => {
         logger.debug('MCP bridge cleanup completed');
@@ -309,9 +330,9 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       });
     }
 
-    if (socket) {
-      socket.disconnect();
-      logger.debug('Socket disconnected');
+    if (client) {
+      client.disconnect();
+      logger.debug('Agent client disconnected');
     }
   }
 }

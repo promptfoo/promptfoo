@@ -1,15 +1,14 @@
-FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:22
+FROM mcr.microsoft.com/vscode/devcontainers/typescript-node:24
 
-# Install additional OS packages including Python 3.11
+# Install additional OS packages including Python
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get -y install --no-install-recommends \
-    jq htop python3.11 python3.11-venv \
+    jq htop python3 python3-venv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Python 3.11 as the default python and python3
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
-    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
+# Set python3 as the default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 
 # Set up npm directories and cache directory
 RUN mkdir -p /home/node/.promptfoo && \

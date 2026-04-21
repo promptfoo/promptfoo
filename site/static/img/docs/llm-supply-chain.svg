@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 320">
+  <!-- Background -->
+  <rect width="800" height="320" fill="#ffffff"/>
+  
+  <!-- Connector line -->
+  <line x1="155" y1="130" x2="645" y2="130" stroke="#e2e8f0" stroke-width="2"/>
+  
+  <!-- Node 1: Model Source -->
+  <g transform="translate(70, 70)">
+    <rect x="0" y="0" width="110" height="120" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" rx="4"/>
+    <text x="55" y="28" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#1e293b" text-anchor="middle" font-weight="600">Model Source</text>
+    <line x1="10" y1="40" x2="100" y2="40" stroke="#e2e8f0" stroke-width="1"/>
+    <text x="55" y="62" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">HuggingFace</text>
+    <text x="55" y="78" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Vendor</text>
+    <text x="55" y="94" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#64748b" text-anchor="middle">Internal ML</text>
+  </g>
+  
+  <!-- Arrow 1 -->
+  <path d="M185 130 L210 130" stroke="#94a3b8" stroke-width="1.5"/>
+  <polygon points="210,130 203,126 203,134" fill="#94a3b8"/>
+  
+  <!-- Node 2: Static Analysis -->
+  <g transform="translate(220, 50)">
+    <rect x="0" y="0" width="130" height="160" fill="#f5f3ff" stroke="#8b5cf6" stroke-width="1.5" rx="4"/>
+    <text x="65" y="26" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#6d28d9" text-anchor="middle" font-weight="600">Static Analysis</text>
+    <line x1="10" y1="38" x2="120" y2="38" stroke="#ddd6fe" stroke-width="1"/>
+    
+    <g font-family="Inter, system-ui, sans-serif" font-size="10" fill="#475569">
+      <text x="16" y="60">Pickle payloads</text>
+      <text x="16" y="78">Executables</text>
+      <text x="16" y="96">Credentials</text>
+      <text x="16" y="114">Backdoors</text>
+    </g>
+    
+    <rect x="14" y="130" width="102" height="18" fill="#ede9fe" rx="2"/>
+    <text x="65" y="143" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#7c3aed" text-anchor="middle" font-weight="500">ModelAudit</text>
+  </g>
+  
+  <!-- Arrow 2 -->
+  <path d="M355 130 L380 130" stroke="#94a3b8" stroke-width="1.5"/>
+  <polygon points="380,130 373,126 373,134" fill="#94a3b8"/>
+  
+  <!-- Node 3: Dynamic Analysis -->
+  <g transform="translate(390, 50)">
+    <rect x="0" y="0" width="130" height="160" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5" rx="4"/>
+    <text x="65" y="26" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#047857" text-anchor="middle" font-weight="600">Dynamic Analysis</text>
+    <line x1="10" y1="38" x2="120" y2="38" stroke="#a7f3d0" stroke-width="1"/>
+    
+    <g font-family="Inter, system-ui, sans-serif" font-size="10" fill="#475569">
+      <text x="16" y="60">Model drift</text>
+      <text x="16" y="78">Safety regression</text>
+      <text x="16" y="96">Data poisoning</text>
+      <text x="16" y="114">Jailbreak testing</text>
+    </g>
+    
+    <rect x="14" y="130" width="102" height="18" fill="#d1fae5" rx="2"/>
+    <text x="65" y="143" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#059669" text-anchor="middle" font-weight="500">Red Team</text>
+  </g>
+  
+  <!-- Arrow 3 -->
+  <path d="M525 130 L550 130" stroke="#94a3b8" stroke-width="1.5"/>
+  <polygon points="550,130 543,126 543,134" fill="#94a3b8"/>
+  
+  <!-- Node 4: Production -->
+  <g transform="translate(560, 70)">
+    <rect x="0" y="0" width="110" height="120" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5" rx="4"/>
+    <text x="55" y="28" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#1e293b" text-anchor="middle" font-weight="600">Production</text>
+    <line x1="10" y1="40" x2="100" y2="40" stroke="#e2e8f0" stroke-width="1"/>
+    
+    <!-- Shield -->
+    <path d="M43 58 L55 52 L67 58 L67 76 C67 82 61 88 55 91 C49 88 43 82 43 76 Z" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+    <path d="M50 72 L53 75 L61 67" stroke="#22c55e" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    
+    <text x="55" y="108" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#16a34a" text-anchor="middle" font-weight="500">Verified</text>
+  </g>
+  
+  <!-- Bottom labels -->
+  <g transform="translate(0, 250)">
+    <text x="285" y="20" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#6d28d9" text-anchor="middle" font-weight="500">Code Execution Risks</text>
+    <text x="285" y="36" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Scan artifacts before deployment</text>
+    
+    <text x="455" y="20" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#047857" text-anchor="middle" font-weight="500">Behavioral Risks</text>
+    <text x="455" y="36" font-family="Inter, system-ui, sans-serif" font-size="9" fill="#64748b" text-anchor="middle">Test inference behavior continuously</text>
+  </g>
+</svg>

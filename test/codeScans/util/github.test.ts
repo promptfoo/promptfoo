@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { prepareComments, ALL_CLEAR_MESSAGE } from '../../../src/codeScan/util/github';
+import { describe, expect, it } from 'vitest';
+import { ALL_CLEAR_MESSAGE, prepareComments } from '../../../src/codeScan/util/github';
 import { CodeScanSeverity, type Comment } from '../../../src/types/codeScan';
 
 describe('prepareComments', () => {

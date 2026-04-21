@@ -1,0 +1,130 @@
+# CODEOWNERS - Automatically request reviews from code owners
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Rules:
+# - Last matching pattern takes precedence (most specific patterns at bottom)
+# - Team ownership provides coverage and knowledge sharing
+# - Individual ownership for specialized domains with clear expertise
+#
+# Generated from git history analysis (scripts/analyze-ownership.ts)
+# Last updated: 2026-01
+
+# ============================================================================
+# DEFAULT
+# ============================================================================
+* @promptfoo/engineering
+
+# ============================================================================
+# TOP-LEVEL DIRECTORIES
+# ============================================================================
+
+/docs/           @alandelong-oai @mldangelo-oai        # Internal agent docs
+/examples/       @mldangelo-oai @ianw-oai              # Example configurations
+/helm/           @jbeckwith-oai                        # Kubernetes Helm charts
+
+# ============================================================================
+# SOURCE - SHARED OWNERSHIP (multiple contributors >15%)
+# ============================================================================
+
+/src/app/        @mldangelo-oai @wholley-oai @faizan-oai       # Web UI
+/src/server/     @mldangelo-oai @wholley-oai @faizan-oai       # API server
+/src/models/     @mldangelo-oai @wholley-oai @faizan-oai       # Data models
+/src/redteam/    @mldangelo-oai @zcrab-oai @wholley-oai        # Red team
+/src/commands/   @mldangelo-oai @zcrab-oai                     # CLI
+/src/types/      @mldangelo-oai @daneschneider-oai @faizan-oai     # Type definitions
+
+# ============================================================================
+# SOURCE - CORE MODULES
+# ============================================================================
+
+/src/assertions/   @mldangelo-oai @zcrab-oai               # Assertion logic
+/src/providers/    @mldangelo-oai @zcrab-oai               # LLM providers (base)
+/src/scheduler/    @mldangelo-oai                          # Eval scheduler
+/src/database/     @mldangelo-oai @wholley-oai             # Database utilities
+/src/prompts/      @mldangelo-oai                          # Prompt handling
+/src/util/         @mldangelo-oai                          # Utility functions
+/src/python/       @mldangelo-oai                          # Python integration
+/src/tracing/      @mldangelo-oai                          # Tracing & telemetry
+
+# ============================================================================
+# SOURCE - SPECIALIZED OWNERSHIP (clear primary owner)
+# ============================================================================
+
+/src/codeScan/      @daneschneider-oai                         # Code scanning
+/code-scan-action/  @daneschneider-oai                         # GitHub Action for code scan
+/src/validators/    @faizan-oai @mldangelo-oai             # Validators
+
+# ============================================================================
+# PROVIDERS - SPECIALIZED OWNERSHIP
+# ============================================================================
+
+/src/providers/openai/     @mldangelo-oai                  # OpenAI provider
+/src/providers/anthropic/  @mldangelo-oai                  # Anthropic provider
+/src/providers/azure/      @zcrab-oai                      # Azure provider
+/src/providers/http.ts     @zcrab-oai @faizan-oai          # HTTP provider
+
+# ============================================================================
+# TESTS (mirror source ownership)
+# ============================================================================
+
+/test/                  @mldangelo-oai                     # Test suite base
+/test/codeScans/        @daneschneider-oai
+/test/code-scan-action/ @daneschneider-oai                     # Tests for GitHub Action
+/test/redteam/          @mldangelo-oai @zcrab-oai @wholley-oai
+/test/validators/       @faizan-oai @mldangelo-oai
+/test/providers/        @zcrab-oai @mldangelo-oai         # Provider tests
+
+# ============================================================================
+# DOCUMENTATION
+# ============================================================================
+
+/site/                      @ianw-oai @mldangelo-oai      # Marketing site (infra/config)
+/site/docs/                 @ianw-oai @mldangelo-oai      # Technical documentation
+/site/src/pages/**/*.tsx    @ianw-oai @mldangelo-oai      # Landing page content
+/site/src/pages/**/*.md     @ianw-oai @mldangelo-oai      # Landing page markdown
+/site/blog/                 @mldangelo-oai                # Blog posts
+/SECURITY.md                @mldangelo-oai @jbeckwith-oai # Security policy
+/CONTRIBUTING.md            @mldangelo-oai                # Contributing guide
+/site/docs/contributing.md  @mldangelo-oai                # Contributing docs
+
+# ============================================================================
+# DEVELOPER PRODUCTIVITY (VP Eng: Justin)
+# ============================================================================
+
+/.github/                      @jbeckwith-oai             # CI/CD workflows
+/scripts/                      @jbeckwith-oai             # Build & dev scripts
+/biome.json                    @jbeckwith-oai             # Linting config
+/tsconfig.json                 @jbeckwith-oai             # TypeScript config
+/tsdown.config.ts              @jbeckwith-oai             # Build config
+/vitest.config.ts              @jbeckwith-oai             # Test config
+/vitest.integration.config.ts  @jbeckwith-oai             # Integration test config
+/knip.json                     @faizan-oai                # Dead code detection
+/renovate.json                 @jbeckwith-oai             # Dependency updates
+/package.json                  @jbeckwith-oai             # Dependencies & scripts
+/release-please-config.json    @jbeckwith-oai             # Release automation
+
+# ============================================================================
+# DATABASE
+# ============================================================================
+
+/drizzle/ @mldangelo-oai @wholley-oai @faizan-oai         # Database migrations
+
+# ============================================================================
+# MODEL AUDIT (specialized domain - overrides broader patterns)
+# ============================================================================
+
+/src/commands/modelScan.ts              @ychhabria         # Model scan CLI command
+/src/server/routes/modelAudit.ts        @ychhabria         # Model audit API route
+/src/util/modelAuditCliParser.ts        @ychhabria         # CLI parser utility
+/src/types/modelAudit.ts                @ychhabria         # Model audit types
+/src/app/src/pages/model-audit/         @ychhabria         # Model audit UI
+/test/commands/modelScan.test.ts        @ychhabria         # CLI tests
+/test/utils/modelAuditCliParser.test.ts @ychhabria         # Parser tests
+
+# ============================================================================
+# AI AGENT INSTRUCTIONS (override all other patterns)
+# ============================================================================
+# These patterns match files anywhere in the repo and must come last
+
+AGENTS.md  @alandelong-oai @mldangelo-oai                 # AI agent instructions
+CLAUDE.md  @alandelong-oai @mldangelo-oai                 # Claude Code instructions

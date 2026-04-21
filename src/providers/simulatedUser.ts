@@ -1,7 +1,7 @@
 import logger from '../logger';
 import { getSessionId } from '../redteam/util';
-import invariant from '../util/invariant';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
+import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -207,6 +207,7 @@ export class SimulatedUser implements ApiProvider {
   }
 
   private async sendMessageToAgent(
+    prompt: string,
     messages: Message[],
     targetProvider: ApiProvider,
     context: CallApiContextParams,
@@ -214,9 +215,9 @@ export class SimulatedUser implements ApiProvider {
     invariant(context?.prompt?.raw, 'Expected context.prompt.raw to be set');
 
     // Include the assistant's prompt/instructions as a system message
-    const agentPrompt = context.prompt.raw;
-    const agentVars = context.vars;
-    const renderedPrompt = getNunjucksEngine().renderString(agentPrompt, agentVars);
+    const renderedPrompt = context.prompt.function
+      ? prompt
+      : getNunjucksEngine().renderString(context.prompt.raw, context.vars);
 
     // For stateful providers:
     //   - First turn (no sessionId): send system prompt + user message to establish session
@@ -250,13 +251,12 @@ export class SimulatedUser implements ApiProvider {
   }
 
   async callApi(
-    // NOTE: The `prompt` parameter is not used directly; `context.prompt.raw` is used instead
-    // to extract the assistant's system instructions. The simulated user's instructions come from vars.
-    _prompt: string,
+    prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
+    const targetProvider = context.originalProvider;
 
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
@@ -295,7 +295,7 @@ export class SimulatedUser implements ApiProvider {
       logger.debug(
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
-      agentResponse = await this.sendMessageToAgent(messages, context.originalProvider, context);
+      agentResponse = await this.sendMessageToAgent(prompt, messages, targetProvider, context);
 
       // Check for errors from agent response
       if (agentResponse.error) {
@@ -323,7 +323,8 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      const { messages: messagesToUser } = userResult;
+      const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
+      accumulateResponseTokenUsage(tokenUsage, { tokenUsage: userTokenUsage });
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
       // Check whether the judge has determined that the instruction goal is satisfied.
@@ -338,8 +339,9 @@ export class SimulatedUser implements ApiProvider {
       messages.push(lastMessage);
 
       agentResponse = await this.sendMessageToAgent(
+        prompt,
         messagesToUser,
-        context.originalProvider,
+        targetProvider,
         context,
       );
 
@@ -359,7 +361,7 @@ export class SimulatedUser implements ApiProvider {
     return this.serializeOutput(
       messages,
       tokenUsage,
-      agentResponse as ProviderResponse,
+      agentResponse,
       getSessionId(agentResponse, context),
     );
   }
@@ -371,7 +373,7 @@ export class SimulatedUser implements ApiProvider {
   serializeOutput(
     messages: Message[],
     tokenUsage: TokenUsage,
-    finalTargetResponse: ProviderResponse,
+    finalTargetResponse: ProviderResponse | undefined,
     sessionId?: string,
   ) {
     return {
@@ -385,7 +387,7 @@ export class SimulatedUser implements ApiProvider {
         messages,
         sessionId,
       },
-      guardrails: finalTargetResponse.guardrails,
+      guardrails: finalTargetResponse?.guardrails,
     };
   }
 }

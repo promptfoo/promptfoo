@@ -1,47 +1,64 @@
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
+import { mockProcessEnv } from '../../util/utils';
 
-import type { ApiProvider } from '../../../src/types/index';
-
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  ...jest.requireActual('../../../src/redteam/remoteGeneration'),
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+vi.mock('../../../src/redteam/remoteGeneration', async () => ({
+  ...(await vi.importActual('../../../src/redteam/remoteGeneration')),
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.promptfoo.app/api/v1/task'),
 }));
 
 describe('System Purpose Extractor', () => {
-  let provider: ApiProvider;
+  let provider: MockApiProvider;
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeAll(() => {
-    originalEnv = process.env;
+    originalEnv = { ...process.env };
   });
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
-    delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
-    provider = {
-      callApi: jest
-        .fn()
-        .mockResolvedValue({ output: '<Purpose>Extracted system purpose</Purpose>' }),
-      id: jest.fn().mockReturnValue('test-provider'),
-    };
-    jest.clearAllMocks();
-    jest.mocked(getRemoteGenerationUrl).mockReturnValue('https://api.promptfoo.app/api/v1/task');
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    mockProcessEnv({ PROMPTFOO_REMOTE_GENERATION_URL: undefined });
+    provider = createMockProvider({
+      response: createProviderResponse({
+        output: '<Purpose>Extracted system purpose</Purpose>',
+      }),
+    });
+    vi.clearAllMocks();
+    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
+      return 'https://api.promptfoo.app/api/v1/task';
+    });
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
   });
 
   it('should use remote generation when enabled', async () => {
-    process.env.OPENAI_API_KEY = undefined;
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
+    vi.mocked(fetchWithCache).mockResolvedValue({
       data: { task: 'purpose', result: 'Remote extracted purpose' },
       status: 200,
       statusText: 'OK',
@@ -68,19 +85,19 @@ describe('System Purpose Extractor', () => {
   });
 
   it('should not fall back to local extraction when remote generation fails', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'false';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
     const originalOpenaiKey = process.env.OPENAI_API_KEY;
-    process.env.OPENAI_API_KEY = undefined;
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('Remote generation failed'));
     const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2']);
 
     expect(result).toBe('');
     expect(provider.callApi).not.toHaveBeenCalled();
-    process.env.OPENAI_API_KEY = originalOpenaiKey;
+    mockProcessEnv({ OPENAI_API_KEY: originalOpenaiKey });
   });
 
   it('should use local extraction when remote generation is disabled', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
 
     const result = await extractSystemPurpose(provider, ['prompt']);
 
@@ -90,8 +107,8 @@ describe('System Purpose Extractor', () => {
   });
 
   it('should extract system purpose when returned without xml tags', async () => {
-    process.env.PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION = 'true';
-    jest.mocked(provider.callApi).mockResolvedValue({ output: 'Extracted system purpose' });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'true' });
+    vi.mocked(provider.callApi).mockResolvedValue({ output: 'Extracted system purpose' });
 
     const result = await extractSystemPurpose(provider, ['prompt1', 'prompt2']);
 

@@ -1,5 +1,7 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
+  buildStructuredImageOutputs,
   calculateImageCost,
   callOpenAiImageApi,
   DALLE2_COSTS,
@@ -10,13 +12,16 @@ import {
   validateSizeForModel,
 } from '../../../src/providers/openai/image';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
 describe('OpenAI Image Provider Functions', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('validateSizeForModel', () => {
@@ -77,7 +82,16 @@ describe('OpenAI Image Provider Functions', () => {
       };
       const result = formatOutput(mockData, 'prompt', 'b64_json');
       expect(typeof result).toBe('string');
-      expect(result).toBe(JSON.stringify(mockData));
+      expect(result).toBe('data:image/png;base64,base64encodeddata');
+    });
+
+    it('should honor output format when formatting base64 output', () => {
+      const mockData = {
+        data: [{ b64_json: 'base64encodeddata' }],
+      };
+      const result = formatOutput(mockData, 'prompt', 'b64_json', 'jpeg');
+      expect(typeof result).toBe('string');
+      expect(result).toBe('data:image/jpeg;base64,base64encodeddata');
     });
 
     it('should return error when URL is missing', () => {
@@ -207,7 +221,7 @@ describe('OpenAI Image Provider Functions', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const url = 'https://api.openai.com/v1/images/generations';
       const body = { model: 'dall-e-3', prompt: 'test' };
@@ -231,7 +245,7 @@ describe('OpenAI Image Provider Functions', () => {
 
   describe('processApiResponse', () => {
     it('should handle error in data', async () => {
-      const mockDeleteFromCache = jest.fn();
+      const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
         deleteFromCache: mockDeleteFromCache,
@@ -292,6 +306,30 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result).toHaveProperty('format', 'json');
     });
 
+    it('should use output_format when building structured base64 images', async () => {
+      const data = {
+        data: [{ b64_json: 'base64data' }],
+      };
+
+      const result = await processApiResponse(
+        data,
+        'test prompt',
+        'b64_json',
+        false,
+        'gpt-image-1',
+        '1024x1024',
+        undefined,
+        'low',
+        1,
+        'webp',
+      );
+
+      expect(result).toMatchObject({
+        output: 'data:image/webp;base64,base64data',
+        images: [{ data: 'data:image/webp;base64,base64data', mimeType: 'image/webp' }],
+      });
+    });
+
     it('should set cost to 0 for cached responses', async () => {
       const data = {
         data: [{ url: 'https://example.com/image.png' }],
@@ -311,7 +349,7 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should handle errors during output formatting', async () => {
-      const mockDeleteFromCache = jest.fn();
+      const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
         deleteFromCache: mockDeleteFromCache,
@@ -334,7 +372,7 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should handle a specific error case with malformed response', async () => {
-      const mockDeleteFromCache = jest.fn();
+      const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
         deleteFromCache: mockDeleteFromCache,
@@ -353,6 +391,24 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('API error:');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
+    });
+  });
+
+  describe('buildStructuredImageOutputs', () => {
+    it('should infer mime type from URL extensions', () => {
+      expect(
+        buildStructuredImageOutputs({
+          data: [{ url: 'https://example.com/image.jpg?size=large' }],
+        }),
+      ).toEqual([{ data: 'https://example.com/image.jpg?size=large', mimeType: 'image/jpeg' }]);
+    });
+
+    it('should omit mime type when URL extension is unknown', () => {
+      expect(
+        buildStructuredImageOutputs({
+          data: [{ url: 'https://example.com/generated-image' }],
+        }),
+      ).toEqual([{ data: 'https://example.com/generated-image' }]);
     });
   });
 });

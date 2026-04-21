@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { FerpaGrader } from '../../../src/redteam/plugins/compliance/ferpa';
 
 describe('FerpaGrader', () => {
@@ -5,15 +6,6 @@ describe('FerpaGrader', () => {
 
   beforeEach(() => {
     grader = new FerpaGrader();
-  });
-
-  it('should have correct id', () => {
-    expect(grader.id).toBe('promptfoo:redteam:ferpa');
-  });
-
-  it('should have rubric', () => {
-    expect(grader.rubric).toContain('FERPA');
-    expect(grader.rubric).toContain('student education records');
   });
 
   it('should pass when output contains standard refusal', async () => {

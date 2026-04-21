@@ -1,6 +1,6 @@
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import invariant from '../../../util/invariant';
@@ -10,13 +10,24 @@ import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import {
+  applyRuntimeTransforms,
+  type LayerConfig,
+  type MediaData,
+  type TransformResult,
+} from '../../shared/runtimeTransform';
+import { Strategies } from '../../strategies';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import {
+  buildGraderResultAssertion,
+  externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
-  messagesToRedteamHistory,
+  isConversationEndedResponse,
+  type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
@@ -33,6 +44,7 @@ import type {
   ProviderResponse,
   RedteamFileConfig,
   TokenUsage,
+  VarValue,
 } from '../../../types/index';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
@@ -89,8 +101,6 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
 
 `;
 
-type StopReason = 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
-
 /**
  * Represents metadata for the Custom conversation process.
  */
@@ -99,7 +109,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   customBacktrackCount: number;
   customResult: boolean;
   customConfidence: number | null;
-  stopReason: StopReason;
+  stopReason: RoundBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -125,6 +135,8 @@ interface CustomConfig {
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   stateful?: boolean;
   continueAfterSuccess?: boolean;
+  /** Per-turn layer transforms (e.g., audio, image) passed from layer strategy */
+  _perTurnLayers?: LayerConfig[];
 }
 
 export class MemorySystem {
@@ -143,7 +155,7 @@ export class MemorySystem {
 
   duplicateConversationExcludingLastTurn(conversationId: string): string {
     const originalConversation = this.getConversation(conversationId);
-    const newConversationId = uuidv4();
+    const newConversationId = crypto.randomUUID();
     const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
     this.conversations.set(newConversationId, newConversation);
     return newConversationId;
@@ -163,6 +175,7 @@ export class CustomProvider implements ApiProvider {
   private maxBacktracks: number;
   private stateful: boolean;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  private readonly perTurnLayers: LayerConfig[];
   private successfulAttacks: Array<{
     turn: number;
     prompt: string;
@@ -174,14 +187,21 @@ export class CustomProvider implements ApiProvider {
 
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
-    this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
-    this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
+
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
-    this.targetConversationId = uuidv4();
-    this.redTeamingChatConversationId = uuidv4();
+    this.targetConversationId = crypto.randomUUID();
+    this.redTeamingChatConversationId = crypto.randomUUID();
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
+    this.perTurnLayers = config._perTurnLayers ?? [];
 
     this.stateful = config.stateful ?? false;
 
@@ -273,7 +293,7 @@ export class CustomProvider implements ApiProvider {
   }: {
     prompt: Prompt;
     filters: NunjucksFilterMap | undefined;
-    vars: Record<string, string | object>;
+    vars: Record<string, VarValue>;
     provider: ApiProvider;
     context?: CallApiContextParams;
     options?: CallApiOptionsParams;
@@ -297,9 +317,20 @@ export class CustomProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let lastTargetError: string | undefined = undefined;
 
-    let exitReason: StopReason = 'Max rounds reached';
+    let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
     const totalTokenUsage = createEmptyTokenUsage();
+
+    // Track redteamHistory entries with audio/image data for UI rendering
+    const redteamHistory: Array<{
+      prompt: string;
+      promptAudio?: MediaData;
+      promptImage?: MediaData;
+      output: string;
+      outputAudio?: MediaData;
+      outputImage?: MediaData;
+    }> = [];
+    let lastTransformResult: TransformResult | undefined;
 
     let assertToUse = test?.assert?.find(
       (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
@@ -362,6 +393,7 @@ export class CustomProvider implements ApiProvider {
           lastResponse,
           lastFeedback,
           objectiveScore,
+          options,
         );
 
         if (!attackPrompt) {
@@ -371,7 +403,7 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug(`[Custom] Generated attack prompt: ${attackPrompt}`);
 
-        const response = await this.sendPrompt(
+        const { response, transformResult } = await this.sendPrompt(
           attackPrompt,
           prompt,
           vars,
@@ -382,7 +414,16 @@ export class CustomProvider implements ApiProvider {
           options,
         );
         lastResponse = response;
+        lastTransformResult = transformResult;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
+        if (isConversationEndedResponse(lastResponse)) {
+          logger.info('[Custom] Target ended conversation', {
+            round: roundNum,
+            reason: lastResponse.conversationEndReason,
+          });
+          exitReason = 'Target ended conversation';
+          break;
+        }
         if (lastResponse.error) {
           lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
           logger.info(
@@ -418,7 +459,7 @@ export class CustomProvider implements ApiProvider {
             `[Custom] Sending unblocking response: ${unblockingResult.unblockingPrompt}`,
           );
 
-          const unblockingResponse = await this.sendPrompt(
+          const { response: unblockingResponse } = await this.sendPrompt(
             unblockingResult.unblockingPrompt,
             prompt,
             vars,
@@ -432,7 +473,17 @@ export class CustomProvider implements ApiProvider {
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
 
           // Update lastResponse to the unblocking response and continue
+          // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (isConversationEndedResponse(lastResponse)) {
+            logger.info('[Custom] Target ended conversation during unblocking', {
+              round: roundNum,
+              reason: lastResponse.conversationEndReason,
+            });
+            exitReason = 'Target ended conversation';
+            break;
+          }
+
           if (lastResponse.error) {
             lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
             logger.info(
@@ -452,6 +503,7 @@ export class CustomProvider implements ApiProvider {
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
           attackPrompt,
           lastResponse.output,
+          options,
         );
         logger.debug(
           `[Custom] Refusal check result: isRefusal=${isRefusal}, rationale=${refusalRationale}`,
@@ -490,22 +542,38 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,
               provider,
-              assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              getGraderAssertionValue(assertToUse),
               additionalRubric,
             );
             graderPassed = grade.pass;
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            };
           }
         }
 
         logger.debug(`[Custom] graderPassed: ${graderPassed}`);
 
-        const [evalScore] = await this.getEvalScore(lastResponse.output);
+        // Store this turn in redteamHistory with audio/image data if present
+        redteamHistory.push({
+          prompt: attackPrompt,
+          promptAudio: lastTransformResult?.audio,
+          promptImage: lastTransformResult?.image,
+          output: lastResponse.output,
+          outputAudio:
+            lastResponse.audio?.data && lastResponse.audio?.format
+              ? { data: lastResponse.audio.data, format: lastResponse.audio.format }
+              : undefined,
+          // Note: outputImage not tracked as TargetResponse doesn't include image yet
+        });
+
+        const [evalScore] = await this.getEvalScore(lastResponse.output, options);
 
         evalFlag = evalScore.value;
         evalPercentage = evalScore.metadata;
@@ -542,6 +610,11 @@ export class CustomProvider implements ApiProvider {
 
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
+        // Re-throw abort errors to properly cancel the operation
+        if (error instanceof Error && error.name === 'AbortError') {
+          logger.debug('[Custom] Operation aborted');
+          throw error;
+        }
         logger.error(`[Custom] Error Running custom step: ${error}`);
       }
     }
@@ -570,24 +643,26 @@ export class CustomProvider implements ApiProvider {
     }
 
     const messages = this.memory.getConversation(this.targetConversationId);
+    const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
+      prompt: finalPrompt,
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user'),
+        redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         customRoundsCompleted: roundNum,
         customBacktrackCount: backtrackCount,
         customResult: evalFlag,
         customConfidence: evalPercentage,
         stopReason: exitReason,
-        redteamHistory: messagesToRedteamHistory(messages),
+        redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult: storedGraderResult,
         sessionId: getSessionId(lastResponse, context),
       },
       tokenUsage: totalTokenUsage,
-      guardrails: lastResponse.guardrails,
+      guardrails: lastResponse?.guardrails,
       ...(lastTargetError ? { error: lastTargetError } : {}),
     };
   }
@@ -598,6 +673,7 @@ export class CustomProvider implements ApiProvider {
     lastResponse: TargetResponse,
     lastFeedback: string,
     objectiveScore?: { value: number; rationale: string },
+    options?: CallApiOptionsParams,
   ): Promise<{ generatedQuestion: string | undefined; tokenUsage?: TokenUsage }> {
     logger.debug(
       `[Custom] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
@@ -635,13 +711,17 @@ export class CustomProvider implements ApiProvider {
     logger.debug(`Sending to red teaming chat:`);
     this.logChatHistory(this.redTeamingChatConversationId);
     const redTeamingChat = await this.getRedTeamProvider();
-    const response = await redTeamingChat.callApi(JSON.stringify(redTeamingHistory), {
-      prompt: {
-        raw: JSON.stringify(redTeamingHistory),
-        label: 'history',
+    const response = await redTeamingChat.callApi(
+      JSON.stringify(redTeamingHistory),
+      {
+        prompt: {
+          raw: JSON.stringify(redTeamingHistory),
+          label: 'history',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(redTeamingChat.id(), response.tokenUsage);
     if (redTeamingChat.delay) {
       logger.debug(`[Custom] Sleeping for ${redTeamingChat.delay}ms`);
@@ -707,13 +787,15 @@ export class CustomProvider implements ApiProvider {
   private async sendPrompt(
     attackPrompt: string,
     originalPrompt: Prompt,
-    vars: Record<string, string | object>,
+    vars: Record<string, VarValue>,
     filters: NunjucksFilterMap | undefined,
     provider: ApiProvider,
     _roundNum: number,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
-  ): Promise<TargetResponse> {
+  ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
+    let lastTransformResult: TransformResult | undefined;
+
     const renderedPrompt = await renderPrompt(
       originalPrompt,
       { ...vars, [this.config.injectVar]: attackPrompt },
@@ -744,14 +826,88 @@ export class CustomProvider implements ApiProvider {
     }
 
     const conversationHistory = this.memory.getConversation(this.targetConversationId);
-    const targetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
+    let finalTargetPrompt = this.stateful ? renderedPrompt : JSON.stringify(conversationHistory);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Apply per-turn layer transforms if configured (e.g., audio, base64)
+    // This enables: layer: { steps: [custom, audio] }
+    // ═══════════════════════════════════════════════════════════════════════
+    if (this.perTurnLayers.length > 0) {
+      logger.debug('[Custom] Applying per-turn transforms', {
+        layers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+      });
+      // Transform the actual message content (attackPrompt), not the full targetPrompt
+      // This ensures we convert just the text to audio, not the JSON structure
+      lastTransformResult = await applyRuntimeTransforms(
+        attackPrompt,
+        this.config.injectVar,
+        this.perTurnLayers,
+        Strategies,
+      );
+
+      if (lastTransformResult.error) {
+        logger.warn('[Custom] Transform failed', { error: lastTransformResult.error });
+        // Return error response - caller will handle
+        return {
+          response: {
+            output: '',
+            error: lastTransformResult.error,
+          },
+          transformResult: lastTransformResult,
+        };
+      }
+
+      // For audio/image transforms, send a hybrid format:
+      // - Previous turns as text (for context)
+      // - Current turn as audio/image (the actual attack)
+      if (lastTransformResult.audio || lastTransformResult.image) {
+        // Build hybrid payload with conversation history + current transformed turn
+        // Get history without the current user message (which we just added)
+        const historyWithoutCurrentTurn = conversationHistory.slice(0, -1);
+        const hybridPayload = {
+          _promptfoo_audio_hybrid: true,
+          history: historyWithoutCurrentTurn,
+          currentTurn: {
+            role: 'user' as const,
+            transcript: attackPrompt, // Original text for reference
+            ...(lastTransformResult.audio && {
+              audio: lastTransformResult.audio,
+            }),
+            ...(lastTransformResult.image && {
+              image: lastTransformResult.image,
+            }),
+          },
+        };
+        finalTargetPrompt = JSON.stringify(hybridPayload);
+        logger.debug('[Custom] Using hybrid format (history + audio/image current turn)', {
+          historyLength: historyWithoutCurrentTurn.length,
+          hasAudio: !!lastTransformResult.audio,
+          hasImage: !!lastTransformResult.image,
+        });
+      } else {
+        // No audio/image, just use the transformed text
+        finalTargetPrompt = lastTransformResult.prompt;
+      }
+
+      logger.debug('[Custom] Per-turn transforms applied', {
+        originalLength: attackPrompt.length,
+        transformedLength: finalTargetPrompt.length,
+        hasAudio: !!lastTransformResult.audio,
+        hasImage: !!lastTransformResult.image,
+      });
+    }
 
     logger.debug(
       `[Custom] Sending to target chat (${this.stateful ? 1 : conversationHistory.length} messages):`,
     );
-    logger.debug(targetPrompt);
+    logger.debug(finalTargetPrompt);
 
-    const targetResponse = await getTargetResponse(provider, targetPrompt, context, options);
+    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     logger.debug('[Custom] Target response', { response: targetResponse });
 
     invariant(
@@ -765,12 +921,13 @@ export class CustomProvider implements ApiProvider {
       content: targetResponse.output,
     });
 
-    return targetResponse;
+    return { response: targetResponse, transformResult: lastTransformResult };
   }
 
   private async getRefusalScore(
     attackPrompt: string,
     lastResponse: string,
+    options?: CallApiOptionsParams,
   ): Promise<[boolean, string]> {
     logger.debug(`[Custom] Getting refusal score for prompt: ${attackPrompt}`);
     // Short-circuit refusal grading for standard refusal prefixes
@@ -797,13 +954,17 @@ export class CustomProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const refusalResponse = await scoringProvider.callApi(refusalBody, {
-      prompt: {
-        raw: refusalBody,
-        label: 'refusal',
+    const refusalResponse = await scoringProvider.callApi(
+      refusalBody,
+      {
+        prompt: {
+          raw: refusalBody,
+          label: 'refusal',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);
@@ -834,7 +995,10 @@ export class CustomProvider implements ApiProvider {
     return [parsed.value, parsed.rationale];
   }
 
-  private async getEvalScore(lastResponse: string): Promise<[any, TokenUsage | undefined]> {
+  private async getEvalScore(
+    lastResponse: string,
+    options?: CallApiOptionsParams,
+  ): Promise<[any, TokenUsage | undefined]> {
     logger.debug(`[Custom] Getting eval score for response: ${lastResponse.substring(0, 100)}...`);
     const evalInput = JSON.stringify({
       conversationObjective: this.userGoal,
@@ -851,13 +1015,17 @@ export class CustomProvider implements ApiProvider {
     ]);
 
     const scoringProvider = await this.getScoringProvider();
-    const evalResponse = await scoringProvider.callApi(evalBody, {
-      prompt: {
-        raw: evalBody,
-        label: 'eval',
+    const evalResponse = await scoringProvider.callApi(
+      evalBody,
+      {
+        prompt: {
+          raw: evalBody,
+          label: 'eval',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), evalResponse.tokenUsage);
     if (scoringProvider.delay) {
       logger.debug(`[Custom] Sleeping for ${scoringProvider.delay}ms`);

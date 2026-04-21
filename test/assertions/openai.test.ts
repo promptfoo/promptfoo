@@ -1,12 +1,12 @@
 import fs from 'fs';
-import path from 'path';
 
-import { runAssertion } from '../../src/assertions/index';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleIsValidFunctionCall } from '../../src/assertions/functionToolCall';
+import { runAssertion } from '../../src/assertions/index';
 import { handleIsValidOpenAiToolsCall } from '../../src/assertions/openai';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { validateFunctionCall } from '../../src/providers/openai/util';
-import { maybeLoadToolsFromExternalFile } from '../../src/util/index';
+import { createMockProvider } from '../factories/provider';
 
 import type { OpenAiTool } from '../../src/providers/openai/util';
 import type {
@@ -17,19 +17,29 @@ import type {
   GradingResult,
 } from '../../src/types/index';
 
-jest.mock('fs');
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(),
-}));
-jest.mock('../../src/util', () => ({
-  ...jest.requireActual('../../src/util'),
-  maybeLoadToolsFromExternalFile: jest.fn(),
+// Create hoisted mocks for stable references
+const mocks = vi.hoisted(() => ({
+  mockPathResolve: vi.fn(),
+  mockMaybeLoadToolsFromExternalFile: vi.fn(),
 }));
 
-const mockedFs = jest.mocked(fs);
-const mockedPath = jest.mocked(path);
-const mockMaybeLoadToolsFromExternalFile = jest.mocked(maybeLoadToolsFromExternalFile);
+vi.mock('fs');
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
+  return {
+    ...actual,
+    resolve: mocks.mockPathResolve,
+  };
+});
+vi.mock('../../src/util', async () => {
+  const actual = await vi.importActual('../../src/util');
+  return {
+    ...actual,
+    maybeLoadToolsFromExternalFile: mocks.mockMaybeLoadToolsFromExternalFile,
+  };
+});
+
+const mockedFs = vi.mocked(fs);
 
 const toolsAssertion: Assertion = {
   type: 'is-valid-openai-tools-call',
@@ -84,10 +94,10 @@ const mockContext: AssertionValueFunctionContext = {
 
 describe('OpenAI assertions', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    mockedPath.resolve.mockImplementation((...args) => args[args.length - 1]);
+    vi.resetAllMocks();
+    mocks.mockPathResolve.mockImplementation((...args: string[]) => args[args.length - 1]);
     mockedFs.existsSync.mockReturnValue(true);
-    mockMaybeLoadToolsFromExternalFile.mockImplementation((input) => input);
+    mocks.mockMaybeLoadToolsFromExternalFile.mockImplementation((input) => input);
   });
 
   describe('is-valid-openai-function-call assertion', () => {
@@ -251,19 +261,16 @@ describe('OpenAI assertions', () => {
 
       mockedFs.readFileSync.mockReturnValue(mockYamlContent);
 
-      const fileProvider = {
-        id: () => 'test-provider',
-        config: {
-          functions: 'file://./test/fixtures/weather_functions.yaml',
-        },
-        callApi: async () => ({ output: '' }),
-      } as ApiProvider;
+      const fileProvider = createMockProvider({
+        config: { functions: 'file://./test/fixtures/weather_functions.yaml' },
+        response: { output: '' },
+      }) as ApiProvider;
 
       expect(() => {
         validateFunctionCall(functionOutput, fileProvider.config.functions, {});
       }).not.toThrow();
 
-      expect(mockedFs.existsSync).toHaveBeenCalledWith('./test/fixtures/weather_functions.yaml');
+      // Note: existsSync is no longer called - we use try/catch on readFileSync instead (TOCTOU fix)
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(
         './test/fixtures/weather_functions.yaml',
         'utf8',
@@ -661,15 +668,14 @@ describe('OpenAI assertions', () => {
       ];
 
       // Make sure the mock returns an array, not a string or object
-      mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockParsedTools);
+      mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockParsedTools);
 
-      const fileProvider = {
-        id: () => 'test-provider',
+      const fileProvider = createMockProvider({
         config: {
           tools: 'file://./test/fixtures/weather_tools.json' as unknown as OpenAiTool[],
         },
-        callApi: async () => ({ output: '' }),
-      } as ApiProvider;
+        response: { output: '' },
+      }) as ApiProvider;
 
       const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
@@ -690,8 +696,8 @@ describe('OpenAI assertions', () => {
         assertion: toolsAssertion,
       });
 
-      // Verify mockMaybeLoadToolsFromExternalFile was called with the file path
-      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+      // Verify mocks.mockMaybeLoadToolsFromExternalFile was called with the file path
+      expect(mocks.mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         'file://./test/fixtures/weather_tools.json',
         {},
       );
@@ -884,7 +890,7 @@ describe('OpenAI assertions', () => {
       ];
 
       // Set up the mock to return processed tools
-      mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockTools);
+      mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockTools);
 
       const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
@@ -898,9 +904,12 @@ describe('OpenAI assertions', () => {
         providerResponse: { output: toolOutput },
       });
 
-      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(mockProvider.config.tools, {
-        city: 'San Francisco, CA',
-      });
+      expect(mocks.mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        mockProvider.config.tools,
+        {
+          city: 'San Francisco, CA',
+        },
+      );
 
       expect(result).toEqual({
         pass: true,
@@ -947,7 +956,7 @@ describe('OpenAI assertions', () => {
           },
         },
       ];
-      mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockToolsFromFile);
+      mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(mockToolsFromFile);
 
       const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
@@ -962,7 +971,7 @@ describe('OpenAI assertions', () => {
       });
 
       // Check that the function was called with the file path
-      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+      expect(mocks.mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         'file://./test/fixtures/weather_tools.json',
         {},
       );
@@ -1027,7 +1036,7 @@ describe('OpenAI assertions', () => {
           },
         },
       ];
-      mockMaybeLoadToolsFromExternalFile.mockResolvedValue(processedTools);
+      mocks.mockMaybeLoadToolsFromExternalFile.mockResolvedValue(processedTools);
 
       const result = await handleIsValidOpenAiToolsCall({
         assertion: toolsAssertion,
@@ -1042,9 +1051,12 @@ describe('OpenAI assertions', () => {
       });
 
       // Verify the function was called with variables
-      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(varProvider.config.tools, {
-        unit: 'custom_unit',
-      });
+      expect(mocks.mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        varProvider.config.tools,
+        {
+          unit: 'custom_unit',
+        },
+      );
 
       expect(result).toEqual({
         pass: true,

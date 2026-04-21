@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import ErrorBoundary from './ErrorBoundary';
 
 describe('ErrorBoundary', () => {
@@ -25,7 +25,6 @@ describe('ErrorBoundary', () => {
 
       const ErrorComponent = () => {
         throw new Error('Test error');
-        return null;
       };
 
       // Suppress console errors for this test since we're intentionally throwing an error
@@ -55,7 +54,6 @@ describe('ErrorBoundary', () => {
 
       const ErrorThrowingComponent = () => {
         throw new Error('Test Error');
-        return null;
       };
 
       // Suppress console errors for this test since we're intentionally throwing an error

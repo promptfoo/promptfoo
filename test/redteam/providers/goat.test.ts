@@ -1,7 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import RedteamGoatProvider from '../../../src/redteam/providers/goat';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
+import { createMockProvider } from '../../factories/provider';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -11,41 +16,47 @@ import type {
 
 // Mock the graders module at the top level
 const mockGrader = {
-  getResult: jest.fn(),
+  getResult: vi.fn(),
 };
 
-const mockGetGraderById = jest.fn().mockReturnValue(mockGrader);
+const mockGetGraderById = vi.fn().mockReturnValue(mockGrader);
 
-jest.mock('../../../src/redteam/graders', () => ({
-  getGraderById: mockGetGraderById,
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
+  ...(await importOriginal()),
+  isLoggedIntoCloud: vi.fn().mockReturnValue(true),
 }));
 
-jest.mock('../../../src/util/server', () => ({
-  checkServerFeatureSupport: jest.fn(() => Promise.resolve(false)),
-}));
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getGraderById: mockGetGraderById,
+  };
+});
+
+vi.mock('../../../src/util/server', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    checkServerFeatureSupport: vi.fn(() => Promise.resolve(false)),
+  };
+});
 
 describe('RedteamGoatProvider', () => {
-  let mockFetch: jest.Mock;
+  let mockFetch: Mock;
+  let tempDir: string;
 
   // Helper function to create a mock target provider
   const createMockTargetProvider = (
     outputValue: any = 'target response',
     tokenUsage: any = {},
     responseOverrides: Record<string, unknown> = {},
-  ) => {
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: outputValue,
-      tokenUsage,
-      ...responseOverrides,
+  ) =>
+    createMockProvider({
+      response: {
+        output: outputValue,
+        tokenUsage,
+        ...responseOverrides,
+      },
     });
-
-    return targetProvider;
-  };
 
   // Helper function to create a mock context
   const createMockContext = (
@@ -59,21 +70,60 @@ describe('RedteamGoatProvider', () => {
     test: testConfig,
   });
 
-  beforeEach(() => {
-    mockFetch = jest.fn().mockImplementation(async () => ({
-      json: async () => ({
-        message: { role: 'assistant', content: 'test response' },
-      }),
-      ok: true,
-    }));
-    global.fetch = mockFetch as unknown as typeof fetch;
+  const createTempFile = (name: string, content: string): string => {
+    const filePath = path.join(tempDir, name);
+    fs.writeFileSync(filePath, content, 'utf8');
+    return filePath;
+  };
 
-    // Reset mocks
-    jest.clearAllMocks();
+  const collectJsonStrings = (value: unknown): string[] => {
+    if (typeof value === 'string') {
+      return [value];
+    }
+    if (Array.isArray(value)) {
+      return value.flatMap((item) => collectJsonStrings(item));
+    }
+    if (typeof value === 'object' && value !== null) {
+      return Object.entries(value).flatMap(([key, item]) => [key, ...collectJsonStrings(item)]);
+    }
+    return [];
+  };
+
+  const getRenderedTargetPrompt = (targetProvider: ApiProvider): string =>
+    (targetProvider.callApi as Mock).mock.calls[0][0] as string;
+
+  const getRenderedTargetPromptText = (targetProvider: ApiProvider): string => {
+    const renderedPrompt = getRenderedTargetPrompt(targetProvider);
+    try {
+      return collectJsonStrings(JSON.parse(renderedPrompt)).join('\n');
+    } catch {
+      return renderedPrompt;
+    }
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetGraderById.mockReset();
+    mockGetGraderById.mockReturnValue(mockGrader);
+    mockGrader.getResult.mockReset();
+
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-goat-provider-'));
+    mockFetch = vi.fn().mockImplementation(async function () {
+      return {
+        json: async () => ({
+          message: { role: 'assistant', content: 'test response' },
+        }),
+
+        ok: true,
+      };
+    });
+    vi.stubGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it('should initialize with required config', () => {
@@ -108,6 +158,41 @@ describe('RedteamGoatProvider', () => {
     });
   });
 
+  it('should enforce maxCharsPerMessage from provider config', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxCharsPerMessage: 5,
+      maxTurns: 1,
+      stateful: true,
+    });
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('should preserve an explicit maxTurns value of 0', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 0,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider);
+    const result = await provider.callApi('test prompt', context);
+
+    expect(provider.config.maxTurns).toBe(0);
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(targetProvider.callApi).not.toHaveBeenCalled();
+    expect(result.output).toBe('');
+    expect(result.prompt).toBe('');
+    expect(result.metadata?.stopReason).toBe('Max turns reached');
+    expect(result.metadata?.successfulAttacks).toEqual([]);
+    expect(result.metadata?.totalSuccessfulAttacks).toBe(0);
+  });
+
   it('should default stateful to false when not specified', () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -132,6 +217,187 @@ describe('RedteamGoatProvider', () => {
     expect(lastCallBody.messages).toBeDefined();
   });
 
+  it('should not dereference file:// paths in remote attacker messages', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+    });
+    const fileContent = 'local secret from attacker-controlled file var';
+    const filePath = createTempFile('attacker-goal.txt', fileContent);
+    const fileUrl = `file://${filePath}`;
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: fileUrl },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, { goal: 'initial goal' }, undefined);
+    context.prompt = { raw: 'Attack: {{goal}}', label: 'test' };
+
+    await provider.callApi('test prompt', context);
+
+    const renderedPromptText = getRenderedTargetPromptText(targetProvider);
+    expect(renderedPromptText).toContain(fileUrl);
+    expect(renderedPromptText).not.toContain(fileContent);
+  });
+
+  it('should not dereference multi-input attacker vars and should preserve JSON escaping', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      inputs: {
+        email: 'The user email',
+        notes: 'Additional attacker notes',
+      },
+    });
+
+    const fileContent = 'multi-input local secret';
+    const filePath = createTempFile('multi-input-email.txt', fileContent);
+    const fileUrl = `file://${filePath}`;
+    const packageRef = 'package:@promptfoo/fake:getSecret';
+    const attackerGoal = 'hello "quoted"\nnext line';
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: {
+          role: 'user',
+          content: JSON.stringify({
+            prompt: attackerGoal,
+            email: fileUrl,
+            notes: packageRef,
+          }),
+        },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(
+      targetProvider,
+      { goal: 'initial goal', email: 'safe@example.com', notes: 'safe notes' },
+      undefined,
+    );
+    context.prompt = {
+      raw: JSON.stringify({
+        role: 'user',
+        content: 'Goal={{goal}}\nEmail={{email}}\nNotes={{notes}}',
+      }),
+      label: 'test',
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(targetProvider.callApi).toHaveBeenCalledTimes(1);
+    const renderedPrompt = getRenderedTargetPrompt(targetProvider);
+    const renderedPromptText = getRenderedTargetPromptText(targetProvider);
+    const parsedPrompt = JSON.parse(renderedPrompt);
+    expect(parsedPrompt).toEqual({
+      role: 'user',
+      content: `Goal=${attackerGoal}\nEmail=${fileUrl}\nNotes=${packageRef}`,
+    });
+    expect(renderedPromptText).toContain(fileUrl);
+    expect(renderedPromptText).toContain(packageRef);
+    expect(renderedPromptText).not.toContain(fileContent);
+  });
+
+  it('should preserve filters on attacker prompts without evaluating attacker templates', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+    });
+    const attackerGoal = '  do {{7*7}}  ';
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: attackerGoal },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, { goal: 'initial goal' }, undefined);
+    context.prompt = { raw: 'Attack: {{goal | trim | upper}}', label: 'test' };
+
+    await provider.callApi('test prompt', context);
+
+    expect(getRenderedTargetPromptText(targetProvider)).toBe('Attack: DO {{7*7}}');
+  });
+
+  it('should preserve filters on file:// attacker prompts without dereferencing them', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+    });
+    const fileContent = 'filtered local secret';
+    const filePath = createTempFile('filtered-goal.txt', fileContent);
+    const fileUrl = `file://${filePath}`;
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: { role: 'user', content: `  ${fileUrl}\n` },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(targetProvider, { goal: 'initial goal' }, undefined);
+    context.prompt = { raw: 'Attack: {{goal | trim}}', label: 'test' };
+
+    await provider.callApi('test prompt', context);
+
+    const renderedPromptText = getRenderedTargetPromptText(targetProvider);
+    expect(renderedPromptText).toBe(`Attack: ${fileUrl}`);
+    expect(renderedPromptText).not.toContain(fileContent);
+  });
+
+  it('should preserve filters on multi-input attacker vars', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      inputs: {
+        email: 'The user email',
+      },
+    });
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        message: {
+          role: 'user',
+          content: JSON.stringify({
+            prompt: '  Keep {{7*7}}  ',
+            email: '  USER@EXAMPLE.COM  ',
+          }),
+        },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(
+      targetProvider,
+      { goal: 'initial goal', email: 'safe@example.com' },
+      undefined,
+    );
+    context.prompt = {
+      raw: 'Goal={{goal | trim}}; Email={{email | trim | lower}}',
+      label: 'test',
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(getRenderedTargetPromptText(targetProvider)).toBe(
+      'Goal=Keep {{7*7}}; Email=user@example.com',
+    );
+  });
+
   it('should pass excludeTargetOutputFromAgenticAttackGeneration through config', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -154,15 +420,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 2,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const prompt: Prompt = {
       raw: 'test prompt',
@@ -193,6 +451,28 @@ describe('RedteamGoatProvider', () => {
     expect(bodyObj.purpose).toBeUndefined();
   });
 
+  it('should stop when target ends conversation', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 3,
+    });
+
+    const targetProvider = createMockTargetProvider(
+      '',
+      {},
+      {
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+      },
+    );
+
+    const context = createMockContext(targetProvider);
+    const result = await provider.callApi('test prompt', context);
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('should handle grader integration and stop early on failure', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -205,7 +485,7 @@ describe('RedteamGoatProvider', () => {
       completion: 5,
     });
 
-    // Mock grader to fail (indicating success)
+    // Mock grader with pass:false (attack succeeded / jailbreak detected)
     (mockGrader.getResult as any).mockResolvedValue({
       grade: {
         pass: false,
@@ -238,15 +518,7 @@ describe('RedteamGoatProvider', () => {
     });
 
     const objectResponse = { foo: 'bar', baz: 123 };
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: objectResponse,
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider(objectResponse);
 
     const prompt: Prompt = {
       raw: 'test prompt',
@@ -270,15 +542,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 1,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const context: CallApiContextParams = {
       originalProvider: targetProvider,
@@ -304,15 +568,7 @@ describe('RedteamGoatProvider', () => {
       maxTurns: 1,
     });
 
-    const targetProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: jest.fn() as any,
-    };
-
-    (targetProvider.callApi as any).mockResolvedValue({
-      output: 'target response',
-      tokenUsage: {},
-    });
+    const targetProvider = createMockTargetProvider();
 
     const context: CallApiContextParams = {
       originalProvider: targetProvider,
@@ -332,7 +588,7 @@ describe('RedteamGoatProvider', () => {
   describe('continueAfterSuccess functionality', () => {
     beforeEach(() => {
       // Reset mocks before each test
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should stop on first successful attack when continueAfterSuccess is false (default)', async () => {
@@ -348,7 +604,7 @@ describe('RedteamGoatProvider', () => {
         completion: 5,
       });
 
-      // Mock grader to fail on first attempt (indicating success)
+      // Mock grader with pass:false on first attempt (indicating attack success)
       (mockGrader.getResult as any).mockResolvedValue({
         grade: {
           pass: false,
@@ -384,12 +640,9 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'first harmful response',
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
@@ -460,14 +713,10 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
-      (targetProvider.callApi as any).mockResolvedValue({
-        output: 'safe response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      const targetProvider = createMockTargetProvider('safe response', {
+        total: 10,
+        prompt: 5,
+        completion: 5,
       });
 
       // Mock grader to always pass (indicating no successful attacks)
@@ -522,12 +771,9 @@ describe('RedteamGoatProvider', () => {
         continueAfterSuccess: true,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({ output: 'safe response 1', tokenUsage: {} })
         .mockResolvedValueOnce({ output: 'harmful response 1', tokenUsage: {} })
         .mockResolvedValueOnce({ output: 'safe response 2', tokenUsage: {} })
@@ -571,25 +817,23 @@ describe('RedteamGoatProvider', () => {
 
     // Mock grader to capture the additionalRubric parameter
     let capturedAdditionalRubric: string | undefined;
-    (mockGrader.getResult as any).mockImplementation(
-      async (
-        _prompt: string,
-        _output: string,
-        _test: any,
-        _provider: any,
-        _value: any,
-        additionalRubric?: string,
-      ) => {
-        capturedAdditionalRubric = additionalRubric;
-        return {
-          grade: {
-            pass: false,
-            score: 0,
-            reason: 'Test jailbreak detected',
-          },
-        };
-      },
-    );
+    (mockGrader.getResult as any).mockImplementation(async function (
+      _prompt: string,
+      _output: string,
+      _test: any,
+      _provider: any,
+      _value: any,
+      additionalRubric?: string,
+    ) {
+      capturedAdditionalRubric = additionalRubric;
+      return {
+        grade: {
+          pass: false,
+          score: 0,
+          reason: 'Test jailbreak detected',
+        },
+      };
+    });
 
     const testConfig = {
       vars: {},
@@ -874,12 +1118,15 @@ describe('RedteamGoatProvider', () => {
       });
 
     // Mock remote generation API for second turn
-    mockFetch.mockImplementationOnce(async () => ({
-      json: async () => ({
-        message: { role: 'assistant', content: 'attack prompt' },
-      }),
-      ok: true,
-    }));
+    mockFetch.mockImplementationOnce(async function () {
+      return {
+        json: async () => ({
+          message: { role: 'assistant', content: 'attack prompt' },
+        }),
+
+        ok: true,
+      };
+    });
 
     const testConfig = {
       vars: {},
@@ -910,9 +1157,9 @@ describe('RedteamGoatProvider', () => {
   });
 
   describe('Token Counting', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       // Reset TokenUsageTracker between tests to ensure clean state
-      const { TokenUsageTracker } = require('../../../src/util/tokenUsage');
+      const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
       TokenUsageTracker.getInstance().resetAllUsage();
     });
 
@@ -946,13 +1193,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 3,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
-      // Mock target provider for multiple calls with different token usage
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response 1',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -986,12 +1229,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 3,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response with tokens',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -1025,12 +1265,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'successful response',
           tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
@@ -1059,12 +1296,9 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
-      (targetProvider.callApi as any)
+      const targetProvider = createMockProvider();
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'response with zero tokens',
           tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
@@ -1093,13 +1327,10 @@ describe('RedteamGoatProvider', () => {
         maxTurns: 2,
       });
 
-      const targetProvider: ApiProvider = {
-        id: () => 'test-provider',
-        callApi: jest.fn() as any,
-      };
-
+      const targetProvider = createMockProvider();
       // First call (normal attack), second call (next attack)
-      (targetProvider.callApi as any)
+      targetProvider.callApi
+        .mockReset()
         .mockResolvedValueOnce({
           output: 'first response',
           tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
@@ -1120,6 +1351,193 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.prompt).toBe(75); // 30 + 45
       expect(result.tokenUsage?.completion).toBe(50); // 20 + 30
       expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+  });
+
+  describe('Abort Signal Handling', () => {
+    it('should re-throw AbortError from fetchWithProxy and not swallow it', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 3,
+      });
+
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock fetch to throw AbortError
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const targetProvider = createMockTargetProvider();
+      const context = createMockContext(targetProvider);
+
+      await expect(provider.callApi('test prompt', context)).rejects.toThrow(
+        'The operation was aborted',
+      );
+    });
+
+    it('should pass options with abortSignal to target provider callApi', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider();
+
+      const context = createMockContext(targetProvider);
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      await provider.callApi('test prompt', context, options);
+
+      // Verify that callApi was called with the options
+      expect(targetProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should swallow non-AbortError exceptions and continue the loop', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+      });
+
+      const regularError = new Error('Network error');
+      // First turn fails with non-AbortError, second turn succeeds
+      mockFetch.mockRejectedValueOnce(regularError).mockImplementationOnce(async () => ({
+        json: async () => ({
+          message: { role: 'assistant', content: 'test response' },
+        }),
+        ok: true,
+      }));
+
+      const targetProvider = createMockTargetProvider();
+      const context = createMockContext(targetProvider);
+
+      // Should NOT throw - should continue to next turn
+      const result = await provider.callApi('test prompt', context);
+
+      // Should complete without throwing
+      expect(result.metadata?.stopReason).toBe('Max turns reached');
+    });
+  });
+
+  describe('perTurnLayers configuration', () => {
+    it('should initialize with _perTurnLayers config', () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 3,
+        _perTurnLayers: ['audio', 'base64'],
+      });
+
+      expect(provider.config._perTurnLayers).toEqual(['audio', 'base64']);
+    });
+
+    it('should accept perTurnLayers with object config', () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 3,
+        _perTurnLayers: [{ id: 'audio', config: { voice: 'alloy' } }, 'base64'],
+      });
+
+      expect(provider.config._perTurnLayers).toHaveLength(2);
+      expect(provider.config._perTurnLayers![0]).toEqual({
+        id: 'audio',
+        config: { voice: 'alloy' },
+      });
+    });
+
+    it('should default perTurnLayers to empty array when not provided', () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+      });
+
+      expect(provider.config._perTurnLayers).toBeUndefined();
+    });
+  });
+
+  describe('redteamHistory with audio/image data', () => {
+    it('should include redteamHistory in metadata', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+      });
+
+      const targetProvider = createMockTargetProvider('target response');
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      // redteamHistory should be present in metadata
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
+    });
+
+    it('should capture prompt and output in redteamHistory entries', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('target response text');
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      const history = result.metadata?.redteamHistory;
+      if (history && history.length > 0) {
+        const entry = history[0];
+        expect(entry).toHaveProperty('prompt');
+        expect(entry).toHaveProperty('output');
+        expect(entry.output).toBe('target response text');
+      }
+    });
+
+    it('should have optional promptAudio and promptImage fields in redteamHistory', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('response');
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      const history = result.metadata?.redteamHistory;
+      if (history && history.length > 0) {
+        const entry = history[0];
+        // These fields should be undefined when no perTurnLayers are configured
+        expect(entry.promptAudio).toBeUndefined();
+        expect(entry.promptImage).toBeUndefined();
+      }
+    });
+
+    it('should capture outputAudio when target returns audio data', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider(
+        'response with audio',
+        {},
+        {
+          audio: { data: 'base64audiodata', format: 'mp3' },
+        },
+      );
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      const history = result.metadata?.redteamHistory;
+      if (history && history.length > 0) {
+        const entry = history[0];
+        expect(entry.outputAudio).toBeDefined();
+        expect(entry.outputAudio?.data).toBe('base64audiodata');
+        expect(entry.outputAudio?.format).toBe('mp3');
+      }
     });
   });
 

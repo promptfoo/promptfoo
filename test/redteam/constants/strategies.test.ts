@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,

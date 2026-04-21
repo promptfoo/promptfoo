@@ -1,17 +1,12 @@
-import React from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type React from 'react';
 
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import HelpIcon from '@mui/icons-material/Help';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import Box from '@mui/material/Box';
-import IconButton from '@mui/material/IconButton';
-import Link from '@mui/material/Link';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { HelperText } from '@app/components/ui/helper-text';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { cn } from '@app/lib/utils';
 import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
+import { SetupSection } from '../SetupSection';
 
 interface ValidationError {
   message: string;
@@ -42,7 +37,7 @@ const validatePath = (value: string, isTyping: boolean): ValidationError | undef
   }
 
   if (!filePath || !functionName) {
-    return { message: 'Format: /path/to/file.js:hookFunction' };
+    return { message: 'Incorrect format. Must be of the format /path/to/file.js:hookFunction' };
   }
 
   // During typing, don't show file type error until they've finished typing the file extension
@@ -58,12 +53,13 @@ export default function ExtensionEditor({
   onExtensionsChange,
   onValidationChange,
 }: ExtensionEditorProps) {
-  const [isTyping, setIsTyping] = React.useState(false);
-  const typingTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isTyping, setIsTyping] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const error = React.useMemo(() => validatePath(extensions[0], isTyping), [extensions, isTyping]);
+  const error = useMemo(() => validatePath(extensions[0], isTyping), [extensions, isTyping]);
 
-  const handleChange = React.useCallback(
+  const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value;
       setIsTyping(true);
@@ -82,11 +78,11 @@ export default function ExtensionEditor({
 
       onExtensionsChange([`${FILE_PROTOCOL_PREFIX}${newValue}`]);
     },
-    [onExtensionsChange],
+    [onExtensionsChange, onValidationChange],
   );
 
   // Cleanup timeout on unmount
-  React.useEffect(() => {
+  useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -95,84 +91,79 @@ export default function ExtensionEditor({
   }, []);
 
   return (
-    <Accordion defaultExpanded={!!extensions.length}>
-      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-        <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography variant="h6">Extension Hook</Typography>
-            <Tooltip
-              title={
-                <Box>
-                  <Typography variant="body2" paragraph>
-                    Run custom code at these lifecycle points:
-                  </Typography>
-                  <Box component="ul" sx={{ m: 0, pl: '1.2em' }}>
-                    <li>beforeAll - Start of test suite</li>
-                    <li>afterAll - End of test suite</li>
-                    <li>beforeEach - Before each test</li>
-                    <li>afterEach - After each test</li>
-                  </Box>
-                  <Box sx={{ mt: 1 }}>
-                    <Link
-                      href="https://www.promptfoo.dev/docs/configuration/reference/#extension-hooks"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      color="inherit"
-                      underline="always"
-                    >
-                      View documentation
-                    </Link>
-                  </Box>
-                </Box>
-              }
-            >
-              <IconButton size="small">
-                <HelpIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-          <Typography variant="body2" color="text.secondary">
-            {extensions.length > 0
-              ? extensions[0]
-              : 'Add custom code to run at specific points in the evaluation lifecycle'}
-          </Typography>
-        </Box>
-      </AccordionSummary>
-      <AccordionDetails>
-        <Typography variant="body1" sx={{ mb: 2 }}>
-          See{' '}
-          <Link
-            href="https://www.promptfoo.dev/docs/configuration/reference/#extension-hooks"
-            target="_blank"
-            rel="noopener"
-          >
-            docs
-          </Link>{' '}
-          for more details.
-        </Typography>
-        <Box>
-          <TextField
-            fullWidth
-            size="small"
+    <SetupSection
+      title="Extension Hook"
+      description="Run custom code at specific points in the evaluation lifecycle"
+      isExpanded={isExpanded}
+      onExpandedChange={setIsExpanded}
+      className="mt-4"
+    >
+      <p className="mb-3 text-sm text-muted-foreground">
+        Extension hooks allow you to run custom Javascript or Python code that modifies the
+        evaluation state at specific points in the lifecycle. These hooks are defined in an
+        extension specified below. You can either use a default export, or reference a specific
+        function.
+      </p>
+      <p className="mb-2 text-sm font-medium">Available Hooks</p>
+      <div className="mb-4 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-muted-foreground">
+              <th className="pb-2 pr-4 font-medium">Name</th>
+              <th className="pb-2 pr-4 font-medium">Description</th>
+              <th className="pb-2 font-medium">Context</th>
+            </tr>
+          </thead>
+          <tbody className="text-muted-foreground">
+            <tr className="border-b border-border/50">
+              <td className="py-2 pr-4 font-mono text-xs">beforeAll</td>
+              <td className="py-2 pr-4">Runs before the entire test suite begins</td>
+              <td className="py-2 font-mono text-xs">{`{ suite }`}</td>
+            </tr>
+            <tr className="border-b border-border/50">
+              <td className="py-2 pr-4 font-mono text-xs">afterAll</td>
+              <td className="py-2 pr-4">Runs after the entire test suite has finished</td>
+              <td className="py-2 font-mono text-xs">{`{ results, suite }`}</td>
+            </tr>
+            <tr className="border-b border-border/50">
+              <td className="py-2 pr-4 font-mono text-xs">beforeEach</td>
+              <td className="py-2 pr-4">Runs before each individual test</td>
+              <td className="py-2 font-mono text-xs">{`{ test }`}</td>
+            </tr>
+            <tr>
+              <td className="py-2 pr-4 font-mono text-xs">afterEach</td>
+              <td className="py-2 pr-4">Runs after each individual test</td>
+              <td className="py-2 font-mono text-xs">{`{ test, result }`}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <a
+        href="https://www.promptfoo.dev/docs/configuration/reference/#extension-hooks"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mb-4 block text-sm text-primary hover:underline"
+      >
+        View documentation →
+      </a>
+      <div className="space-y-2">
+        <Label htmlFor="extension-path">Extension File Path</Label>
+        <div className="relative">
+          <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-sm text-foreground">
+            file://
+          </span>
+          <Input
+            id="extension-path"
+            className={cn('pl-[39px]', error && 'border-destructive')}
             placeholder="/path/to/hook.js:extensionHook"
-            value={extensions[0]?.replace(FILE_PROTOCOL_PREFIX, '')}
+            value={extensions[0]?.replace(FILE_PROTOCOL_PREFIX, '') || ''}
             onChange={handleChange}
-            error={!!error}
-            helperText={error?.message}
-            InputProps={{
-              startAdornment: (
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mr: 1, userSelect: 'none' }}
-                >
-                  file://
-                </Typography>
-              ),
-            }}
           />
-        </Box>
-      </AccordionDetails>
-    </Accordion>
+        </div>
+        <HelperText error={!!error}>
+          {error ? error.message : 'Path to your extension file and exported function name'}
+        </HelperText>
+      </div>
+    </SetupSection>
   );
 }

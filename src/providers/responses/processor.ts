@@ -1,11 +1,12 @@
 import logger from '../../logger';
 import { formatOpenAiError } from '../openai/util';
+
 import type { ProviderResponse, TokenUsage } from '../../types/index';
 import type {
+  ProcessedOutput,
   ProcessorConfig,
   ProcessorContext,
   ResponseOutputItem,
-  ProcessedOutput,
 } from './types';
 
 /**
@@ -42,7 +43,7 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     if (cached) {
       const totalTokens =
         data.usage.total_tokens || (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0);
-      return { cached: totalTokens, total: totalTokens };
+      return { cached: totalTokens, total: totalTokens, numRequests: 1 };
     } else {
       const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
       const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
@@ -52,6 +53,7 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         total: totalTokens,
         prompt: promptTokens,
         completion: completionTokens,
+        numRequests: 1,
         ...(data.usage.completion_tokens_details
           ? {
               completionDetails: {
