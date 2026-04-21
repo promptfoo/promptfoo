@@ -802,9 +802,9 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Cell</span>
                       <span className="font-mono">
-                        {item.context.testIdx !== undefined
-                          ? `Row ${item.context.testIdx + 1}`
-                          : '—'}
+                        {item.context.testIdx === undefined
+                          ? '—'
+                          : `Row ${item.context.testIdx + 1}`}
                         {item.context.promptIdx !== undefined &&
                           `, Col ${item.context.promptIdx + 1}`}
                       </span>

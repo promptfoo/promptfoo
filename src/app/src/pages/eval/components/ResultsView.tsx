@@ -201,27 +201,28 @@ function ResultsChartsSection({
           pointerEvents: renderResultsCharts ? 'auto' : 'none',
         }}
       >
-        {canRenderResultsCharts ? (
-          <ResultsCharts scores={resultsChartsScores} />
-        ) : (
-          <Alert variant="info" className="mt-4 items-start">
-            <BarChart className="size-4 mt-0.5" />
-            <AlertContent>
-              <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
-              <AlertDescription className="space-y-3">
-                <p>
-                  We can show charts when the results include comparable prompts and chartable
-                  scores.
-                </p>
-                <ul className="list-disc pl-5 space-y-1">
-                  {resultsChartsUnavailableReasons.map((reason) => (
-                    <li key={reason}>{reason}</li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </AlertContent>
-          </Alert>
-        )}
+        {renderResultsCharts &&
+          (canRenderResultsCharts ? (
+            <ResultsCharts scores={resultsChartsScores} />
+          ) : (
+            <Alert variant="info" className="mt-4 items-start">
+              <BarChart className="size-4 mt-0.5" />
+              <AlertContent>
+                <AlertTitle>Charts are unavailable for this evaluation</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    We can show charts when the results include comparable prompts and chartable
+                    scores.
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {resultsChartsUnavailableReasons.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </AlertContent>
+            </Alert>
+          ))}
       </div>
     </>
   );
@@ -485,17 +486,17 @@ export default function ResultsView({
 
     allColumns.forEach((col) => {
       const varName = getVarNameFromColumnId(col);
-      if (varName !== null) {
-        const isHidden = hiddenVarNames.includes(varName);
-        columnVisibility[col] = !isHidden;
-        if (!isHidden) {
-          selectedColumns.push(col);
-        }
-      } else {
+      if (varName === null) {
         // Non-variable columns (description, prompts): use per-eval state, default to visible
         const isVisible = savedState?.columnVisibility[col] ?? true;
         columnVisibility[col] = isVisible;
         if (isVisible) {
+          selectedColumns.push(col);
+        }
+      } else {
+        const isHidden = hiddenVarNames.includes(varName);
+        columnVisibility[col] = !isHidden;
+        if (!isHidden) {
           selectedColumns.push(col);
         }
       }
@@ -702,7 +703,7 @@ export default function ResultsView({
     if (!table?.body) {
       return [];
     }
-    return table?.body
+    return table.body
       .flatMap((row) => row.outputs.map((output) => output?.score))
       .filter((score) => typeof score === 'number' && !Number.isNaN(score));
   }, [table]);
@@ -881,7 +882,7 @@ export default function ResultsView({
                     {debouncedSearchText && (
                       <Badge variant="secondary" className="text-xs h-5 gap-1">
                         Search:{' '}
-                        {debouncedSearchText.length > 4
+                        {debouncedSearchText.length > 5
                           ? debouncedSearchText.substring(0, 5) + '...'
                           : debouncedSearchText}
                         <button
@@ -929,7 +930,7 @@ export default function ResultsView({
                           </Badge>
                         </TooltipTrigger>
                         <TooltipContent>
-                          {userRatedResultsCount} output{userRatedResultsCount !== 1 ? 's' : ''}{' '}
+                          {userRatedResultsCount} output{userRatedResultsCount === 1 ? '' : 's'}{' '}
                           with user ratings. Click to filter.
                         </TooltipContent>
                       </Tooltip>
@@ -950,7 +951,7 @@ export default function ResultsView({
           )}
         </EvalHeader>
         {activeView === 'results' && (
-          <div className="px-4">
+          <div className="px-4 flex flex-1 min-h-0 flex-col">
             <ResultsTable
               key={currentEvalId}
               maxTextLength={maxTextLength}
@@ -1040,11 +1041,11 @@ export default function ResultsView({
               <p className="font-medium">{config?.description || evalId || 'Unnamed eval'}</p>
               <div className="flex gap-2 mt-1 text-sm text-muted-foreground">
                 <span>
-                  {totalResultsCount.toLocaleString()} result{totalResultsCount !== 1 ? 's' : ''}
+                  {totalResultsCount.toLocaleString()} result{totalResultsCount === 1 ? '' : 's'}
                 </span>
                 <span>•</span>
                 <span>
-                  {head.prompts.length} prompt{head.prompts.length !== 1 ? 's' : ''}
+                  {head.prompts.length} prompt{head.prompts.length === 1 ? '' : 's'}
                 </span>
               </div>
             </div>

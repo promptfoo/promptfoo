@@ -19,6 +19,7 @@ import {
   type MetricDisplayKind,
 } from './metricDisplay';
 import { useTableStore } from './store';
+import { getNamedMetricTotal } from './utils';
 import type { ColumnDef } from '@tanstack/react-table';
 
 type MetricScore = {
@@ -326,7 +327,7 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       table.head.prompts.forEach((prompt, idx) => {
         const columnId = `prompt_${idx}` as PromptMetricColumnKey;
         const score = prompt.metrics?.namedScores?.[metric];
-        const count = prompt.metrics?.namedScoresCount?.[metric];
+        const count = getNamedMetricTotal(prompt.metrics, metric);
         const hasScore = score !== undefined;
 
         row[columnId] = {
@@ -350,11 +351,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       data={rows}
       getRowId={(row) => row.id}
       initialSorting={[{ id: 'metric', desc: false }]}
-      initialPageSize={50}
       emptyMessage="No metrics available"
       showToolbar
       showFilter
-      showPagination
       showColumnToggle
     />
   );

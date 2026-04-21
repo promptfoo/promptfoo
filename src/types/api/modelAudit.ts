@@ -14,6 +14,29 @@ export const CheckInstalledResponseSchema = z.object({
 export type CheckInstalledResponse = z.infer<typeof CheckInstalledResponseSchema>;
 
 // ---------------------------------------------------------------------------
+// GET /api/model-audit/scanners
+// ---------------------------------------------------------------------------
+
+export const ScannerInfoSchema = z
+  .object({
+    id: z.string(),
+    class: z.string().optional().default(''),
+    description: z.string().optional().default(''),
+    extensions: z.array(z.string()).optional().default([]),
+    dependencies: z.array(z.string()).optional().default([]),
+  })
+  .passthrough();
+
+export const ListScannersResponseSchema = z
+  .object({
+    scanners: z.array(ScannerInfoSchema),
+  })
+  .passthrough();
+
+export type ScannerInfo = z.infer<typeof ScannerInfoSchema>;
+export type ListScannersResponse = z.infer<typeof ListScannersResponseSchema>;
+
+// ---------------------------------------------------------------------------
 // POST /api/model-audit/check-path
 // ---------------------------------------------------------------------------
 
@@ -61,6 +84,8 @@ export const ScanRequestSchema = z.object({
       sbom: z.string().optional(),
       output: z.string().optional(),
       maxSize: z.string().optional(),
+      scanners: z.array(z.string()).optional(),
+      excludeScanner: z.array(z.string()).optional(),
       persist: z.boolean().optional(),
       name: z.string().optional(),
       author: z.string().optional(),
@@ -78,10 +103,21 @@ export type ScanRequest = z.infer<typeof ScanRequestSchema>;
 // GET /api/model-audit/scans
 // ---------------------------------------------------------------------------
 
+export const MODEL_AUDIT_SORT_FIELDS = [
+  'createdAt',
+  'failedChecks',
+  'hasErrors',
+  'id',
+  'modelPath',
+  'name',
+  'passedChecks',
+  'totalChecks',
+] as const;
+
 export const ListScansQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(100),
   offset: z.coerce.number().int().min(0).optional().default(0),
-  sort: z.enum(['createdAt', 'name', 'modelPath']).optional().default('createdAt'),
+  sort: z.enum(MODEL_AUDIT_SORT_FIELDS).optional().default('createdAt'),
   order: z.enum(['asc', 'desc']).optional().default('desc'),
   search: z.string().optional(),
 });
@@ -161,6 +197,9 @@ export type DeleteScanResponse = z.infer<typeof DeleteScanResponseSchema>;
 export const ModelAuditSchemas = {
   CheckInstalled: {
     Response: CheckInstalledResponseSchema,
+  },
+  ListScanners: {
+    Response: ListScannersResponseSchema,
   },
   CheckPath: {
     Request: CheckPathRequestSchema,

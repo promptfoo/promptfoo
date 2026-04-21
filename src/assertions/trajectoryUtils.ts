@@ -1,3 +1,8 @@
+import {
+  getFirstStringAttribute,
+  getToolNameFromAttributes,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+} from '../tracing/toolAttributes';
 import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
@@ -13,6 +18,7 @@ export interface TrajectoryStepMatcher {
 
 export interface TrajectoryStep {
   aliases: string[];
+  args?: unknown;
   attributes: TrajectoryAttributes;
   endTime?: number;
   name: string;
@@ -24,19 +30,6 @@ export interface TrajectoryStep {
   type: TrajectoryStepType;
 }
 
-const TOOL_ATTRIBUTE_KEYS = [
-  'tool.name',
-  'tool_name',
-  'tool',
-  'function.name',
-  'function_name',
-  'gen_ai.tool.name',
-  'codex.mcp.tool',
-  'agent.tool',
-  'agent.tool_name',
-  'agent.toolName',
-] as const;
-
 const COMMAND_ATTRIBUTE_KEYS = [
   'codex.command',
   'command',
@@ -47,6 +40,7 @@ const COMMAND_ATTRIBUTE_KEYS = [
 const SEARCH_ATTRIBUTE_KEYS = ['codex.search.query', 'search.query', 'search_query'] as const;
 
 const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
+const COMMAND_TOOL_NAMES = new Set(['exec_command', 'local_shell', 'shell']);
 
 const SEARCH_SPAN_NAME_PATTERN = /(^|[\s._:/-])(search|find|lookup|retriev(?:e|al))($|[\s._:/-])/i;
 
@@ -72,16 +66,28 @@ interface OmittedJudgeTrajectorySteps {
   omittedCount: number;
 }
 
-function getStringAttribute(
-  attributes: TrajectoryAttributes,
-  keys: readonly string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = attributes[key];
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
+function normalizeStructuredAttribute(value: unknown): unknown {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return trimmed;
     }
   }
+
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'object') {
+    return value;
+  }
+
   return undefined;
 }
 
@@ -116,10 +122,14 @@ function getCommandExecutable(command: string): string | undefined {
   return executable || undefined;
 }
 
+function isCommandToolName(toolName: string | undefined): boolean {
+  return !!toolName && COMMAND_TOOL_NAMES.has(toolName.trim().toLowerCase());
+}
+
 function extractToolName(span: TraceSpan): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, TOOL_ATTRIBUTE_KEYS);
+  const directMatch = getToolNameFromAttributes(attributes);
   if (directMatch) {
     return directMatch;
   }
@@ -148,10 +158,42 @@ function extractToolName(span: TraceSpan): string | undefined {
   return undefined;
 }
 
-function extractCommand(span: TraceSpan): string | undefined {
+function extractToolArgs(span: TraceSpan): unknown {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
+  for (const key of TOOL_ARGUMENT_ATTRIBUTE_KEYS) {
+    const value = normalizeStructuredAttribute(attributes[key]);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  for (const [key, rawValue] of Object.entries(attributes)) {
+    if (/result|output|error|status/i.test(key)) {
+      continue;
+    }
+
+    if (!/(^|[._])(arguments|args|input)($|[._])/i.test(key)) {
+      continue;
+    }
+
+    const value = normalizeStructuredAttribute(rawValue);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function extractCommand(
+  span: TraceSpan,
+  toolName = extractToolName(span),
+  getToolArgs = () => extractToolArgs(span),
+): string | undefined {
+  const attributes = span.attributes || {};
+
+  const directMatch = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
   }
@@ -166,6 +208,24 @@ function extractCommand(span: TraceSpan): string | undefined {
     }
   }
 
+  const toolArgs = getToolArgs();
+  if (isCommandToolName(toolName) && toolArgs && typeof toolArgs === 'object') {
+    const args = toolArgs as Record<string, unknown>;
+    const command = args.cmd ?? args.command;
+    if (typeof command === 'string' && command.trim()) {
+      return command.trim();
+    }
+    if (Array.isArray(command)) {
+      const joined = command
+        .map((part) => String(part).trim())
+        .filter(Boolean)
+        .join(' ');
+      if (joined) {
+        return joined;
+      }
+    }
+  }
+
   if (span.name.startsWith('exec ')) {
     return span.name.slice('exec '.length).trim();
   }
@@ -176,12 +236,12 @@ function extractCommand(span: TraceSpan): string | undefined {
 function extractSearchQuery(span: TraceSpan): string | undefined {
   const attributes = span.attributes || {};
 
-  const directMatch = getStringAttribute(attributes, SEARCH_ATTRIBUTE_KEYS);
+  const directMatch = getFirstStringAttribute(attributes, SEARCH_ATTRIBUTE_KEYS);
   if (directMatch) {
     return directMatch;
   }
 
-  const genericQuery = getStringAttribute(attributes, GENERIC_QUERY_ATTRIBUTE_KEYS);
+  const genericQuery = getFirstStringAttribute(attributes, GENERIC_QUERY_ATTRIBUTE_KEYS);
   if (genericQuery && isSearchLikeSpan(span)) {
     return genericQuery;
   }
@@ -213,32 +273,57 @@ function isMessageSpan(span: TraceSpan): boolean {
 
 export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
   return [...(trace.spans || [])]
-    .sort((a, b) => {
-      const timeDiff = a.startTime - b.startTime;
+    .map((span, index) => ({ span, index }))
+    .sort((left, right) => {
+      const timeDiff = left.span.startTime - right.span.startTime;
       if (timeDiff !== 0) {
         return timeDiff;
       }
 
-      const endDiff = (a.endTime ?? a.startTime) - (b.endTime ?? b.startTime);
+      const endDiff =
+        (left.span.endTime ?? left.span.startTime) - (right.span.endTime ?? right.span.startTime);
       if (endDiff !== 0) {
         return endDiff;
       }
 
-      return a.name.localeCompare(b.name);
+      return left.index - right.index;
     })
-    .map((span) => {
+    .map(({ span }) => {
       const toolName = extractToolName(span);
-      const command = extractCommand(span);
+      let toolArgs: unknown;
+      let hasExtractedToolArgs = false;
+      const getToolArgs = () => {
+        if (!hasExtractedToolArgs) {
+          toolArgs = extractToolArgs(span);
+          hasExtractedToolArgs = true;
+        }
+        return toolArgs;
+      };
+      const command = extractCommand(span, toolName, getToolArgs);
       const searchQuery = extractSearchQuery(span);
 
       let type: TrajectoryStepType = 'span';
       let name = span.name;
       const aliases = new Set<string>([span.name]);
+      let args: unknown;
 
-      if (toolName) {
+      if (command && isCommandToolName(toolName)) {
+        type = 'command';
+        name = command;
+        aliases.add(command);
+        args = getToolArgs();
+        if (toolName) {
+          aliases.add(toolName);
+        }
+        const executable = getCommandExecutable(command);
+        if (executable) {
+          aliases.add(executable);
+        }
+      } else if (toolName) {
         type = 'tool';
         name = toolName;
         aliases.add(toolName);
+        args = getToolArgs();
       } else if (command) {
         type = 'command';
         name = command;
@@ -263,6 +348,7 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
 
       return {
         aliases: [...aliases],
+        ...(args === undefined ? {} : { args }),
         attributes: span.attributes || {},
         endTime: span.endTime,
         name,
@@ -320,6 +406,21 @@ export function formatTrajectoryStep(step: TrajectoryStep): string {
   return `${step.type}:${step.name}`;
 }
 
+export function formatTrajectoryArgs(args: unknown): string {
+  if (args === undefined) {
+    return '(none)';
+  }
+
+  try {
+    const serialized = JSON.stringify(args);
+    if (serialized !== undefined) {
+      return serialized;
+    }
+  } catch {}
+
+  return String(args);
+}
+
 function compactJudgeTrajectorySteps(steps: JudgeTrajectoryStep[]): JudgeTrajectoryStep[] {
   const compacted: JudgeTrajectoryStep[] = [];
 
@@ -357,13 +458,16 @@ function truncateJudgeTrajectorySteps(
 }
 
 export function summarizeTrajectoryForJudge(trace: TraceData): string {
-  const rawSteps = extractTrajectorySteps(trace).map((step, index) => ({
-    index: index + 1,
-    type: step.type,
-    name: step.name,
-    ...(step.spanName !== step.name ? { spanName: step.spanName } : {}),
-    ...(getTrajectoryStepStatus(step) ? { status: getTrajectoryStepStatus(step) } : {}),
-  }));
+  const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
+    const status = getTrajectoryStepStatus(step);
+    return {
+      index: index + 1,
+      type: step.type,
+      name: step.name,
+      ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
+      ...(status ? { status } : {}),
+    };
+  });
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);
   const steps = truncateJudgeTrajectorySteps(compactedSteps);
 

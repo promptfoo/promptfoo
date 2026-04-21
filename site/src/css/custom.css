@@ -385,6 +385,18 @@ html:not(.docs-wrapper) .DocSearch {
   margin: 0 auto;
 }
 
+.llmJudgeFigure {
+  max-width: 1120px;
+  margin: 2rem auto;
+}
+
+.llmJudgeFigure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
 /* Remove pill background from active breadcrumb item */
 .breadcrumbs__item--active .breadcrumbs__link {
   background: none;
