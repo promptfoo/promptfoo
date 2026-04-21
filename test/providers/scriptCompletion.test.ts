@@ -1,16 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MockedFunction } from 'vitest';
-
 import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
 import {
   getFileHashes,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import type { MockedFunction } from 'vitest';
 
 vi.mock('child_process', async (importOriginal) => {
   return {
@@ -55,6 +54,14 @@ let statSyncMock: MockedFunction<typeof fs.statSync>;
 let readFileSyncMock: MockedFunction<typeof fs.readFileSync>;
 let createHashMock: MockedFunction<typeof crypto.createHash>;
 
+function normalizeFsPath(path: fs.PathOrFileDescriptor): string {
+  if (path instanceof URL) {
+    return path.pathname;
+  }
+
+  return String(path);
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -90,7 +97,7 @@ describe('getFileHashes', () => {
     const mockHash2 = 'hash2';
 
     existsSyncMock.mockImplementation(function (path: fs.PathLike) {
-      return path !== 'nonexistent.js';
+      return normalizeFsPath(path) !== 'nonexistent.js';
     });
     statSyncMock.mockReturnValue({
       isFile: () => true,
@@ -102,10 +109,11 @@ describe('getFileHashes', () => {
       isSocket: () => false,
     } as fs.Stats);
     readFileSyncMock.mockImplementation(function (path: fs.PathOrFileDescriptor) {
-      if (path === 'file1.js') {
+      const normalizedPath = normalizeFsPath(path);
+      if (normalizedPath === 'file1.js') {
         return mockFileContent1;
       }
-      if (path === 'file2.js') {
+      if (normalizedPath === 'file2.js') {
         return mockFileContent2;
       }
       throw new Error('File not found');
@@ -181,6 +189,55 @@ describe('ScriptCompletionProvider', () => {
     expect(provider.id()).toBe('exec:node script.js');
   });
 
+  it('should close stdin on the child process to prevent hanging', async () => {
+    const stdinEnd = vi.fn();
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('ok'),
+        '',
+      );
+      return { stdin: { end: stdinEnd } } as any;
+    });
+
+    await provider.callApi('test prompt');
+    expect(stdinEnd).toHaveBeenCalledOnce();
+  });
+
+  it('should handle child process with no stdin gracefully', async () => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('ok'),
+        '',
+      );
+      return { stdin: null } as any;
+    });
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toBe('ok');
+  });
+
+  it('should close stdin before the exec callback rejects on script execution errors', async () => {
+    const stdinEnd = vi.fn();
+    const errorMessage = 'Script execution failed';
+    let stdinClosedBeforeCallback = false;
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      const childProcess = { stdin: { end: stdinEnd } } as any;
+      queueMicrotask(() => {
+        stdinClosedBeforeCallback = stdinEnd.mock.calls.length > 0;
+        if (typeof callback === 'function') {
+          callback(new Error(errorMessage), '', '');
+        }
+      });
+      return childProcess;
+    });
+
+    await expect(provider.callApi('test prompt')).rejects.toThrow(errorMessage);
+    expect(stdinEnd).toHaveBeenCalledOnce();
+    expect(stdinClosedBeforeCallback).toBe(true);
+  });
+
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
@@ -231,7 +288,8 @@ describe('ScriptCompletionProvider', () => {
     });
 
     const result = await provider.callApi('test prompt');
-    expect(result).toEqual(cachedResult);
+    expect(result.cached).toBe(true);
+    expect(result).toEqual({ ...cachedResult, cached: true });
     expect(mockCache.get).toHaveBeenCalledWith(
       'exec:node script.js:mock hash:mock hash:test prompt:undefined',
     );

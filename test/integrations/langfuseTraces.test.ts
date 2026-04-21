@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the envars module
 vi.mock('../../src/envars', () => ({
@@ -7,12 +7,14 @@ vi.mock('../../src/envars', () => ({
 }));
 
 // Mock the langfuse package with hoisted mocks
-const mockFetchTraces = vi.hoisted(() => vi.fn());
+const mockTraceList = vi.hoisted(() => vi.fn());
 const mockShutdownAsync = vi.hoisted(() => vi.fn());
 
 vi.mock('langfuse', () => ({
   Langfuse: class MockLangfuse {
-    fetchTraces = mockFetchTraces;
+    api = {
+      traceList: mockTraceList,
+    };
     shutdownAsync = mockShutdownAsync;
   },
 }));
@@ -29,7 +31,7 @@ describe('langfuseTraces', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // Reset mocks to ensure test isolation
-    mockFetchTraces.mockReset();
+    mockTraceList.mockReset();
     mockShutdownAsync.mockReset();
     vi.mocked(getEnvString).mockReset();
     // Shutdown any existing langfuse instance to reset singleton state
@@ -79,7 +81,12 @@ describe('langfuseTraces', () => {
 
     it('should parse tags parameter', () => {
       const result = parseTracesUrl('langfuse://traces?tags=production,gpt-4');
-      expect(result.tags).toBe('production,gpt-4');
+      expect(result.tags).toEqual(['production', 'gpt-4']);
+    });
+
+    it('should parse repeated tags parameters', () => {
+      const result = parseTracesUrl('langfuse://traces?tags=production&tags=gpt-4,critical');
+      expect(result.tags).toEqual(['production', 'gpt-4', 'critical']);
     });
 
     it('should parse name parameter', () => {
@@ -108,7 +115,7 @@ describe('langfuseTraces', () => {
       expect(result).toEqual({
         limit: 100,
         userId: 'user_123',
-        tags: 'production',
+        tags: ['production'],
         name: 'test',
       });
     });
@@ -157,14 +164,14 @@ describe('langfuseTraces', () => {
         },
       ];
 
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: mockTraces,
         meta: { page: 1, limit: 100, totalItems: 1, totalPages: 1 },
       });
 
       const tests = await fetchLangfuseTraces('langfuse://traces?limit=10');
 
-      expect(mockFetchTraces).toHaveBeenCalledWith({
+      expect(mockTraceList).toHaveBeenCalledWith({
         limit: 10,
         page: 1,
       });
@@ -198,7 +205,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should handle traces with string input/output directly', async () => {
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: [
           {
             id: 'trace-2',
@@ -218,7 +225,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should handle traces with various input object formats', async () => {
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: [
           {
             id: 'trace-prompt',
@@ -235,25 +242,25 @@ describe('langfuseTraces', () => {
       expect(tests[0].vars?.output).toBe('Using result key');
     });
 
-    it('should pass filter parameters to fetchTraces', async () => {
-      mockFetchTraces.mockResolvedValueOnce({ data: [] });
+    it('should pass filter parameters to traceList', async () => {
+      mockTraceList.mockResolvedValueOnce({ data: [] });
 
       await fetchLangfuseTraces(
         'langfuse://traces?userId=user_123&sessionId=sess_456&tags=prod&name=test',
       );
 
-      expect(mockFetchTraces).toHaveBeenCalledWith({
+      expect(mockTraceList).toHaveBeenCalledWith({
         limit: 100,
         page: 1,
         userId: 'user_123',
         sessionId: 'sess_456',
-        tags: 'prod',
+        tags: ['prod'],
         name: 'test',
       });
     });
 
     it('should handle empty response', async () => {
-      mockFetchTraces.mockResolvedValueOnce({ data: [] });
+      mockTraceList.mockResolvedValueOnce({ data: [] });
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
@@ -262,7 +269,7 @@ describe('langfuseTraces', () => {
 
     it('should paginate through multiple pages', async () => {
       // First page
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: Array(100)
           .fill(null)
           .map((_, i) => ({
@@ -275,7 +282,7 @@ describe('langfuseTraces', () => {
       });
 
       // Second page
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: Array(50)
           .fill(null)
           .map((_, i) => ({
@@ -289,12 +296,12 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces?limit=150');
 
-      expect(mockFetchTraces).toHaveBeenCalledTimes(2);
+      expect(mockTraceList).toHaveBeenCalledTimes(2);
       expect(tests).toHaveLength(150);
     });
 
     it('should respect limit when paginating', async () => {
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: Array(100)
           .fill(null)
           .map((_, i) => ({
@@ -308,8 +315,8 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces?limit=50');
 
-      expect(mockFetchTraces).toHaveBeenCalledTimes(1);
-      expect(mockFetchTraces).toHaveBeenCalledWith({
+      expect(mockTraceList).toHaveBeenCalledTimes(1);
+      expect(mockTraceList).toHaveBeenCalledWith({
         limit: 50,
         page: 1,
       });
@@ -317,7 +324,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should handle traces without output for assertion-only mode', async () => {
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: [
           {
             id: 'trace-no-output',
@@ -334,7 +341,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should handle traces with OpenAI chat format', async () => {
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: [
           {
             id: 'trace-openai',
@@ -363,7 +370,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should handle traces with Anthropic format', async () => {
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: [
           {
             id: 'trace-anthropic',
@@ -384,7 +391,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should handle traces with unrecognized complex format', async () => {
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: [
           {
             id: 'trace-unknown',
@@ -419,7 +426,7 @@ describe('langfuseTraces', () => {
         return '';
       });
 
-      mockFetchTraces.mockResolvedValueOnce({
+      mockTraceList.mockResolvedValueOnce({
         data: [
           {
             id: 'trace-1',
@@ -436,8 +443,42 @@ describe('langfuseTraces', () => {
       );
     });
 
+    it('should prefer LANGFUSE_BASE_URL and normalize trace URLs', async () => {
+      vi.mocked(getEnvString).mockImplementation((key: string) => {
+        if (key === 'LANGFUSE_PUBLIC_KEY') {
+          return 'pk-test';
+        }
+        if (key === 'LANGFUSE_SECRET_KEY') {
+          return 'sk-test';
+        }
+        if (key === 'LANGFUSE_BASE_URL') {
+          return 'https://eu.cloud.langfuse.com/';
+        }
+        if (key === 'LANGFUSE_HOST') {
+          return 'https://custom.langfuse.com';
+        }
+        return '';
+      });
+
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-1',
+            timestamp: '2024-01-15T10:00:00Z',
+            htmlPath: 'project/123/traces/trace-1',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].metadata?.langfuseTraceUrl).toBe(
+        'https://eu.cloud.langfuse.com/project/123/traces/trace-1',
+      );
+    });
+
     it('should throw helpful error on 401 authentication failure', async () => {
-      mockFetchTraces.mockRejectedValueOnce(new Error('401 Unauthorized'));
+      mockTraceList.mockRejectedValueOnce(new Error('401 Unauthorized'));
 
       await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
         'Langfuse authentication failed',
@@ -445,7 +486,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should throw helpful error on 403 forbidden', async () => {
-      mockFetchTraces.mockRejectedValueOnce(new Error('403 Forbidden'));
+      mockTraceList.mockRejectedValueOnce(new Error('403 Forbidden'));
 
       await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
         'Langfuse access denied',
@@ -453,7 +494,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should throw error when response is null', async () => {
-      mockFetchTraces.mockResolvedValueOnce(null);
+      mockTraceList.mockResolvedValueOnce(null);
 
       await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
         'Langfuse returned an empty response',
@@ -461,7 +502,7 @@ describe('langfuseTraces', () => {
     });
 
     it('should wrap generic API errors', async () => {
-      mockFetchTraces.mockRejectedValueOnce(new Error('Network timeout'));
+      mockTraceList.mockRejectedValueOnce(new Error('Network timeout'));
 
       await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
         'Failed to fetch traces from Langfuse: Network timeout',

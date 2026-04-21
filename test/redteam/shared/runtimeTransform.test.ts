@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Strategy } from '../../../src/redteam/strategies/types';
 import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
+
+import type { Strategy } from '../../../src/redteam/strategies/types';
 import type { TestCaseWithPlugin } from '../../../src/types';
 
 describe('runtimeTransform', () => {

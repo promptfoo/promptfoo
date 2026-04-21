@@ -27,6 +27,8 @@ import cliProgress from 'cli-progress';
 import cliState from '../cliState';
 import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
+import type { ApiTraceListParams, ApiTraces } from 'langfuse';
+
 import type { TestCase } from '../types';
 
 const DEFAULT_LIMIT = 100;
@@ -50,22 +52,14 @@ interface LangfuseTrace {
   totalCost?: number;
 }
 
-interface LangfuseTracesResponse {
-  data: LangfuseTrace[];
-  meta?: {
-    page: number;
-    limit: number;
-    totalItems: number;
-    totalPages: number;
-  };
-}
+type LangfuseTracesResponse = ApiTraces;
 
 interface FetchTracesQuery {
   limit?: number;
   page?: number;
   userId?: string;
   sessionId?: string;
-  tags?: string | string[];
+  tags?: string[];
   name?: string;
   fromTimestamp?: string;
   toTimestamp?: string;
@@ -73,20 +67,60 @@ interface FetchTracesQuery {
   release?: string;
 }
 
-let langfuseInstance: any;
+interface LangfuseTracesClient {
+  api: {
+    traceList(query: ApiTraceListParams): Promise<LangfuseTracesResponse>;
+  };
+  shutdownAsync(): Promise<void>;
+}
+
+type MessageContent = {
+  role?: unknown;
+  content?: unknown;
+};
+
+let langfuseInstance: LangfuseTracesClient | undefined;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function findTextBlock(content: unknown[]): unknown {
+  const textBlock = content.find(
+    (item): item is { text: unknown } => isRecord(item) && item.type === 'text' && 'text' in item,
+  );
+  return textBlock?.text ?? JSON.stringify(content);
+}
+
+function getLangfuseBaseUrl(): string {
+  return (
+    getEnvString('LANGFUSE_BASE_URL') ||
+    getEnvString('LANGFUSE_HOST') ||
+    'https://cloud.langfuse.com'
+  ).replace(/\/+$/, '');
+}
+
+function buildTraceUrl(baseUrl: string, htmlPath?: string): string | undefined {
+  if (!htmlPath) {
+    return undefined;
+  }
+  if (/^https?:\/\//i.test(htmlPath)) {
+    return htmlPath;
+  }
+  return `${baseUrl}${htmlPath.startsWith('/') ? '' : '/'}${htmlPath}`;
+}
 
 /**
  * Get or create the Langfuse client instance
  */
-async function getLangfuseClient(): Promise<any> {
+async function getLangfuseClient(): Promise<LangfuseTracesClient> {
   if (langfuseInstance) {
     return langfuseInstance;
   }
 
   const publicKey = getEnvString('LANGFUSE_PUBLIC_KEY');
   const secretKey = getEnvString('LANGFUSE_SECRET_KEY');
-  const baseUrl =
-    process.env.LANGFUSE_BASE_URL || getEnvString('LANGFUSE_HOST') || 'https://cloud.langfuse.com';
+  const baseUrl = getLangfuseBaseUrl();
 
   if (!publicKey || !secretKey) {
     throw new Error(
@@ -100,7 +134,7 @@ async function getLangfuseClient(): Promise<any> {
       publicKey,
       secretKey,
       baseUrl,
-    });
+    }) as unknown as LangfuseTracesClient;
     return langfuseInstance;
   } catch {
     throw new Error(
@@ -130,7 +164,7 @@ export function parseTracesUrl(url: string): FetchTracesQuery {
   }
 
   // Parse other string parameters
-  const stringParams: Array<keyof FetchTracesQuery> = [
+  const stringParams = [
     'userId',
     'sessionId',
     'name',
@@ -138,19 +172,22 @@ export function parseTracesUrl(url: string): FetchTracesQuery {
     'toTimestamp',
     'version',
     'release',
-  ];
+  ] as const;
 
   for (const param of stringParams) {
     const value = params.get(param);
     if (value) {
-      (query as any)[param] = value;
+      query[param] = value;
     }
   }
 
-  // Parse tags (comma-separated or multiple params)
-  const tagsParam = params.get('tags');
-  if (tagsParam) {
-    query.tags = tagsParam;
+  const tags = params
+    .getAll('tags')
+    .flatMap((value) => value.split(','))
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+  if (tags.length > 0) {
+    query.tags = tags;
   }
 
   return query;
@@ -172,18 +209,18 @@ function extractInputText(input: unknown): unknown {
 
   // OpenAI chat format: { messages: [{role: 'user', content: '...'}] }
   if (Array.isArray(obj.messages) && obj.messages.length > 0) {
+    const messages = obj.messages.filter(isRecord) as MessageContent[];
     // Get the last user message, or the last message if no user message
-    const userMessages = obj.messages.filter((m: any) => m.role === 'user');
+    const userMessages = messages.filter((message) => message.role === 'user');
     const lastMessage =
       userMessages.length > 0
         ? userMessages[userMessages.length - 1]
-        : obj.messages[obj.messages.length - 1];
-    if (lastMessage && typeof lastMessage === 'object' && 'content' in lastMessage) {
-      const content = (lastMessage as any).content;
+        : messages[messages.length - 1];
+    if (lastMessage && 'content' in lastMessage) {
+      const content = lastMessage.content;
       // Handle Anthropic-style content array
       if (Array.isArray(content)) {
-        const textBlock = content.find((c: any) => c.type === 'text');
-        return textBlock?.text ?? JSON.stringify(content);
+        return findTextBlock(content);
       }
       return content;
     }
@@ -209,20 +246,21 @@ function extractOutputText(output: unknown): unknown {
 
   // OpenAI completion format: { choices: [{message: {content: '...'}}] } or { choices: [{text: '...'}] }
   if (Array.isArray(obj.choices) && obj.choices.length > 0) {
-    const choice = obj.choices[0] as any;
-    if (choice.message?.content !== undefined) {
-      return choice.message.content;
-    }
-    if (choice.text !== undefined) {
-      return choice.text;
+    const choice = obj.choices[0];
+    if (isRecord(choice)) {
+      if (isRecord(choice.message) && choice.message.content !== undefined) {
+        return choice.message.content;
+      }
+      if (choice.text !== undefined) {
+        return choice.text;
+      }
     }
   }
 
   // Anthropic format: { content: [{type: 'text', text: '...'}] } or { content: '...' }
   if (obj.content !== undefined) {
     if (Array.isArray(obj.content)) {
-      const textBlock = obj.content.find((c: any) => c.type === 'text');
-      return textBlock?.text ?? JSON.stringify(obj.content);
+      return findTextBlock(obj.content);
     }
     return obj.content;
   }
@@ -239,8 +277,7 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
   const inputValue = extractInputText(trace.input);
   const outputValue = extractOutputText(trace.output);
 
-  // Build the trace URL
-  const traceUrl = trace.htmlPath ? `${baseUrl}${trace.htmlPath}` : undefined;
+  const traceUrl = buildTraceUrl(baseUrl, trace.htmlPath);
 
   // Create the test case with vars populated from trace data
   // Build vars object, filtering out undefined values
@@ -319,6 +356,69 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
   return testCase;
 }
 
+function createProgressBar(limit: number): cliProgress.SingleBar | undefined {
+  if (cliState.webUI || isCI() || limit <= PAGE_SIZE) {
+    return undefined;
+  }
+
+  const progressBar = new cliProgress.SingleBar(
+    {
+      format: 'Fetching Langfuse traces [{bar}] {percentage}% | {value}/{total} traces',
+      hideCursor: true,
+      stopOnComplete: true,
+    },
+    cliProgress.Presets.shades_classic,
+  );
+  progressBar.start(limit, 0);
+  return progressBar;
+}
+
+function getFetchErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function fetchTracePage(
+  langfuse: LangfuseTracesClient,
+  fetchQuery: FetchTracesQuery,
+): Promise<LangfuseTracesResponse> {
+  try {
+    const response = await langfuse.api.traceList(fetchQuery);
+    if (!response) {
+      throw new Error(
+        'Langfuse returned an empty response. Check your credentials and network connection.',
+      );
+    }
+    return response;
+  } catch (error) {
+    const message = getFetchErrorMessage(error);
+    if (message.includes('Langfuse returned an empty response')) {
+      throw error;
+    }
+    if (message.includes('401') || message.includes('Unauthorized')) {
+      throw new Error(
+        'Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL environment variables.',
+      );
+    }
+    if (message.includes('403') || message.includes('Forbidden')) {
+      throw new Error(
+        'Langfuse access denied. Your API key may not have permission to access traces.',
+      );
+    }
+    throw new Error(`Failed to fetch traces from Langfuse: ${message}`);
+  }
+}
+
+function shouldFetchNextPage(
+  response: LangfuseTracesResponse,
+  currentPage: number,
+  pageLimit: number,
+): boolean {
+  if (response.meta) {
+    return currentPage < response.meta.totalPages;
+  }
+  return response.data.length === pageLimit;
+}
+
 /**
  * Fetch traces from Langfuse and convert them to TestCase objects
  *
@@ -332,28 +432,12 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
   logger.debug(`[Langfuse Traces] Fetching traces with query: ${JSON.stringify(query)}`);
 
   const langfuse = await getLangfuseClient();
-  const baseUrl =
-    process.env.LANGFUSE_BASE_URL || getEnvString('LANGFUSE_HOST') || 'https://cloud.langfuse.com';
+  const baseUrl = getLangfuseBaseUrl();
 
   const tests: TestCase[] = [];
   let page = 1;
   let hasMore = true;
-
-  // Initialize progress bar for large fetches
-  let progressBar: cliProgress.SingleBar | undefined;
-  const showProgress = !cliState.webUI && !isCI() && limit > PAGE_SIZE;
-
-  if (showProgress) {
-    progressBar = new cliProgress.SingleBar(
-      {
-        format: 'Fetching Langfuse traces [{bar}] {percentage}% | {value}/{total} traces',
-        hideCursor: true,
-        stopOnComplete: true,
-      },
-      cliProgress.Presets.shades_classic,
-    );
-    progressBar.start(limit, 0);
-  }
+  const progressBar = createProgressBar(limit);
 
   try {
     while (hasMore && tests.length < limit) {
@@ -368,31 +452,7 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
 
       logger.debug(`[Langfuse Traces] Fetching page ${page} with limit ${pageLimit}`);
 
-      let response: LangfuseTracesResponse;
-      try {
-        response = await langfuse.fetchTraces(fetchQuery);
-      } catch (fetchError: any) {
-        // Handle API errors with helpful messages
-        const message = fetchError?.message || String(fetchError);
-        if (message.includes('401') || message.includes('Unauthorized')) {
-          throw new Error(
-            `Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL environment variables.`,
-          );
-        }
-        if (message.includes('403') || message.includes('Forbidden')) {
-          throw new Error(
-            `Langfuse access denied. Your API key may not have permission to access traces.`,
-          );
-        }
-        throw new Error(`Failed to fetch traces from Langfuse: ${message}`);
-      }
-
-      // Check for null/undefined response (can happen on API errors)
-      if (!response) {
-        throw new Error(
-          'Langfuse returned an empty response. Check your credentials and network connection.',
-        );
-      }
+      const response = await fetchTracePage(langfuse, fetchQuery);
 
       if (!response.data || response.data.length === 0) {
         logger.debug(`[Langfuse Traces] No more traces found on page ${page}`);
@@ -412,13 +472,8 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
         progressBar.update(tests.length);
       }
 
-      // Check if there are more pages
-      if (response.meta) {
-        hasMore = page < response.meta.totalPages;
-      } else {
-        // If no meta, assume more pages if we got a full page
-        hasMore = response.data.length === pageLimit;
-      }
+      // If no metadata is present, assume more pages when the page is full.
+      hasMore = shouldFetchNextPage(response, page, pageLimit);
 
       page++;
 
@@ -458,6 +513,6 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
 export async function shutdownLangfuse(): Promise<void> {
   if (langfuseInstance) {
     await langfuseInstance.shutdownAsync();
-    langfuseInstance = null;
+    langfuseInstance = undefined;
   }
 }

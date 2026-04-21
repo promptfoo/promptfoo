@@ -1,4 +1,4 @@
-import { matchesPattern } from '../util/tracing';
+import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';

@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+#
 # Example: Evaluate Langfuse traces
 #
 # This config demonstrates loading traces from Langfuse and evaluating
@@ -15,10 +17,8 @@
 
 description: Langfuse traces evaluation example
 
-# Load traces from Langfuse
-# URL format: langfuse://traces?<params>
-# Supported params: limit, userId, sessionId, tags, name, fromTimestamp, toTimestamp
-tests: langfuse://traces?limit=10
+prompts:
+  - '{{input}}'
 
 # Use the stored output directly (assertion-only evaluation)
 # The echo provider returns the output variable from the trace
@@ -27,12 +27,14 @@ providers:
     config:
       text: '{{output}}'
 
-prompts:
-  - '{{input}}'
-
 # Assertions to run on each trace
 defaultTest:
   assert:
     # Verify output exists
     - type: javascript
       value: typeof output === 'string' && output.length > 0
+
+# Load traces from Langfuse
+# URL format: langfuse://traces?<params>
+# Supported params: limit, userId, sessionId, tags, name, fromTimestamp, toTimestamp
+tests: langfuse://traces?limit=10

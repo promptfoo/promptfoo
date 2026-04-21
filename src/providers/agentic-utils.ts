@@ -85,6 +85,10 @@ export interface AgenticCacheOptions {
   workingDir?: string;
   /** Whether to bust the cache (read bypass, but still write) */
   bustCache?: boolean;
+  /** MCP configuration — when present and cacheMcp is not true, caching is disabled */
+  mcp?: unknown;
+  /** When true, enables caching even when MCP is configured */
+  cacheMcp?: boolean;
 }
 
 /**
@@ -145,6 +149,16 @@ export async function initializeAgenticCache(
     };
   }
 
+  // MCP tools typically interact with external state, so disable caching by default.
+  // Users can opt in with cacheMcp: true for deterministic MCP tools.
+  if (options.mcp && !options.cacheMcp) {
+    return {
+      shouldCache: false,
+      shouldReadCache: false,
+      shouldWriteCache: false,
+    };
+  }
+
   let workingDirFingerprint: string | null = null;
 
   if (options.workingDir) {
@@ -168,6 +182,7 @@ export async function initializeAgenticCache(
   const cacheKey = generateCacheKey(options.cacheKeyPrefix, {
     ...cacheKeyData,
     workingDirFingerprint,
+    ...(options.mcp ? { mcp: options.mcp } : {}),
   });
 
   return {
@@ -201,7 +216,7 @@ export async function getCachedResponse(
       logger.debug(
         `Returning cached response${debugContext ? ` for ${debugContext}` : ''} (cache key: ${cacheResult.cacheKey})`,
       );
-      return JSON.parse(cachedResponse);
+      return { ...JSON.parse(cachedResponse), cached: true };
     }
   } catch (error) {
     logger.error(`Error getting cached response: ${String(error)}`);

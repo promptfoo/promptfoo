@@ -4,19 +4,21 @@
  * Extracts clean speech from audio with background noise
  */
 
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  ProviderResponse,
-  EnvOverrides,
-} from '../../../types';
-import { getEnvString } from '../../../envars';
-import logger from '../../../logger';
 import { promises as fs } from 'fs';
 import path from 'path';
+
+import { getEnvString } from '../../../envars';
+import logger from '../../../logger';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
 import { encodeAudio } from '../tts/audio';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  EnvOverrides,
+  ProviderResponse,
+} from '../../../types';
 import type { AudioIsolationConfig } from './types';
 
 /**

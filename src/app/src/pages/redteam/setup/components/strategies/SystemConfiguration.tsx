@@ -1,9 +1,5 @@
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Paper from '@mui/material/Paper';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
-import Typography from '@mui/material/Typography';
+import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
+import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../StatefulnessRadioGroup';
 
 interface SystemConfigurationProps {
   isStatefulValue: boolean;
@@ -15,30 +11,17 @@ export function SystemConfiguration({
   onStatefulChange,
 }: SystemConfigurationProps) {
   return (
-    <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
-      <Typography variant="h6" gutterBottom>
-        System Configuration
-      </Typography>
-      <FormControl component="fieldset">
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Is the target system Stateful? (Does it maintain conversation history?)
-        </Typography>
-        <RadioGroup
+    <Card className="mb-6">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">System Configuration</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="mb-4 text-sm font-medium">{STATEFULNESS_QUESTION}</p>
+        <StatefulnessRadioGroup
           value={String(isStatefulValue)}
-          onChange={(e) => onStatefulChange(e.target.value === 'true')}
-        >
-          <FormControlLabel
-            value="true"
-            control={<Radio />}
-            label="Yes - System is stateful, system maintains conversation history."
-          />
-          <FormControlLabel
-            value="false"
-            control={<Radio />}
-            label="No - System does not maintain conversation history"
-          />
-        </RadioGroup>
-      </FormControl>
-    </Paper>
+          onValueChange={(value) => onStatefulChange(value === 'true')}
+        />
+      </CardContent>
+    </Card>
   );
 }

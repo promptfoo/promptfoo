@@ -18,21 +18,21 @@ This guide shows you how to integrate **Promptfoo** evaluations into a Looper CI
 Add the following file to the root of your repo:
 
 ```yaml
-language: workflow                 # optional but common
+language: workflow # optional but common
 
 tools:
-  nodejs: 22                       # Looper provisions Node.js
+  nodejs: 22 # Looper provisions Node.js
   jq: 1.7
 
 envs:
   global:
     variables:
-      PROMPTFOO_CACHE_PATH: "${HOME}/.promptfoo/cache"
+      PROMPTFOO_CACHE_PATH: '${HOME}/.promptfoo/cache'
 
 triggers:
-  - pr                             # run on every pull‑request
-  - manual: "Nightly Prompt Tests" # manual button in UI
-    call: nightly                  # invokes the nightly flow below
+  - pr # run on every pull‑request
+  - manual: 'Nightly Prompt Tests' # manual button in UI
+    call: nightly # invokes the nightly flow below
 
 flows:
   # ---------- default PR flow ----------
@@ -40,23 +40,23 @@ flows:
     - (name Install Promptfoo) npm install -g promptfoo
 
     - (name Evaluate Prompts) |
-        promptfoo eval \
-          -c promptfooconfig.yaml \
-          --prompts "prompts/**/*.json" \
-          --share \
-          -o output.json
+      promptfoo eval \
+      -c promptfooconfig.yaml \
+      --prompts "prompts/**/*.json" \
+      --share \
+      -o output.json
 
     - (name Quality gate) |
-        SUCC=$(jq -r '.results.stats.successes' output.json)
-        FAIL=$(jq -r '.results.stats.failures' output.json)
-        echo "✅ $SUCC  ❌ $FAIL"
-        test "$FAIL" -eq 0  # non‑zero exit fails the build
+      SUCC=$(jq -r '.results.stats.successes' output.json)
+      FAIL=$(jq -r '.results.stats.failures' output.json)
+      echo "✅ $SUCC  ❌ $FAIL"
+      test "$FAIL" -eq 0 # non‑zero exit fails the build
 
   # ---------- nightly scheduled flow ----------
   nightly:
-    - call: default                  # reuse the logic above
+    - call: default # reuse the logic above
     - (name Upload artefacts) |
-        echo "TODO: push output.json to S3 files"
+      aws s3 cp output.json s3://your-bucket/promptfoo/output.json
 ```
 
 ### How it works

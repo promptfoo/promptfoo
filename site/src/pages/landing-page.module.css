@@ -321,9 +321,9 @@ section {
 }
 
 .sectionTitle {
-  font-size: 3rem;
+  font-size: 2.5rem;
   text-align: center;
-  margin-bottom: 4rem;
+  margin-bottom: 1rem;
   font-weight: 800;
   color: #333;
 }
@@ -348,33 +348,7 @@ section {
   box-shadow:
     0 4px 20px rgba(229, 58, 58, 0.08),
     0 2px 10px rgba(0, 0, 0, 0.04);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
-}
-
-.benefitItem::before {
-  content: '';
-  position: absolute;
-  top: -100%;
-  left: -100%;
-  width: 300%;
-  height: 300%;
-  background: radial-gradient(circle, rgba(229, 58, 58, 0.05) 0%, transparent 50%);
-  transition: all 0.5s ease;
-}
-
-.benefitItem:hover::before {
-  top: -150%;
-  left: -150%;
-}
-
-.benefitItem:hover {
-  transform: translateY(-8px) scale(1.02);
-  box-shadow:
-    0 12px 40px rgba(229, 58, 58, 0.15),
-    0 6px 20px rgba(0, 0, 0, 0.08);
-  border-color: rgba(229, 58, 58, 0.2);
 }
 
 [data-theme='dark'] .benefitItem {
@@ -723,8 +697,7 @@ section {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
 
-  .featureItem:hover,
-  .benefitItem:hover {
+  .featureItem:hover {
     background-color: rgba(255, 255, 255, 0.05);
     border-color: var(--ifm-color-primary);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
@@ -829,13 +802,6 @@ section {
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(10px);
-  }
-
-  .benefitItem:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-    border-color: var(--ifm-color-primary-lighter);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    transform: translateY(-5px);
   }
 
   .benefitItem h3 {
@@ -1284,6 +1250,10 @@ section {
 }
 
 /* Section Common Styles */
+.section {
+  padding: 5rem 0;
+}
+
 .sectionEyebrow {
   font-size: 0.875rem;
   font-weight: 700;
@@ -1409,14 +1379,7 @@ section {
   background: white;
   border-radius: 16px;
   border: 2px solid rgba(229, 58, 58, 0.1);
-  transition: all 0.3s ease;
   position: relative;
-}
-
-.solutionCard:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 40px rgba(229, 58, 58, 0.2);
-  border-color: var(--pf-red-base);
 }
 
 [data-theme='dark'] .solutionCard {
@@ -2177,5 +2140,288 @@ section {
 
   .vulnSubtitle {
     font-size: 1.1rem;
+  }
+}
+
+/* ========================================
+   PROOF BANNER SECTION
+   Callout linking to technical blog post
+   ======================================== */
+
+.proofBanner {
+  padding: 0;
+  margin: 0 auto;
+  max-width: 1100px;
+  width: 100%;
+}
+
+.proofBannerContainer {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, rgba(229, 58, 58, 0.08) 0%, rgba(229, 58, 58, 0.04) 100%);
+  border: 1px solid rgba(229, 58, 58, 0.2);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.proofBannerContainer:hover {
+  border-color: rgba(229, 58, 58, 0.4);
+  box-shadow: 0 4px 16px rgba(229, 58, 58, 0.1);
+}
+
+[data-theme='dark'] .proofBannerContainer {
+  background: linear-gradient(135deg, rgba(229, 58, 58, 0.12) 0%, rgba(229, 58, 58, 0.06) 100%);
+  border-color: rgba(229, 58, 58, 0.3);
+}
+
+[data-theme='dark'] .proofBannerContainer:hover {
+  border-color: rgba(229, 58, 58, 0.5);
+  box-shadow: 0 4px 16px rgba(229, 58, 58, 0.15);
+}
+
+.proofBannerIcon {
+  font-size: 2.5rem !important;
+  color: var(--pf-red-base, #e53a3a);
+  flex-shrink: 0;
+}
+
+[data-theme='dark'] .proofBannerIcon {
+  color: var(--pf-red-light, #ff7a7a);
+}
+
+.proofBannerContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.proofBannerTitle {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #333;
+  margin: 0 0 0.25rem 0;
+}
+
+[data-theme='dark'] .proofBannerTitle {
+  color: #f5f5f5;
+}
+
+.proofBannerText {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #64748b;
+  margin: 0;
+}
+
+[data-theme='dark'] .proofBannerText {
+  color: #94a3b8;
+}
+
+.proofBannerButton {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .proofBannerContainer {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+
+  .proofBannerIcon {
+    font-size: 2rem !important;
+  }
+
+  .proofBannerTitle {
+    font-size: 1rem;
+  }
+
+  .proofBannerText {
+    font-size: 0.875rem;
+  }
+
+  .proofBannerButton {
+    width: 100%;
+  }
+}
+
+/* ========================================
+   REGULATION BADGE GRID
+   Modern badge/tag layout for compliance items
+   ======================================== */
+
+.regulationBadges {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 1rem;
+}
+
+.regulationBadge {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.regulationBadge:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.regulationBadge:first-child {
+  padding-top: 0;
+}
+
+[data-theme='dark'] .regulationBadge {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.badgeName {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--pf-red-dark, #b32e2e);
+}
+
+[data-theme='dark'] .badgeName {
+  color: var(--pf-red-light, #ff7a7a);
+}
+
+.badgeDesc {
+  font-size: 0.875rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+[data-theme='dark'] .badgeDesc {
+  color: #94a3b8;
+}
+
+/* Alternative compact badge variant for inline display */
+.regulationBadgesInline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.regulationBadgeCompact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: rgba(229, 58, 58, 0.06);
+  border-radius: 20px;
+  border: 1px solid rgba(229, 58, 58, 0.15);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #333;
+}
+
+[data-theme='dark'] .regulationBadgeCompact {
+  background: rgba(229, 58, 58, 0.12);
+  border-color: rgba(229, 58, 58, 0.25);
+  color: #f5f5f5;
+}
+
+/* Mobile responsive for badges */
+@media (max-width: 768px) {
+  .regulationBadge {
+    padding: 0.75rem 0;
+  }
+
+  .badgeName {
+    font-size: 0.9rem;
+  }
+
+  .badgeDesc {
+    font-size: 0.8rem;
+  }
+}
+
+/* ========================================
+   ALSO SUPPORTS BADGE ROW
+   Compact horizontal badges for secondary standards
+   ======================================== */
+
+.alsoSupportsSection {
+  margin-top: 2rem;
+  text-align: center;
+}
+
+.alsoSupportsLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 1rem;
+}
+
+[data-theme='dark'] .alsoSupportsLabel {
+  color: #94a3b8;
+}
+
+.alsoSupportsBadges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.625rem;
+}
+
+.alsoSupportsBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 100px;
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: #333;
+  transition: all 0.2s ease;
+}
+
+.alsoSupportsBadge:hover {
+  border-color: var(--pf-red-base, #e53a3a);
+  background: rgba(229, 58, 58, 0.04);
+}
+
+[data-theme='dark'] .alsoSupportsBadge {
+  background: rgba(46, 60, 70, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #e0e0e0;
+}
+
+[data-theme='dark'] .alsoSupportsBadge:hover {
+  border-color: var(--pf-red-light, #ff7a7a);
+  background: rgba(229, 58, 58, 0.15);
+}
+
+/* Two-column grid for primary compliance cards */
+.complianceGridTwo {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+  margin: 3rem 0 0;
+}
+
+@media (max-width: 768px) {
+  .complianceGridTwo {
+    grid-template-columns: 1fr;
+  }
+
+  .alsoSupportsBadges {
+    gap: 0.5rem;
+  }
+
+  .alsoSupportsBadge {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.75rem;
   }
 }

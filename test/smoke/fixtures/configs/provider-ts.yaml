@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - TypeScript provider class'
+
+providers:
+  - file://../providers/echo-ts.ts
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: TypeScript
+    assert:
+      - type: contains
+        value: 'TypeScript Echo:'
+      - type: contains
+        value: TypeScript

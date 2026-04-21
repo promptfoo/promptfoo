@@ -6,6 +6,7 @@
  * and event handlers are properly set up.
  */
 import type { ChildProcess } from 'child_process';
+
 import { vi } from 'vitest';
 
 export interface MockChildProcessOptions {

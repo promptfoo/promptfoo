@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
 import opener from 'opener';
+import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 import { getDefaultPort, VERSION } from '../../src/constants';
 import logger from '../../src/logger';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
@@ -138,6 +138,12 @@ describe('Server Utilities', () => {
       await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
 
       expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/redteam/setup`);
+    });
+
+    it('should open browser with eval setup URL when BrowserBehavior.OPEN_TO_EVAL_SETUP', async () => {
+      await openBrowser(BrowserBehavior.OPEN_TO_EVAL_SETUP);
+
+      expect(opener).toHaveBeenCalledWith(`http://localhost:${getDefaultPort()}/setup`);
     });
 
     it('should not open browser when BrowserBehavior.SKIP', async () => {

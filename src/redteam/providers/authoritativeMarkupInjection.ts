@@ -2,6 +2,13 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -9,11 +16,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
-import { fetchWithProxy } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 interface AuthoritativeMarkupInjectionConfig {
   injectVar: string;
@@ -115,6 +117,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     const totalTokenUsage = createEmptyTokenUsage();
 
     // Call the target provider with the injected attack
+    throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);
     const targetResponse = await targetProvider.callApi(renderedAttackerPrompt, context, options);
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
@@ -131,6 +134,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
 
     return {
       ...targetResponse,
+      prompt: renderedAttackerPrompt,
       metadata: {
         ...targetResponse.metadata,
         redteamFinalPrompt: renderedAttackerPrompt,

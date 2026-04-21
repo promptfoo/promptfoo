@@ -11,7 +11,7 @@ When setting up your target, use these best practices:
 - If your target requires authentication, include a custom header or user agent in your configuration and whitelist your client.
 - Promptfoo runs locally on your machine, so your machine must have access to the target.
 
-Promptfoo is capable of using authentication, complex protocols, websockets, and more. But you will find it much easier to setup if you use a single HTTP endpoint.
+Promptfoo is capable of using authentication, complex protocols, websockets, and more. But you will find it much easier to set up if you use a single HTTP endpoint.
 
 There are a few common issues that can arise when connecting to targets:
 
@@ -39,7 +39,7 @@ headers:
 
 ## Streaming or Polling
 
-Many chatbots will stream responses back to the client or have the client poll for new messages. The solution here is to setup an alternate HTTP endpoint or parameter to return the response in a single message.
+Many chatbots will stream responses back to the client or have the client poll for new messages. The solution here is to set up an alternate HTTP endpoint or parameter to return the response in a single message.
 
 ## Using WebSockets for Realtime Targets
 

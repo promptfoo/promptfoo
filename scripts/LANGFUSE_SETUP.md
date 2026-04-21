@@ -36,7 +36,7 @@ Langfuse Cloud is free for development and the easiest way to get started.
 5. **Run the seed script**:
 
    ```bash
-   npx ts-node scripts/langfuse-seed.ts
+   npx tsx scripts/langfuse-seed.ts
    ```
 
 6. **View traces** at https://cloud.langfuse.com → Your Project → Traces
@@ -94,7 +94,7 @@ Run Langfuse locally using Docker Compose for fully offline development.
 6. **Run the seed script**:
    ```bash
    cd /path/to/promptfoo
-   npx ts-node scripts/langfuse-seed.ts
+   npx tsx scripts/langfuse-seed.ts
    ```
 
 ### Stopping Local Langfuse

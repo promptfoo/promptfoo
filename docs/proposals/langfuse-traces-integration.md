@@ -1,7 +1,6 @@
 # Langfuse Traces Evaluation Integration
 
 **GitHub Issue:** #4157
-**Author:** Generated with Claude Code
 **Date:** 2025-12-16
 
 ## Problem Statement

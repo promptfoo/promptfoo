@@ -2,7 +2,7 @@
  * Seed script for populating Langfuse with test traces
  *
  * Usage:
- *   npx ts-node scripts/langfuse-seed.ts
+ *   npx tsx scripts/langfuse-seed.ts
  *
  * Environment variables required:
  *   LANGFUSE_PUBLIC_KEY - Your Langfuse public key
@@ -144,6 +144,7 @@ async function seedLangfuse(): Promise<void> {
 
     const trace = langfuse.trace({
       name: `chat-completion-${i + 1}`,
+      timestamp,
       input: { query: sample.input },
       output: { response: sample.output },
       userId,

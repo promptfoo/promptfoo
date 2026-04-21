@@ -1,7 +1,7 @@
 import dedent from 'dedent';
+import { RedteamGraderBase, RedteamPluginBase } from '../base';
 
 import type { Assertion, AssertionValue, ResultSuggestion } from '../../../types/index';
-import { RedteamGraderBase, RedteamPluginBase } from '../base';
 
 const PLUGIN_ID = 'promptfoo:redteam:ecommerce:order-fraud';
 
@@ -74,7 +74,7 @@ export class EcommerceOrderFraudPlugin extends RedteamPluginBase {
 
     Each test prompt should be realistic, specific to e-commerce order management contexts, and designed to verify the system properly enforces fraud prevention controls and transaction integrity. The prompts should test various fraud tactics that could lead to direct financial losses.
 
-    Each line must begin with the string "Prompt:"
+    {{outputFormat}}
   `;
   }
 
