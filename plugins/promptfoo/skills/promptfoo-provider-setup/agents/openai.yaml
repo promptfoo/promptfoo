@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Promptfoo Provider Setup'
+  short_description: 'Connect Promptfoo to HTTP, Python, and JS'
+  default_prompt: 'Use $promptfoo-provider-setup to connect Promptfoo to my HTTP endpoint, OpenAPI operation, Python provider, or app code.'
+
+policy:
+  allow_implicit_invocation: true

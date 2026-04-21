@@ -30,6 +30,7 @@ import {
   getCandidate,
   getGoogleClient,
   loadCredentials,
+  normalizeSafetySettings,
 } from './util';
 
 import type {
@@ -43,6 +44,13 @@ import type { GeminiApiResponse, GeminiErrorResponse, GeminiResponseData } from 
 
 // Type for Google API errors
 type GaxiosError = any;
+
+type GeminiRequestResult = {
+  cached: boolean;
+  data?: GeminiApiResponse;
+  error?: string;
+  status?: number;
+};
 
 const DEFAULT_AI_STUDIO_HOST = 'generativelanguage.googleapis.com';
 
@@ -280,6 +288,13 @@ export class GoogleProvider extends GoogleGenericProvider {
    */
   private isRetryableError(error: unknown): boolean {
     if (error instanceof Error) {
+      // Prefer structured HTTP status over message matching so permanent
+      // 4xx errors are not retried just because their message mentions quota.
+      const responseStatus = (error as any).response?.status;
+      if (typeof responseStatus === 'number') {
+        return this.isRetryableStatus(responseStatus);
+      }
+
       const message = error.message.toLowerCase();
       // Check HTTP status codes
       if (message.includes('503') || message.includes('service unavailable')) {
@@ -289,11 +304,6 @@ export class GoogleProvider extends GoogleGenericProvider {
         return true;
       }
       if (message.includes('overloaded')) {
-        return true;
-      }
-      // Check error.response.status
-      const responseStatus = (error as any).response?.status;
-      if (responseStatus === 503 || responseStatus === 429) {
         return true;
       }
       // Check network error codes
@@ -324,22 +334,105 @@ export class GoogleProvider extends GoogleGenericProvider {
    * Determine if an HTTP status code is retryable.
    */
   private isRetryableStatus(status: number): boolean {
-    return status === 429 || status === 503 || status >= 500;
+    return status === 408 || status === 429 || status >= 500;
   }
 
   /**
    * Calculate retry delay with exponential backoff and jitter.
    */
-  private getRetryDelay(attempt: number): number {
-    const baseDelay = this.config.baseRetryDelay ?? 1000;
+  private getRetryDelay(config: CompletionOptions, attempt: number): number {
+    const baseDelay = Math.max(0, config.baseRetryDelay ?? 1000);
     return baseDelay * Math.pow(2, attempt) + Math.random() * baseDelay;
   }
 
   /**
    * Get the maximum number of retries.
    */
-  private getMaxRetries(): number {
-    return this.config.maxRetries ?? 3;
+  private getMaxRetries(config: CompletionOptions): number {
+    return Math.max(0, config.maxRetries ?? 3);
+  }
+
+  private async waitBeforeRetry(
+    config: CompletionOptions,
+    attempt: number,
+    maxRetries: number,
+  ): Promise<void> {
+    const delay = this.getRetryDelay(config, attempt);
+    logger.debug(
+      `Retrying Google API call (attempt ${attempt + 1}/${maxRetries}) after ${Math.round(delay)}ms`,
+    );
+    await sleep(delay);
+  }
+
+  private async callGeminiApiOnce(
+    body: Record<string, any>,
+    config: CompletionOptions,
+  ): Promise<GeminiRequestResult> {
+    if (this.isVertexMode && !this.isExpressMode()) {
+      // Vertex AI OAuth mode
+      const client = await this.getClientWithCredentials();
+      const projectId = await this.getProjectId();
+      const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+
+      const res = await client.request({
+        url,
+        method: 'POST',
+        data: body,
+        timeout: REQUEST_TIMEOUT_MS,
+      });
+      return { data: res.data as GeminiApiResponse, cached: false };
+    }
+
+    if (this.isVertexMode && this.isExpressMode()) {
+      // Vertex AI express mode (API key)
+      const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+
+      const res = await fetchWithProxy(url, {
+        method: 'POST',
+        headers: await this.getAuthHeaders(),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
+        return {
+          cached: false,
+          status: res.status,
+          error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+        };
+      }
+
+      return { data: (await res.json()) as GeminiApiResponse, cached: false };
+    }
+
+    // AI Studio mode
+    const endpoint = this.getApiEndpoint('generateContent');
+    const headers = await this.getAuthHeaders();
+    const authDiscriminator = createAuthCacheDiscriminator(headers);
+    const result = await fetchWithCache<GeminiApiResponse>(
+      endpoint,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        // Include auth discriminator in cache key to prevent cross-tenant cache sharing
+        ...(authDiscriminator && { _authHash: authDiscriminator }),
+      } as RequestInit,
+      REQUEST_TIMEOUT_MS,
+      'json',
+      false,
+      0,
+    );
+
+    return {
+      cached: result.cached,
+      data: result.data,
+      status: result.status,
+    };
   }
 
   /**
@@ -375,7 +468,7 @@ export class GoogleProvider extends GoogleGenericProvider {
         ...(config.maxOutputTokens !== undefined && { maxOutputTokens: config.maxOutputTokens }),
         ...config.generationConfig,
       },
-      safetySettings: config.safetySettings,
+      safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       // Vertex AI uses camelCase (systemInstruction), AI Studio uses snake_case (system_instruction)
@@ -416,86 +509,32 @@ export class GoogleProvider extends GoogleGenericProvider {
 
     let data: GeminiApiResponse;
     let cached = false;
-    const maxRetries = this.getMaxRetries();
+    const maxRetries = this.getMaxRetries(config);
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        if (this.isVertexMode && !this.isExpressMode()) {
-          // Vertex AI OAuth mode
-          const client = await this.getClientWithCredentials();
-          const projectId = await this.getProjectId();
-          const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
+        const result = await this.callGeminiApiOnce(body, config);
+        const shouldRetryStatus =
+          result.status !== undefined && this.isRetryableStatus(result.status);
 
-          const res = await client.request({
-            url,
-            method: 'POST',
-            data: body,
-            timeout: REQUEST_TIMEOUT_MS,
-          });
-          data = res.data as GeminiApiResponse;
-        } else if (this.isVertexMode && this.isExpressMode()) {
-          // Vertex AI express mode (API key)
-          const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
-
-          const res = await fetchWithProxy(url, {
-            method: 'POST',
-            headers: await this.getAuthHeaders(),
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          });
-
-          if (!res.ok) {
-            const errorData = await res.json().catch(() => null);
-            // Check if this is a retryable HTTP status
-            if (this.isRetryableStatus(res.status) && attempt < maxRetries) {
-              const delay = this.getRetryDelay(attempt);
-              logger.debug(
-                `Retrying Google API call (attempt ${attempt + 1}/${maxRetries}) after ${Math.round(delay)}ms`,
-              );
-              await sleep(delay);
-              continue;
-            }
-            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
-            return {
-              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
-            };
-          }
-
-          data = (await res.json()) as GeminiApiResponse;
-        } else {
-          // AI Studio mode
-          const endpoint = this.getApiEndpoint('generateContent');
-          const headers = await this.getAuthHeaders();
-          const authDiscriminator = createAuthCacheDiscriminator(headers);
-          const result = await fetchWithCache(
-            endpoint,
-            {
-              method: 'POST',
-              headers,
-              body: JSON.stringify(body),
-              // Include auth discriminator in cache key to prevent cross-tenant cache sharing
-              ...(authDiscriminator && { _authHash: authDiscriminator }),
-            } as RequestInit,
-            REQUEST_TIMEOUT_MS,
-            'json',
-            false,
-          );
-          data = result.data as GeminiApiResponse;
-          cached = result.cached;
+        if (shouldRetryStatus && attempt < maxRetries) {
+          await this.waitBeforeRetry(config, attempt, maxRetries);
+          continue;
         }
+
+        if (result.error) {
+          return { error: result.error };
+        }
+
+        data = result.data as GeminiApiResponse;
+        cached = result.cached;
 
         // Success - break out of retry loop
         break;
       } catch (err) {
         // Check if we should retry
         if (attempt < maxRetries && this.isRetryableError(err)) {
-          const delay = this.getRetryDelay(attempt);
-          logger.debug(
-            `Retrying Google API call (attempt ${attempt + 1}/${maxRetries}) after ${Math.round(delay)}ms`,
-          );
-          await sleep(delay);
+          await this.waitBeforeRetry(config, attempt, maxRetries);
           continue;
         }
 
@@ -667,16 +706,20 @@ export class GoogleProvider extends GoogleGenericProvider {
             c.groundingMetadata || c.groundingChunks || c.groundingSupports || c.webSearchQueries,
         );
 
-      // Calculate cost only for AI Studio mode (Vertex AI pricing differs)
       // Include thinking tokens in output cost - Google bills them as output tokens
       const completionForCost =
-        tokenUsage.completion != null
-          ? tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0)
-          : undefined;
-      const cost =
-        !this.isVertexMode && !cached
-          ? calculateGoogleCost(this.modelName, config, tokenUsage.prompt, completionForCost)
-          : undefined;
+        tokenUsage.completion == null
+          ? undefined
+          : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            tokenUsage.prompt,
+            completionForCost,
+            this.isVertexMode,
+          );
 
       const response: ProviderResponse = {
         output,

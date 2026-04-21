@@ -137,9 +137,22 @@ const successResponse = {
   cached: false,
 };
 
+function mockGoogleClientRequest(
+  request = vi.fn().mockResolvedValue({ data: successResponse.data }),
+) {
+  vi.mocked(util.getGoogleClient).mockResolvedValue({
+    client: { request },
+    credentials: {},
+  } as any);
+}
+
 describe('GoogleProvider retry logic', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(cache.fetchWithCache).mockReset();
+    vi.mocked(fetchUtil.fetchWithProxy).mockReset();
+    vi.mocked(timeUtil.sleep).mockReset().mockResolvedValue(undefined);
+    mockGoogleClientRequest();
     mockMaybeLoadToolsFromExternalFile.mockReset().mockImplementation((input: any) => input);
     mockMaybeLoadFromExternalFile.mockReset().mockImplementation((input: any) => input);
     vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
@@ -159,6 +172,28 @@ describe('GoogleProvider retry logic', () => {
   });
 
   describe('AI Studio mode retries', () => {
+    it('should retry on returned HTTP 503 responses and eventually succeed', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
+      });
+
+      vi.mocked(cache.fetchWithCache)
+        .mockResolvedValueOnce({
+          data: { error: { code: 503, message: 'Service Unavailable' } },
+          cached: false,
+          status: 503,
+          statusText: 'Service Unavailable',
+        } as any)
+        .mockResolvedValueOnce(successResponse as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('test response');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+    });
+
     it('should retry on HTTP 503 and eventually succeed', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
@@ -172,6 +207,33 @@ describe('GoogleProvider retry logic', () => {
         .mockResolvedValueOnce(successResponse as any);
 
       const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('test response');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(2);
+      expect(timeUtil.sleep).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use prompt-level retry config overrides', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 0 },
+      });
+
+      const error503 = new Error('Service Unavailable');
+      (error503 as any).response = { status: 503 };
+
+      vi.mocked(cache.fetchWithCache)
+        .mockRejectedValueOnce(error503)
+        .mockResolvedValueOnce(successResponse as any);
+
+      const result = await provider.callApi('test prompt', {
+        prompt: {
+          raw: 'test prompt',
+          label: 'test prompt',
+          config: { maxRetries: 1, baseRetryDelay: 10 },
+        },
+        vars: {},
+      });
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('test response');
@@ -259,6 +321,23 @@ describe('GoogleProvider retry logic', () => {
       });
 
       const error400 = new Error('Bad Request');
+      (error400 as any).response = { status: 400 };
+
+      vi.mocked(cache.fetchWithCache).mockRejectedValueOnce(error400);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('API call error');
+      expect(cache.fetchWithCache).toHaveBeenCalledTimes(1);
+      expect(timeUtil.sleep).not.toHaveBeenCalled();
+    });
+
+    it('should NOT retry non-retryable HTTP statuses even when the message mentions quota', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key', maxRetries: 2, baseRetryDelay: 10 },
+      });
+
+      const error400 = new Error('Bad Request: quota project is invalid');
       (error400 as any).response = { status: 400 };
 
       vi.mocked(cache.fetchWithCache).mockRejectedValueOnce(error400);
@@ -479,10 +558,7 @@ describe('GoogleProvider retry logic', () => {
           },
         });
 
-      vi.mocked(util.getGoogleClient).mockResolvedValue({
-        client: { request: mockRequest },
-        credentials: {},
-      } as any);
+      mockGoogleClientRequest(mockRequest);
 
       const provider = new GoogleProvider('gemini-pro', {
         config: {

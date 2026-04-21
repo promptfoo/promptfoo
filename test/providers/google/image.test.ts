@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GoogleImageProvider } from '../../../src/providers/google/image';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -28,9 +29,11 @@ describe('GoogleImageProvider', async () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.GOOGLE_API_KEY = 'test-api-key';
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
+    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
 
     // Set up default mock behaviors
     mockLoadCredentials.mockImplementation(function (creds) {
@@ -40,10 +43,11 @@ describe('GoogleImageProvider', async () => {
   });
 
   afterEach(() => {
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GOOGLE_PROJECT_ID;
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
   });
 
   it('should construct with model name', () => {
@@ -53,7 +57,7 @@ describe('GoogleImageProvider', async () => {
   });
 
   it('should use Google AI Studio when project ID is missing but API key is available', async () => {
-    delete process.env.GOOGLE_PROJECT_ID;
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
     const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
     mockFetchWithCache.mockResolvedValueOnce({
@@ -81,14 +85,17 @@ describe('GoogleImageProvider', async () => {
       expect.any(Number),
       'json',
     );
-    expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
+    expect(result.output).toContain('data:image/png;base64,base64data');
+    expect(result.images).toEqual([
+      { data: 'data:image/png;base64,base64data', mimeType: 'image/png' },
+    ]);
   });
 
   it('should return error when both project ID and API key are missing', async () => {
-    delete process.env.GOOGLE_PROJECT_ID;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
     const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
     const result = await provider.callApi('Test prompt');
@@ -100,7 +107,7 @@ describe('GoogleImageProvider', async () => {
 
   describe('Vertex AI', () => {
     beforeEach(() => {
-      process.env.GOOGLE_PROJECT_ID = 'test-project';
+      mockProcessEnv({ GOOGLE_PROJECT_ID: 'test-project' });
     });
 
     it('should use OAuth authentication for Vertex AI', async () => {
@@ -146,7 +153,10 @@ describe('GoogleImageProvider', async () => {
         timeout: 300000,
       });
 
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
+      expect(result.output).toContain('data:image/png;base64,base64data');
+      expect(result.images).toEqual([
+        { data: 'data:image/png;base64,base64data', mimeType: 'image/png' },
+      ]);
     });
 
     it('should handle OAuth errors', async () => {
@@ -244,8 +254,8 @@ describe('GoogleImageProvider', async () => {
 
   describe('Google AI Studio', () => {
     beforeEach(() => {
-      delete process.env.GOOGLE_PROJECT_ID;
-      process.env.GOOGLE_API_KEY = 'test-api-key';
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
     });
 
     it('should make correct API request to Google AI Studio', async () => {
@@ -303,8 +313,13 @@ describe('GoogleImageProvider', async () => {
         'json',
       );
 
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data1)');
-      expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data2)');
+      // First image as output for blob externalization
+      expect(result.output).toBe('data:image/png;base64,base64data1');
+      // All images in structured field
+      expect(result.images).toEqual([
+        { data: 'data:image/png;base64,base64data1', mimeType: 'image/png' },
+        { data: 'data:image/png;base64,base64data2', mimeType: 'image/png' },
+      ]);
       expect(result.cached).toBe(false);
       expect(result.cost).toBe(0.08); // 2 images * 0.04
     });
@@ -327,9 +342,9 @@ describe('GoogleImageProvider', async () => {
     });
 
     it('should handle missing API key for Google AI Studio', async () => {
-      delete process.env.GOOGLE_API_KEY;
-      delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-      delete process.env.GEMINI_API_KEY;
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
+      mockProcessEnv({ GEMINI_API_KEY: undefined });
       const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
       const result = await provider.callApi('Test prompt');
@@ -338,8 +353,8 @@ describe('GoogleImageProvider', async () => {
     });
 
     it('should support different API key environment variables', async () => {
-      delete process.env.GOOGLE_API_KEY;
-      process.env.GEMINI_API_KEY = 'gemini-key';
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ GEMINI_API_KEY: 'gemini-key' });
 
       const provider = new GoogleImageProvider('imagen-3.0-generate-001');
 
@@ -368,7 +383,7 @@ describe('GoogleImageProvider', async () => {
         expect.any(Number),
         'json',
       );
-      expect(result.output).toContain('![Generated Image]');
+      expect(result.output).toContain('data:image/png;base64,base64data');
     });
   });
 });

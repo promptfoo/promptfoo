@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
-import { matchesAnswerRelevance } from '../../src/matchers';
+import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import invariant from '../../src/util/invariant';
 
 import type { AssertionValueFunctionContext } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/rag');
 vi.mock('../../src/util/invariant');
 
 describe('handleAnswerRelevance', () => {

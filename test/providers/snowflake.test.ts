@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, fetchWithCache } from '../../src/cache';
 import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache', async (importOriginal) => {
   return {
@@ -19,8 +20,8 @@ describe('Snowflake Cortex Provider', () => {
   afterEach(async () => {
     await clearCache();
     vi.clearAllMocks();
-    delete process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER;
-    delete process.env.SNOWFLAKE_API_KEY;
+    mockProcessEnv({ SNOWFLAKE_ACCOUNT_IDENTIFIER: undefined });
+    mockProcessEnv({ SNOWFLAKE_API_KEY: undefined });
   });
 
   describe('initialization', () => {
@@ -38,7 +39,7 @@ describe('Snowflake Cortex Provider', () => {
     });
 
     it('should initialize with accountIdentifier from environment', () => {
-      process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER = 'myorg-myaccount';
+      mockProcessEnv({ SNOWFLAKE_ACCOUNT_IDENTIFIER: 'myorg-myaccount' });
 
       const provider = new SnowflakeCortexProvider('claude-3-5-sonnet', {
         config: {
@@ -95,8 +96,8 @@ describe('Snowflake Cortex Provider', () => {
 
   describe('callApi', () => {
     beforeEach(() => {
-      process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER = 'myorg-myaccount';
-      process.env.SNOWFLAKE_API_KEY = 'test-key';
+      mockProcessEnv({ SNOWFLAKE_ACCOUNT_IDENTIFIER: 'myorg-myaccount' });
+      mockProcessEnv({ SNOWFLAKE_API_KEY: 'test-key' });
     });
 
     it('should call Snowflake Cortex API with correct endpoint', async () => {

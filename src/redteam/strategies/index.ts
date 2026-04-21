@@ -99,6 +99,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'crescendo',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding Crescendo to ${testCases.length} test cases`);
       const newTestCases = addCrescendo(testCases, injectVar, config);
@@ -108,6 +109,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'custom',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config, strategyId = 'custom') => {
       logger.debug(`Adding Custom to ${testCases.length} test cases`);
       const newTestCases = addCustom(testCases, injectVar, config, strategyId);
@@ -126,6 +128,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'goat',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
@@ -135,6 +138,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'indirect-web-pwn',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding Indirect Web Pwn to ${testCases.length} test cases`);
       const newTestCases = await addIndirectWebPwnTestCases(testCases, injectVar, config);
@@ -174,11 +178,17 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    // Deprecated: Use 'jailbreak:meta' instead. This alias exists for backward compatibility.
     id: 'jailbreak',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding experimental jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative', config);
-      logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
+      logger.warn(
+        'Strategy "jailbreak" is deprecated. Use "jailbreak:meta" instead. ' +
+          'The "jailbreak" strategy used outdated single-shot optimization techniques.',
+      );
+      logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
+      logger.debug(`Added ${newTestCases.length} meta-agent jailbreak test cases`);
       return newTestCases;
     },
   },
@@ -202,6 +212,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:tree',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding experimental tree jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree', config);
@@ -211,6 +222,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:meta',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
@@ -220,6 +232,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:hydra',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding hydra multi-turn jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addHydra(testCases, injectVar, config);

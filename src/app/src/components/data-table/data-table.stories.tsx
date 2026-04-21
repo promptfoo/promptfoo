@@ -17,6 +17,13 @@ interface Evaluation {
   createdAt: string;
 }
 
+interface TaggedEvaluation {
+  id: string;
+  name: string;
+  tags: string[];
+  owner: string;
+}
+
 // Sample data
 const sampleData: Evaluation[] = [
   {
@@ -61,22 +68,158 @@ const sampleData: Evaluation[] = [
   },
 ];
 
-// Generate more data for pagination demo
-const generateLargeDataset = (count: number): Evaluation[] => {
+const longNameData: Evaluation[] = [
+  {
+    id: 'long-1',
+    name: 'This is an intentionally very long evaluation name designed to demonstrate cell truncation behavior in a constrained DataTable layout',
+    status: 'passed',
+    score: 100,
+    provider: 'openai',
+    createdAt: '2024-01-16',
+  },
+];
+
+// Generate more data for virtualization demos
+const createEvaluation = (index: number): Evaluation => {
   const statuses: Array<'passed' | 'failed' | 'pending'> = ['passed', 'failed', 'pending'];
   const providers = ['openai', 'anthropic', 'google', 'meta', 'mistral'];
-  return Array.from({ length: count }, (_, i) => ({
-    id: String(i + 1),
-    name: `Evaluation ${i + 1}`,
-    status: statuses[i % 3],
-    score: Math.floor(Math.random() * 100),
-    provider: providers[i % providers.length],
-    createdAt: new Date(2024, 0, 15 - (i % 30)).toISOString().split('T')[0],
-  }));
+
+  return {
+    id: String(index + 1),
+    name: `Evaluation ${index + 1}`,
+    status: statuses[index % 3],
+    score: (index * 37) % 100,
+    provider: providers[index % providers.length],
+    createdAt: new Date(2024, 0, 15 - (index % 30)).toISOString().split('T')[0],
+  };
+};
+
+const generateLargeDataset = (count: number): Evaluation[] => {
+  return Array.from({ length: count }, (_, index) => createEvaluation(index));
 };
 
 const largeDataset = generateLargeDataset(100);
 const printDataset = generateLargeDataset(30); // 30 rows to test print all rows (>25)
+const serverVirtualRowCount = 10_000;
+const serverVirtualPageSize = 100;
+const serverVirtualLoadDelayMs = 400;
+const taggedData: TaggedEvaluation[] = [
+  {
+    id: 'tag-1',
+    name: 'Prompt Injection Guardrail',
+    tags: ['prompt-injection', 'jailbreak'],
+    owner: 'Safety',
+  },
+  {
+    id: 'tag-2',
+    name: 'PII Redaction Check',
+    tags: ['pii', 'data-loss'],
+    owner: 'Privacy',
+  },
+  {
+    id: 'tag-3',
+    name: 'Tool Call Policy Test',
+    tags: ['tool-use', 'prompt-injection'],
+    owner: 'Platform',
+  },
+  {
+    id: 'tag-4',
+    name: 'RAG Data Exposure Audit',
+    tags: ['data-loss', 'access-control'],
+    owner: 'Security',
+  },
+  {
+    id: 'tag-5',
+    name: 'Output Safety Validation',
+    tags: ['toxicity', 'jailbreak'],
+    owner: 'Safety',
+  },
+  {
+    id: 'tag-6',
+    name: 'Agent Permission Boundary Test',
+    tags: ['access-control', 'tool-use'],
+    owner: 'Platform',
+  },
+];
+const taggedFilterOptions = [
+  { label: 'Prompt Injection', value: 'prompt-injection' },
+  { label: 'Jailbreak', value: 'jailbreak' },
+  { label: 'PII', value: 'pii' },
+  { label: 'Data Loss', value: 'data-loss' },
+  { label: 'Tool Use', value: 'tool-use' },
+  { label: 'Access Control', value: 'access-control' },
+  { label: 'Toxicity', value: 'toxicity' },
+];
+const taggedColumns: ColumnDef<TaggedEvaluation>[] = [
+  {
+    accessorKey: 'name',
+    header: 'Evaluation',
+    size: 260,
+  },
+  {
+    accessorKey: 'tags',
+    header: 'Tags',
+    size: 320,
+    cell: ({ row }) => {
+      const tags = row.getValue('tags') as string[];
+      return (
+        <div className="flex flex-wrap gap-1">
+          {tags.map((tag) => (
+            <Badge key={tag} variant="outline" className="capitalize">
+              {tag.replace(/-/g, ' ')}
+            </Badge>
+          ))}
+        </div>
+      );
+    },
+    meta: {
+      filterVariant: 'select',
+      filterOptions: taggedFilterOptions,
+    },
+    filterFn: (row, columnId, filterValue) => {
+      if (!filterValue || typeof filterValue !== 'object') {
+        return true;
+      }
+
+      const { operator, value } = filterValue as {
+        operator?: string;
+        value?: string | string[];
+      };
+      const selectedTags = Array.isArray(value) ? value : value ? [value] : [];
+      if (selectedTags.length === 0) {
+        return true;
+      }
+
+      const rowTags = row.getValue(columnId);
+      if (!Array.isArray(rowTags)) {
+        return false;
+      }
+
+      const normalizedRowTags = rowTags.map((tag) => String(tag).toLowerCase());
+      const normalizedSelectedTags = selectedTags.map((tag) => String(tag).toLowerCase());
+
+      if (operator === 'notEquals') {
+        return normalizedSelectedTags.every((tag) => !normalizedRowTags.includes(tag));
+      }
+
+      return normalizedSelectedTags.some((tag) => normalizedRowTags.includes(tag));
+    },
+  },
+  {
+    accessorKey: 'owner',
+    header: 'Owner',
+    size: 120,
+    meta: {
+      filterVariant: 'select',
+      filterOptions: [
+        { label: 'Safety', value: 'Safety' },
+        { label: 'Privacy', value: 'Privacy' },
+        { label: 'Platform', value: 'Platform' },
+        { label: 'Security', value: 'Security' },
+      ],
+    },
+  },
+];
 
 // Column definitions
 const columns: ColumnDef<Evaluation>[] = [
@@ -252,7 +395,7 @@ export const WithRowSelection: Story = {
           onRowSelectionChange={setSelection}
           getRowId={(row) => row.id}
         />
-        <div className="text-sm text-muted-foreground">
+        <div className="text-sm text-gray-500 dark:text-gray-400">
           Selected: {Object.keys(selection).filter((k) => selection[k]).length} rows
         </div>
       </div>
@@ -268,7 +411,9 @@ export const WithRowClick: Story = {
     return (
       <div className="space-y-4">
         <DataTable columns={columns} data={sampleData} onRowClick={(row) => setClicked(row.name)} />
-        {clicked && <div className="text-sm text-muted-foreground">Last clicked: {clicked}</div>}
+        {clicked && (
+          <div className="text-sm text-gray-500 dark:text-gray-400">Last clicked: {clicked}</div>
+        )}
       </div>
     );
   },
@@ -286,11 +431,9 @@ export const WithoutToolbar: Story = {
   render: () => <DataTable columns={columns} data={sampleData} showToolbar={false} />,
 };
 
-// Minimal - no toolbar, no pagination
+// Minimal - no toolbar
 export const Minimal: Story = {
-  render: () => (
-    <DataTable columns={columns} data={sampleData} showToolbar={false} showPagination={false} />
-  ),
+  render: () => <DataTable columns={columns} data={sampleData} showToolbar={false} />,
 };
 
 // With custom toolbar actions
@@ -342,16 +485,129 @@ export const SelectionWithActions: Story = {
   },
 };
 
-// Large dataset with pagination
-export const WithPagination: Story = {
-  render: () => <DataTable columns={columns} data={largeDataset} initialPageSize={10} />,
+// Large dataset with client-side virtualization (default row display mode)
+export const ClientVirtualizedDefault: Story = {
+  render: () => <DataTable columns={columns} data={largeDataset} maxHeight="400px" />,
+};
+
+export const LargeClientVirtualizedDataset: Story = {
+  render: () => <DataTable columns={columns} data={generateLargeDataset(5000)} maxHeight="500px" />,
+};
+
+export const ServerVirtualizedDataset: Story = {
+  render: () => {
+    const [rowsByIndex, setRowsByIndex] = React.useState<Map<number, Evaluation>>(() => new Map());
+    const [loadingPages, setLoadingPages] = React.useState<Set<number>>(() => new Set());
+    const [lastRequestedRange, setLastRequestedRange] = React.useState('none yet');
+    const loadedPagesRef = React.useRef(new Set<number>());
+    const loadingPagesRef = React.useRef(new Set<number>());
+
+    const loadRows = React.useCallback(
+      ({
+        startIndex,
+        endIndex,
+        signal,
+      }: {
+        startIndex: number;
+        endIndex: number;
+        signal: AbortSignal;
+      }) => {
+        const firstPage = Math.floor(startIndex / serverVirtualPageSize);
+        const lastPage = Math.floor(endIndex / serverVirtualPageSize);
+        const pagesToLoad: number[] = [];
+
+        for (let page = firstPage; page <= lastPage; page += 1) {
+          if (!loadedPagesRef.current.has(page) && !loadingPagesRef.current.has(page)) {
+            pagesToLoad.push(page);
+          }
+        }
+
+        setLastRequestedRange(
+          `${startIndex}-${endIndex}${
+            pagesToLoad.length > 0 ? ` (fetching page ${pagesToLoad.join(', ')})` : ' (cached)'
+          }`,
+        );
+
+        if (pagesToLoad.length === 0) {
+          return;
+        }
+
+        pagesToLoad.forEach((page) => loadingPagesRef.current.add(page));
+        setLoadingPages(new Set(loadingPagesRef.current));
+
+        const timeoutId = window.setTimeout(() => {
+          if (signal.aborted) {
+            return;
+          }
+
+          setRowsByIndex((prev) => {
+            const next = new Map(prev);
+
+            pagesToLoad.forEach((page) => {
+              const pageStartIndex = page * serverVirtualPageSize;
+              const pageEndIndex = Math.min(
+                pageStartIndex + serverVirtualPageSize,
+                serverVirtualRowCount,
+              );
+
+              for (let index = pageStartIndex; index < pageEndIndex; index += 1) {
+                next.set(index, createEvaluation(index));
+              }
+            });
+
+            return next;
+          });
+
+          pagesToLoad.forEach((page) => {
+            loadedPagesRef.current.add(page);
+            loadingPagesRef.current.delete(page);
+          });
+          setLoadingPages(new Set(loadingPagesRef.current));
+        }, serverVirtualLoadDelayMs);
+
+        const abortLoad = () => {
+          window.clearTimeout(timeoutId);
+          pagesToLoad.forEach((page) => loadingPagesRef.current.delete(page));
+          setLoadingPages(new Set(loadingPagesRef.current));
+        };
+
+        signal.addEventListener('abort', abortLoad, { once: true });
+      },
+      [],
+    );
+
+    return (
+      <div className="space-y-3">
+        <div className="rounded-md border border-dashed border-zinc-300 bg-zinc-50 p-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/40 dark:text-zinc-300">
+          <div>
+            Loaded rows: {rowsByIndex.size.toLocaleString()} /{' '}
+            {serverVirtualRowCount.toLocaleString()}
+          </div>
+          <div>Loading pages: {loadingPages.size > 0 ? [...loadingPages].join(', ') : 'none'}</div>
+          <div>Last requested range: {lastRequestedRange}</div>
+        </div>
+        <DataTable
+          columns={columns}
+          data={[]}
+          rowDisplayMode="server-virtualized"
+          maxHeight="400px"
+          virtualOverscan={5}
+          serverVirtualization={{
+            rowCount: serverVirtualRowCount,
+            pageSize: serverVirtualPageSize,
+            getRow: (index) => rowsByIndex.get(index),
+            loadRows,
+            isRowLoading: (index) => !rowsByIndex.has(index),
+          }}
+        />
+      </div>
+    );
+  },
 };
 
 // With max height (scrollable)
 export const WithMaxHeight: Story = {
-  render: () => (
-    <DataTable columns={columns} data={largeDataset} maxHeight="400px" showPagination={false} />
-  ),
+  render: () => <DataTable columns={columns} data={largeDataset} maxHeight="400px" />,
 };
 
 // With hidden columns
@@ -377,6 +633,159 @@ export const WithExportHandlers: Story = {
   ),
 };
 
+// Column header filters — hover over a column header to see the filter icon.
+// Columns with `filterVariant: 'select'` show a dropdown, others show a text input with operators.
+export const WithColumnHeaderFilters: Story = {
+  render: () => <DataTable columns={columns} data={largeDataset} />,
+};
+
+// Multi-select tag filtering with array-valued cells.
+export const WithMultiTagColumnFilter: Story = {
+  render: () => (
+    <div className="space-y-3">
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        Hover the Tags header, choose "is any of", and select multiple tags to filter rows that
+        include any selected tag.
+      </p>
+      <DataTable columns={taggedColumns} data={taggedData} />
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Demonstrates filtering one column with multiple tags. The Tags column stores string arrays and supports multi-select filtering via the `is any of` operator.',
+      },
+    },
+  },
+};
+
+// Demonstrates long, dense content staying within fixed column constraints.
+export const WithLongCellContent: Story = {
+  render: () => {
+    const longContentColumns: ColumnDef<Evaluation>[] = [
+      {
+        accessorKey: 'id',
+        header: 'ID',
+        size: 120,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Name',
+        size: 180,
+        cell: ({ row }) => (
+          <span className="truncate block w-full" title={row.getValue<string>('name')}>
+            {row.getValue<string>('name')}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        size: 120,
+      },
+    ];
+
+    return <DataTable columns={longContentColumns} data={longNameData} />;
+  },
+};
+
+// Custom column widths — demonstrates fixed pixel sizes and proportional (flex-like) sizing.
+// The table uses `tableLayout: 'fixed'` with `w-full`, so when the container is wider than
+// the sum of all `size` values, extra space is distributed proportionally — `size` acts like
+// a flex ratio. A column with `size: 300` gets 3× the extra space of one with `size: 100`.
+export const CustomColumnWidths: StoryObj<{
+  idWidth: number;
+  nameWidth: number;
+  statusWidth: number;
+  scoreWidth: number;
+  providerWidth: number;
+  createdAtWidth: number;
+}> = {
+  args: {
+    idWidth: 60,
+    nameWidth: 300,
+    statusWidth: 100,
+    scoreWidth: 80,
+    providerWidth: 150,
+    createdAtWidth: 120,
+  },
+  argTypes: {
+    idWidth: { control: { type: 'range', min: 40, max: 400, step: 10 }, name: 'ID width (px)' },
+    nameWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Name width (px)',
+    },
+    statusWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Status width (px)',
+    },
+    scoreWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Score width (px)',
+    },
+    providerWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Provider width (px)',
+    },
+    createdAtWidth: {
+      control: { type: 'range', min: 40, max: 400, step: 10 },
+      name: 'Created At width (px)',
+    },
+  },
+  render: (args) => {
+    const customColumns: ColumnDef<Evaluation>[] = [
+      {
+        accessorKey: 'id',
+        header: 'ID',
+        size: args.idWidth,
+      },
+      {
+        accessorKey: 'name',
+        header: 'Name',
+        size: args.nameWidth,
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        size: args.statusWidth,
+        cell: ({ row }) => {
+          const status = row.getValue('status') as string;
+          const variant =
+            status === 'passed' ? 'success' : status === 'failed' ? 'destructive' : 'secondary';
+          return (
+            <Badge variant={variant} truncate>
+              {status}
+            </Badge>
+          );
+        },
+      },
+      {
+        accessorKey: 'score',
+        header: 'Score',
+        size: args.scoreWidth,
+        cell: ({ row }) => {
+          const score = row.getValue('score') as number;
+          return <span className="font-mono tabular-nums">{score}%</span>;
+        },
+        meta: { align: 'right' },
+      },
+      {
+        accessorKey: 'provider',
+        header: 'Provider',
+        size: args.providerWidth,
+      },
+      {
+        accessorKey: 'createdAt',
+        header: 'Created At',
+        size: args.createdAtWidth,
+      },
+    ];
+
+    return <DataTable columns={customColumns} data={sampleData} />;
+  },
+};
+
 // Customized toolbar options
 export const CustomToolbarOptions: Story = {
   render: () => (
@@ -395,13 +804,13 @@ export const CustomToolbarOptions: Story = {
 export const PrintStyles: Story = {
   render: () => (
     <div className="space-y-4">
-      <div className="dark bg-zinc-950 p-6 rounded-lg">
-        <p className="text-sm text-zinc-400 mb-4">
+      <div className="dark bg-gray-950 p-6 rounded-lg">
+        <p className="text-sm text-gray-400 mb-4">
           This table has 30 rows to test the "print all rows" functionality. Use your browser's
           print preview (Cmd/Ctrl + P) to see how it renders in light mode for printing. All rows
-          should be visible in print, bypassing pagination.
+          should be visible in print, bypassing virtualization.
         </p>
-        <DataTable columns={columns} data={printDataset} initialPageSize={10} />
+        <DataTable columns={columns} data={printDataset} />
       </div>
     </div>
   ),
@@ -409,8 +818,247 @@ export const PrintStyles: Story = {
     docs: {
       description: {
         story:
-          'The DataTable includes print-specific styles that force light mode colors and show all rows when printing, ensuring readability regardless of the current theme or pagination settings.',
+          'The DataTable includes print-specific styles that force light mode colors and show all rows when printing, ensuring readability regardless of the current theme or virtualization settings.',
       },
     },
+  },
+};
+
+// Row expansion - basic
+export const WithRowExpansion: Story = {
+  render: () => (
+    <DataTable
+      columns={columns}
+      data={sampleData}
+      renderSubComponent={(row) => (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+          <p className="text-sm text-muted-foreground">
+            Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
+            {row.original.createdAt}
+          </p>
+        </div>
+      )}
+    />
+  ),
+};
+
+// Row expansion - accordion (single expand)
+export const WithSingleExpand: Story = {
+  render: () => (
+    <DataTable
+      columns={columns}
+      data={sampleData}
+      singleExpand
+      renderSubComponent={(row) => (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+          <p className="text-sm text-muted-foreground">
+            Only one row can be expanded at a time (accordion mode).
+          </p>
+        </div>
+      )}
+    />
+  ),
+};
+
+// Row expansion with row selection
+export const WithExpansionAndSelection: Story = {
+  render: () => {
+    const [selection, setSelection] = React.useState<Record<string, boolean>>({});
+
+    return (
+      <DataTable
+        columns={columns}
+        data={sampleData}
+        enableRowSelection
+        rowSelection={selection}
+        onRowSelectionChange={setSelection}
+        getRowId={(row) => row.id}
+        renderSubComponent={(row) => (
+          <div className="text-sm text-muted-foreground">
+            Expanded detail for {row.original.name}
+          </div>
+        )}
+      />
+    );
+  },
+};
+
+// Row expansion with getRowCanExpand predicate
+export const WithConditionalExpansion: Story = {
+  render: () => (
+    <DataTable
+      columns={columns}
+      data={sampleData}
+      getRowCanExpand={(row) => row.original.status !== 'pending'}
+      renderSubComponent={(row) => (
+        <div className="text-sm text-muted-foreground">
+          Details for {row.original.name} (only non-pending rows are expandable)
+        </div>
+      )}
+    />
+  ),
+};
+
+// Row expansion - default expanded (uncontrolled with initial state)
+export const WithDefaultExpanded: Story = {
+  render: () => (
+    <DataTable
+      columns={columns}
+      data={sampleData}
+      expanded={{ '0': true, '2': true }}
+      renderSubComponent={(row) => (
+        <div className="space-y-2">
+          <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+          <p className="text-sm text-muted-foreground">
+            Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
+            {row.original.createdAt}
+          </p>
+        </div>
+      )}
+    />
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Rows 1 and 3 start expanded by passing an initial `expanded` state. The user can still toggle rows freely (uncontrolled after mount).',
+      },
+    },
+  },
+};
+
+// Row expansion - controlled expanded state
+export const WithControlledExpansion: Story = {
+  render: () => {
+    const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
+    const expandedCount = Object.values(expanded).filter(Boolean).length;
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <button
+            className="text-sm px-3 py-1 rounded border border-border hover:bg-muted"
+            onClick={() =>
+              setExpanded(Object.fromEntries(sampleData.map((_, i) => [String(i), true])))
+            }
+          >
+            Expand all
+          </button>
+          <button
+            className="text-sm px-3 py-1 rounded border border-border hover:bg-muted"
+            onClick={() => setExpanded({})}
+          >
+            Collapse all
+          </button>
+          <span className="text-sm text-muted-foreground">
+            {expandedCount} of {sampleData.length} rows expanded
+          </span>
+        </div>
+        <DataTable
+          columns={columns}
+          data={sampleData}
+          expanded={expanded}
+          onExpandedChange={(next) => setExpanded(next as Record<string, boolean>)}
+          renderSubComponent={(row) => (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Details for {row.original.name}</h4>
+              <p className="text-sm text-muted-foreground">
+                Provider: {row.original.provider} | Score: {row.original.score}% | Created:{' '}
+                {row.original.createdAt}
+              </p>
+            </div>
+          )}
+        />
+      </div>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Fully controlled expansion: the parent owns `expanded` state and receives updates via `onExpandedChange`. The "Expand all" / "Collapse all" buttons demonstrate programmatic control.',
+      },
+    },
+  },
+};
+
+// Server-side / manual filtering — parent controls column filters via props.
+export const ManualFiltering: StoryObj<typeof DataTable<Evaluation>> = {
+  render: () => {
+    const [columnFilters, setColumnFilters] = React.useState<{ id: string; value: unknown }[]>([]);
+
+    return (
+      <div className="space-y-4">
+        <div className="text-sm text-zinc-500 dark:text-zinc-400">
+          <p>
+            Column filters are controlled externally. Open a column header filter and change a value
+            — the callback fires but no client-side filtering happens.
+          </p>
+          <pre className="mt-2 rounded bg-muted p-2 text-xs">
+            {JSON.stringify(columnFilters, null, 2)}
+          </pre>
+        </div>
+        <DataTable
+          columns={columns}
+          data={sampleData}
+          manualFiltering
+          columnFilters={columnFilters}
+          onColumnFiltersChange={setColumnFilters}
+        />
+      </div>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Demonstrates manual (server-side) filtering. The parent owns columnFilters state and receives updates via onColumnFiltersChange. No client-side row filtering occurs.',
+      },
+    },
+  },
+};
+
+// Explicit Tailwind utility colors (light and dark variants) are preserved in cell renderers.
+export const WithExplicitTailwindColors: Story = {
+  render: () => {
+    const colorColumns: ColumnDef<Evaluation>[] = [
+      {
+        accessorKey: 'name',
+        header: 'Name',
+        size: 260,
+        cell: ({ getValue }) => (
+          <span className="text-sky-700 dark:text-sky-300 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded">
+            {getValue<string>()}
+          </span>
+        ),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        size: 140,
+      },
+      {
+        accessorKey: 'score',
+        header: 'Score',
+        size: 100,
+      },
+    ];
+
+    return (
+      <div className="space-y-6">
+        <div className="rounded-lg border p-4">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-3">Light mode</p>
+          <DataTable columns={colorColumns} data={sampleData.slice(0, 3)} />
+        </div>
+        <div className="rounded-lg border p-4 dark bg-zinc-950">
+          <p className="text-sm text-zinc-300 mb-3">Dark mode</p>
+          <div className="dark">
+            <DataTable columns={colorColumns} data={sampleData.slice(0, 3)} />
+          </div>
+        </div>
+      </div>
+    );
   },
 };
