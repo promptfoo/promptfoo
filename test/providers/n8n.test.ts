@@ -49,6 +49,7 @@ describe('N8nProvider', () => {
       const provider = new N8nProvider('', {
         config: { url: 'https://n8n.example.com/webhook/agent' },
       });
+      expect(provider.id()).toBe('n8n:https://n8n.example.com/webhook/agent');
       expect(provider.toString()).toBe('[n8n Provider https://n8n.example.com/webhook/agent]');
     });
 
@@ -424,6 +425,7 @@ describe('createN8nProvider', () => {
     const provider = createN8nProvider('n8n', {
       config: { url: 'https://n8n.example.com/webhook/agent' },
     });
+    expect(provider.id()).toBe('n8n:https://n8n.example.com/webhook/agent');
     expect(provider.toString()).toContain('https://n8n.example.com/webhook/agent');
   });
 

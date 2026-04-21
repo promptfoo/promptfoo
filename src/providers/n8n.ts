@@ -197,12 +197,13 @@ export class N8nProvider implements ApiProvider {
   constructor(webhookUrl: string, options: ProviderOptions = {}) {
     this.webhookUrl = webhookUrl;
     this.config = (options.config as N8nProviderConfig) || {};
-    this.providerId = options.id || `n8n:${webhookUrl}`;
 
     // Validate URL
     if (!this.webhookUrl && !this.config.url) {
       throw new Error('n8n provider requires a webhook URL');
     }
+
+    this.providerId = options.id || `n8n:${this.getUrl()}`;
   }
 
   id(): string {
