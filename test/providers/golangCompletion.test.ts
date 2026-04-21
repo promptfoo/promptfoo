@@ -66,6 +66,9 @@ describe('GolangProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockExecFile.mockReset();
+    mockGetCache.mockReset();
+    mockIsCacheEnabled.mockReset();
 
     // Reset all mocks to default behavior
     mockGetCache.mockResolvedValue({

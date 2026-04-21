@@ -9,6 +9,7 @@ import {
   type XAIFunctionCallOutput,
   XAIVoiceProvider,
 } from '../../../src/providers/xai/voice';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
 
@@ -139,7 +140,7 @@ describe('XAI Voice Provider', () => {
   describe('API key handling', () => {
     it('returns error when API key is not set', async () => {
       const originalKey = process.env.XAI_API_KEY;
-      delete process.env.XAI_API_KEY;
+      mockProcessEnv({ XAI_API_KEY: undefined });
 
       try {
         const provider = new XAIVoiceProvider('grok-3');
@@ -150,7 +151,7 @@ describe('XAI Voice Provider', () => {
         );
       } finally {
         if (originalKey) {
-          process.env.XAI_API_KEY = originalKey;
+          mockProcessEnv({ XAI_API_KEY: originalKey });
         }
       }
     });
@@ -373,14 +374,14 @@ describe('XAI Voice Provider', () => {
 
     beforeEach(() => {
       originalEnvValue = process.env.XAI_API_BASE_URL;
-      delete process.env.XAI_API_BASE_URL;
+      mockProcessEnv({ XAI_API_BASE_URL: undefined });
     });
 
     afterEach(() => {
       if (originalEnvValue === undefined) {
-        delete process.env.XAI_API_BASE_URL;
+        mockProcessEnv({ XAI_API_BASE_URL: undefined });
       } else {
-        process.env.XAI_API_BASE_URL = originalEnvValue;
+        mockProcessEnv({ XAI_API_BASE_URL: originalEnvValue });
       }
     });
 
@@ -445,14 +446,14 @@ describe('XAI Voice Provider', () => {
     });
 
     it('uses XAI_API_BASE_URL environment variable', () => {
-      process.env.XAI_API_BASE_URL = 'https://env-proxy.com/v1';
+      mockProcessEnv({ XAI_API_BASE_URL: 'https://env-proxy.com/v1' });
       const provider = new TestableXAIVoiceProvider('grok-3');
       expect(provider.getApiUrl()).toBe('https://env-proxy.com/v1');
       expect(provider.getWebSocketUrl()).toBe('wss://env-proxy.com/v1/realtime');
     });
 
     it('config apiBaseUrl takes priority over environment variable', () => {
-      process.env.XAI_API_BASE_URL = 'https://env-proxy.com/v1';
+      mockProcessEnv({ XAI_API_BASE_URL: 'https://env-proxy.com/v1' });
       const provider = new TestableXAIVoiceProvider('grok-3', {
         config: { apiBaseUrl: 'https://config-proxy.com/v1' },
       });
@@ -468,7 +469,7 @@ describe('XAI Voice Provider', () => {
     });
 
     it('env overrides take priority over environment variable', () => {
-      process.env.XAI_API_BASE_URL = 'https://env-proxy.com/v1';
+      mockProcessEnv({ XAI_API_BASE_URL: 'https://env-proxy.com/v1' });
       const provider = new TestableXAIVoiceProvider('grok-3', {
         env: { XAI_API_BASE_URL: 'https://override-proxy.com/v1' },
       });

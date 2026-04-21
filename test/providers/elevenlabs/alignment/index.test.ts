@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAlignmentProvider } from '../../../../src/providers/elevenlabs/alignment';
+import { mockProcessEnv } from '../../../util/utils';
 
 import type { CallApiContextParams } from '../../../../src/types/providers';
 
@@ -22,11 +23,12 @@ vi.mock('fs', async (importOriginal) => {
 describe('ElevenLabsAlignmentProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ELEVENLABS_API_KEY = 'test-api-key';
+    mockReadFile.mockReset();
+    mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
-    delete process.env.ELEVENLABS_API_KEY;
+    mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -38,7 +40,7 @@ describe('ElevenLabsAlignmentProvider', () => {
     });
 
     it('should throw error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsAlignmentProvider('elevenlabs:alignment')).toThrow(
         'ELEVENLABS_API_KEY environment variable is not set',
@@ -97,7 +99,7 @@ describe('ElevenLabsAlignmentProvider', () => {
     });
 
     it('should support custom API key environment variable', () => {
-      process.env.CUSTOM_ELEVENLABS_KEY = 'custom-key';
+      mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: 'custom-key' });
 
       const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment', {
         config: { apiKeyEnvar: 'CUSTOM_ELEVENLABS_KEY' },
@@ -105,7 +107,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       expect(provider).toBeDefined();
 
-      delete process.env.CUSTOM_ELEVENLABS_KEY;
+      mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: undefined });
     });
   });
 
@@ -349,7 +351,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
   describe('error handling', () => {
     it('should throw meaningful error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsAlignmentProvider('elevenlabs:alignment')).toThrow(
         /ELEVENLABS_API_KEY/i,

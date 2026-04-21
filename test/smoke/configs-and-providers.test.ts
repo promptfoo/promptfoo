@@ -118,7 +118,7 @@ describe('Provider Smoke Tests', () => {
     });
   });
 
-  describe('3.3 OpenAI Tool Format', () => {
+  describe('3.3 OpenAI Providers', () => {
     it('3.3.1 - passes tools and tool_choice to providers', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/normalized-tools.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'normalized-tools-output.json');
@@ -163,9 +163,7 @@ describe('Provider Smoke Tests', () => {
       expect(specificOutput.tool_choice.type).toBe('function');
       expect(specificOutput.tool_choice.function.name).toBe('get_weather');
     });
-  });
 
-  describe('3.3 OpenAI Provider Errors', () => {
     it('3.3.2 - surfaces custom apiKeyEnvar in missing API key errors', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/openai-custom-api-key-envar.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'openai-custom-api-key-envar-output.json');

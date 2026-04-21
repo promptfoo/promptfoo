@@ -21,6 +21,7 @@ import {
   materializeInputVariablesWithMetadata,
 } from '../inputVariables';
 import {
+  getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationUrl,
   getRemoteHealthUrl,
   neverGenerateRemote,
@@ -573,7 +574,7 @@ const pluginFactories: PluginFactory[] = [
     key: category,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        logger.error(`${category} plugin requires remote generation to be enabled`);
+        logger.error(getRemoteGenerationExplicitlyDisabledError(`${category} plugin`));
         return [];
       }
 
@@ -642,7 +643,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (neverGenerateRemote()) {
-      logger.error(`${category} plugin requires remote generation to be enabled`);
+      logger.error(getRemoteGenerationExplicitlyDisabledError(`${category} plugin`));
       return [];
     }
 
@@ -687,7 +688,7 @@ function createRemotePlugin<T extends PluginConfig>(
       const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
       if (neverGenerateRemote()) {
-        logger.error(`${key} plugin requires remote generation to be enabled`);
+        logger.error(getRemoteGenerationExplicitlyDisabledError(`${key} plugin`));
         return [];
       }
       const pluginId = getShortPluginId(key);

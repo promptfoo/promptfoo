@@ -45,8 +45,8 @@ interface MockEvalOutputCellProps extends EvalOutputCellProps {
 /**
  * Tests for duplicate image prevention logic (GitHub issue fix).
  * These tests verify that when the primary output is rendered as an image
- * (data URI, blob ref, or SVG), the first entry in output.images is skipped
- * to avoid rendering the same image twice.
+ * (data URI, blob ref, or SVG), matching entries in output.images are skipped
+ * without dropping distinct structured images.
  */
 describe('EvalOutputCell duplicate image prevention', () => {
   const mockOnRating = vi.fn();
@@ -129,7 +129,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
       const props = createBaseProps({
         text: dataUri,
         images: [
-          { data: '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQ==' },
+          { data: dataUri },
           {
             data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
           },
@@ -148,7 +148,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
         'data:application/octet-stream;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
       const props = createBaseProps({
         text: dataUri,
-        images: [{ data: 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' }],
+        images: [{ data: dataUri }],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -158,12 +158,29 @@ describe('EvalOutputCell duplicate image prevention', () => {
       expect(images).toHaveLength(1);
     });
 
+    it('should deduplicate mixed MIME data URIs that contain the same image bytes', () => {
+      const base64 = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      const props = createBaseProps({
+        text: `data:application/octet-stream;base64,${base64}`,
+        images: [
+          {
+            data: `data:image/png;base64,${base64}`,
+          },
+        ],
+      });
+
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(1);
+    });
+
     it('should detect data URI with image/svg+xml as primary rendered image', () => {
       const dataUri = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCI+PC9zdmc+';
       const props = createBaseProps({
         text: dataUri,
         images: [
-          { data: 'PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCI+PC9zdmc+' },
+          { data: dataUri },
           {
             data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
           },
@@ -184,7 +201,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
         text: dataUri,
         images: [
           {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            data: dataUri,
           },
         ],
       });
@@ -223,11 +240,14 @@ describe('EvalOutputCell duplicate image prevention', () => {
     it('should detect raw SVG content (starts with <svg) as primary rendered image', () => {
       const svgContent =
         '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><circle cx="50" cy="50" r="40" fill="blue"/></svg>';
+      const primarySvgSrc = `data:image/svg+xml;base64,${btoa(
+        unescape(encodeURIComponent(svgContent)),
+      )}`;
       const props = createBaseProps({
         text: svgContent,
         images: [
           {
-            data: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIj48L3N2Zz4=',
+            data: primarySvgSrc,
           },
           {
             data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -245,11 +265,14 @@ describe('EvalOutputCell duplicate image prevention', () => {
     it('should detect raw SVG with leading whitespace as primary rendered image', () => {
       const svgContent =
         '  \n\t  <svg xmlns="http://www.w3.org/2000/svg" width="50" height="50"><rect width="50" height="50" fill="red"/></svg>';
+      const primarySvgSrc = `data:image/svg+xml;base64,${btoa(
+        unescape(encodeURIComponent(svgContent)),
+      )}`;
       const props = createBaseProps({
         text: svgContent,
         images: [
           {
-            data: 'PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCI+PC9zdmc+',
+            data: primarySvgSrc,
           },
         ],
       });
@@ -303,14 +326,16 @@ describe('EvalOutputCell duplicate image prevention', () => {
     });
   });
 
-  describe('image array slicing behavior', () => {
-    it('should skip first image when primary is rendered as image', () => {
-      const dataUri = 'data:image/png;base64,primary-image-data';
+  describe('image array deduplication behavior', () => {
+    it('should skip matching structured images when primary is rendered as image', () => {
+      const duplicateImageData =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const dataUri = `data:image/png;base64,${duplicateImageData}`;
       const props = createBaseProps({
         text: dataUri,
         images: [
           {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            data: duplicateImageData,
           },
           {
             data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -323,7 +348,7 @@ describe('EvalOutputCell duplicate image prevention', () => {
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
 
-      // Should render 3 images: primary + 2 additional (skipping first duplicate)
+      // Should render 3 images: primary + 2 additional (skipping only the matching duplicate)
       const images = container.querySelectorAll('img');
       expect(images).toHaveLength(3);
     });
@@ -352,12 +377,14 @@ describe('EvalOutputCell duplicate image prevention', () => {
     });
 
     it('should handle single image in array when primary is rendered as image', () => {
-      const dataUri = 'data:image/png;base64,primary-image-data';
+      const duplicateImageData =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const dataUri = `data:image/png;base64,${duplicateImageData}`;
       const props = createBaseProps({
         text: dataUri,
         images: [
           {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            data: duplicateImageData,
           },
         ],
       });
@@ -369,20 +396,22 @@ describe('EvalOutputCell duplicate image prevention', () => {
       expect(images).toHaveLength(1);
     });
 
-    it('should handle empty images array after slicing', () => {
-      const dataUri = 'data:image/png;base64,primary-image-data';
+    it('should handle an images array containing only a duplicate', () => {
+      const duplicateImageData =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const dataUri = `data:image/png;base64,${duplicateImageData}`;
       const props = createBaseProps({
         text: dataUri,
         images: [
           {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            data: duplicateImageData,
           },
         ],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
 
-      // Should render 1 image (primary only, since slicing leaves empty array)
+      // Should render 1 image (primary only, since the structured image is a duplicate)
       const images = container.querySelectorAll('img');
       expect(images).toHaveLength(1);
 
@@ -392,9 +421,12 @@ describe('EvalOutputCell duplicate image prevention', () => {
 
     it('should not render any additional images if array only had the duplicate', () => {
       const svgContent = '<svg width="100" height="100"></svg>';
+      const primarySvgSrc = `data:image/svg+xml;base64,${btoa(
+        unescape(encodeURIComponent(svgContent)),
+      )}`;
       const props = createBaseProps({
         text: svgContent,
-        images: [{ data: 'PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCI+PC9zdmc+' }],
+        images: [{ data: primarySvgSrc }],
       });
 
       const { container } = renderWithProviders(<EvalOutputCell {...props} />);
@@ -477,6 +509,27 @@ describe('EvalOutputCell duplicate image prevention', () => {
       expect(images).toHaveLength(2);
     });
 
+    it('deduplicates repeated structured images when no primary image is rendered', () => {
+      const imageData =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const props = createBaseProps({
+        text: '',
+        images: [
+          {
+            data: imageData,
+          },
+          {
+            data: `data:image/png;base64,${imageData}`,
+          },
+        ],
+      });
+
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(1);
+    });
+
     it('should handle images with null data gracefully', () => {
       const dataUri = 'data:image/png;base64,primary-image-data';
       const props = createBaseProps({
@@ -549,12 +602,14 @@ describe('EvalOutputCell duplicate image prevention', () => {
   describe('integration with different output types', () => {
     it('should work correctly when output has both text and images from Gemini', () => {
       // Simulate a Gemini response with text+image format
+      const duplicateImageData =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
       const props = createBaseProps({
-        text: 'data:image/png;base64,gemini-generated-image',
+        text: `data:image/png;base64,${duplicateImageData}`,
         provider: 'google:gemini-3.1-flash-image-preview',
         images: [
           {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            data: duplicateImageData,
           },
           {
             data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -656,13 +711,15 @@ describe('EvalOutputCell duplicate image prevention', () => {
 
     it('should correctly show additional images beyond the first when primary is rendered', () => {
       // Ensure the fix doesn't break the ability to show truly additional images
-      const primaryImageUri = 'data:image/png;base64,primary-image';
+      const duplicateImageData =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const primaryImageUri = `data:image/png;base64,${duplicateImageData}`;
 
       const props = createBaseProps({
         text: primaryImageUri,
         images: [
           {
-            data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            data: duplicateImageData,
           },
           {
             data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
@@ -678,6 +735,25 @@ describe('EvalOutputCell duplicate image prevention', () => {
       // Should show: primary + 2 additional (skipping only the first duplicate)
       const images = container.querySelectorAll('img');
       expect(images).toHaveLength(3);
+    });
+
+    it('should render the first structured image when it is distinct from the primary image', () => {
+      const structuredImageData =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const props = createBaseProps({
+        text: 'data:image/png;base64,primary-image',
+        images: [
+          {
+            data: structuredImageData,
+          },
+        ],
+      });
+
+      const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+      const images = container.querySelectorAll('img');
+      expect(images).toHaveLength(2);
+      expect(images[1].getAttribute('src')).toBe(`data:image/png;base64,${structuredImageData}`);
     });
   });
 });

@@ -12,7 +12,12 @@ import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationDisabledError,
+  getRemoteGenerationExplicitlyDisabledError,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../remoteGeneration';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -654,7 +659,9 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     // Meta-agent strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:meta strategy requires remote generation, which is currently disabled for this configuration. To fix, enable remote generation (for example by unsetting OPENAI_API_KEY), set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
+        neverGenerateRemote()
+          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:meta strategy')
+          : getRemoteGenerationDisabledError('jailbreak:meta strategy'),
       );
     }
 

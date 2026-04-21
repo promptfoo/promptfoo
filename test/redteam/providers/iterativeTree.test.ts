@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createTreeNode,
   evaluateResponse,
@@ -19,11 +19,14 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../src/util/tokenUsageUtils';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
-  ApiProvider,
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
@@ -117,13 +120,11 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('evaluateResponse', () => {
-    let mockRedteamProvider: Mocked<OpenAiChatCompletionProvider>;
+    let mockRedteamProvider: MockApiProvider;
 
     beforeEach(() => {
-      mockRedteamProvider = {
-        id: vi.fn().mockReturnValue('mock-provider'),
-        callApi: vi.fn(),
-      } as unknown as Mocked<OpenAiChatCompletionProvider>;
+      mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
+      mockRedteamProvider.callApi.mockReset();
     });
 
     it('should evaluate response correctly without penalized phrase', async () => {
@@ -227,13 +228,11 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('getNewPrompt', () => {
-    let mockRedteamProvider: Mocked<OpenAiChatCompletionProvider>;
+    let mockRedteamProvider: MockApiProvider;
 
     beforeEach(() => {
-      mockRedteamProvider = {
-        id: vi.fn().mockReturnValue('mock-provider'),
-        callApi: vi.fn(),
-      } as unknown as Mocked<OpenAiChatCompletionProvider>;
+      mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
+      mockRedteamProvider.callApi.mockReset();
     });
 
     it('should generate a new prompt correctly', async () => {
@@ -320,13 +319,11 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('Abort Signal Handling', () => {
-    let mockRedteamProvider: Mocked<ApiProvider>;
+    let mockRedteamProvider: MockApiProvider;
 
     beforeEach(() => {
-      mockRedteamProvider = {
-        id: vi.fn().mockReturnValue('mock-provider'),
-        callApi: vi.fn(),
-      } as unknown as Mocked<ApiProvider>;
+      mockRedteamProvider = createMockProvider({ id: 'mock-provider' });
+      mockRedteamProvider.callApi.mockReset();
     });
 
     it('should re-throw AbortError from evaluateResponse and not swallow it', async () => {
@@ -505,13 +502,11 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('getTargetResponse', () => {
-    let mockTargetProvider: Mocked<ApiProvider>;
+    let mockTargetProvider: MockApiProvider;
 
     beforeEach(() => {
-      mockTargetProvider = {
-        id: vi.fn().mockReturnValue('mock-provider'),
-        callApi: vi.fn<ApiProvider['callApi']>(),
-      } as Mocked<ApiProvider>;
+      mockTargetProvider = createMockProvider({ id: 'mock-provider' });
+      mockTargetProvider.callApi.mockReset();
     });
 
     it('should get target response correctly', async () => {
@@ -711,23 +706,19 @@ describe('Tree Structure', () => {
 });
 
 describe('Tree Structure and Metadata', () => {
-  let mockRedteamProvider: Mocked<ApiProvider>;
-  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockRedteamProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockRedteamProvider = {
-      id: vi.fn().mockReturnValue('mock-provider'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
-        output: JSON.stringify({ onTopic: true }),
-      }),
-    } as Mocked<ApiProvider>;
+    mockRedteamProvider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({ output: JSON.stringify({ onTopic: true }) }),
+    });
 
-    mockTargetProvider = {
-      id: vi.fn().mockReturnValue('mock-provider'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
-        output: 'test response',
-      }),
-    } as Mocked<ApiProvider>;
+    mockTargetProvider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({ output: 'test response' }),
+    });
   });
   it('should track parent-child relationships in metadata', async () => {
     const parentPrompt = 'parent prompt';
@@ -772,13 +763,13 @@ describe('Tree Structure and Metadata', () => {
 
   it('should not throw on target error and allow error-bearing output to be recorded', async () => {
     // This test validates the non-throwing behavior at a unit level by calling shared.getTargetResponse directly
-    const mockTargetProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'This is 504',
         error: 'HTTP 504',
       }),
-    } as Mocked<ApiProvider>;
+    });
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -1168,14 +1159,14 @@ describe('Token Counting', () => {
   });
 
   it('should correctly track token usage from target provider responses', async () => {
-    const mockTargetProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'target response',
         tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
         cached: false,
       }),
-    } as Mocked<ApiProvider>;
+    });
 
     const targetPrompt = 'Test prompt';
     const context: CallApiContextParams = {
@@ -1197,14 +1188,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle missing token usage from target responses', async () => {
-    const mockTargetProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'response without tokens',
-        // No tokenUsage provided
+        tokenUsage: undefined,
         cached: false,
       }),
-    } as Mocked<ApiProvider>;
+    });
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -1218,14 +1209,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle zero token counts correctly', async () => {
-    const mockTargetProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'response with zero tokens',
         tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
         cached: false,
       }),
-    } as Mocked<ApiProvider>;
+    });
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -1257,16 +1248,16 @@ describe('Token Counting', () => {
   });
 
   it('should track token usage from redteam provider calls', async () => {
-    const mockRedteamProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-redteam'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockRedteamProvider = createMockProvider({
+      id: 'mock-redteam',
+      response: createProviderResponse({
         output: JSON.stringify({
           improvement: 'test improvement',
           prompt: 'test prompt',
         }),
         tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
       }),
-    } as Mocked<ApiProvider>;
+    });
 
     const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: 'System prompt' },
@@ -1282,16 +1273,16 @@ describe('Token Counting', () => {
   });
 
   it('should track token usage from judge evaluation calls', async () => {
-    const mockJudgeProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-judge'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockJudgeProvider = createMockProvider({
+      id: 'mock-judge',
+      response: createProviderResponse({
         output: JSON.stringify({
           currentResponse: { rating: 8, explanation: 'Good response' },
           previousBestResponse: { rating: 5, explanation: 'Previous response' },
         }),
         tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
       }),
-    } as Mocked<ApiProvider>;
+    });
 
     const { score, explanation } = await evaluateResponse(
       mockJudgeProvider,
@@ -1309,13 +1300,13 @@ describe('Token Counting', () => {
   // removed on-topic token usage test
 
   it('should handle incomplete token usage data gracefully', async () => {
-    const mockProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-provider'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      response: createProviderResponse({
         output: 'response with partial tokens',
         tokenUsage: { total: 100, prompt: 60 }, // completion missing
       }),
-    } as Mocked<ApiProvider>;
+    });
 
     const result = await getTargetResponse(
       mockProvider,
@@ -1431,30 +1422,28 @@ describe('Token Counting', () => {
     // This test simulates how token usage would be accumulated in the actual iterativeTree provider
     // by testing individual components that contribute to token usage
 
-    const mockRedteamProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-redteam'),
-      callApi: vi
-        .fn<ApiProvider['callApi']>()
-        .mockResolvedValueOnce({
-          output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
-          tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
-        })
-        .mockResolvedValueOnce({
-          output: JSON.stringify({
-            currentResponse: { rating: 7, explanation: 'test' },
-            previousBestResponse: { rating: 0, explanation: 'none' },
-          }),
-          tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
+    const mockRedteamProvider = createMockProvider({ id: 'mock-redteam' });
+    mockRedteamProvider.callApi
+      .mockReset()
+      .mockResolvedValueOnce({
+        output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
+        tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: JSON.stringify({
+          currentResponse: { rating: 7, explanation: 'test' },
+          previousBestResponse: { rating: 0, explanation: 'none' },
         }),
-    } as Mocked<ApiProvider>;
+        tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
+      });
 
-    const mockTargetProvider: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({
         output: 'target response',
         tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
       }),
-    } as Mocked<ApiProvider>;
+    });
 
     // Simulate the sequence of calls that would happen in one iteration
     const promptResult = await getNewPrompt(mockRedteamProvider, [
@@ -1486,14 +1475,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle provider delay settings during token tracking', async () => {
-    const mockProviderWithDelay: Mocked<ApiProvider> = {
-      id: vi.fn().mockReturnValue('mock-provider-with-delay'),
-      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockProviderWithDelay = createMockProvider({
+      id: 'mock-provider-with-delay',
+      delay: 100,
+      response: createProviderResponse({
         output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
         tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
       }),
-      delay: 100, // 100ms delay
-    } as Mocked<ApiProvider>;
+    });
 
     const startTime = Date.now();
 
