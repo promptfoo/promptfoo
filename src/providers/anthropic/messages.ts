@@ -14,12 +14,20 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { transformToolChoice, transformTools } from '../shared';
+import {
+  CLAUDE_CODE_IDENTITY_PROMPT,
+  CLAUDE_CODE_OAUTH_BETA_FEATURES,
+  CLAUDE_CODE_USER_AGENT,
+  CLAUDE_CODE_X_APP,
+  isCredentialExpired,
+} from './claudeCodeAuth';
 import { AnthropicGenericProvider } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
   getRefusalDetails,
   getTokenUsage,
+  isClaudeOpus47Model,
   outputFromMessage,
   parseMessages,
   processAnthropicTools,
@@ -53,6 +61,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   declare config: AnthropicMessageOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
+  private opus47TemperatureWarned = false;
+
+  // Messages is the only Anthropic subclass wired to Claude Code OAuth —
+  // the legacy text-completion endpoint does not accept OAuth tokens.
+  static override readonly SUPPORTS_CLAUDE_CODE_OAUTH = true;
 
   static ANTHROPIC_MODELS = ANTHROPIC_MODELS;
 
@@ -101,9 +114,25 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       await this.initializationPromise;
     }
 
-    if (!this.apiKey) {
+    if (!this.apiKey && !this.usingClaudeCodeOAuth) {
       throw new Error(
-        'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config.',
+        'Anthropic API key is not set. Set the ANTHROPIC_API_KEY environment variable or add `apiKey` to the provider config. ' +
+          'Alternatively, if you have an active Claude Code session, set `apiKeyRequired: false` in the provider config to authenticate via Claude Code.',
+      );
+    }
+
+    // Re-check expiry at request time so we fail with an actionable message
+    // ("run `claude /login`") instead of a raw 401 from the SDK. The
+    // constructor already warned on expiry, but that log is easy to miss in
+    // long eval runs where the provider is built minutes before the first
+    // call. Credentials without an `expiresAt` are treated as non-expired.
+    if (
+      this.usingClaudeCodeOAuth &&
+      this.claudeCodeCredential &&
+      isCredentialExpired(this.claudeCodeCredential)
+    ) {
+      throw new Error(
+        'Claude Code OAuth credential is expired. Run `claude /login` to refresh it, then re-run the eval.',
       );
     }
 
@@ -265,16 +294,49 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       }
     }
 
+    // Opus 4.7 deprecated `temperature` at the model level — the API returns
+    // 400 `invalid_request_error` for any request that includes it, including
+    // promptfoo's built-in default of 0. Suppress the parameter entirely and
+    // warn once per provider instance when the user supplied an explicit
+    // temperature via config or the ANTHROPIC_TEMPERATURE env var (the
+    // built-in default stays silent to avoid spamming every request).
+    const isOpus47 = isClaudeOpus47Model(this.modelName);
+    const explicitTemperature =
+      config.temperature != null ||
+      parseEnvFloat(this.env?.ANTHROPIC_TEMPERATURE) != null ||
+      parseEnvFloat(process.env.ANTHROPIC_TEMPERATURE) != null;
+    if (isOpus47 && explicitTemperature && !this.opus47TemperatureWarned) {
+      logger.warn(
+        'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your config (or unset ANTHROPIC_TEMPERATURE) to silence this warning.',
+      );
+      this.opus47TemperatureWarned = true;
+    }
+
+    // Anthropic rejects `temperature` alongside `top_p`, with extended thinking,
+    // and on Opus 4.7 (deprecated at the model level). Collapse all three cases
+    // into one predicate so the params spread stays readable.
+    const omitTemperature = resolvedTopP != null || thinkingEnabled || isOpus47;
+
+    // When authenticating via a Claude Code OAuth token, Anthropic's API
+    // requires the Claude Code identity as the first system block — as of
+    // 2025-Q4, sending any other leading system block returns HTTP 400
+    // `invalid_request_error`. Prepend it as its own block so the
+    // user-provided system prompt still flows through. If the user's own
+    // system prompt happens to start with the same string the API tolerates
+    // the duplicate.
+    const resolvedSystem: Anthropic.TextBlockParam[] | undefined = this.usingClaudeCodeOAuth
+      ? [{ type: 'text', text: CLAUDE_CODE_IDENTITY_PROMPT }, ...(system ?? [])]
+      : system;
+
     const shouldStream = config.stream ?? false;
     const params: Anthropic.MessageCreateParams = {
       model: this.modelName,
-      ...(system ? { system } : {}),
+      ...(resolvedSystem && resolvedSystem.length > 0 ? { system: resolvedSystem } : {}),
       max_tokens:
         config.max_tokens ?? getEnvInt('ANTHROPIC_MAX_TOKENS', thinkingEnabled ? 2048 : 1024),
       messages: extractedMessages,
       stream: shouldStream,
-      // Anthropic: temperature is incompatible with both top_p and extended thinking
-      ...(resolvedTopP != null || thinkingEnabled
+      ...(omitTemperature
         ? {}
         : {
             temperature:
@@ -312,9 +374,30 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     // Add beta features header if specified
     let allBetaFeatures = [...(config.beta || []), ...requiredBetaFeatures];
 
+    // Merge any `anthropic-beta` the user passed via `config.headers` so it
+    // isn't silently dropped when we rebuild the header below. The SDK
+    // accepts a comma-separated list, so we split, trim, and dedupe.
+    const userBetaHeader = config.headers?.['anthropic-beta'];
+    if (typeof userBetaHeader === 'string' && userBetaHeader.length > 0) {
+      allBetaFeatures.push(
+        ...userBetaHeader
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter((entry) => entry.length > 0),
+      );
+    }
+
     // Automatically add structured-outputs beta when output_format is used
     if (processedOutputFormat && !allBetaFeatures.includes('structured-outputs-2025-11-13')) {
       allBetaFeatures.push('structured-outputs-2025-11-13');
+    }
+
+    // Claude Code OAuth tokens require additional beta flags. These are also
+    // set as default SDK headers by the generic provider, but we merge them
+    // into per-request headers as well so explicit `config.headers` or
+    // `config.beta` entries don't drop them.
+    if (this.usingClaudeCodeOAuth) {
+      allBetaFeatures.push(...CLAUDE_CODE_OAUTH_BETA_FEATURES);
     }
 
     // Deduplicate beta features
@@ -322,6 +405,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
     if (allBetaFeatures.length > 0) {
       headers['anthropic-beta'] = allBetaFeatures.join(',');
+    }
+
+    // Force the Claude Code identity headers when authenticating via OAuth.
+    // These are also set on the SDK client as `defaultHeaders`, but per-request
+    // `headers` override those, so a user-supplied `config.headers['user-agent']`
+    // (or `x-app`) would otherwise break OAuth — Anthropic gates OAuth tokens
+    // to the Claude Code app identity and responds with 401 if either header
+    // doesn't match.
+    if (this.usingClaudeCodeOAuth) {
+      headers['user-agent'] = CLAUDE_CODE_USER_AGENT;
+      headers['x-app'] = CLAUDE_CODE_X_APP;
     }
 
     const cache = await getCache();
