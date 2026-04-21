@@ -9,9 +9,8 @@
   "plugins": [
     {
       "name": "promptfoo-evals",
-      "source": "./.claude/skills/promptfoo-evals",
+      "source": "./plugins/promptfoo-evals",
       "description": "Teaches AI coding agents to create promptfoo eval suites with deterministic assertions, provider configs, and best practices",
-      "version": "1.0.0",
       "homepage": "https://www.promptfoo.dev/docs/integrations/agent-skill",
       "repository": "https://github.com/promptfoo/promptfoo",
       "license": "MIT",

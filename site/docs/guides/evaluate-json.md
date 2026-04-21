@@ -140,7 +140,7 @@ tests:
 
 ## Example
 
-See the full example in [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/json-output).
+See the full example in [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-json-output).
 
 ## Conclusion
 

@@ -206,6 +206,18 @@ describe('sanitizeObject', () => {
       it('should redact authToken', () => {
         expect(sanitizeObject({ authToken: 'token123' })).toEqual({ authToken: '[REDACTED]' });
       });
+
+      it('should redact AWS_BEARER_TOKEN_BEDROCK', () => {
+        expect(sanitizeObject({ AWS_BEARER_TOKEN_BEDROCK: 'bedrock-token' })).toEqual({
+          AWS_BEARER_TOKEN_BEDROCK: '[REDACTED]',
+        });
+      });
+
+      it('should redact ANTHROPIC_API_KEY', () => {
+        expect(sanitizeObject({ ANTHROPIC_API_KEY: 'anthropic-key' })).toEqual({
+          ANTHROPIC_API_KEY: '[REDACTED]',
+        });
+      });
     });
 
     describe('authorization and auth variants', () => {
@@ -446,6 +458,28 @@ describe('sanitizeObject', () => {
       };
       const result = sanitizeObject(input);
       expect(result.l1.l2.l3.l4.l5).toBe('[...]');
+    });
+
+    it('should allow overriding max depth limit', () => {
+      const input = {
+        l1: {
+          l2: {
+            l3: {
+              l4: {
+                l5: {
+                  l6: {
+                    data: 'reachable',
+                    token: 'secret',
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+      const result = sanitizeObject(input, { maxDepth: Number.POSITIVE_INFINITY });
+      expect(result.l1.l2.l3.l4.l5.l6.data).toBe('reachable');
+      expect(result.l1.l2.l3.l4.l5.l6.token).toBe('[REDACTED]');
     });
 
     it('should sanitize at all depth levels within limit', () => {

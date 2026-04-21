@@ -26,33 +26,30 @@ The cache is managed by [`cache-manager`](https://www.npmjs.com/package/cache-ma
 
 ### Cache Keys
 
-Cache entries are stored using composite keys that include:
+Cache entries are stored using provider-specific composite keys that include:
 
 - Provider identifier
-- Prompt content
+- Prompt or request content, often represented as a deterministic digest
 - Provider configuration
 - Context variables (when applicable)
 
-For example:
+Cache key formats are implementation details and may change between versions.
+Sensitive request payloads and headers are hashed where possible instead of
+being embedded directly in cache keys.
 
 ```js
-// OpenAI - model, messages, settings
-`gpt-5:${JSON.stringify({
-  "messages": [...],
-  "temperature": 0
-})}`
+// Provider-specific scope plus a digest of request material
+const providerCacheKey = `openai:gpt-5:<request-digest>`;
 
-// HTTP - URL and request details
-`fetch:v2:https://api.example.com/v1/chat:${JSON.stringify({
-  "method": "POST",
-  "body": {...}
-})}`
+// HTTP fetch cache entries include URL, method, headers, options, and body identity
+const fetchCacheKey = `fetch:v3:<request-digest>`;
 ```
 
 ### Cache Behavior
 
 - Successful API responses are cached with their complete response data
 - Error responses are not cached to allow for retry attempts
+- When `evaluateOptions.repeat` or `--repeat` is greater than 1, each repeat index uses a separate cache namespace. Re-running the same eval can reuse those per-repeat cached responses, while preserving distinct outputs between repeat 0, repeat 1, etc.
 - Cache is automatically invalidated when:
   - TTL expires (default: 14 days)
   - Cache is manually cleared
@@ -61,6 +58,8 @@ For example:
 ## Command Line
 
 If you're using the command line, call `promptfoo eval` with `--no-cache` to disable the cache, or set `{ evaluateOptions: { cache: false }}` in your config file.
+
+Use `--no-cache` with `--repeat` when you want every run to make fresh LLM calls instead of replaying each repeat index from cache.
 
 Use `promptfoo cache clear` command to clear the cache.
 

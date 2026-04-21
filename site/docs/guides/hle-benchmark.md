@@ -62,12 +62,12 @@ HLE addresses benchmark saturation - the phenomenon where advanced models achiev
 Set up your HLE eval with these commands:
 
 ```bash
-npx promptfoo@latest init --example huggingface-hle
-cd huggingface-hle
+npx promptfoo@latest init --example huggingface/hle
+cd huggingface/hle
 npx promptfoo@latest eval
 ```
 
-See the complete example at [examples/huggingface-hle](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface-hle) for all configuration files and implementation details.
+See the complete example at [examples/huggingface/hle](https://github.com/promptfoo/promptfoo/tree/main/examples/huggingface/hle) for all configuration files and implementation details.
 
 Set these API keys before running:
 
@@ -224,7 +224,7 @@ providers:
 
 ## Eval Limitations
 
-Keep in mind these results are preliminary - we only tested 50 questions per model in a single run. That's a pretty small sample from HLE's 14,000+ questions, and we didn't optimize our approach much (token budgets, prompts, etc. were chosen somewhat arbitrarily).
+Keep in mind these results are preliminary - we only tested 50 questions per model in a single run. That's a pretty small sample from HLE's 3,000+ questions, and we didn't optimize our approach much (token budgets, prompts, etc. were chosen somewhat arbitrarily).
 
 o4-mini's 42% success rate stands out and requires validation through larger samples and multiple runs. Performance will likely vary considerably across different subjects and question formats.
 
