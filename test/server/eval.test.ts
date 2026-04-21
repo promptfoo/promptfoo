@@ -39,7 +39,6 @@ describe('eval routes', () => {
     // Wait for all cleanups to complete
     await Promise.allSettled(cleanupPromises);
     testEvalIds.clear();
-    vi.restoreAllMocks();
   });
 
   function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
