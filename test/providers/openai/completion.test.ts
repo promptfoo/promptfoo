@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiCompletionProvider } from '../../../src/providers/openai/completion';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/logger');
@@ -13,7 +15,7 @@ describe('OpenAI Provider', () => {
     vi.resetAllMocks();
     disableCache();
     // Set a default API key for tests unless explicitly testing missing key
-    process.env.OPENAI_API_KEY = 'test-api-key';
+    mockProcessEnv({ OPENAI_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
@@ -76,7 +78,7 @@ describe('OpenAI Provider', () => {
     it('should handle missing API key', async () => {
       // Save the original env var and clear it for this test
       const originalApiKey = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiCompletionProvider('text-davinci-003', {
@@ -88,12 +90,37 @@ describe('OpenAI Provider', () => {
           },
         });
 
-        await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage(),
+        );
       } finally {
-        // Restore the original env var
-        if (originalApiKey) {
-          process.env.OPENAI_API_KEY = originalApiKey;
-        }
+        restoreEnvVar('OPENAI_API_KEY', originalApiKey);
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const originalApiKey = process.env.OPENAI_API_KEY;
+      const originalCustomApiKey = process.env.CUSTOM_OPENAI_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_OPENAI_KEY: undefined });
+
+      try {
+        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_OPENAI_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_OPENAI_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('Test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_OPENAI_KEY'),
+        );
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalApiKey);
+        restoreEnvVar('CUSTOM_OPENAI_KEY', originalCustomApiKey);
       }
     });
 
@@ -209,7 +236,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle invalid OPENAI_STOP env var', async () => {
-      process.env.OPENAI_STOP = '{invalid json}';
+      mockProcessEnv({ OPENAI_STOP: '{invalid json}' });
 
       const provider = new OpenAiCompletionProvider('text-davinci-003', {
         config: {
@@ -221,7 +248,7 @@ describe('OpenAI Provider', () => {
         /OPENAI_STOP is not a valid JSON string/,
       );
 
-      delete process.env.OPENAI_STOP;
+      mockProcessEnv({ OPENAI_STOP: undefined });
     });
   });
 });

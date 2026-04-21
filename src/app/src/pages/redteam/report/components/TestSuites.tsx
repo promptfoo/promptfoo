@@ -6,7 +6,6 @@ import { Card } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
-import { useTelemetry } from '@app/hooks/useTelemetry';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import {
   categoryAliases,
@@ -41,8 +40,8 @@ interface TestSuitesProps {
   evalId: string;
   categoryStats: Record<string, Required<TestResultStats>>;
   plugins: RedteamPluginObject[];
-  failuresByPlugin?: Record<string, any[]>;
-  passesByPlugin?: Record<string, any[]>;
+  failuresByPlugin?: Record<string, unknown[]>;
+  passesByPlugin?: Record<string, unknown[]>;
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -67,7 +66,6 @@ const TestSuites = ({
   vulnerabilitiesDataGridRef,
 }: TestSuitesProps) => {
   const navigate = useNavigate();
-  const { recordEvent } = useTelemetry();
   const { severityFilter } = useReportStore();
   const [sortModel] = React.useState<SortingState>([{ id: 'riskScore', desc: true }]);
 
@@ -107,6 +105,7 @@ const TestSuites = ({
 
   const customPoliciesById = useCustomPoliciesMap(plugins);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const allRows = React.useMemo(() => {
     return (
       Object.entries(categoryStats)
@@ -219,12 +218,13 @@ const TestSuites = ({
       }
 
       if (sortModel.length > 0 && sortModel[0].id === 'severity') {
-        const severityOrder = {
-          [Severity.Critical]: 4,
-          [Severity.High]: 3,
-          [Severity.Medium]: 2,
-          [Severity.Low]: 1,
-        } as const;
+        const severityOrder: Record<Severity, number> = {
+          [Severity.Critical]: 5,
+          [Severity.High]: 4,
+          [Severity.Medium]: 3,
+          [Severity.Low]: 2,
+          [Severity.Informational]: 1,
+        };
 
         return sortModel[0].desc
           ? severityOrder[b.severity as Severity] - severityOrder[a.severity as Severity]
@@ -329,7 +329,7 @@ const TestSuites = ({
               <TooltipTrigger asChild>
                 <span className="flex cursor-help items-center gap-2">
                   <span
-                    className="h-3 w-3 rounded-full"
+                    className="size-3 rounded-full"
                     style={{ backgroundColor: getRiskScoreColor(value) }}
                   />
                   {value.toFixed(2)}
@@ -431,11 +431,12 @@ const TestSuites = ({
           return severityDisplayNames[value] || 'Unknown';
         },
         sortingFn: (rowA, rowB) => {
-          const severityOrder: Record<string, number> = {
-            [Severity.Critical]: 4,
-            [Severity.High]: 3,
-            [Severity.Medium]: 2,
-            [Severity.Low]: 1,
+          const severityOrder: Record<Severity, number> = {
+            [Severity.Critical]: 5,
+            [Severity.High]: 4,
+            [Severity.Medium]: 3,
+            [Severity.Low]: 2,
+            [Severity.Informational]: 1,
           };
           const a = severityOrder[rowA.original.severity as Severity] ?? 0;
           const b = severityOrder[rowB.original.severity as Severity] ?? 0;
@@ -448,13 +449,14 @@ const TestSuites = ({
             { label: 'High', value: Severity.High },
             { label: 'Medium', value: Severity.Medium },
             { label: 'Low', value: Severity.Low },
+            { label: 'Informational', value: Severity.Informational },
           ],
         },
       },
       {
         id: 'actions',
         header: 'Actions',
-        size: 220,
+        size: 100,
         enableSorting: false,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
@@ -481,46 +483,19 @@ const TestSuites = ({
             >
               View logs
             </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    // Track the mitigation button click
-                    recordEvent('feature_used', {
-                      feature: 'redteam_apply_mitigation_clicked',
-                      plugin: row.original.pluginName,
-                      evalId,
-                    });
-
-                    // Open email in new tab
-                    window.open(
-                      'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
-                      '_blank',
-                    );
-                  }}
-                >
-                  Apply mitigation
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                Temporarily disabled while in beta, click to contact us to enable
-              </TooltipContent>
-            </Tooltip>
           </div>
         ),
       },
     ],
-    [navigate, pluginsById, recordEvent, evalId],
+    [navigate, pluginsById, evalId],
   );
 
   return (
-    <div className="break-before-page print:break-before-always" ref={vulnerabilitiesDataGridRef}>
+    <div ref={vulnerabilitiesDataGridRef}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl font-semibold">Vulnerabilities and Mitigations</h2>
         <Button onClick={exportToCSV} className="print:hidden">
-          <Download className="mr-2 h-4 w-4" />
+          <Download className="mr-2 size-4" />
           Export vulnerabilities to CSV
         </Button>
       </div>
@@ -534,8 +509,6 @@ const TestSuites = ({
           showColumnToggle={true}
           showFilter={true}
           showExport={false}
-          showPagination={true}
-          initialPageSize={25}
           getRowId={(row) => row.id}
         />
       </Card>

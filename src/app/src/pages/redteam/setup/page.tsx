@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
-import PylonChat from '@app/components/PylonChat';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -37,7 +36,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { customTargetOption, predefinedTargets } from './components/constants';
+import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
@@ -53,7 +52,7 @@ import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
+import type { Config } from './types';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };
@@ -120,6 +119,7 @@ export default function RedTeamSetupPage() {
   const lastSavedConfig = useRef<string>('');
 
   // Track funnel on initial load
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('funnel', {
       type: 'redteam',
@@ -321,6 +321,7 @@ export default function RedTeamSetupPage() {
 
     try {
       const content = await readFileAsText(file);
+      // biome-ignore lint/suspicious/noExplicitAny: FIXME
       const yamlConfig = yaml.load(content) as any;
 
       const strategies = yamlConfig?.redteam?.strategies || [];
@@ -328,7 +329,7 @@ export default function RedTeamSetupPage() {
 
       // Convert string targets to objects
       if (typeof target === 'string') {
-        const targetType = predefinedTargets.find((t: RedteamUITarget) => t.value === target);
+        const targetType = findPredefinedTarget(target);
 
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
@@ -339,7 +340,6 @@ export default function RedTeamSetupPage() {
       const hasAnyStatefulStrategies = strategies.some(
         (strat: RedteamStrategy) => typeof strat !== 'string' && strat?.config?.stateful,
       );
-      console.log({ hasAnyStatefulStrategies, strategies });
       if (hasAnyStatefulStrategies) {
         if (typeof target === 'string') {
           target = { id: target, config: { stateful: true } };
@@ -362,6 +362,7 @@ export default function RedTeamSetupPage() {
         plugins: yamlConfig.redteam?.plugins || ['default'],
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
+        provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
@@ -425,12 +426,15 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  // Calculate active strategy count (excluding 'basic' with enabled: false)
+  // Calculate active strategy count shown in the sidebar.
+  // Exclude hidden basic strategy and explicitly disabled entries.
   const activeStrategyCount = useMemo(() => {
     return config.strategies.filter((strategy) => {
       const id = typeof strategy === 'string' ? strategy : strategy.id;
-      // Skip 'basic' strategy if it has enabled: false
-      if (id === 'basic' && typeof strategy === 'object' && strategy.config?.enabled === false) {
+      if (id === 'basic') {
+        return false;
+      }
+      if (typeof strategy === 'object' && strategy.config?.enabled === false) {
         return false;
       }
       return true;
@@ -455,7 +459,7 @@ export default function RedTeamSetupPage() {
       {/* Root container */}
       <div className="fixed flex w-full bg-white dark:bg-zinc-900">
         {/* Content wrapper */}
-        <div className="flex flex-grow transition-[margin] duration-200">
+        <div className="flex grow transition-[margin] duration-200">
           {/* Outer sidebar container */}
           <div
             className="flex h-full flex-col border-r border-border"
@@ -502,7 +506,7 @@ export default function RedTeamSetupPage() {
               </div>
 
               {/* Tabs container */}
-              <div className="flex-grow overflow-y-auto">
+              <div className="grow overflow-y-auto">
                 <Tabs
                   value={String(value)}
                   onValueChange={handleTabChange}
@@ -522,7 +526,7 @@ export default function RedTeamSetupPage() {
                             'hover:bg-muted/50',
                           )}
                         >
-                          <Icon className="h-[18px] w-[18px]" />
+                          <Icon className="size-[18px]" />
                           {getTabLabel(tab)}
                         </TabsTrigger>
                       );
@@ -535,29 +539,29 @@ export default function RedTeamSetupPage() {
               <div className="flex flex-col gap-1 border-t border-border bg-card p-3">
                 <Button
                   variant="ghost"
-                  className="justify-start px-2 py-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => setSaveDialogOpen(true)}
                 >
-                  <Save className="mr-2 h-[18px] w-[18px]" />
+                  <Save className="mr-2 size-[18px]" />
                   Save Config
                 </Button>
                 <Button
                   variant="ghost"
-                  className="justify-start px-2 py-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     loadConfigs();
                     setLoadDialogOpen(true);
                   }}
                 >
-                  <FolderOpen className="mr-2 h-[18px] w-[18px]" />
+                  <FolderOpen className="mr-2 size-[18px]" />
                   Load Config
                 </Button>
                 <Button
                   variant="ghost"
-                  className="justify-start px-2 py-2 text-sm font-normal text-muted-foreground hover:text-foreground"
+                  className="justify-start p-2 text-sm font-normal text-muted-foreground hover:text-foreground"
                   onClick={() => setResetDialogOpen(true)}
                 >
-                  <RotateCcw className="mr-2 h-[18px] w-[18px]" />
+                  <RotateCcw className="mr-2 size-[18px]" />
                   Reset Config
                 </Button>
               </div>
@@ -565,7 +569,7 @@ export default function RedTeamSetupPage() {
           </div>
 
           {/* Tab content */}
-          <div className="relative flex flex-grow flex-col transition-[margin] duration-200">
+          <div className="relative flex grow flex-col transition-[margin] duration-200">
             {value === 0 && (
               <ErrorBoundary name="Target Type Selection Page">
                 <TargetTypeSelection onNext={handleNext} />
@@ -606,7 +610,6 @@ export default function RedTeamSetupPage() {
         </div>
 
         {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
-        <PylonChat />
 
         {/* Save Dialog */}
         <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>
@@ -627,11 +630,11 @@ export default function RedTeamSetupPage() {
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={handleDownloadYaml} className="flex-1">
-                  <Download className="mr-2 h-4 w-4" />
+                  <Download className="mr-2 size-4" />
                   Export YAML
                 </Button>
                 <Button onClick={handleSaveConfig} disabled={!configName} className="flex-1">
-                  <Save className="mr-2 h-4 w-4" />
+                  <Save className="mr-2 size-4" />
                   Save
                 </Button>
               </div>

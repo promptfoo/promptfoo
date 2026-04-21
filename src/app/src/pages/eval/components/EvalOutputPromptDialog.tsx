@@ -17,13 +17,23 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import type { GradingResult } from '@promptfoo/types';
+import type { GradingResult, Vars } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
+import type { Citation } from './Citations';
 import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const subtitleTypographyClassName = 'mb-2 font-medium text-base';
+
+interface RedteamHistoryEntry {
+  prompt?: string;
+  promptAudio?: { data?: string; format?: string };
+  promptImage?: { data?: string; format?: string };
+  output?: string;
+  outputAudio?: { data?: string; format?: string };
+  outputImage?: { data?: string; format?: string };
+}
 
 interface CodeDisplayProps {
   content: string;
@@ -89,10 +99,10 @@ function CodeDisplay({
             variant="ghost"
             size="icon"
             onClick={onCopy}
-            className="absolute right-2 top-2 h-8 w-8 bg-background shadow-sm hover:shadow"
+            className="absolute right-2 top-2 size-8 bg-background shadow-sm hover:shadow"
             aria-label={`Copy ${title.toLowerCase()}`}
           >
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           </Button>
         )}
       </div>
@@ -107,7 +117,7 @@ export interface ReplayEvaluationParams {
   evaluationId: string;
   testIndex?: number;
   prompt: string;
-  variables?: Record<string, any>;
+  variables?: Vars;
 }
 
 /**
@@ -135,12 +145,17 @@ interface EvalOutputPromptDialogProps {
   provider?: string;
   output?: string;
   gradingResults?: GradingResult[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
+  /**
+   * The actual prompt sent by the provider (if different from the rendered prompt).
+   * Takes priority over metadata.redteamFinalPrompt for display purposes.
+   */
+  providerPrompt?: string;
   evaluationId?: string;
   testCaseId?: string;
   testIndex?: number;
   promptIndex?: number;
-  variables?: Record<string, any>;
+  variables?: Vars;
   onAddFilter?: (filter: FilterConfig) => void;
   onResetFilters?: () => void;
   onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
@@ -157,6 +172,7 @@ export default function EvalOutputPromptDialog({
   output,
   gradingResults,
   metadata,
+  providerPrompt,
   evaluationId,
   testCaseId,
   testIndex,
@@ -310,42 +326,38 @@ export default function EvalOutputPromptDialog({
 
   let parsedMessages: Message[] = [];
   try {
-    parsedMessages = JSON.parse(metadata?.messages || '[]');
+    const messagesValue = metadata?.messages;
+    parsedMessages = JSON.parse(typeof messagesValue === 'string' ? messagesValue : '[]');
   } catch {}
 
-  const citationsData = metadata?.citations;
+  const citationsData = metadata?.citations as Citation | Citation[] | undefined;
 
   const hasOutputContent = Boolean(
     output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
   );
 
-  const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
-    .filter((entry: any) => entry?.prompt && entry?.output)
-    .flatMap(
-      (entry: {
-        prompt: string;
-        promptAudio?: { data?: string; format?: string };
-        promptImage?: { data?: string; format?: string };
-        output: string;
-        outputAudio?: { data?: string; format?: string };
-        outputImage?: { data?: string; format?: string };
-        score?: number;
-        graderPassed?: boolean;
-      }) => [
-        {
-          role: 'user' as const,
-          content: entry.prompt,
-          audio: entry.promptAudio,
-          image: entry.promptImage,
-        },
-        {
-          role: 'assistant' as const,
-          content: entry.output,
-          audio: entry.outputAudio,
-          image: entry.outputImage,
-        },
-      ],
-    );
+  const redteamHistoryRaw = (metadata?.redteamHistory || metadata?.redteamTreeHistory || []) as
+    | RedteamHistoryEntry[]
+    | unknown[];
+  const redteamHistoryMessages = (Array.isArray(redteamHistoryRaw) ? redteamHistoryRaw : [])
+    .filter((entry): entry is RedteamHistoryEntry => {
+      const e = entry as RedteamHistoryEntry;
+      return Boolean(e?.prompt && e?.output);
+    })
+    .flatMap((entry: RedteamHistoryEntry) => [
+      {
+        role: 'user' as const,
+        content: entry.prompt!,
+        audio: entry.promptAudio,
+        image: entry.promptImage,
+      },
+      {
+        role: 'assistant' as const,
+        content: entry.output!,
+        audio: entry.outputAudio,
+        image: entry.outputImage,
+      },
+    ]);
 
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
@@ -392,9 +404,9 @@ export default function EvalOutputPromptDialog({
             size="icon"
             onClick={onClose}
             aria-label="close"
-            className="h-8 w-8 ml-2"
+            className="size-8 ml-2"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </Button>
         </SheetHeader>
 
@@ -407,14 +419,14 @@ export default function EvalOutputPromptDialog({
           <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent px-4 h-auto py-0">
             <TabsTrigger
               value="prompt-output"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+              className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
             >
               {hasOutputContent ? 'Prompt & Output' : 'Prompt'}
             </TabsTrigger>
             {hasEvaluationData && (
               <TabsTrigger
                 value="evaluation"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
               >
                 Evaluation
               </TabsTrigger>
@@ -422,7 +434,7 @@ export default function EvalOutputPromptDialog({
             {hasMessagesData && (
               <TabsTrigger
                 value="messages"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
               >
                 Messages
               </TabsTrigger>
@@ -430,7 +442,7 @@ export default function EvalOutputPromptDialog({
             {hasMetadata && (
               <TabsTrigger
                 value="metadata"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
               >
                 Metadata
               </TabsTrigger>
@@ -438,7 +450,7 @@ export default function EvalOutputPromptDialog({
             {hasTracesData && (
               <TabsTrigger
                 value="traces"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3"
+                className="-mb-px rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none py-3"
               >
                 Traces
               </TabsTrigger>
@@ -472,7 +484,12 @@ export default function EvalOutputPromptDialog({
                 <OutputsPanel
                   output={output}
                   replayOutput={replayOutput}
-                  redteamFinalPrompt={metadata?.redteamFinalPrompt}
+                  providerPrompt={providerPrompt}
+                  redteamFinalPrompt={
+                    typeof metadata?.redteamFinalPrompt === 'string'
+                      ? metadata.redteamFinalPrompt
+                      : undefined
+                  }
                   copiedFields={copiedFields}
                   hoveredElement={hoveredElement}
                   onCopy={copyFieldToClipboard}
@@ -494,10 +511,20 @@ export default function EvalOutputPromptDialog({
             {/* Messages Panel */}
             {hasMessagesData && (
               <TabsContent value="messages" className="mt-0">
-                {parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
+                {parsedMessages.length > 0 && (
+                  <ChatMessages
+                    messages={parsedMessages}
+                    displayTurnCount={parsedMessages.length > 2}
+                    maxTurns={Math.ceil(parsedMessages.length / 2)}
+                  />
+                )}
                 {redteamHistoryMessages.length > 0 && (
                   <div className={parsedMessages.length > 0 ? 'mt-6' : ''}>
-                    <ChatMessages messages={redteamHistoryMessages} />
+                    <ChatMessages
+                      messages={redteamHistoryMessages}
+                      displayTurnCount={redteamHistoryMessages.length > 2}
+                      maxTurns={Math.ceil(redteamHistoryMessages.length / 2)}
+                    />
                   </div>
                 )}
               </TabsContent>

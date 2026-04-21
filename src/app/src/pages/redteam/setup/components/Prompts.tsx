@@ -81,7 +81,7 @@ export default function Prompts() {
                 onClick={() => removePrompt(index)}
                 className="mt-6 text-muted-foreground hover:text-destructive"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>Remove prompt</TooltipContent>
@@ -89,7 +89,7 @@ export default function Prompts() {
         </div>
       ))}
       <Button variant="outline" onClick={addPrompt}>
-        <Plus className="mr-2 h-4 w-4" />
+        <Plus className="mr-2 size-4" />
         Add Prompt
       </Button>
     </div>

@@ -1,4 +1,5 @@
 ---
+title: Red Team Plugins
 sidebar_label: Overview
 description: Red team LLM plugins by deploying trained adversarial models to detect vulnerabilities, prevent prompt injection attacks, and protect AI systems from malicious payloads
 ---
@@ -44,7 +45,7 @@ Promptfoo also supports various risk management frameworks based on common secur
 | [**OWASP Top 10 for Agentic Applications**](/docs/red-team/owasp-agentic-ai/) | owasp:agentic   | owasp:agentic:asi01        |
 | [**MITRE ATLAS**](/docs/red-team/mitre-atlas/)                                | mitre:atlas     | mitre:atlas:reconnaissance |
 | [**ISO/IEC 42001**](/docs/red-team/iso-42001/)                                | iso:42001       | iso:42001:privacy          |
-| [**GDPR**](/docs/red-team/gdpr/)                                              | gdpr            | gdpr:art5                  |
+| [**Data Protection**](/docs/red-team/gdpr/)                                   | gdpr            | gdpr:art5                  |
 | [**EU AI Act**](/docs/red-team/eu-ai-act/)                                    | eu:ai-act       | eu:ai-act:art5             |
 | **Promptfoo Recommended**                                                     | default         | default                    |
 
@@ -152,7 +153,9 @@ plugins:
 
 ### Configuring Graders
 
-Graders determine whether an adversarial probe passes or fails. You can customize graders for specific plugins using two approaches:
+Graders determine whether an adversarial probe passes or fails. You can customize graders globally or for specific plugins using two approaches.
+
+Set `redteam.graderExamples` for examples that should apply to every plugin. Use `plugins[].config.graderExamples` for plugin-specific tuning. When both are present, global examples are applied first.
 
 **1. Grader Examples** - Provide concrete examples of outputs and their expected scores:
 

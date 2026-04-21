@@ -1,3 +1,4 @@
+import { mockClipboard } from '@app/tests/browserMocks';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -5,18 +6,10 @@ import { CopyButton } from './copy-button';
 
 describe('CopyButton', () => {
   beforeEach(() => {
-    // Set up a working clipboard API for most tests
-    Object.defineProperty(navigator, 'clipboard', {
-      value: {
-        writeText: vi.fn().mockResolvedValue(undefined),
-      },
-      writable: true,
-      configurable: true,
-    });
+    mockClipboard();
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -54,25 +47,25 @@ describe('CopyButton', () => {
   });
 
   it('reverts to copy icon after 2 seconds', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const user = userEvent.setup();
     render(<CopyButton value="test text" />);
     const button = screen.getByRole('button', { name: 'Copy' });
 
     await user.click(button);
 
-    // Verify the copied state appears
     expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
 
-    // Fast-forward 2 seconds and let React process state updates
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(2000);
+    const filteredCalls = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 2000);
+    const timeoutCallback = filteredCalls[filteredCalls.length - 1]?.[0] as
+      | (() => void)
+      | undefined;
+    act(() => {
+      timeoutCallback?.();
     });
 
-    // Button should revert to "Copy"
     expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-
-    vi.useRealTimers();
+    setTimeoutSpy.mockRestore();
   });
 
   it('applies custom className', () => {
@@ -88,6 +81,8 @@ describe('CopyButton', () => {
   });
 
   it('handles rapid clicks by clearing previous timeouts', async () => {
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
     const user = userEvent.setup();
     render(<CopyButton value="test text" />);
     const button = screen.getByRole('button', { name: 'Copy' });
@@ -96,16 +91,20 @@ describe('CopyButton', () => {
     await user.click(button);
     await user.click(button);
 
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
+
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+    const filteredCalls2 = setTimeoutSpy.mock.calls.filter(([, delay]) => delay === 2000);
+    const timeoutCallback = filteredCalls2[filteredCalls2.length - 1]?.[0] as
+      | (() => void)
+      | undefined;
+    act(() => {
+      timeoutCallback?.();
     });
 
-    await waitFor(
-      () => {
-        expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
-      },
-      { timeout: 2500 },
-    );
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument();
+    clearTimeoutSpy.mockRestore();
+    setTimeoutSpy.mockRestore();
   });
 
   it('clears copy timeout on unmount if copy operation was triggered', async () => {

@@ -1,4 +1,5 @@
 ---
+title: Prompt Extraction Plugin
 sidebar_label: Prompt Extraction
 description: Red team prompt extraction vulnerabilities by testing AI systems for instruction leakage to protect proprietary system prompts and prevent unauthorized access to model controls
 ---

@@ -94,7 +94,7 @@ providers:
 You can run the included example configuration:
 
 ```bash
-npx promptfoo@latest init --example cometapi
+npx promptfoo@latest init --example provider-cometapi
 ```
 
 ### Command Line Usage

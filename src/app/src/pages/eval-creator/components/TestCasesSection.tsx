@@ -229,7 +229,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
               <label className="cursor-pointer" aria-label="Upload test cases from CSV or YAML">
                 <Button variant="ghost" size="icon" asChild>
                   <span>
-                    <UploadIcon className="h-4 w-4" />
+                    <UploadIcon className="size-4" />
                   </span>
                 </Button>
                 <input
@@ -242,6 +242,8 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
             </TooltipTrigger>
             <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
           </Tooltip>
+
+          <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
 
           {testCases.length === 0 && (
             <Button
@@ -271,7 +273,6 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
               Add Example
             </Button>
           )}
-          <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
         </div>
       </div>
 
@@ -317,7 +318,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                         {hasMissingVars && (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <AlertTriangleIcon className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                              <AlertTriangleIcon className="size-4 text-amber-500 shrink-0" />
                             </TooltipTrigger>
                             <TooltipContent>
                               Missing variables: {missingVars.join(', ')}
@@ -338,7 +339,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                         <span className="text-muted-foreground/60">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground font-mono text-xs">
+                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">
                       {Object.keys(testCase.vars || {}).length > 0 ? (
                         Object.entries(testCase.vars || {})
                           .map(([k, v]) => `${k}=${v}`)
@@ -360,7 +361,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                                 setTestCaseDialogOpen(true);
                               }}
                             >
-                              <EditIcon className="h-4 w-4" />
+                              <EditIcon className="size-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Edit</TooltipContent>
@@ -374,7 +375,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                               onClick={(event) => handleDuplicateTestCase(event, index)}
                               aria-label="Duplicate test case"
                             >
-                              <ContentCopyIcon className="h-4 w-4" />
+                              <ContentCopyIcon className="size-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Duplicate</TooltipContent>
@@ -388,7 +389,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                               onClick={(event) => handleRemoveTestCase(event, index)}
                               aria-label="Delete test case"
                             >
-                              <DeleteIcon className="h-4 w-4" />
+                              <DeleteIcon className="size-4" />
                             </Button>
                           </TooltipTrigger>
                           <TooltipContent>Delete</TooltipContent>

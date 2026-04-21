@@ -1,4 +1,5 @@
 ---
+title: Overreliance Plugin
 sidebar_label: Overreliance
 description: Red team AI overreliance vulnerabilities by testing model responses to incorrect assumptions, protecting systems from blindly accepting flawed user inputs
 ---

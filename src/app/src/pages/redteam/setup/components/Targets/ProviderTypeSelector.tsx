@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -6,7 +6,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { CheckCircle, Edit, HelpCircle, Search, X } from 'lucide-react';
-import { DEFAULT_WEBSOCKET_TIMEOUT_MS } from './consts';
+import { DEFAULT_OPENAI_TARGET_ID } from '../constants';
+import { DEFAULT_WEBSOCKET_TIMEOUT_MS, DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
@@ -168,7 +169,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.2, GPT-5.1, and GPT-5 models',
+    description: 'GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano and older models',
     tag: 'providers',
     recommended: true,
   },
@@ -433,6 +434,10 @@ export default function ProviderTypeSelector({
   const [selectedTag, setSelectedTag] = useState<string | undefined>();
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
 
+  useEffect(() => {
+    setSelectedProviderType(providerType);
+  }, [providerType]);
+
   // Tag filter options - 4 categories based on user intent
   type TagKey = 'app' | 'agents' | 'providers' | 'local';
   const tagFilters: Array<{ key: TagKey; label: string }> = [
@@ -500,6 +505,7 @@ export default function ProviderTypeSelector({
             body: JSON.stringify({
               message: '{{prompt}}',
             }),
+            stateful: true,
           },
         },
         'http',
@@ -510,9 +516,12 @@ export default function ProviderTypeSelector({
           id: 'websocket',
           label: currentLabel,
           config: {
-            url: '',
-            messageTemplate: '{{prompt}}',
+            type: 'websocket',
+            url: 'wss://example.com/ws',
+            messageTemplate: '{"message": {{prompt | dump}}}',
+            transformResponse: DEFAULT_WEBSOCKET_TRANSFORM_RESPONSE,
             timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
+            stateful: true,
           },
         },
         'websocket',
@@ -523,8 +532,12 @@ export default function ProviderTypeSelector({
           id: 'browser',
           label: currentLabel,
           config: {
-            steps: [],
-            headless: true,
+            steps: [
+              {
+                action: 'navigate',
+                args: { url: 'https://example.com' },
+              },
+            ],
           },
         },
         'browser',
@@ -532,7 +545,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openai') {
       setProvider(
         {
-          id: 'openai:gpt-5.2',
+          id: DEFAULT_OPENAI_TARGET_ID,
           config: {},
           label: currentLabel,
         },
@@ -541,7 +554,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'anthropic') {
       setProvider(
         {
-          id: 'anthropic:messages:claude-3-5-sonnet-20241022',
+          id: 'anthropic:messages:claude-sonnet-4-5-20250929',
           config: {},
           label: currentLabel,
         },
@@ -613,7 +626,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openrouter') {
       setProvider(
         {
-          id: 'openrouter:openai/gpt-4o',
+          id: 'openrouter:openai/gpt-5.4',
           config: {},
           label: currentLabel,
         },
@@ -793,9 +806,12 @@ export default function ProviderTypeSelector({
     } else if (value === 'mcp') {
       setProvider(
         {
-          id: 'mcp:server-name',
-          config: {},
+          id: 'mcp',
           label: currentLabel,
+          config: {
+            enabled: true,
+            verbose: false,
+          },
         },
         'mcp',
       );
@@ -1031,7 +1047,7 @@ export default function ProviderTypeSelector({
     return (
       <div>
         <div className="flex w-full items-center rounded-lg border-2 border-primary bg-primary/5 p-4">
-          <CheckCircle className="mr-4 h-5 w-5 flex-shrink-0 text-primary" />
+          <CheckCircle className="mr-4 size-5 shrink-0 text-primary" />
 
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex items-center gap-2">
@@ -1047,7 +1063,7 @@ export default function ProviderTypeSelector({
             </p>
           </div>
 
-          <div className="ml-4 flex flex-shrink-0 items-center">
+          <div className="ml-4 flex shrink-0 items-center">
             {/* Documentation link */}
             {hasSpecificDocumentation(selectedOption.value) && (
               <Tooltip>
@@ -1058,7 +1074,7 @@ export default function ProviderTypeSelector({
                     rel="noopener noreferrer"
                     className="mr-2 text-muted-foreground hover:text-foreground"
                   >
-                    <HelpCircle className="h-4 w-4" />
+                    <HelpCircle className="size-4" />
                   </a>
                 </TooltipTrigger>
                 <TooltipContent>View {selectedOption.label} documentation</TooltipContent>
@@ -1066,7 +1082,7 @@ export default function ProviderTypeSelector({
             )}
 
             <Button variant="outline" size="sm" onClick={handleEditSelection}>
-              <Edit className="mr-1 h-4 w-4" />
+              <Edit className="mr-1 size-4" />
               Change
             </Button>
           </div>
@@ -1127,7 +1143,7 @@ export default function ProviderTypeSelector({
 
         {/* Search */}
         <div className="relative w-64 shrink-0">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search providers..."
             value={searchTerm}
@@ -1140,7 +1156,7 @@ export default function ProviderTypeSelector({
               onClick={() => setSearchTerm('')}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </button>
           )}
         </div>
@@ -1209,7 +1225,7 @@ export default function ProviderTypeSelector({
                     </p>
                   </div>
 
-                  <div className="ml-4 flex flex-shrink-0 items-center gap-2">
+                  <div className="ml-4 flex shrink-0 items-center gap-2">
                     {/* Documentation link */}
                     {hasSpecificDocumentation(option.value) && (
                       <Tooltip>
@@ -1221,14 +1237,14 @@ export default function ProviderTypeSelector({
                             onClick={(e) => e.stopPropagation()}
                             className="text-muted-foreground hover:text-foreground"
                           >
-                            <HelpCircle className="h-4 w-4" />
+                            <HelpCircle className="size-4" />
                           </a>
                         </TooltipTrigger>
                         <TooltipContent>View {option.label} documentation</TooltipContent>
                       </Tooltip>
                     )}
 
-                    {isSelected && <CheckCircle className="h-5 w-5 text-primary" />}
+                    {isSelected && <CheckCircle className="size-5 text-primary" />}
                   </div>
                 </div>
               </Fragment>

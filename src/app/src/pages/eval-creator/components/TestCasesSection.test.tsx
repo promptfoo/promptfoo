@@ -1,7 +1,8 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import * as yaml from 'js-yaml';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TestCasesSection from './TestCasesSection';
@@ -122,6 +123,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles empty file upload', async () => {
+      const user = userEvent.setup();
       createFileReaderMock('');
 
       render(
@@ -135,7 +137,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File([''], 'empty.csv', { type: 'text/csv' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -149,6 +151,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles file size validation', async () => {
+      const user = userEvent.setup();
       render(
         <TooltipProvider delayDuration={0}>
           <TestCasesSection varsList={[]} />
@@ -159,11 +162,14 @@ describe('TestCasesSection', () => {
         .getByLabelText('Upload test cases from CSV or YAML')
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
 
-      // Create a file larger than 50MB
-      const largeContent = 'x'.repeat(51 * 1024 * 1024);
-      const file = new File([largeContent], 'large.csv', { type: 'text/csv' });
+      // Create a file that reports a size larger than 50MB without allocating it
+      const file = new File(['x'], 'large.csv', { type: 'text/csv' });
+      Object.defineProperty(file, 'size', {
+        value: 51 * 1024 * 1024,
+        configurable: true,
+      });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -190,7 +196,12 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['some content'], 'test.txt', { type: 'text/plain' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      // Bypass the browser accept filter to exercise the defensive unsupported-file branch.
+      Object.defineProperty(fileInput, 'files', {
+        value: [file],
+        configurable: true,
+      });
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -204,6 +215,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles CSV file upload without auto-generating descriptions', async () => {
+      const user = userEvent.setup();
       const mockCsvData = [
         { question: 'What is 2+2?', expected: '4' },
         { question: 'Capital of France?', expected: 'Paris' },
@@ -235,7 +247,7 @@ describe('TestCasesSection', () => {
         type: 'text/csv',
       });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -258,6 +270,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles YAML file upload with array of test cases', async () => {
+      const user = userEvent.setup();
       const mockYamlData = [
         {
           description: 'Math test',
@@ -285,7 +298,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['- description: Math test'], 'test.yaml', { type: 'text/yaml' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -308,6 +321,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles YAML file upload with single test case', async () => {
+      const user = userEvent.setup();
       const mockYamlData = {
         description: 'Single test',
         vars: { input: 'hello' },
@@ -329,7 +343,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['description: Single test'], 'test.yml', { type: 'text/yaml' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -347,6 +361,7 @@ describe('TestCasesSection', () => {
     });
 
     it('validates YAML test case structure and skips invalid entries', async () => {
+      const user = userEvent.setup();
       const mockYamlData = [
         {
           description: 'Valid test',
@@ -385,7 +400,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['- description: Test'], 'test.yaml', { type: 'text/yaml' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -411,6 +426,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles YAML file with no valid test cases', async () => {
+      const user = userEvent.setup();
       const mockYamlData = [
         // These are actually valid objects that pass the isValidTestCase check
         {
@@ -435,7 +451,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['invalid'], 'test.yaml', { type: 'text/yaml' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         // The first object is actually valid (it's an object), so we expect a warning about skipped items
@@ -448,6 +464,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles YAML file with all invalid test cases', async () => {
+      const user = userEvent.setup();
       const mockYamlData = ['string instead of object', null, undefined, 123, true];
 
       vi.mocked(yaml.load).mockReturnValue(mockYamlData);
@@ -465,7 +482,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['invalid'], 'test.yaml', { type: 'text/yaml' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -476,6 +493,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles invalid YAML format', async () => {
+      const user = userEvent.setup();
       vi.mocked(yaml.load).mockReturnValue('invalid string');
 
       createFileReaderMock('invalid yaml');
@@ -491,7 +509,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['invalid yaml'], 'test.yaml', { type: 'text/yaml' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith(
@@ -502,6 +520,7 @@ describe('TestCasesSection', () => {
     });
 
     it('handles file parsing errors gracefully', async () => {
+      const user = userEvent.setup();
       vi.mocked(yaml.load).mockImplementation(() => {
         throw new Error('YAML parsing failed');
       });
@@ -520,7 +539,7 @@ describe('TestCasesSection', () => {
         .parentElement?.querySelector('input[type="file"]') as HTMLInputElement;
       const file = new File(['bad yaml'], 'test.yaml', { type: 'text/yaml' });
 
-      fireEvent.change(fileInput, { target: { files: [file] } });
+      await user.upload(fileInput, file);
 
       await waitFor(() => {
         expect(consoleSpy).toHaveBeenCalled();
@@ -535,7 +554,8 @@ describe('TestCasesSection', () => {
   });
 
   describe('Test Case Actions', () => {
-    it('can duplicate a test case', () => {
+    it('can duplicate a test case', async () => {
+      const user = userEvent.setup();
       const testCases = [
         {
           description: 'Original test',
@@ -556,7 +576,7 @@ describe('TestCasesSection', () => {
 
       // Find the duplicate button by aria-label
       const duplicateButton = screen.getByRole('button', { name: 'Duplicate test case' });
-      fireEvent.click(duplicateButton);
+      await user.click(duplicateButton);
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
         tests: [
@@ -587,13 +607,15 @@ describe('TestCasesSection', () => {
       // Find the delete button by aria-label
       const deleteButton = screen.getByRole('button', { name: 'Delete test case' });
       await act(async () => {
-        fireEvent.click(deleteButton);
+        const user = userEvent.setup();
+        await user.click(deleteButton);
       });
 
       // Confirm deletion
       const confirmButton = screen.getByText('Delete');
       await act(async () => {
-        fireEvent.click(confirmButton);
+        const user = userEvent.setup();
+        await user.click(confirmButton);
       });
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
