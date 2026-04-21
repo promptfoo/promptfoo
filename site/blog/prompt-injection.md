@@ -175,7 +175,7 @@ We'll see more of these attacks as AI becomes more embedded in our lives.
 
 For a fuller explanation of this proof-of-concept, see the video below.
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/FL3qHH02Yd4?si=fshwMlV5qkNw8Dew" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/FL3qHH02Yd4?si=fshwMlV5qkNw8Dew" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 ## Prevention and Mitigation Strategies
 

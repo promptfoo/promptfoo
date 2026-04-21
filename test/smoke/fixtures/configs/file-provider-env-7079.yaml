@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - file provider env placeholders'
+
+providers:
+  - file://../providers/file-provider-env-7079.yaml
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: contains
+        value: World

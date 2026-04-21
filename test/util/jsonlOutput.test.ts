@@ -4,6 +4,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { writeOutput } from '../../src/util/index';
+import { createTempDir, removeTempDir } from './utils';
 
 // Mock dependencies
 vi.mock('../../src/database', () => ({
@@ -29,7 +30,7 @@ describe('JSONL output with proper line endings', () => {
   let mockEval: any;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-jsonl-test-'));
+    tempDir = createTempDir('promptfoo-jsonl-test-');
     tempFilePath = path.join(tempDir, 'test-export.jsonl');
 
     mockEval = {
@@ -46,10 +47,7 @@ describe('JSONL output with proper line endings', () => {
   });
 
   afterEach(() => {
-    if (fs.existsSync(tempFilePath)) {
-      fs.unlinkSync(tempFilePath);
-    }
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    removeTempDir(tempDir);
     vi.clearAllMocks();
   });
 

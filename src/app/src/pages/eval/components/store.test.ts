@@ -1,9 +1,10 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { type ResultsFilter, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import type {
   EvalTableDTO,
   EvaluateTable,
@@ -94,33 +95,13 @@ function createMockOutput(hasHumanRating: boolean): EvaluateTableOutput {
   return output;
 }
 
+const initialTableStoreState = useTableStore.getState();
+const initialResultsViewSettingsState = useResultsViewSettingsStore.getState();
+
 describe('useTableStore', () => {
   beforeEach(() => {
     act(() => {
-      const initialState = useTableStore.getState();
-      useTableStore.setState({
-        ...initialState,
-        table: null,
-        filters: {
-          values: {},
-          appliedCount: 0,
-          options: {
-            metric: [],
-            metadata: [],
-            plugin: [],
-            strategy: [],
-            severity: [],
-          },
-        },
-        shouldHighlightSearchText: false,
-        isStreaming: false,
-        filteredMetrics: null,
-        metadataKeys: [],
-        metadataKeysLoading: false,
-        metadataKeysError: false,
-        currentMetadataKeysRequest: null,
-        userRatedResultsCount: 0,
-      });
+      useTableStore.setState(initialTableStoreState, true);
     });
     vi.clearAllMocks();
   });
@@ -2601,39 +2582,63 @@ describe('useTableStore', () => {
     });
 
     it('should abort the request after 30 seconds if fetchMetadataKeys API call does not complete', async () => {
-      vi.useFakeTimers();
-      const mockEvalId = 'test-eval-id';
+      const timers = useTestTimers();
+      try {
+        const mockEvalId = 'test-eval-id';
 
-      vi.mocked(callApi).mockImplementation((_url: string, options?: any) => {
-        return new Promise((_resolve, reject) => {
-          options?.signal?.addEventListener('abort', () => {
-            const abortError = new Error('The operation was aborted');
-            abortError.name = 'AbortError';
-            reject(abortError);
+        vi.mocked(callApi).mockImplementation((_url: string, options?: any) => {
+          return new Promise((_resolve, reject) => {
+            options?.signal?.addEventListener('abort', () => {
+              const abortError = new Error('The operation was aborted');
+              abortError.name = 'AbortError';
+              reject(abortError);
+            });
           });
         });
-      });
 
-      act(() => {
-        useTableStore.setState({ currentMetadataKeysRequest: null });
-      });
+        act(() => {
+          useTableStore.setState({ currentMetadataKeysRequest: null });
+        });
 
-      act(() => {
-        useTableStore.getState().fetchMetadataKeys(mockEvalId);
-      });
+        act(() => {
+          useTableStore.getState().fetchMetadataKeys(mockEvalId);
+        });
 
-      expect(useTableStore.getState().metadataKeysLoading).toBe(true);
+        expect(useTableStore.getState().metadataKeysLoading).toBe(true);
 
-      await act(async () => {
-        await vi.runAllTimersAsync();
-      });
+        await act(async () => {
+          await timers.runAllAsync();
+        });
 
-      const state = useTableStore.getState();
-      expect(state.metadataKeysLoading).toBe(false);
-      expect(state.metadataKeysError).toBe(false);
-      expect(state.currentMetadataKeysRequest).toBeNull();
-
-      vi.useRealTimers();
+        const state = useTableStore.getState();
+        expect(state.metadataKeysLoading).toBe(false);
+        expect(state.metadataKeysError).toBe(false);
+        expect(state.currentMetadataKeysRequest).toBeNull();
+      } finally {
+        timers.restore({ runPending: true });
+      }
     });
+  });
+});
+
+describe('useResultsViewSettingsStore', () => {
+  beforeEach(() => {
+    act(() => {
+      useResultsViewSettingsStore.setState(initialResultsViewSettingsState, true);
+    });
+  });
+
+  it('defaults chart visibility to auto mode until the user toggles it', () => {
+    expect(useResultsViewSettingsStore.getState().showCharts).toBeNull();
+
+    act(() => {
+      useResultsViewSettingsStore.getState().setShowCharts(false);
+    });
+    expect(useResultsViewSettingsStore.getState().showCharts).toBe(false);
+
+    act(() => {
+      useResultsViewSettingsStore.getState().setShowCharts(true);
+    });
+    expect(useResultsViewSettingsStore.getState().showCharts).toBe(true);
   });
 });

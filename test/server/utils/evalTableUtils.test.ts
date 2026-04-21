@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   evalTableToCsv,
   evalTableToJson,
+  getEvalTableOutputPromptLocationsBySize,
+  getEvalTablePromptStrippedPayload,
+  STRIPPED_TABLE_CELL_PROMPT,
   streamEvalCsv,
 } from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types/index';
+import { createCompletedPrompt } from '../../factories/eval';
 
 import type Eval from '../../../src/models/eval';
 import type {
@@ -25,18 +29,16 @@ describe('evalTableUtils', () => {
       head: {
         vars: ['var1', 'var2'],
         prompts: [
-          {
+          createCompletedPrompt('Test prompt {{var1}}', {
             provider: 'openai:gpt-4',
             label: 'Prompt 1',
-            raw: 'Test prompt {{var1}}',
             display: 'Test prompt',
-          } as CompletedPrompt,
-          {
+          }),
+          createCompletedPrompt('Another prompt {{var2}}', {
             provider: 'anthropic:claude',
             label: 'Prompt 2',
-            raw: 'Another prompt {{var2}}',
             display: 'Another prompt',
-          } as CompletedPrompt,
+          }),
         ],
       },
       body: [
@@ -453,18 +455,16 @@ describe('evalTableUtils', () => {
           head: {
             vars: ['var1'],
             prompts: [
-              {
+              createCompletedPrompt('Test prompt 1', {
                 provider: 'openai:gpt-4',
                 label: 'Prompt 1',
-                raw: 'Test prompt 1',
                 display: 'Test prompt 1',
-              } as CompletedPrompt,
-              {
+              }),
+              createCompletedPrompt('Test prompt 2', {
                 provider: 'anthropic:claude',
                 label: 'Prompt 2',
-                raw: 'Test prompt 2',
                 display: 'Test prompt 2',
-              } as CompletedPrompt,
+              }),
             ],
           },
           body: [
@@ -551,18 +551,16 @@ describe('evalTableUtils', () => {
           head: {
             vars: ['var1'],
             prompts: [
-              {
+              createCompletedPrompt('Test prompt 1', {
                 provider: 'openai:gpt-4',
                 label: 'Prompt 1',
-                raw: 'Test prompt 1',
                 display: 'Test prompt 1',
-              } as CompletedPrompt,
-              {
+              }),
+              createCompletedPrompt('Test prompt 2', {
                 provider: 'anthropic:claude',
                 label: 'Prompt 2',
-                raw: 'Test prompt 2',
                 display: 'Test prompt 2',
-              } as CompletedPrompt,
+              }),
             ],
           },
           body: [
@@ -1008,6 +1006,48 @@ describe('evalTableUtils', () => {
         // Note: When messages are present, redteamHistory is not included in its own column
         // The redteamHistory data would be empty since messages take precedence
       });
+    });
+  });
+
+  describe('table prompt stripping helpers', () => {
+    it('should strip prompts from largest to smallest by requested count', () => {
+      const payload = {
+        table: {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                { ...mockTable.body[0].outputs[0], prompt: 'short prompt' },
+                { ...mockTable.body[0].outputs[1], prompt: 'very long prompt' },
+              ],
+            },
+          ],
+        },
+        totalCount: 1,
+        filteredCount: 1,
+        filteredMetrics: null,
+        config: {},
+        author: null,
+        version: 4,
+        id: 'eval-id',
+      };
+
+      const promptLocations = getEvalTableOutputPromptLocationsBySize(payload);
+
+      expect(promptLocations).toHaveLength(2);
+
+      const firstFallback = getEvalTablePromptStrippedPayload(payload, promptLocations, 1);
+      const secondFallback = getEvalTablePromptStrippedPayload(payload, promptLocations, 2);
+
+      expect(firstFallback.table.body[0].outputs[0].prompt).toBe('short prompt');
+      expect(firstFallback.table.body[0].outputs[1].prompt).toBe(STRIPPED_TABLE_CELL_PROMPT);
+      expect(secondFallback.table.body[0].outputs[0].prompt).toBe(STRIPPED_TABLE_CELL_PROMPT);
+      expect(secondFallback.table.body[0].outputs[1].prompt).toBe(STRIPPED_TABLE_CELL_PROMPT);
+      expect(JSON.stringify(firstFallback).length).toBeLessThan(JSON.stringify(payload).length);
+      expect(JSON.stringify(secondFallback).length).toBeLessThan(
+        JSON.stringify(firstFallback).length,
+      );
     });
   });
 

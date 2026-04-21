@@ -1,4 +1,4 @@
-# redteam-azure-assistant
+# redteam-azure-assistant (Red Team Azure Assistant)
 
 Red team testing for Azure OpenAI Assistants with function tools to evaluate security boundaries.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-azure-assistant
+cd redteam-azure-assistant
 ```
 
 ## Overview
@@ -16,7 +17,7 @@ This example demonstrates how to security test an Azure OpenAI Assistant that ha
 
 1. **Setup environment variables**:
 
-   ```
+   ```text
    AZURE_API_KEY=your_key
    AZURE_OPENAI_API_HOST=your-resource.openai.azure.com
    AZURE_DEPLOYMENT_NAME=your_deployment_name
