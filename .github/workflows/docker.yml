@@ -2,15 +2,16 @@
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
 # if all checks pass. This action is triggered by the release-please workflow,
-# workflow dispatch, pull requests to main that modify the Dockerfile, and pushes to main.
+# published human-created releases, workflow dispatch, pull requests to main that
+# modify the Dockerfile, and pushes to main.
 
 name: Test and Publish Multi-arch Docker Image
 run-name: |
-  ${{ inputs.tag_name && 'Release' ||
+  ${{ (inputs.tag_name || github.event.release.tag_name) && 'Release' ||
       github.event_name == 'workflow_dispatch' && 'Manual' ||
       github.event_name == 'pull_request' && 'PR' ||
       'Push' }}
-  Docker build for ${{ inputs.tag_name || github.ref_name }}
+  Docker build for ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   ${{ github.event_name == 'pull_request' && format('(PR #{0})', github.event.number) || '' }}
   by @${{ github.actor }}
 
@@ -22,6 +23,14 @@ on:
         required: true
         type: string
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Optional release tag to publish (e.g., 0.121.6)'
+        required: false
+        type: string
+  release:
+    types:
+      - published
   pull_request:
     branches:
       - main
@@ -40,12 +49,20 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name || '' }}
+  SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
+  BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
+  BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
 
 permissions:
   contents: read
 
 jobs:
   test:
+    # Release-please-created releases are already handled by release-please.yml
+    # after npm publish. The release event path is for human-published releases
+    # and backfills where release-please did not emit release_created=true.
+    if: github.event_name != 'release' || github.event.release.author.login != 'promptfoobot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -64,6 +81,8 @@ jobs:
 
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ env.SOURCE_REF }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
@@ -81,8 +100,8 @@ jobs:
           tags: local-test-image:latest
           platforms: linux/amd64
           build-args: |
-            BUILD_VERSION=${{ inputs.tag_name || github.ref_name }}
-            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ github.sha }}
 
       - name: Run Docker container for testing
@@ -186,6 +205,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ env.SOURCE_REF }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
@@ -217,8 +238,8 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_VERSION=${{ inputs.tag_name || github.ref_name }}
-            BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+            BUILD_DATE=${{ env.BUILD_DATE }}
             GIT_SHA=${{ github.sha }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
@@ -274,8 +295,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-            type=raw,value=${{ inputs.tag_name }},enable=${{ inputs.tag_name != '' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || inputs.tag_name != '' }}
+            type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || env.RELEASE_TAG != '' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
@@ -287,7 +308,7 @@ jobs:
       - name: Inspect image
         id: inspect
         run: |
-          IMAGE_TAG="${{ inputs.tag_name || steps.meta.outputs.version }}"
+          IMAGE_TAG="${{ env.RELEASE_TAG || steps.meta.outputs.version }}"
           IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG}"
           # Log full inspection details and extract digest
           INSPECT_OUTPUT=$(docker buildx imagetools inspect "${IMAGE_REF}")
