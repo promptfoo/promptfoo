@@ -195,7 +195,7 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
   } else if (useGoogleAiStudioDefaults) {
     logger.debug('Using Google AI Studio default providers');
     providers = {
-      embeddingProvider: GeminiEmbeddingProvider, // Google AI Studio doesn't support embeddings, fall back to Vertex
+      embeddingProvider: GeminiEmbeddingProvider, // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
       gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
       gradingProvider: GoogleAiStudioGradingProvider,
       llmRubricProvider: GoogleAiStudioLlmRubricProvider,
