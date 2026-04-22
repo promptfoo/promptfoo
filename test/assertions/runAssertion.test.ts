@@ -3706,5 +3706,50 @@ describe('runAssertion', () => {
       // Metadata object should exist and be extensible
       expect(result.metadata).toBeTruthy();
     });
+
+    // Regression for https://github.com/promptfoo/promptfoo/issues/7861: the
+    // reporter claimed defaultTest llm-rubric rubrics sent raw {{var}} text to
+    // the grader. In reality the assertion pipeline renders the value before
+    // grading — so the grading LLM DOES receive the substituted string. Prove
+    // this by letting the assertion run all the way through a real grader
+    // provider and inspecting the prompt it received.
+    it('renders llm-rubric value with vars before calling the grader', async () => {
+      const capturedPrompt = vi.fn<ApiProvider['callApi']>(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),
+      }));
+      const capturingGrader = createMockProvider({
+        id: 'capturing-grader',
+        callApi: capturedPrompt,
+      });
+
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'Does the output correctly reference the input: {{myVar}}?',
+        provider: capturingGrader,
+      };
+
+      const test: AtomicTestCase = {
+        vars: { myVar: 'hello world' },
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test,
+        providerResponse: { output: 'static model output' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      const gradingPrompt = capturedPrompt.mock.calls[0]?.[0] as string;
+      expect(gradingPrompt).toContain('hello world');
+      expect(gradingPrompt).not.toContain('{{myVar}}');
+
+      expect(result.metadata?.renderedAssertionValue).toBe(
+        'Does the output correctly reference the input: hello world?',
+      );
+      expect(result.assertion?.value).toBe(
+        'Does the output correctly reference the input: {{myVar}}?',
+      );
+    });
   });
 });

@@ -73,6 +73,20 @@ defaultTest:
     provider: openai:gpt-5-mini
 ```
 
+To set grader parameters such as `temperature` for repeatability, expand the shorthand into an `id` + `config` block:
+
+```yaml
+assert:
+  - type: g-eval
+    value: 'Ensure response is factually accurate'
+    provider:
+      id: openai:gpt-5-mini
+      config:
+        temperature: 0
+```
+
+See the [llm-rubric grader override docs](/docs/configuration/expected-outputs/model-graded/llm-rubric#setting-grader-parameters-temperature-etc) for more detail.
+
 ## Example
 
 Here's a complete example showing how to use G-Eval to assess multiple aspects of an LLM response:

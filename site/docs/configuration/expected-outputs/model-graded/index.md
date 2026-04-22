@@ -253,14 +253,24 @@ By default, model-graded asserts use `gpt-5` for grading. If you do not have acc
            provider: openai:gpt-5-mini
    ```
 
-Use the `provider.config` field to set custom parameters:
+Use the `provider.config` field to set custom parameters such as `temperature`, `max_tokens`, or API host:
 
 ```yaml
-provider:
-  - id: openai:gpt-5-mini
-    config:
-      temperature: 0
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Is not apologetic and provides a clear, concise answer
+        provider:
+          id: openai:gpt-5-mini
+          config:
+            temperature: 0
 ```
+
+This works at every level where a grader can be set — per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
+
+:::note
+The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. GPT-5 series reasoning models ignore `temperature` entirely.
+:::
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.
 
