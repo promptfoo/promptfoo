@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
+import {
+  EVAL_CONFIG_DETAIL_FIELDS,
+  EVAL_TABLE_CELL_DETAIL_FIELDS,
+  EvalResultsFilterMode,
+  EvaluateOptionsSchema,
+  TestSuiteConfigSchema,
+} from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */
@@ -98,20 +104,14 @@ export const EvalTableQuerySchema = z.object({
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
-const EvalConfigDetailFieldSchema = z.enum(['tests', 'defaultTest', 'scenarios']);
+const EvalConfigDetailFieldSchema = z.enum(EVAL_CONFIG_DETAIL_FIELDS);
 
 const EvalConfigDetailInfoSchema = z.object({
   available: z.boolean(),
   omittedFields: z.array(EvalConfigDetailFieldSchema),
 });
 
-const EvalTableCellDetailFieldSchema = z.enum([
-  'prompt',
-  'response',
-  'testCase',
-  'metadata',
-  'media',
-]);
+const EvalTableCellDetailFieldSchema = z.enum(EVAL_TABLE_CELL_DETAIL_FIELDS);
 
 const EvalTableCellDetailInfoSchema = z.object({
   available: z.boolean(),

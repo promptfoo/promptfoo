@@ -1,4 +1,8 @@
-import { ResultFailureReason } from '../../types';
+import {
+  EVAL_CONFIG_DETAIL_FIELDS,
+  EVAL_TABLE_CELL_DETAIL_FIELDS,
+  ResultFailureReason,
+} from '../../types';
 import {
   DEFAULT_OVERSIZED_STRING_LIMIT,
   type OversizedStringStats,
@@ -8,6 +12,7 @@ import {
 import type {
   AtomicTestCase,
   CompletedPrompt,
+  EvalConfigDetailField,
   EvaluateTable,
   EvaluateTableOutput,
   EvaluateTableRow,
@@ -24,10 +29,10 @@ const DETAIL_ONLY_METADATA_KEYS = new Set([
   'citations',
 ]);
 
-const DETAIL_OMITTED_FIELDS = ['prompt', 'response', 'testCase', 'metadata'] as const;
-const CONFIG_DETAIL_ONLY_FIELDS = ['tests', 'defaultTest', 'scenarios'] as const;
-
-type ConfigDetailOnlyField = (typeof CONFIG_DETAIL_ONLY_FIELDS)[number];
+// 'media' is appended at runtime only when media content was actually trimmed.
+const BASE_CELL_DETAIL_OMITTED_FIELDS = EVAL_TABLE_CELL_DETAIL_FIELDS.filter(
+  (field) => field !== 'media',
+);
 
 type TrimOptions = {
   maxStringLength?: number;
@@ -223,8 +228,8 @@ export function trimTableCellForApi(
     detail: {
       available: Boolean(cell.id),
       omittedFields: mediaWasOmitted
-        ? [...DETAIL_OMITTED_FIELDS, 'media']
-        : [...DETAIL_OMITTED_FIELDS],
+        ? [...BASE_CELL_DETAIL_OMITTED_FIELDS, 'media']
+        : [...BASE_CELL_DETAIL_OMITTED_FIELDS],
     },
   };
 }
@@ -260,13 +265,13 @@ export function trimEvalConfigForTableApi(
   config: Partial<UnifiedConfig>;
   detail?: {
     available: boolean;
-    omittedFields: ConfigDetailOnlyField[];
+    omittedFields: EvalConfigDetailField[];
   };
 } {
   const leanConfig: Record<string, unknown> = { ...config };
-  const omittedFields: ConfigDetailOnlyField[] = [];
+  const omittedFields: EvalConfigDetailField[] = [];
 
-  for (const field of CONFIG_DETAIL_ONLY_FIELDS) {
+  for (const field of EVAL_CONFIG_DETAIL_FIELDS) {
     if (field in leanConfig) {
       delete leanConfig[field];
       omittedFields.push(field);
