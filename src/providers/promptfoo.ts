@@ -16,6 +16,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  Inputs,
   PluginConfig,
   ProviderResponse,
   TokenUsage,
@@ -147,6 +148,10 @@ interface PromptfooChatCompletionOptions {
     | 'hydra-decision'
     | 'voice-crescendo'
     | 'voice-crescendo-eval';
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   */
+  inputs?: Inputs;
 }
 
 /**
@@ -195,6 +200,8 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       step: context?.prompt.label,
       task: this.options.task,
       email: getUserEmail(),
+      // Pass inputs schema for multi-input mode
+      ...(this.options.inputs && { inputs: this.options.inputs }),
     };
 
     try {
@@ -214,7 +221,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const data = await response.json();
 
       if (!data.result) {
-        logger.error(
+        logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {

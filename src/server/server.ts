@@ -4,12 +4,13 @@ import dotenv from 'dotenv';
 
 dotenv.config({ quiet: true });
 
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import { getDefaultPort, VERSION } from '../constants';
 import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -31,6 +32,7 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
+import { csrfProtection } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
@@ -84,12 +86,41 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
   process.exit(1);
 }
 
+/**
+ * Finds the static directory containing the web app.
+ *
+ * When running in development (tsx), getDirectory() returns src/ and the app is at src/app/.
+ * When bundled into dist/src/server/index.js, getDirectory() returns dist/src/server/
+ * but the app is at dist/src/app/, so we need to check the parent directory.
+ */
+export function findStaticDir(): string {
+  const baseDir = getDirectory();
+
+  // Try the standard location first (works in development)
+  const standardPath = path.join(baseDir, 'app');
+  if (fs.existsSync(path.join(standardPath, 'index.html'))) {
+    return standardPath;
+  }
+
+  // When bundled, the server is at dist/src/server/ but app is at dist/src/app/
+  const parentPath = path.resolve(baseDir, '..', 'app');
+  if (fs.existsSync(path.join(parentPath, 'index.html'))) {
+    logger.debug(`Static directory resolved to parent: ${parentPath}`);
+    return parentPath;
+  }
+
+  // Fall back to standard path even if it doesn't exist (will fail gracefully later)
+  logger.warn(`Static directory not found at ${standardPath} or ${parentPath}`);
+  return standardPath;
+}
+
 export function createApp() {
   const app = express();
 
-  const staticDir = path.join(getDirectory(), 'app');
+  const staticDir = findStaticDir();
 
   app.use(cors());
+  app.use(csrfProtection);
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
@@ -136,7 +167,7 @@ export function createApp() {
   );
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const file = await readResult(id);
     if (!file) {
       res.status(404).send('Result not found');
@@ -167,7 +198,7 @@ export function createApp() {
   });
 
   app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
-    const sha256hash = req.params.sha256hash;
+    const sha256hash = req.params.sha256hash as string;
     const prompts = await getPromptsForTestCasesHash(sha256hash);
     res.json({ data: prompts });
   });
@@ -249,7 +280,7 @@ export function createApp() {
       if (!result.success) {
         res
           .status(400)
-          .json({ error: 'Invalid request body', details: fromError(result.error).toString() });
+          .json({ error: 'Invalid request body', details: z.prettifyError(result.error) });
         return;
       }
       const { event, properties } = result.data;
@@ -293,24 +324,28 @@ export async function startServer(
 
   await runDbMigrations();
 
-  const watcher = setupSignalWatcher(async () => {
-    // Try to get the specific eval that was updated from the signal file
-    const signalEvalId = readSignalEvalId();
-    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+  const watcher = setupSignalWatcher(() => {
+    const handleSignalUpdate = async () => {
+      // Try to get the specific eval that was updated from the signal file
+      const signalEvalId = readSignalEvalId();
+      const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+      const results = await updatedEval?.getResultsCount();
 
-    const results = await updatedEval?.getResultsCount();
+      if (results && results > 0) {
+        logger.debug(
+          `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
+        );
+        io.emit('update', { evalId: updatedEval?.id });
+        allPrompts = null;
+      }
+    };
 
-    if (results && results > 0) {
-      logger.debug(
-        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
-      );
-      io.emit('update', updatedEval);
-      allPrompts = null;
-    }
+    void handleSignalUpdate();
   });
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await Eval.latest());
+    const latestEval = await Eval.latest();
+    socket.emit('init', latestEval ? { evalId: latestEval.id } : null);
   });
 
   // Return a Promise that only resolves when the server shuts down

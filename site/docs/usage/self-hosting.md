@@ -59,6 +59,9 @@ docker pull ghcr.io/promptfoo/promptfoo:latest
 
 # Or pull a specific version
 # docker pull ghcr.io/promptfoo/promptfoo:0.109.1
+
+# You can verify image authenticity with:
+# gh attestation verify oci://ghcr.io/promptfoo/promptfoo:latest --owner promptfoo
 ```
 
 ### 2. Run the Container
@@ -524,6 +527,53 @@ docker exec promptfoo_container cat /home/promptfoo/.promptfoo/ui-providers.yaml
 
 File must be named `ui-providers.yaml` or `ui-providers.yml` (case-sensitive on Linux).
 
+## Deploying Behind a Reverse Proxy with Base Path
+
+To serve promptfoo at a URL prefix (e.g., `https://example.com/promptfoo/`), rebuild the Docker image with `VITE_PUBLIC_BASENAME` and configure your reverse proxy to strip the prefix.
+
+### Build the Image
+
+```bash
+docker build --build-arg VITE_PUBLIC_BASENAME=/promptfoo -t my-promptfoo .
+```
+
+### Nginx Configuration
+
+```nginx
+location /promptfoo/ {
+    proxy_pass http://localhost:3000/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+### Traefik Configuration
+
+```yaml
+http:
+  routers:
+    promptfoo:
+      rule: 'PathPrefix(`/promptfoo`)'
+      middlewares:
+        - strip-promptfoo
+      service: promptfoo
+  middlewares:
+    strip-promptfoo:
+      stripPrefix:
+        prefixes:
+          - '/promptfoo'
+  services:
+    promptfoo:
+      loadBalancer:
+        servers:
+          - url: 'http://promptfoo:3000'
+```
+
+The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the correct paths for routing, API calls, and WebSocket connections.
+
 ## Specifications
 
 ### Client Requirements (Running `promptfoo` CLI)
@@ -533,7 +583,7 @@ File must be named `ui-providers.yaml` or `ui-providers.yml` (case-sensitive on 
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js v20+, npm
+- **Dependencies**: Node.js 20+, npm
 
 ### Server Requirements (Hosting the Web UI/API)
 

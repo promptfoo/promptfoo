@@ -1,6 +1,7 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore } from '../stores';
 import PathSelector from './PathSelector';
@@ -10,8 +11,6 @@ vi.mock('../stores');
 
 const mockCallApi = vi.mocked(callApi);
 const mockUseModelAuditConfigStore = vi.mocked(useModelAuditConfigStore);
-
-const theme = createTheme();
 
 describe('PathSelector', () => {
   const onAddPath = vi.fn();
@@ -28,6 +27,7 @@ describe('PathSelector', () => {
 
   describe('handleAddPath', () => {
     it('should call onAddPath with the correct path, type, and name when the API confirms the path exists', async () => {
+      const user = userEvent.setup();
       const pathToAdd = '/path/to/model.pkl';
       const apiResponse = {
         exists: true,
@@ -40,16 +40,18 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
+        <TooltipProvider delayDuration={0}>
           <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
       const addButton = screen.getByRole('button', { name: 'Add' });
 
-      fireEvent.change(input, { target: { value: pathToAdd } });
-      fireEvent.click(addButton);
+      await user.click(input);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste(pathToAdd);
+      await user.click(addButton);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
@@ -72,20 +74,23 @@ describe('PathSelector', () => {
     });
 
     it('should call onAddPath with the guessed type and name when the API call fails', async () => {
+      const user = userEvent.setup();
       const pathToAdd = '/path/to/model.pkl';
       mockCallApi.mockRejectedValue(new Error('API Error'));
 
       render(
-        <ThemeProvider theme={theme}>
+        <TooltipProvider delayDuration={0}>
           <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
       const addButton = screen.getByRole('button', { name: 'Add' });
 
-      fireEvent.change(input, { target: { value: pathToAdd } });
-      fireEvent.click(addButton);
+      await user.click(input);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste(pathToAdd);
+      await user.click(addButton);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
@@ -108,6 +113,7 @@ describe('PathSelector', () => {
     });
 
     it('should call onAddPath with the guessed type and name when a user enters a path that does not exist according to the API', async () => {
+      const user = userEvent.setup();
       const pathToAdd = '/path/to/nonexistent/directory/';
       mockCallApi.mockResolvedValue({
         ok: true,
@@ -115,16 +121,18 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
+        <TooltipProvider delayDuration={0}>
           <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
       const addButton = screen.getByRole('button', { name: 'Add' });
 
-      fireEvent.change(input, { target: { value: pathToAdd } });
-      fireEvent.click(addButton);
+      await user.click(input);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste(pathToAdd);
+      await user.click(addButton);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
@@ -147,6 +155,7 @@ describe('PathSelector', () => {
     });
 
     it('should call onAddPath with the guessed type and name when the API returns malformed data', async () => {
+      const user = userEvent.setup();
       const pathToAdd = '/path/to/model.pkl';
       const apiResponse = {};
       mockCallApi.mockResolvedValue({
@@ -155,16 +164,18 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
+        <TooltipProvider delayDuration={0}>
           <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
       const addButton = screen.getByRole('button', { name: 'Add' });
 
-      fireEvent.change(input, { target: { value: pathToAdd } });
-      fireEvent.click(addButton);
+      await user.click(input);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste(pathToAdd);
+      await user.click(addButton);
 
       await waitFor(() => {
         expect(mockCallApi).toHaveBeenCalledWith('/model-audit/check-path', {
@@ -187,27 +198,29 @@ describe('PathSelector', () => {
     });
   });
 
-  it('should call onRemovePath with the correct index when the delete button for a selected path is clicked', () => {
+  it('should call onRemovePath with the correct index when the delete button for a selected path is clicked', async () => {
+    const user = userEvent.setup();
     const paths = [
       { path: '/path/to/model1', type: 'file' as 'file' | 'directory', name: 'model1' },
       { path: '/path/to/model2', type: 'directory' as 'file' | 'directory', name: 'model2' },
     ];
 
     render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider delayDuration={0}>
         <PathSelector paths={paths} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
 
     // Find the delete button for the first path
     const deleteButton = screen.getByLabelText('Remove model1');
-    fireEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     expect(onRemovePath).toHaveBeenCalledTimes(1);
     expect(onRemovePath).toHaveBeenCalledWith(0);
   });
 
-  it('should call clearRecentScans when the clear recent scans button is clicked and there are more than three recent scans', () => {
+  it('should call clearRecentScans when the clear recent scans button is clicked and there are more than three recent scans', async () => {
+    const user = userEvent.setup();
     const clearRecentScansMock = vi.fn();
     mockUseModelAuditConfigStore.mockReturnValue({
       recentScans: [
@@ -221,13 +234,13 @@ describe('PathSelector', () => {
     } as any);
 
     render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider delayDuration={0}>
         <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
 
     const clearButton = screen.getByText('Clear All');
-    fireEvent.click(clearButton);
+    await user.click(clearButton);
 
     expect(clearRecentScansMock).toHaveBeenCalledTimes(1);
   });
@@ -242,9 +255,9 @@ describe('PathSelector', () => {
     } as any);
 
     render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider delayDuration={0}>
         <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
 
     const clearButton = screen.getByText('Clear All');

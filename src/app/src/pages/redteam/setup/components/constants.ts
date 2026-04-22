@@ -1,21 +1,41 @@
 import type { RedteamUITarget } from '../types';
 
+export const DEFAULT_OPENAI_TARGET_ID = 'openai:gpt-5.4';
+export const OPENAI_TARGET_PLACEHOLDER = 'openai:gpt-5.4, openai:gpt-5.4-mini, openai:gpt-5.4-nano';
+
 export const predefinedTargets: RedteamUITarget[] = [
   { value: '', label: 'Select a target' },
   { value: 'http', label: 'HTTP/HTTPS Endpoint' },
   { value: 'websocket', label: 'WebSocket Endpoint' },
   { value: 'browser', label: 'Web Browser Automation' },
-  { value: 'openai:gpt-5', label: 'OpenAI GPT-5' },
-  { value: 'openai:gpt-5-mini', label: 'OpenAI GPT-5 Mini' },
-  { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
+  { value: DEFAULT_OPENAI_TARGET_ID, label: 'OpenAI GPT-5.4' },
+  { value: 'openai:gpt-5.4-mini', label: 'OpenAI GPT-5.4 Mini' },
+  { value: 'openai:gpt-5.4-nano', label: 'OpenAI GPT-5.4 Nano' },
   { value: 'openai:gpt-4o', label: 'OpenAI GPT-4o' },
   { value: 'openai:gpt-4.1', label: 'OpenAI GPT-4.1' },
   { value: 'openai:gpt-4.1-mini', label: 'OpenAI GPT-4.1 Mini' },
+  { value: 'claude-sonnet-4-6', label: 'Anthropic Claude 4.6 Sonnet' },
+  { value: 'claude-opus-4-6', label: 'Anthropic Claude 4.6 Opus' },
+  { value: 'claude-sonnet-4-5-20250929', label: 'Anthropic Claude 4.5 Sonnet' },
   { value: 'claude-sonnet-4-20250514', label: 'Anthropic Claude 4 Sonnet' },
   { value: 'claude-opus-4-1-20250805', label: 'Anthropic Claude 4.1 Opus' },
   { value: 'claude-opus-4-20250514', label: 'Anthropic Claude 4 Opus' },
   { value: 'claude-3-7-sonnet-latest', label: 'Anthropic Claude 3.7 Sonnet' },
+  { value: 'vertex:gemini-3.1-pro-preview', label: 'Google Vertex AI Gemini 3.1 Pro' },
   { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
 ];
 
+const legacyPredefinedTargets: RedteamUITarget[] = [
+  { value: 'openai:gpt-5', label: 'OpenAI GPT-5' },
+  { value: 'openai:gpt-5-mini', label: 'OpenAI GPT-5 Mini' },
+  { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
+];
+
 export const customTargetOption: RedteamUITarget = { value: 'custom', label: 'Custom Target' };
+
+export function findPredefinedTarget(value: string): RedteamUITarget | undefined {
+  return (
+    predefinedTargets.find((target) => target.value === value) ||
+    legacyPredefinedTargets.find((target) => target.value === value)
+  );
+}

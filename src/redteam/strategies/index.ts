@@ -1,11 +1,8 @@
-import chalk from 'chalk';
-import dedent from 'dedent';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
-import { strategyDisplayNames } from '../constants';
 import { isCustomStrategy } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
@@ -18,6 +15,7 @@ import { addGoatTestCases } from './goat';
 import { addHexEncoding } from './hex';
 import { addHomoglyphs } from './homoglyph';
 import { addHydra } from './hydra';
+import { addIndirectWebPwnTestCases } from './indirectWebPwn';
 import { addIterativeJailbreaks } from './iterative';
 import { addLayerTestCases } from './layer';
 import { addLeetspeak } from './leetspeak';
@@ -101,6 +99,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'crescendo',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding Crescendo to ${testCases.length} test cases`);
       const newTestCases = addCrescendo(testCases, injectVar, config);
@@ -110,6 +109,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'custom',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config, strategyId = 'custom') => {
       logger.debug(`Adding Custom to ${testCases.length} test cases`);
       const newTestCases = addCustom(testCases, injectVar, config, strategyId);
@@ -128,10 +128,21 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'goat',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding GOAT to ${testCases.length} test cases`);
       const newTestCases = await addGoatTestCases(testCases, injectVar, config);
       logger.debug(`Added ${newTestCases.length} GOAT test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    id: 'indirect-web-pwn',
+    requiresGoalExtraction: true,
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Indirect Web Pwn to ${testCases.length} test cases`);
+      const newTestCases = await addIndirectWebPwnTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Indirect Web Pwn test cases`);
       return newTestCases;
     },
   },
@@ -167,11 +178,17 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    // Deprecated: Use 'jailbreak:meta' instead. This alias exists for backward compatibility.
     id: 'jailbreak',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding experimental jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative', config);
-      logger.debug(`Added ${newTestCases.length} experimental jailbreak test cases`);
+      logger.warn(
+        'Strategy "jailbreak" is deprecated. Use "jailbreak:meta" instead. ' +
+          'The "jailbreak" strategy used outdated single-shot optimization techniques.',
+      );
+      logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
+      const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
+      logger.debug(`Added ${newTestCases.length} meta-agent jailbreak test cases`);
       return newTestCases;
     },
   },
@@ -195,6 +212,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:tree',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding experimental tree jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:tree', config);
@@ -204,6 +222,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:meta',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding meta-agent jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addIterativeJailbreaks(testCases, injectVar, 'iterative:meta', config);
@@ -213,6 +232,7 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:hydra',
+    requiresGoalExtraction: true,
     action: async (testCases, injectVar, config) => {
       logger.debug(`Adding hydra multi-turn jailbreaks to ${testCases.length} test cases`);
       const newTestCases = addHydra(testCases, injectVar, config);
@@ -266,11 +286,23 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    id: 'jailbreak-templates',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding jailbreak templates to ${testCases.length} test cases`);
+      const newTestCases = await addInjections(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} jailbreak template test cases`);
+      return newTestCases;
+    },
+  },
+  {
+    // Deprecated: Use 'jailbreak-templates' instead. This alias exists for backward compatibility.
     id: 'prompt-injection',
     action: async (testCases, injectVar, config) => {
-      logger.debug(`Adding prompt injections to ${testCases.length} test cases`);
+      logger.warn(
+        'Strategy "prompt-injection" is deprecated. Use "jailbreak-templates" instead. ' +
+          'This strategy applies static jailbreak templates and does not cover modern prompt injection techniques.',
+      );
       const newTestCases = await addInjections(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} prompt injection test cases`);
       return newTestCases;
     },
   },
@@ -293,14 +325,10 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    // Deprecated: Simba strategy has been removed. This entry exists for backwards compatibility.
     id: 'simba',
     action: async (testCases, injectVar, config) => {
-      logger.debug(
-        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
-      );
-      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
-      return newTestCases;
+      return addSimbaTestCases(testCases, injectVar, config);
     },
   },
   {
@@ -373,12 +401,9 @@ export async function validateStrategies(strategies: RedteamStrategyObject[]): P
   if (invalidStrategies.length > 0) {
     const validStrategiesString = Strategies.map((s) => s.id).join(', ');
     const invalidStrategiesString = invalidStrategies.map((s) => s.id).join(', ');
-    logger.error(
-      dedent`Invalid strategy(s): ${invalidStrategiesString}.
-
-        ${chalk.green(`Valid strategies are: ${validStrategiesString}`)}`,
+    throw new Error(
+      `Invalid strategy(s): ${invalidStrategiesString}. Valid strategies are: ${validStrategiesString}`,
     );
-    process.exit(1);
   }
 }
 

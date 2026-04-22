@@ -15,7 +15,7 @@ declare global {
         account_external_id?: string;
       };
     };
-    Pylon?: any;
+    Pylon?: unknown;
   }
 }
 

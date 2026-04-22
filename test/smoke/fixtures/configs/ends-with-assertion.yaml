@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing regex assertion with end-of-string pattern
+description: 'Smoke test - regex ends-with pattern'
+
+providers:
+  - echo
+
+prompts:
+  - 'The answer is 42.'
+
+tests:
+  - assert:
+      # Regex pattern to match string ending with "42."
+      - type: regex
+        value: '42\.$'
+      # Regex pattern to match string ending with "."
+      - type: regex
+        value: '\.$'

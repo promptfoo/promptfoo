@@ -8,6 +8,7 @@ import {
   getCompletedPairsFromCloud,
   getConfigFromCloud,
   getDefaultTeam,
+  getEvalConfigFromCloud,
   getEvalFromCloud,
   getEvalSummaryFromCloud,
   getPluginSeverityOverridesFromCloud,
@@ -19,6 +20,8 @@ import {
 } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { checkServerFeatureSupport } from '../../src/util/server';
+
+import type { UnifiedConfig } from '../../src/types';
 
 vi.mock('../../src/util/fetch/index.ts');
 vi.mock('../../src/globalConfig/cloud');
@@ -355,6 +358,95 @@ describe('cloud utils', () => {
 
       await expect(getConfigFromCloud('test-config')).rejects.toThrow(
         'Failed to fetch config from cloud: test-config.',
+      );
+    });
+  });
+
+  describe('getEvalConfigFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch and normalize eval config from cloud envelope', async () => {
+      const providerId = '12345678-1234-4234-8234-123456789abc';
+      const responseBody = {
+        config: {
+          id: 'config-id',
+          name: 'My Cloud Eval Config',
+          config: {
+            providerIds: [providerId],
+            prompts: [{ id: 'prompt-1', content: 'Hello {{name}}' }],
+            testCases: [{ vars: { name: 'World' } }],
+            delay: 250,
+            maxConcurrency: 2,
+            verbose: true,
+          },
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(responseBody),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+
+      expect(result.description).toBe('My Cloud Eval Config');
+      expect(result.providers).toEqual([`promptfoo://provider/${providerId}`]);
+      expect(result.prompts).toEqual(['Hello {{name}}']);
+      expect(result.tests).toEqual([{ vars: { name: 'World' } }]);
+      expect(result.commandLineOptions).toEqual({
+        delay: 250,
+        maxConcurrency: 2,
+        verbose: true,
+      });
+      expect((result as any).providerIds).toBeUndefined();
+      expect((result as any).testCases).toBeUndefined();
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/configs/eval-config-id',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should default tests to an empty array when absent', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            config: {
+              description: 'Cloud Eval',
+              providers: ['promptfoo://provider/12345678-1234-4234-8234-123456789abc'],
+              prompts: ['Say hello'],
+            },
+          }),
+      } as Response);
+
+      const result = await getEvalConfigFromCloud('eval-config-id');
+      expect(result.tests).toEqual([]);
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getEvalConfigFromCloud('eval-config-id')).rejects.toThrow(
+        'Could not fetch Config eval-config-id from cloud. Cloud config is not enabled.',
+      );
+    });
+
+    it('should throw error when eval config fetch fails', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: () => Promise.resolve('Config not found'),
+      } as Response);
+
+      await expect(getEvalConfigFromCloud('eval-config-id')).rejects.toThrow(
+        'Failed to fetch config from cloud: Not Found',
       );
     });
   });
@@ -1263,14 +1355,69 @@ describe('cloud utils', () => {
 
       await expect(checkCloudPermissions(complexConfig)).resolves.toBeUndefined();
 
+      // Should strip tests and replace redteam with empty object
+      const expectedConfig = {
+        providers: ['provider1', 'provider2'],
+        prompts: ['prompt1'],
+        redteam: {},
+      };
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
         'https://api.example.com/api/v1/permissions/check',
         {
           method: 'POST',
-          body: JSON.stringify({ config: complexConfig }),
+          body: JSON.stringify({ config: expectedConfig }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
+    });
+
+    it('should strip heavy fields from config before sending', async () => {
+      const largeConfig: Partial<UnifiedConfig> = {
+        providers: ['provider1'],
+        prompts: ['prompt1'],
+        metadata: { configId: 'config-123', teamId: 'team-456' },
+        tests: Array.from({ length: 300 }, (_, i) => ({
+          vars: { input: `test-${i}` },
+          assert: [{ type: 'contains' as const, value: `expected-${i}` }],
+        })),
+        scenarios: [
+          {
+            config: [{ vars: { scenario: 'test' } }],
+            tests: [{ vars: { input: 'scenario-test' } }],
+          },
+        ],
+        defaultTest: { vars: { default: 'value' } },
+        evaluateOptions: { maxConcurrency: 5 },
+        redteam: {
+          plugins: [{ id: 'plugin1' as const }, { id: 'plugin2' as const }],
+          strategies: [{ id: 'strategy1' as const }],
+          purpose: 'A very long purpose string',
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      } as Response);
+
+      await expect(checkCloudPermissions(largeConfig)).resolves.toBeUndefined();
+
+      const sentBody = JSON.parse((mockFetchWithProxy.mock.calls[0] as any[])[1].body as string);
+      const sentConfig = sentBody.config;
+
+      // Should keep providers, prompts, and metadata
+      expect(sentConfig.providers).toEqual(['provider1']);
+      expect(sentConfig.prompts).toEqual(['prompt1']);
+      expect(sentConfig.metadata).toEqual({ configId: 'config-123', teamId: 'team-456' });
+
+      // Should strip heavy fields
+      expect(sentConfig.tests).toBeUndefined();
+      expect(sentConfig.scenarios).toBeUndefined();
+      expect(sentConfig.defaultTest).toBeUndefined();
+      expect(sentConfig.evaluateOptions).toBeUndefined();
+
+      // Should replace redteam with empty object (preserving truthiness)
+      expect(sentConfig.redteam).toEqual({});
     });
 
     it('should handle config with undefined providers', async () => {
@@ -1295,6 +1442,273 @@ describe('cloud utils', () => {
           body: JSON.stringify({ config: { providers: [] } }),
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
+      );
+    });
+  });
+
+  describe('getEvalFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch eval successfully', async () => {
+      const mockEval = {
+        id: 'eval-123',
+        createdAt: '2024-01-01T00:00:00Z',
+        config: {
+          prompts: ['Test prompt'],
+          providers: ['test-provider'],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      };
+
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockEval),
+      } as Response);
+
+      const result = await getEvalFromCloud('eval-123');
+
+      expect(result).toEqual(mockEval);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/results/eval-123',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getEvalFromCloud('eval-123')).rejects.toThrow(
+        'Could not fetch eval eval-123 from cloud. Cloud config is not enabled.',
+      );
+    });
+
+    it('should throw specific error when eval is not found', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('Not found'),
+      } as Response);
+
+      await expect(getEvalFromCloud('eval-123')).rejects.toThrow(
+        'Eval eval-123 not found in cloud. It may have been deleted.',
+      );
+    });
+
+    it('should throw generic fetch error for non-404 HTTP failures', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Internal server error'),
+      } as Response);
+
+      await expect(getEvalFromCloud('eval-123')).rejects.toThrow(
+        'Failed to fetch eval from cloud: eval-123',
+      );
+    });
+  });
+
+  describe('getEvalSummaryFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should calculate summary stats from cloud prompt metrics', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            prompts: [
+              { metrics: { testPassCount: 2, testFailCount: 1, testErrorCount: 0 } },
+              { metrics: { testPassCount: 1, testFailCount: 0, testErrorCount: 2 } },
+            ],
+          }),
+      } as Response);
+
+      const result = await getEvalSummaryFromCloud('eval-123');
+
+      expect(result).toEqual({
+        totalTests: 6,
+        passCount: 3,
+        failCount: 1,
+        errorCount: 2,
+        passRate: 50,
+      });
+    });
+
+    it('should return empty stats when summary fetch fails', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('Internal server error'),
+      } as Response);
+
+      const result = await getEvalSummaryFromCloud('eval-123');
+
+      expect(result).toEqual({
+        totalTests: 0,
+        passCount: 0,
+        failCount: 0,
+        errorCount: 0,
+        passRate: 0,
+      });
+    });
+  });
+
+  describe('getCompletedPairsFromCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should fetch completed pairs successfully', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ pairs: ['0:0', '0:1', '2:0'] }),
+      } as Response);
+
+      const result = await getCompletedPairsFromCloud('eval-123');
+
+      expect(result).toBeInstanceOf(Set);
+      expect([...result]).toEqual(['0:0', '0:1', '2:0']);
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/results/eval-123/completed-pairs',
+        {
+          method: 'GET',
+          body: undefined,
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should return an empty set when completed pairs are not found', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('Not found'),
+      } as Response);
+
+      const result = await getCompletedPairsFromCloud('eval-123');
+
+      expect(result).toBeInstanceOf(Set);
+      expect(result.size).toBe(0);
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(getCompletedPairsFromCloud('eval-123')).rejects.toThrow(
+        'Could not fetch completed pairs from cloud. Cloud config is not enabled.',
+      );
+    });
+  });
+
+  describe('createEvalInCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should create eval successfully', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ id: 'new-eval-123' }),
+      } as Response);
+
+      const evalData = {
+        config: {
+          prompts: ['Test prompt'],
+          providers: ['test-provider'],
+          tests: [{ vars: { input: 'test' } }],
+        },
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        author: 'test-user',
+      };
+
+      const result = await createEvalInCloud(evalData);
+
+      expect(result).toBe('new-eval-123');
+      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/results', {
+        method: 'POST',
+        body: expect.any(String),
+        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+      });
+      expect(JSON.parse((mockFetchWithProxy.mock.calls[0] as any[])[1].body)).toEqual({
+        ...evalData,
+        createdAt: evalData.createdAt.toISOString(),
+        prompts: [],
+        results: [],
+      });
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(
+        createEvalInCloud({
+          config: { prompts: [], providers: [] },
+          createdAt: new Date(),
+        }),
+      ).rejects.toThrow('Could not create eval in cloud. Cloud config is not enabled.');
+    });
+
+    it('should throw error when cloud does not return an eval ID', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({}),
+      } as Response);
+
+      await expect(
+        createEvalInCloud({
+          config: { prompts: [], providers: [] },
+          createdAt: new Date(),
+        }),
+      ).rejects.toThrow('Cloud did not return an eval ID');
+    });
+  });
+
+  describe('streamResultsToCloud', () => {
+    beforeEach(() => {
+      mockCloudConfig.isEnabled.mockReturnValue(true);
+    });
+
+    it('should stream results successfully', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      } as Response);
+
+      const results = [
+        { success: true, testIdx: 0, promptIdx: 0 },
+        { success: false, testIdx: 1, promptIdx: 0 },
+      ];
+
+      await streamResultsToCloud('eval-123', results as any);
+
+      expect(mockFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.example.com/api/v1/results/eval-123/results',
+        {
+          method: 'POST',
+          body: JSON.stringify(results),
+          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
+        },
+      );
+    });
+
+    it('should skip streaming when results array is empty', async () => {
+      await streamResultsToCloud('eval-123', []);
+
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    });
+
+    it('should throw error when cloud config is not enabled', async () => {
+      mockCloudConfig.isEnabled.mockReturnValue(false);
+
+      await expect(streamResultsToCloud('eval-123', [{ success: true } as any])).rejects.toThrow(
+        'Could not stream results to cloud. Cloud config is not enabled.',
       );
     });
   });
@@ -1404,401 +1818,6 @@ describe('cloud utils', () => {
           headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
         },
       );
-    });
-  });
-
-  describe('getEvalFromCloud', () => {
-    beforeEach(() => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
-    });
-
-    it('should fetch eval successfully', async () => {
-      const mockEval = {
-        id: 'eval-123',
-        config: {
-          description: 'Test eval',
-          providers: ['test-provider'],
-          prompts: ['test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        },
-        createdAt: '2024-01-01T00:00:00Z',
-      };
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockEval),
-      } as Response);
-
-      const result = await getEvalFromCloud('eval-123');
-
-      expect(result).toEqual(mockEval);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/results/eval-123',
-        {
-          method: 'GET',
-          body: undefined,
-          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-        },
-      );
-    });
-
-    it('should throw error when cloud config is not enabled', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
-
-      await expect(getEvalFromCloud('eval-123')).rejects.toThrow(
-        'Could not fetch eval eval-123 from cloud. Cloud config is not enabled.',
-      );
-    });
-
-    it('should throw specific error when eval not found (404)', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        text: () => Promise.resolve('Not found'),
-      } as Response);
-
-      await expect(getEvalFromCloud('eval-123')).rejects.toThrow(
-        'Eval eval-123 not found in cloud. It may have been deleted.',
-      );
-    });
-
-    it('should throw error for other HTTP errors', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        text: () => Promise.resolve('Internal server error'),
-      } as Response);
-
-      await expect(getEvalFromCloud('eval-123')).rejects.toThrow(
-        'Failed to fetch eval from cloud: eval-123',
-      );
-    });
-
-    it('should throw error when fetch fails', async () => {
-      mockFetchWithProxy.mockRejectedValueOnce(new Error('Network error'));
-
-      await expect(getEvalFromCloud('eval-123')).rejects.toThrow(
-        'Failed to fetch eval from cloud: eval-123',
-      );
-    });
-  });
-
-  describe('getEvalSummaryFromCloud', () => {
-    beforeEach(() => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
-    });
-
-    it('should fetch and calculate summary correctly', async () => {
-      const mockEval = {
-        prompts: [
-          {
-            metrics: {
-              testPassCount: 5,
-              testFailCount: 2,
-              testErrorCount: 1,
-            },
-          },
-          {
-            metrics: {
-              testPassCount: 3,
-              testFailCount: 1,
-              testErrorCount: 0,
-            },
-          },
-        ],
-      };
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockEval),
-      } as Response);
-
-      const result = await getEvalSummaryFromCloud('eval-123');
-
-      expect(result).toEqual({
-        totalTests: 12,
-        passCount: 8,
-        failCount: 3,
-        errorCount: 1,
-        passRate: (8 / 12) * 100,
-      });
-    });
-
-    it('should handle empty prompts array', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ prompts: [] }),
-      } as Response);
-
-      const result = await getEvalSummaryFromCloud('eval-123');
-
-      expect(result).toEqual({
-        totalTests: 0,
-        passCount: 0,
-        failCount: 0,
-        errorCount: 0,
-        passRate: 0,
-      });
-    });
-
-    it('should return empty stats when cloud is not enabled', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
-
-      await expect(getEvalSummaryFromCloud('eval-123')).rejects.toThrow(
-        'Could not fetch eval summary from cloud. Cloud config is not enabled.',
-      );
-    });
-
-    it('should return empty stats on error (graceful degradation)', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-      } as Response);
-
-      const result = await getEvalSummaryFromCloud('eval-123');
-
-      expect(result).toEqual({
-        totalTests: 0,
-        passCount: 0,
-        failCount: 0,
-        errorCount: 0,
-        passRate: 0,
-      });
-    });
-  });
-
-  describe('getCompletedPairsFromCloud', () => {
-    beforeEach(() => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
-    });
-
-    it('should fetch completed pairs successfully', async () => {
-      const mockPairs = {
-        pairs: ['0:0', '0:1', '1:0', '1:1', '2:0'],
-      };
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockPairs),
-      } as Response);
-
-      const result = await getCompletedPairsFromCloud('eval-123');
-
-      expect(result).toBeInstanceOf(Set);
-      expect(result.size).toBe(5);
-      expect(result.has('0:0')).toBe(true);
-      expect(result.has('2:0')).toBe(true);
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/results/eval-123/completed-pairs',
-        {
-          method: 'GET',
-          body: undefined,
-          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-        },
-      );
-    });
-
-    it('should return empty set for 404 (no results yet)', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        text: () => Promise.resolve('Not found'),
-      } as Response);
-
-      const result = await getCompletedPairsFromCloud('eval-123');
-
-      expect(result).toBeInstanceOf(Set);
-      expect(result.size).toBe(0);
-    });
-
-    it('should throw error when cloud config is not enabled', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
-
-      await expect(getCompletedPairsFromCloud('eval-123')).rejects.toThrow(
-        'Could not fetch completed pairs from cloud. Cloud config is not enabled.',
-      );
-    });
-
-    it('should throw error for other HTTP errors', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        text: () => Promise.resolve('Internal server error'),
-      } as Response);
-
-      await expect(getCompletedPairsFromCloud('eval-123')).rejects.toThrow(
-        'Failed to fetch completed pairs from cloud: eval-123',
-      );
-    });
-
-    it('should handle empty pairs array', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ pairs: [] }),
-      } as Response);
-
-      const result = await getCompletedPairsFromCloud('eval-123');
-
-      expect(result).toBeInstanceOf(Set);
-      expect(result.size).toBe(0);
-    });
-  });
-
-  describe('createEvalInCloud', () => {
-    beforeEach(() => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
-    });
-
-    it('should create eval successfully', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: 'new-eval-123' }),
-      } as Response);
-
-      const evalData = {
-        config: {
-          description: 'Test eval',
-          providers: ['test-provider'],
-          prompts: ['test prompt'],
-          tests: [{ vars: { input: 'test' } }],
-        },
-        createdAt: new Date('2024-01-01T00:00:00Z'),
-        author: 'test-user',
-      };
-
-      const result = await createEvalInCloud(evalData);
-
-      expect(result).toBe('new-eval-123');
-      expect(mockFetchWithProxy).toHaveBeenCalledWith('https://api.example.com/api/v1/results', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...evalData,
-          results: [],
-          prompts: [],
-        }),
-        headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-      });
-    });
-
-    it('should throw error when cloud config is not enabled', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
-
-      await expect(
-        createEvalInCloud({
-          config: { prompts: [], providers: [] },
-          createdAt: new Date(),
-        }),
-      ).rejects.toThrow('Could not create eval in cloud. Cloud config is not enabled.');
-    });
-
-    it('should throw error when response is not ok', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        text: () => Promise.resolve('Internal server error'),
-      } as Response);
-
-      await expect(
-        createEvalInCloud({
-          config: { prompts: [], providers: [] },
-          createdAt: new Date(),
-        }),
-      ).rejects.toThrow('Failed to create eval in cloud: Internal server error');
-    });
-
-    it('should throw error when no id returned', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({}),
-      } as Response);
-
-      await expect(
-        createEvalInCloud({
-          config: { prompts: [], providers: [] },
-          createdAt: new Date(),
-        }),
-      ).rejects.toThrow('Cloud did not return an eval ID');
-    });
-  });
-
-  describe('streamResultsToCloud', () => {
-    beforeEach(() => {
-      mockCloudConfig.isEnabled.mockReturnValue(true);
-    });
-
-    it('should stream results successfully', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      } as Response);
-
-      const results = [
-        {
-          success: true,
-          score: 1,
-          response: { output: 'test' },
-          provider: { id: () => 'test-provider', label: 'Test' },
-          prompt: { raw: 'test prompt', label: 'Test Prompt' },
-          testIdx: 0,
-          promptIdx: 0,
-        },
-      ];
-
-      await streamResultsToCloud('eval-123', results as any);
-
-      expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        'https://api.example.com/api/v1/results/eval-123/results',
-        {
-          method: 'POST',
-          body: JSON.stringify(results),
-          headers: { Authorization: 'Bearer test-api-key', 'Content-Type': 'application/json' },
-        },
-      );
-    });
-
-    it('should skip streaming when results array is empty', async () => {
-      await streamResultsToCloud('eval-123', []);
-
-      expect(mockFetchWithProxy).not.toHaveBeenCalled();
-    });
-
-    it('should throw error when cloud config is not enabled', async () => {
-      mockCloudConfig.isEnabled.mockReturnValue(false);
-
-      await expect(streamResultsToCloud('eval-123', [{ success: true } as any])).rejects.toThrow(
-        'Could not stream results to cloud. Cloud config is not enabled.',
-      );
-    });
-
-    it('should throw error when response is not ok', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        text: () => Promise.resolve('Internal server error'),
-      } as Response);
-
-      await expect(streamResultsToCloud('eval-123', [{ success: true } as any])).rejects.toThrow(
-        'Failed to stream results to cloud: Internal server error',
-      );
-    });
-
-    it('should stream multiple results', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      } as Response);
-
-      const results = [
-        { success: true, testIdx: 0, promptIdx: 0 },
-        { success: false, testIdx: 1, promptIdx: 0 },
-        { success: true, testIdx: 2, promptIdx: 0 },
-      ];
-
-      await streamResultsToCloud('eval-123', results as any);
-
-      expect(mockFetchWithProxy).toHaveBeenCalledTimes(1);
-      const callBody = JSON.parse((mockFetchWithProxy.mock.calls[0] as any)[1].body);
-      expect(callBody).toHaveLength(3);
     });
   });
 });
