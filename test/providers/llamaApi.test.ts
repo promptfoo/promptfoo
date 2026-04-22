@@ -1,10 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
-  LlamaApiProvider,
   createLlamaApiProvider,
   LLAMA_API_MODELS,
   LLAMA_API_MULTIMODAL_MODELS,
+  LlamaApiProvider,
 } from '../../src/providers/llamaApi';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
@@ -32,6 +31,19 @@ vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
 describe('LlamaApiProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    openAiMocks.OpenAiChatCompletionProvider.mockReset().mockImplementation(function (
+      this: unknown,
+      modelName: string,
+      options: any,
+    ) {
+      return {
+        modelName,
+        config: options?.config || {},
+        id: vi.fn().mockReturnValue(`openai:${modelName}`),
+        toString: vi.fn().mockReturnValue(`[OpenAI Provider ${modelName}]`),
+        toJSON: vi.fn().mockReturnValue({ provider: 'openai', model: modelName }),
+      };
+    });
   });
 
   describe('constructor', () => {
@@ -184,6 +196,19 @@ describe('LlamaApiProvider', () => {
 describe('createLlamaApiProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    openAiMocks.OpenAiChatCompletionProvider.mockReset().mockImplementation(function (
+      this: unknown,
+      modelName: string,
+      options: any,
+    ) {
+      return {
+        modelName,
+        config: options?.config || {},
+        id: vi.fn().mockReturnValue(`openai:${modelName}`),
+        toString: vi.fn().mockReturnValue(`[OpenAI Provider ${modelName}]`),
+        toJSON: vi.fn().mockReturnValue({ provider: 'openai', model: modelName }),
+      };
+    });
   });
 
   it('should create provider for chat format', () => {

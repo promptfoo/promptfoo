@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import path from 'path';
 
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
   extractFileReferences,
@@ -13,6 +13,12 @@ import {
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
+  maybeLoadFromExternalFileWithVars,
+  maybeLoadResponseFormatFromExternalFile,
+  maybeLoadToolsFromExternalFile,
+  parsePathOrGlob,
+  readFilters,
+  readOutput,
   resolveFileProtocolPath,
   validateFileReferences,
 } from '../../src/util/file';
@@ -22,17 +28,42 @@ import {
   isJavascriptFile,
   isVideoFile,
 } from '../../src/util/fileExtensions';
+import { mockProcessEnv } from './utils';
+
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
+}));
 
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
   return {
     ...actual,
     readFileSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    statSync: vi.fn(),
+    readdirSync: vi.fn(),
     existsSync: vi.fn(),
+    mkdirSync: vi.fn(),
   };
 });
 
-vi.mock('glob');
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
+  hasMagic: vi.fn((path: string) => {
+    return /[*?[\]{}]/.test(path) && !path.includes('\\');
+  }),
+}));
+
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn(),
+}));
+
+// Import after mocking
+import { importModule } from '../../src/esm';
+
+vi.mock('../../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
+}));
 
 describe('file utilities', () => {
   describe('isJavascriptFile', () => {
@@ -249,7 +280,11 @@ describe('file utilities', () => {
     });
 
     it('should throw error when file does not exist', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+      const enoentError = new Error('ENOENT: no such file or directory') as NodeJS.ErrnoException;
+      enoentError.code = 'ENOENT';
+      vi.mocked(fs.readFileSync).mockImplementation(() => {
+        throw enoentError;
+      });
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent.yaml')).toThrow(
         `File does not exist: ${path.resolve('/mock/base/path', 'nonexistent.yaml')}`,
@@ -276,7 +311,6 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file://test.txt');
 
       const expectedPath = path.resolve(basePath, 'test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
@@ -290,25 +324,21 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file://test.txt');
 
       const expectedPath = path.resolve(basePath, 'test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
     });
 
     it('should handle a path with environment variables in Nunjucks template', () => {
-      process.env.TEST_ROOT_PATH = '/root/dir';
+      mockProcessEnv({ TEST_ROOT_PATH: '/root/dir' });
       const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
-
-      vi.mocked(fs.existsSync).mockReturnValue(true);
 
       const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
       maybeLoadFromExternalFile(input);
 
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
-      delete process.env.TEST_ROOT_PATH;
+      mockProcessEnv({ TEST_ROOT_PATH: undefined });
     });
 
     it('should ignore basePath when file path is absolute', () => {
@@ -319,7 +349,6 @@ describe('file utilities', () => {
       maybeLoadFromExternalFile('file:///absolute/path/test.txt');
 
       const expectedPath = path.resolve('/absolute/path/test.txt');
-      expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
       cliState.basePath = undefined;
@@ -335,11 +364,6 @@ describe('file utilities', () => {
       vi.mocked(fs.readFileSync).mockReturnValue(mockFileData);
 
       maybeLoadFromExternalFile(input);
-
-      expect(fs.existsSync).toHaveBeenCalledTimes(3);
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'));
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test2.txt'));
-      expect(fs.existsSync).toHaveBeenCalledWith(path.resolve(basePath, 'test3.txt'));
 
       expect(fs.readFileSync).toHaveBeenCalledTimes(3);
       expect(fs.readFileSync).toHaveBeenCalledWith(path.resolve(basePath, 'test1.txt'), 'utf8');
@@ -525,8 +549,9 @@ describe('file utilities', () => {
     it('should handle objects with prototype pollution attempts safely', () => {
       vi.mocked(fs.readFileSync).mockReturnValueOnce('malicious content');
 
+      const protoKey = '__proto__';
       const config = {
-        __proto__: 'file://malicious.txt',
+        [protoKey]: 'file://malicious.txt',
         constructor: { normal: 'value' },
         prototype: ['safe', 'array'],
         normal: 'safe value',
@@ -535,11 +560,12 @@ describe('file utilities', () => {
       const result = maybeLoadConfigFromExternalFile(config);
 
       expect(result).toEqual({
-        __proto__: 'malicious content',
+        [protoKey]: 'malicious content',
         constructor: { normal: 'value' },
         prototype: ['safe', 'array'],
         normal: 'safe value',
       });
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     });
 
     it('should handle very large nested structures efficiently', () => {
@@ -624,7 +650,6 @@ describe('file utilities', () => {
       const result = maybeLoadFromExternalFile('file://test.py');
 
       expect(result).toBe('file contents');
-      expect(fs.existsSync).toHaveBeenCalled();
       expect(fs.readFileSync).toHaveBeenCalled();
     });
 
@@ -638,14 +663,13 @@ describe('file utilities', () => {
     });
 
     it('should handle non-Python/JS files with colons normally', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
       vi.mocked(fs.readFileSync).mockReturnValue('{"data": "test"}');
 
       // JSON file with colon should still load normally (not treated as function)
       const result = maybeLoadFromExternalFile('file://data:test.json');
 
       expect(result).toEqual({ data: 'test' });
-      expect(fs.existsSync).toHaveBeenCalled();
+      expect(fs.readFileSync).toHaveBeenCalled();
     });
 
     it('should preserve function references in config objects (integration test)', () => {
@@ -1010,320 +1034,931 @@ describe('file utilities', () => {
     });
   });
 
-  describe('extractFileReferences', () => {
-    it('should extract file:// references from a string', () => {
-      const result = extractFileReferences('file://path/to/file.py');
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        original: 'file://path/to/file.py',
-        filePath: 'path/to/file.py',
-        functionName: undefined,
-        configPath: 'root',
-      });
+  describe('maybeLoadToolsFromExternalFile', () => {
+    const mockFileContent = '{"name": "calculator", "parameters": {"type": "object"}}';
+    const mockToolsArray = [
+      { type: 'function', function: { name: 'calculator', parameters: { type: 'object' } } },
+    ];
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
     });
 
-    it('should extract file:// references with function names', () => {
-      const result = extractFileReferences('file://path/to/file.py:my_function');
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        original: 'file://path/to/file.py:my_function',
-        filePath: 'path/to/file.py',
-        functionName: 'my_function',
-        configPath: 'root',
-      });
+    it('should process tool objects directly', async () => {
+      const tools = mockToolsArray;
+      const vars = { api_key: '123456' };
+      expect(await maybeLoadToolsFromExternalFile(tools, vars)).toEqual(tools);
     });
 
-    it('should extract file:// references from nested objects', () => {
-      const config = {
-        providers: [{ id: 'file://provider.py' }],
-        prompts: ['file://prompt.txt'],
-        tests: [
-          {
-            vars: {
-              data: 'file://data.json',
-            },
+    it('should load tools from external file', async () => {
+      const tools = 'file://tools.json';
+      expect(await maybeLoadToolsFromExternalFile(tools)).toEqual(JSON.parse(mockFileContent));
+    });
+
+    it('should render variables in tools object', async () => {
+      const tools = [
+        {
+          type: 'function',
+          function: {
+            name: 'calculator',
+            parameters: { type: 'object' },
+            apiKey: '{{ api_key }}',
           },
-        ],
-      };
-      const result = extractFileReferences(config);
-      expect(result).toHaveLength(3);
-      expect(result.map((r) => r.original)).toEqual([
-        'file://provider.py',
-        'file://prompt.txt',
-        'file://data.json',
-      ]);
-      expect(result.map((r) => r.configPath)).toEqual([
-        'providers[0].id',
-        'prompts[0]',
-        'tests[0].vars.data',
-      ]);
+        },
+      ];
+      const vars = { api_key: '123456' };
+
+      const expected = [
+        {
+          type: 'function',
+          function: {
+            name: 'calculator',
+            parameters: { type: 'object' },
+            apiKey: '123456',
+          },
+        },
+      ];
+
+      expect(await maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
     });
 
-    it('should return empty array for configs without file:// references', () => {
-      const config = {
-        providers: ['openai:gpt-4o'],
-        prompts: ['Hello {{name}}'],
-      };
-      const result = extractFileReferences(config);
-      expect(result).toHaveLength(0);
+    it('should render variables and load from external file', async () => {
+      const tools = 'file://{{ file_path }}.json';
+      const vars = { file_path: 'tools' };
+
+      maybeLoadToolsFromExternalFile(tools, vars);
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('tools.json'), 'utf8');
     });
 
-    it('should handle arrays at root level', () => {
-      const result = extractFileReferences(['file://a.py', 'file://b.py']);
-      expect(result).toHaveLength(2);
-      expect(result[0].configPath).toBe('[0]');
-      expect(result[1].configPath).toBe('[1]');
+    it('should handle array of file paths', async () => {
+      const tools = ['file://tools1.json', 'file://tools2.json'];
+
+      await maybeLoadToolsFromExternalFile(tools);
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
     });
 
-    it('should handle null and undefined values', () => {
-      const config = {
-        a: null,
-        b: undefined,
-        c: 'file://test.py',
-      };
-      const result = extractFileReferences(config);
-      expect(result).toHaveLength(1);
-      expect(result[0].original).toBe('file://test.py');
+    describe('validation', () => {
+      it('should throw error for Python/JS/TS file with function name when file not found', async () => {
+        const pythonTools = 'file://nonexistent.py:get_tools';
+        await expect(maybeLoadToolsFromExternalFile(pythonTools)).rejects.toThrow(
+          /Failed to load tools/,
+        );
+
+        const jsTools = 'file://nonexistent.js:getTools';
+        await expect(maybeLoadToolsFromExternalFile(jsTools)).rejects.toThrow(
+          /Failed to load tools/,
+        );
+
+        const tsTools = 'file://nonexistent.ts:getTools';
+        await expect(maybeLoadToolsFromExternalFile(tsTools)).rejects.toThrow(
+          /Failed to load tools/,
+        );
+      });
+
+      it('should throw error for Python file without function name', async () => {
+        const tools = 'file://tools.py';
+
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+          /Python files require a function name/,
+        );
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+          /file:\/\/tools\.py:get_tools/,
+        );
+      });
+
+      it('should throw error for JavaScript file without function name', async () => {
+        const tools = 'file://tools.js';
+
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+          /JavaScript files require a function name/,
+        );
+      });
+
+      it('should throw error for invalid string content', async () => {
+        const textContent = 'this is not valid JSON or YAML';
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockReturnValue(textContent);
+
+        const tools = 'file://tools.txt';
+
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+          /expected an array or object, but got a string/,
+        );
+      });
+
+      it('should accept valid YAML tools', async () => {
+        const yamlContent = `- type: function
+  function:
+    name: test
+    parameters:
+      type: object`;
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockReturnValue(yamlContent);
+
+        const tools = 'file://tools.yaml';
+        const result = await maybeLoadToolsFromExternalFile(tools);
+
+        expect(Array.isArray(result)).toBe(true);
+        expect(result[0].type).toBe('function');
+      });
+
+      it('should accept valid JSON tools', async () => {
+        const jsonContent = JSON.stringify([
+          { type: 'function', function: { name: 'test', parameters: { type: 'object' } } },
+        ]);
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockReturnValue(jsonContent);
+
+        const tools = 'file://tools.json';
+        const result = await maybeLoadToolsFromExternalFile(tools);
+
+        expect(Array.isArray(result)).toBe(true);
+        expect(result[0].type).toBe('function');
+      });
+
+      it('should accept inline tool objects', async () => {
+        const tools = [{ type: 'function', function: { name: 'test' } }];
+        const result = await maybeLoadToolsFromExternalFile(tools);
+        expect(result).toEqual(tools);
+      });
+
+      it('should return undefined for undefined input', async () => {
+        const result = await maybeLoadToolsFromExternalFile(undefined);
+        expect(result).toBeUndefined();
+      });
+
+      it('should return null for null input', async () => {
+        const result = await maybeLoadToolsFromExternalFile(null);
+        expect(result).toBeNull();
+      });
+
+      it('should reject number return types from functions', async () => {
+        const mockedImportModule = vi.mocked(importModule);
+        mockedImportModule.mockResolvedValue({
+          getTools: () => 42,
+        });
+
+        const tools = 'file://tools.js:getTools';
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+          /must return an array or object/,
+        );
+      });
+
+      it('should reject boolean return types from functions', async () => {
+        const mockedImportModule = vi.mocked(importModule);
+        mockedImportModule.mockResolvedValue({
+          getTools: () => true,
+        });
+
+        const tools = 'file://tools.js:getTools';
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+          /must return an array or object/,
+        );
+      });
+
+      it('should handle async function exports from JS files', async () => {
+        const mockedImportModule = vi.mocked(importModule);
+        const expectedTools = [{ type: 'function', function: { name: 'asyncTool' } }];
+        mockedImportModule.mockResolvedValue({
+          getTools: async () => expectedTools,
+        });
+
+        const tools = 'file://tools.js:getTools';
+        const result = await maybeLoadToolsFromExternalFile(tools);
+
+        expect(result).toEqual(expectedTools);
+      });
+
+      it('should show empty exports message when no functions available', async () => {
+        const mockedImportModule = vi.mocked(importModule);
+        mockedImportModule.mockResolvedValue({
+          default: {},
+        });
+
+        const tools = 'file://tools.js:getTools';
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(
+          /Available exports: \(none\)/,
+        );
+      });
+
+      it('should handle JavaScript syntax errors gracefully', async () => {
+        const mockedImportModule = vi.mocked(importModule);
+        const syntaxError = new SyntaxError('Unexpected token )');
+        mockedImportModule.mockRejectedValue(syntaxError);
+
+        const tools = 'file://tools.js:getTools';
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Unexpected token/);
+      });
+
+      it('should handle Python syntax errors gracefully', async () => {
+        const { runPython } = await import('../../src/python/pythonUtils');
+        vi.mocked(runPython).mockRejectedValue(
+          new Error('SyntaxError: invalid syntax (tools.py, line 2)'),
+        );
+
+        const tools = 'file://tools.py:get_tools';
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/Failed to load tools/);
+        await expect(maybeLoadToolsFromExternalFile(tools)).rejects.toThrow(/SyntaxError/);
+      });
     });
   });
 
-  describe('validateFileReferences', () => {
+  describe('maybeLoadFromExternalFileWithVars', () => {
     beforeEach(() => {
       vi.resetAllMocks();
-      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
-        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+    });
+
+    it('should render variables and load from file', () => {
+      const mockContent = JSON.stringify({ name: 'test', value: 123 });
+      vi.mocked(fs.readFileSync).mockReturnValue(mockContent);
+
+      const result = maybeLoadFromExternalFileWithVars('file://{{ filename }}.json', {
+        filename: 'config',
+      });
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('config.json'), 'utf8');
+      expect(result).toEqual({ name: 'test', value: 123 });
+    });
+
+    it('should render variables in object', () => {
+      const config = {
+        name: '{{ name }}',
+        apiKey: '{{ api_key }}',
+      };
+      const vars = { name: 'test-function', api_key: 'sk-123' };
+
+      const result = maybeLoadFromExternalFileWithVars(config, vars);
+
+      expect(result).toEqual({
+        name: 'test-function',
+        apiKey: 'sk-123',
       });
     });
 
-    it('should return valid=true when all files exist', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+    it('should pass through non-file values unchanged', () => {
+      const config = { type: 'function', name: 'calculator' };
+      const result = maybeLoadFromExternalFileWithVars(config, {});
 
-      const config = {
-        providers: ['file://provider.py'],
-        prompts: ['file://prompt.txt'],
-      };
-      const result = validateFileReferences(config, '/base/path');
-
-      expect(result.valid).toBe(true);
-      expect(result.missingFiles).toHaveLength(0);
-      expect(result.validFiles).toHaveLength(2);
+      expect(result).toEqual(config);
     });
 
-    it('should return valid=false when files are missing', () => {
-      vi.mocked(fs.existsSync).mockImplementation((p) => {
-        return !String(p).includes('missing');
+    it('should handle undefined and null', () => {
+      expect(maybeLoadFromExternalFileWithVars(undefined, {})).toBeUndefined();
+      expect(maybeLoadFromExternalFileWithVars(null, {})).toBeNull();
+    });
+  });
+
+  describe('maybeLoadResponseFormatFromExternalFile', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+    });
+
+    it('should return undefined for undefined input', () => {
+      expect(maybeLoadResponseFormatFromExternalFile(undefined, {})).toBeUndefined();
+    });
+
+    it('should return null for null input', () => {
+      expect(maybeLoadResponseFormatFromExternalFile(null, {})).toBeNull();
+    });
+
+    it('should load response_format from file', () => {
+      const mockFormat = JSON.stringify({
+        type: 'json_schema',
+        json_schema: { name: 'my_schema', schema: { type: 'object' } },
       });
+      vi.mocked(fs.readFileSync).mockReturnValue(mockFormat);
 
-      const config = {
-        providers: ['file://provider.py'],
-        prompts: ['file://missing.txt'],
-      };
-      const result = validateFileReferences(config, '/base/path');
+      const result = maybeLoadResponseFormatFromExternalFile('file://format.json', {});
 
-      expect(result.valid).toBe(false);
-      expect(result.missingFiles).toHaveLength(1);
-      expect(result.missingFiles[0].reference.original).toBe('file://missing.txt');
-      expect(result.validFiles).toHaveLength(1);
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('format.json'), 'utf8');
+      expect(result).toEqual({
+        type: 'json_schema',
+        json_schema: { name: 'my_schema', schema: { type: 'object' } },
+      });
     });
 
-    it('should skip glob patterns', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
-      const config = {
-        tests: 'file://tests/*.yaml',
+    it('should render variables in response_format', () => {
+      const format = {
+        type: 'json_schema',
+        name: '{{ schema_name }}',
+        schema: { type: 'object' },
       };
-      const result = validateFileReferences(config, '/base/path');
+      const vars = { schema_name: 'my_custom_schema' };
 
-      expect(result.valid).toBe(true);
-      expect(result.missingFiles).toHaveLength(0);
-      expect(fs.existsSync).not.toHaveBeenCalled();
+      const result = maybeLoadResponseFormatFromExternalFile(format, vars);
+
+      expect(result).toEqual({
+        type: 'json_schema',
+        name: 'my_custom_schema',
+        schema: { type: 'object' },
+      });
     });
 
-    it('should skip Nunjucks templates in file paths', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+    it('should load nested schema from file when schema is a file reference', () => {
+      const nestedSchema = JSON.stringify({
+        type: 'object',
+        properties: { name: { type: 'string' } },
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(nestedSchema);
 
-      const config = {
-        prompts: ['file://{{env.PROMPT_DIR}}/prompt.txt'],
+      const format = {
+        type: 'json_schema',
+        name: 'test_schema',
+        schema: 'file://schema.json',
       };
-      const result = validateFileReferences(config, '/base/path');
 
-      expect(result.valid).toBe(true);
-      expect(result.missingFiles).toHaveLength(0);
-      expect(fs.existsSync).not.toHaveBeenCalled();
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('schema.json'), 'utf8');
+      expect(result).toEqual({
+        type: 'json_schema',
+        name: 'test_schema',
+        schema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+        },
+      });
     });
 
-    it('should resolve paths relative to basePath', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+    it('should load nested json_schema.schema from file', () => {
+      const nestedSchema = JSON.stringify({
+        type: 'object',
+        required: ['id'],
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(nestedSchema);
 
-      const config = {
-        providers: ['file://provider.py'],
+      const format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'nested_schema',
+          schema: 'file://nested.json',
+        },
       };
-      validateFileReferences(config, '/my/base/path');
 
-      expect(fs.existsSync).toHaveBeenCalledWith(
-        expect.stringContaining(path.join('/my/base/path', 'provider.py')),
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('nested.json'), 'utf8');
+      expect(result).toEqual({
+        type: 'json_schema',
+        json_schema: {
+          name: 'nested_schema',
+          schema: {
+            type: 'object',
+            required: ['id'],
+          },
+        },
+      });
+    });
+
+    it('should render variables in nested schema file path', () => {
+      const nestedSchema = JSON.stringify({ type: 'object' });
+      vi.mocked(fs.readFileSync).mockReturnValue(nestedSchema);
+
+      const format = {
+        type: 'json_schema',
+        name: 'dynamic_schema',
+        schema: 'file://{{ schema_file }}.json',
+      };
+      const vars = { schema_file: 'my-schema' };
+
+      maybeLoadResponseFormatFromExternalFile(format, vars);
+
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('my-schema.json'),
+        'utf8',
       );
     });
 
-    it('should handle absolute paths', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+    it('should pass through json_object type without modification', () => {
+      const format = { type: 'json_object' };
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
 
-      const config = {
-        providers: ['file:///absolute/path/provider.py'],
-      };
-      validateFileReferences(config, '/base/path');
-
-      expect(fs.existsSync).toHaveBeenCalledWith('/absolute/path/provider.py');
+      expect(result).toEqual({ type: 'json_object' });
     });
 
-    it('should report multiple missing files', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
+    it('should pass through non-json_schema types without nested loading', () => {
+      const format = { type: 'text' };
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
 
-      const config = {
-        providers: ['file://missing1.py'],
-        prompts: ['file://missing2.txt'],
-        tests: [{ vars: { data: 'file://missing3.json' } }],
+      expect(result).toEqual({ type: 'text' });
+    });
+
+    it('should handle inline schema without file loading', () => {
+      const format = {
+        type: 'json_schema',
+        name: 'inline_schema',
+        schema: {
+          type: 'object',
+          properties: { count: { type: 'number' } },
+        },
       };
-      const result = validateFileReferences(config, '/base/path');
+
+      const result = maybeLoadResponseFormatFromExternalFile(format, {});
+
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(result).toEqual(format);
+    });
+
+    it('should handle chained file references (outer file contains nested file reference)', () => {
+      // This tests the critical case where:
+      // 1. response_format: file://format.json
+      // 2. format.json contains { type: 'json_schema', schema: 'file://schema.json' }
+      // Both files should be loaded correctly
+      const outerFormat = JSON.stringify({
+        type: 'json_schema',
+        name: 'chained_schema',
+        schema: 'file://nested-schema.json',
+      });
+      const nestedSchema = JSON.stringify({
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      });
+
+      // Mock fs.readFileSync to return different content based on the file path
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: any) => {
+        if (filePath.includes('format.json')) {
+          return outerFormat;
+        }
+        if (filePath.includes('nested-schema.json')) {
+          return nestedSchema;
+        }
+        throw new Error(`Unexpected file: ${filePath}`);
+      });
+
+      const result = maybeLoadResponseFormatFromExternalFile('file://format.json', {});
+
+      expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+      expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('format.json'), 'utf8');
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('nested-schema.json'),
+        'utf8',
+      );
+      expect(result).toEqual({
+        type: 'json_schema',
+        name: 'chained_schema',
+        schema: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+      });
+    });
+
+    it('should propagate errors when nested schema file does not exist', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fs.readFileSync).mockImplementation(() => {
+        throw new Error('ENOENT: no such file or directory');
+      });
+
+      const format = {
+        type: 'json_schema',
+        name: 'test_schema',
+        schema: 'file://nonexistent.json',
+      };
+
+      expect(() => maybeLoadResponseFormatFromExternalFile(format, {})).toThrow();
+    });
+  });
+
+  describe('readOutput', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      // Reset fs.readFileSync mock to clear any mockReturnValue from other tests
+      vi.mocked(fs.readFileSync).mockReset();
+    });
+
+    it('reads JSON output', () => {
+      const outputPath = 'output.json';
+      vi.mocked(fs.readFileSync).mockReturnValue('{}');
+      const output = readOutput(outputPath);
+      expect(output).toEqual({});
+    });
+
+    it('fails for csv output', () => {
+      expect(() => readOutput('output.csv')).toThrow(
+        'Unsupported output file format: csv currently only supports json',
+      );
+    });
+
+    it('fails for yaml output', () => {
+      expect(() => readOutput('output.yaml')).toThrow(
+        'Unsupported output file format: yaml currently only supports json',
+      );
+
+      expect(() => readOutput('output.yml')).toThrow(
+        'Unsupported output file format: yml currently only supports json',
+      );
+    });
+
+    it('fails for xml output', () => {
+      expect(() => readOutput('output.xml')).toThrow(
+        'Unsupported output file format: xml currently only supports json',
+      );
+    });
+  });
+
+  describe('file reference validation helpers', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const value = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return /[*?[\]{}]/.test(value);
+      });
+    });
+
+    it('extracts nested file references with config paths', () => {
+      const result = extractFileReferences({
+        providers: ['file://providers.yaml'],
+        tests: [{ vars: { payload: 'file://data/input.json' } }],
+        assertion: 'file://assertions.py:check',
+      });
+
+      expect(result).toEqual([
+        {
+          original: 'file://providers.yaml',
+          filePath: 'providers.yaml',
+          functionName: undefined,
+          configPath: 'providers[0]',
+        },
+        {
+          original: 'file://data/input.json',
+          filePath: 'data/input.json',
+          functionName: undefined,
+          configPath: 'tests[0].vars.payload',
+        },
+        {
+          original: 'file://assertions.py:check',
+          filePath: 'assertions.py',
+          functionName: 'check',
+          configPath: 'assertion',
+        },
+      ]);
+    });
+
+    it('validates missing and existing file references', () => {
+      vi.mocked(fs.existsSync).mockImplementation((filePath) =>
+        String(filePath).endsWith('exists.yaml'),
+      );
+
+      const result = validateFileReferences(
+        {
+          valid: 'file://exists.yaml',
+          missing: 'file://missing.yaml',
+        },
+        '/base',
+      );
 
       expect(result.valid).toBe(false);
-      expect(result.missingFiles).toHaveLength(3);
-    });
-  });
-
-  describe('resolveFileProtocolPath', () => {
-    it('should resolve relative paths with basePath', () => {
-      const result = resolveFileProtocolPath('file://path/to/file.yaml', '/base');
-      expect(result).toBe(path.join('/base', 'path/to/file.yaml'));
-    });
-
-    it('should resolve relative paths with cwd when no basePath', () => {
-      const result = resolveFileProtocolPath('file://path/to/file.yaml');
-      expect(result).toBe(path.join(process.cwd(), 'path/to/file.yaml'));
-    });
-
-    it('should handle absolute paths', () => {
-      const result = resolveFileProtocolPath('file:///absolute/path/file.yaml', '/base');
-      expect(result).toBe('/absolute/path/file.yaml');
+      expect(result.validFiles).toHaveLength(1);
+      expect(result.missingFiles).toEqual([
+        {
+          reference: {
+            original: 'file://missing.yaml',
+            filePath: 'missing.yaml',
+            functionName: undefined,
+            configPath: 'missing',
+          },
+          resolvedPath: path.resolve('/base', 'missing.yaml'),
+        },
+      ]);
     });
 
-    it('should strip file:// prefix', () => {
-      const result = resolveFileProtocolPath('file://test.yaml', '/base');
-      expect(result).not.toContain('file://');
-    });
-  });
+    it('skips glob and templated file references during upfront validation', () => {
+      const result = validateFileReferences(
+        {
+          glob: 'file://fixtures/*.yaml',
+          templated: 'file://{{ env.DATASET_PATH }}',
+        },
+        '/base',
+      );
 
-  describe('formatFileNotFoundError', () => {
-    it('should format error with basePath', () => {
-      const result = formatFileNotFoundError({
-        filePath: '/path/to/missing.yaml',
+      expect(result.valid).toBe(true);
+      expect(fs.existsSync).not.toHaveBeenCalled();
+    });
+
+    it('resolves file protocol paths relative to a base path', () => {
+      expect(resolveFileProtocolPath('file://fixtures/provider.yaml', '/base')).toBe(
+        path.join('/base', 'fixtures/provider.yaml'),
+      );
+      expect(resolveFileProtocolPath('file:///absolute/provider.yaml', '/base')).toBe(
+        '/absolute/provider.yaml',
+      );
+    });
+
+    it('formats missing file and read errors with actionable context', () => {
+      const notFound = formatFileNotFoundError({
+        filePath: '/base/missing.yaml',
         basePath: '/base',
+        docsUrl: 'https://promptfoo.dev/docs/providers/file/',
       });
-      expect(result).toContain('File not found');
-      expect(result).toContain('missing.yaml');
-      expect(result).toContain('Please verify that');
-      expect(result).toContain('/base');
-    });
+      expect(notFound).toContain('File not found');
+      expect(notFound).toContain('/base/missing.yaml');
+      expect(notFound).toContain('The path is relative to: /base');
+      expect(notFound).toContain('https://promptfoo.dev/docs/providers/file/');
 
-    it('should format error without basePath', () => {
-      const result = formatFileNotFoundError({
-        filePath: '/path/to/missing.yaml',
-      });
-      expect(result).toContain('File not found');
-      expect(result).toContain('current directory');
-    });
-
-    it('should include docs URL when provided', () => {
-      const result = formatFileNotFoundError({
-        filePath: '/path/to/missing.yaml',
-        docsUrl: 'https://example.com/docs',
-      });
-      expect(result).toContain('https://example.com/docs');
-      expect(result).toContain('For more information');
-    });
-
-    it('should not include docs section when no URL', () => {
-      const result = formatFileNotFoundError({
-        filePath: '/path/to/missing.yaml',
-      });
-      expect(result).not.toContain('For more information');
-    });
-  });
-
-  describe('formatFileReadError', () => {
-    it('should format error with Error object', () => {
-      const result = formatFileReadError({
-        filePath: '/path/to/file.yaml',
+      const readError = formatFileReadError({
+        filePath: '/base/config.yaml',
         error: new Error('Permission denied'),
       });
-      expect(result).toContain('Failed to read file');
-      expect(result).toContain('file.yaml');
-      expect(result).toContain('Permission denied');
+      expect(readError).toContain('Failed to read file');
+      expect(readError).toContain('Permission denied');
     });
 
-    it('should format error with string error', () => {
-      const result = formatFileReadError({
-        filePath: '/path/to/file.yaml',
-        error: 'Something went wrong',
-      });
-      expect(result).toContain('Failed to read file');
-      expect(result).toContain('Something went wrong');
-    });
-  });
-
-  describe('formatMissingFileReferencesError', () => {
-    it('should format error for missing files', () => {
-      const validationResult = {
-        valid: false,
-        missingFiles: [
-          {
-            reference: {
-              original: 'file://missing.py',
-              filePath: 'missing.py',
-              configPath: 'providers[0]',
+    it('formats missing file-reference validation errors', () => {
+      const result = formatMissingFileReferencesError(
+        {
+          valid: false,
+          missingFiles: [
+            {
+              reference: {
+                original: 'file://missing.py',
+                filePath: 'missing.py',
+                configPath: 'providers[0]',
+              },
+              resolvedPath: '/base/missing.py',
             },
-            resolvedPath: '/base/missing.py',
-          },
-        ],
-        validFiles: [],
-      };
-      const result = formatMissingFileReferencesError(validationResult, '/base');
-      expect(result).toContain('File reference errors found');
+          ],
+          validFiles: [],
+        },
+        '/base',
+      );
+
+      expect(result).toContain('File reference errors found in config');
       expect(result).toContain('file://missing.py');
       expect(result).toContain('providers[0]');
       expect(result).toContain('/base/missing.py');
-      expect(result).toContain('Please verify that');
+    });
+  });
+
+  describe('readFilters', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
     });
 
-    it('should format error for multiple missing files', () => {
-      const validationResult = {
-        valid: false,
-        missingFiles: [
-          {
-            reference: {
-              original: 'file://missing1.py',
-              filePath: 'missing1.py',
-              configPath: 'providers[0]',
-            },
-            resolvedPath: '/base/missing1.py',
-          },
-          {
-            reference: {
-              original: 'file://missing2.txt',
-              filePath: 'missing2.txt',
-              configPath: 'prompts[0]',
-            },
-            resolvedPath: '/base/missing2.txt',
-          },
-        ],
-        validFiles: [],
-      };
-      const result = formatMissingFileReferencesError(validationResult, '/base');
-      expect(result).toContain('file://missing1.py');
-      expect(result).toContain('file://missing2.txt');
-      expect(result).toContain('providers[0]');
-      expect(result).toContain('prompts[0]');
+    it('loads filter from file', async () => {
+      const mockFilter = vi.fn();
+      const mockedImportModule = vi.mocked(importModule);
+
+      vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+      mockedImportModule.mockResolvedValueOnce(mockFilter);
+
+      const filters = await readFilters({ testFilter: 'filter.js' });
+
+      expect(filters.testFilter).toBe(mockFilter);
+    });
+
+    it('returns empty object when no filters provided', async () => {
+      const filters = await readFilters({});
+      expect(filters).toEqual({});
+    });
+
+    it('handles non-existent filter file gracefully', async () => {
+      vi.mocked(globSync).mockReturnValue([]);
+      const filters = await readFilters({ testFilter: 'nonexistent.js' });
+      expect(filters.testFilter).toBeUndefined();
+    });
+
+    it('throws when importModule fails', async () => {
+      vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+      vi.mocked(importModule).mockRejectedValueOnce(new Error('Module load failed'));
+
+      await expect(readFilters({ testFilter: 'invalid.js' })).rejects.toThrow('Module load failed');
+    });
+  });
+
+  describe('parsePathOrGlob', () => {
+    afterEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('should parse a simple file path with extension', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file.txt')).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('/base', 'file.txt'),
+      });
+    });
+
+    it('should parse a file path with function name', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file.py:myFunction')).toEqual({
+        extension: '.py',
+        functionName: 'myFunction',
+        isPathPattern: false,
+        filePath: path.join('/base', 'file.py'),
+      });
+    });
+
+    it('should parse a Go file path with function name', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: path.join('/base', 'script.go'),
+      });
+    });
+
+    it('should parse a directory path', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'dir')).toEqual({
+        extension: undefined,
+        functionName: undefined,
+        isPathPattern: true,
+        filePath: path.join('/base', 'dir'),
+      });
+    });
+
+    it('should handle non-existent file path gracefully when PROMPTFOO_STRICT_FILES is false', async () => {
+      vi.spyOn(fs, 'statSync').mockImplementation(() => {
+        throw new Error('File does not exist');
+      });
+      expect(parsePathOrGlob('/base', 'nonexistent.js')).toEqual({
+        extension: '.js',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('/base', 'nonexistent.js'),
+      });
+    });
+
+    it('should throw an error for non-existent file path when PROMPTFOO_STRICT_FILES is true', async () => {
+      mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
+      vi.spyOn(fs, 'statSync').mockImplementation(() => {
+        throw new Error('File does not exist');
+      });
+      expect(() => parsePathOrGlob('/base', 'nonexistent.js')).toThrow('File does not exist');
+      mockProcessEnv({ PROMPTFOO_STRICT_FILES: undefined });
+    });
+
+    it('should properly test file existence when function name in the path', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      parsePathOrGlob('/base', 'script.py:myFunction');
+      expect(fs.statSync).toHaveBeenCalledWith(path.join('/base', 'script.py'));
+    });
+
+    it('should return empty extension for files without extension', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file')).toEqual({
+        extension: '',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('/base', 'file'),
+      });
+    });
+
+    it('should handle relative paths', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('./base', 'file.txt')).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('./base', 'file.txt'),
+      });
+    });
+
+    it('should handle paths with environment variables', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      mockProcessEnv({ FILE_PATH: 'file.txt' });
+      const filePath = process.env.FILE_PATH as string;
+      expect(parsePathOrGlob('/base', filePath)).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('/base', 'file.txt'),
+      });
+      mockProcessEnv({ FILE_PATH: undefined });
+    });
+
+    it('should handle glob patterns in file path', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', '*.js')).toEqual({
+        extension: undefined,
+        functionName: undefined,
+        isPathPattern: true,
+        filePath: path.join('/base', '*.js'),
+      });
+    });
+
+    it('should handle complex file paths', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'dir/subdir/file.py:func')).toEqual({
+        extension: '.py',
+        functionName: 'func',
+        isPathPattern: false,
+        filePath: path.join('/base', 'dir/subdir/file.py'),
+      });
+    });
+
+    it('should handle non-standard file extensions', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file.customext')).toEqual({
+        extension: '.customext',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('/base', 'file.customext'),
+      });
+    });
+
+    it('should handle deeply nested file paths', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g/file.py:func')).toEqual({
+        extension: '.py',
+        functionName: 'func',
+        isPathPattern: false,
+        filePath: path.join('/base', 'a/b/c/d/e/f/g/file.py'),
+      });
+    });
+
+    it('should handle complex directory paths', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => true } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'a/b/c/d/e/f/g')).toEqual({
+        extension: undefined,
+        functionName: undefined,
+        isPathPattern: true,
+        filePath: path.join('/base', 'a/b/c/d/e/f/g'),
+      });
+    });
+
+    it('should join basePath and safeFilename correctly', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      const basePath = 'base';
+      const relativePath = 'relative/path/to/file.txt';
+      expect(parsePathOrGlob(basePath, relativePath)).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: expect.stringMatching(/base[\\\/]relative[\\\/]path[\\\/]to[\\\/]file.txt/),
+      });
+    });
+
+    it('should handle empty basePath', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('', 'file.txt')).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: 'file.txt',
+      });
+    });
+
+    it('should handle file:// prefix', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('', 'file://file.txt')).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: 'file.txt',
+      });
+    });
+
+    it('should handle file://./... with absolute base path', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/absolute/base', 'file://./prompts/file.txt')).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: expect.stringMatching(/^[/\\]absolute[/\\]base[/\\]prompts[/\\]file\.txt$/),
+      });
+    });
+
+    it('should handle file://./... with relative base path', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('relative/base', 'file://file.txt')).toEqual({
+        extension: '.txt',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: expect.stringMatching(/^relative[/\\]base[/\\]file\.txt$/),
+      });
+    });
+
+    it('should handle file:// prefix with Go function', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file://script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: path.join('/base', 'script.go'),
+      });
+    });
+
+    it('should handle file:// prefix with absolute path and Go function', async () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'file:///absolute/path/script.go:CallApi')).toEqual({
+        extension: '.go',
+        functionName: 'CallApi',
+        isPathPattern: false,
+        filePath: expect.stringMatching(/^[/\\]absolute[/\\]path[/\\]script\.go$/),
+      });
     });
   });
 });

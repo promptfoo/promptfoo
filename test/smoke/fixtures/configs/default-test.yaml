@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - defaultTest feature (7.2.1)'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+# Default assertions applied to all tests
+defaultTest:
+  assert:
+    - type: contains
+      value: 'Hello'
+
+tests:
+  - vars:
+      name: Alice
+  - vars:
+      name: Bob
+  - vars:
+      name: Charlie

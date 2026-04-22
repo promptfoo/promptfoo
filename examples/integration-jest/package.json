@@ -1,0 +1,27 @@
+{
+  "name": "promptfoo-jest-vitest-integration-example",
+  "version": "1.0.0",
+  "description": "A small example of testing LLM prompts using Jest, Vitest, and promptfoo.",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:jest": "npx jest",
+    "test:vitest": "npx vitest"
+  },
+  "keywords": [
+    "jest",
+    "vitest",
+    "prompt testing",
+    "LLM",
+    "promptfoo"
+  ],
+  "author": "Ian Webster",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}

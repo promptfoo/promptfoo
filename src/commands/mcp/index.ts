@@ -1,7 +1,8 @@
-import type { Command } from 'commander';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { startHttpMcpServer, startStdioMcpServer } from './server';
+import type { Command } from 'commander';
+
 import type { McpCommandOptions } from './types';
 
 export function mcpCommand(program: Command): void {
@@ -14,7 +15,8 @@ export function mcpCommand(program: Command): void {
       // Validate transport type
       if (!['http', 'stdio'].includes(cmdObj.transport)) {
         logger.error(`Invalid transport type: ${cmdObj.transport}. Must be "http" or "stdio".`);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
 
       telemetry.record('command_used', {
@@ -28,7 +30,8 @@ export function mcpCommand(program: Command): void {
         const port = Number.parseInt(cmdObj.port, 10);
         if (Number.isNaN(port)) {
           logger.error(`Invalid port number: ${cmdObj.port}`);
-          process.exit(1);
+          process.exitCode = 1;
+          return;
         }
         await startHttpMcpServer(port);
       }
@@ -36,5 +39,5 @@ export function mcpCommand(program: Command): void {
 }
 
 // Re-export server functions for direct use
-export { startHttpMcpServer, startStdioMcpServer, createMcpServer } from './server';
+export { createMcpServer, startHttpMcpServer, startStdioMcpServer } from './server';
 export * from './types';

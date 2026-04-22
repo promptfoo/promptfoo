@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { DatabricksMosaicAiChatCompletionProvider } from '../../src/providers/databricks';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { mockProcessEnv } from '../util/utils';
 
 import type { DatabricksMosaicAiProviderOptions } from '../../src/providers/databricks';
 
 vi.mock('../../src/logger');
 
 describe('Databricks Foundation Model APIs Provider', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
   const workspaceUrl = 'https://test-workspace.cloud.databricks.com';
   const defaultOptions: DatabricksMosaicAiProviderOptions = {
     config: {
@@ -18,14 +19,14 @@ describe('Databricks Foundation Model APIs Provider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env = { ...originalEnv };
-    delete process.env.DATABRICKS_WORKSPACE_URL;
-    delete process.env.DATABRICKS_TOKEN;
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    mockProcessEnv({ DATABRICKS_WORKSPACE_URL: undefined });
+    mockProcessEnv({ DATABRICKS_TOKEN: undefined });
   });
 
   afterEach(async () => {
     await clearCache();
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
   });
 
   describe('DatabricksMosaicAiChatCompletionProvider', () => {
@@ -58,7 +59,7 @@ describe('Databricks Foundation Model APIs Provider', () => {
     });
 
     it('should create provider with workspace URL from environment variable', () => {
-      process.env.DATABRICKS_WORKSPACE_URL = workspaceUrl;
+      mockProcessEnv({ DATABRICKS_WORKSPACE_URL: workspaceUrl });
 
       const options: DatabricksMosaicAiProviderOptions = {
         config: {},

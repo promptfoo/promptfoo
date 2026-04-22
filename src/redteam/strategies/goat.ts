@@ -1,6 +1,7 @@
 import logger from '../../logger';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { Inputs } from '../../types/shared';
 
 export async function addGoatTestCases(
   testCases: TestCaseWithPlugin[],
@@ -10,6 +11,10 @@ export async function addGoatTestCases(
   logger.debug('Adding GOAT test cases');
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);
+    // Get inputs from plugin config if available
+    const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
+    const inputs = pluginConfig?.inputs as Inputs | undefined;
+
     return {
       ...testCase,
       provider: {
@@ -17,6 +22,8 @@ export async function addGoatTestCases(
         config: {
           injectVar,
           ...config,
+          // Pass inputs from plugin config to GOAT provider
+          ...(inputs && { inputs }),
         },
       },
       assert: testCase.assert?.map((assertion) => ({

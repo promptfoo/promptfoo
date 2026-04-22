@@ -69,6 +69,7 @@ const createDefaultCitation = (packageJson: PackageJson): Citation => ({
  */
 async function getReleaseDate(version: string): Promise<string | null> {
   try {
+    // biome-ignore lint/style/noRestrictedGlobals: Standalone script, fetchWithProxy not needed
     const response = await fetch(
       `https://api.github.com/repos/promptfoo/promptfoo/releases/tags/${version}`,
     );

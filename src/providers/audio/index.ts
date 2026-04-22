@@ -7,8 +7,8 @@
 
 import logger from '../../logger';
 import {
-  convertToRealtimeFormat,
   convertFromRealtimeFormat,
+  convertToRealtimeFormat,
   type SupportedInputFormat,
 } from '../../redteam/audio/format';
 
