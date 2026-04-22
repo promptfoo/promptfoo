@@ -128,12 +128,12 @@ export function resolveCliProvidersWithConfig(
  * @see https://github.com/promptfoo/promptfoo/issues/364
  */
 const JSON_SCHEMA_PATH_PATTERNS: readonly RegExp[] = [
-  /^#\/providers\/\d+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
-  /^#\/providers\/\d+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
-  /^#\/providers\/\d+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
-  /^#\/providers\/\d+\/[^/]+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
-  /^#\/providers\/\d+\/[^/]+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
-  /^#\/providers\/\d+\/[^/]+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+  /^#\/(?:providers|targets)\/\d+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/(?:providers|targets)\/\d+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/(?:providers|targets)\/\d+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
+  /^#\/(?:providers|targets)\/\d+\/[^/]+\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
+  /^#\/(?:providers|targets)\/\d+\/[^/]+\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
+  /^#\/(?:providers|targets)\/\d+\/[^/]+\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,
   /^#\/defaultTest\/options\/provider\/config\/tools\/\d+\/function\/parameters(?:\/.*)?$/,
   /^#\/defaultTest\/options\/provider\/config\/functions\/\d+\/parameters(?:\/.*)?$/,
   /^#\/defaultTest\/options\/provider\/config\/response_format\/json_schema\/schema(?:\/.*)?$/,

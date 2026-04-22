@@ -1730,7 +1730,18 @@ describe('dereferenceConfig', () => {
     expect(
       excludedPathMatcher('#/providers/0/config/tools/0/function/parameters/properties/priority'),
     ).toBe(true);
+    expect(
+      excludedPathMatcher(
+        '#/targets/0/config/response_format/json_schema/schema/properties/status',
+      ),
+    ).toBe(true);
+    expect(
+      excludedPathMatcher(
+        '#/targets/0/openai:gpt-4/config/tools/0/function/parameters/properties/priority',
+      ),
+    ).toBe(true);
     expect(excludedPathMatcher('#/providers/0/config/model')).toBe(false);
+    expect(excludedPathMatcher('#/targets/0/config/model')).toBe(false);
     expect(excludedPathMatcher('#/definitions/prompt')).toBe(false);
   });
 });
