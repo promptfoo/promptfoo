@@ -208,6 +208,7 @@ describe('computeAssertionStats', () => {
       'model-graded-closedqa',
       'model-graded-factuality',
       'search-rubric',
+      'trajectory:goal-success',
     ] as const;
 
     const results: StatableResult[] = [

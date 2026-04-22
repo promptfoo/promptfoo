@@ -55,14 +55,6 @@ export function validateFilePath(filePath: string, basePath?: string): void {
 }
 
 /**
- * Escapes special regex characters in a string.
- * Use this when building regex patterns from user input to prevent ReDoS attacks.
- */
-export function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
  * Validates provider ID format
  */
 export function validateProviderId(providerId: string): void {

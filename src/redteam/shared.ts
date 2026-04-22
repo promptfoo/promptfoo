@@ -9,6 +9,7 @@ import logger, { setLogCallback, setLogLevel } from '../logger';
 import telemetry from '../telemetry';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
@@ -80,11 +81,12 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   const { maxConcurrency, ...passThroughOptions } = options;
 
   let redteamConfig;
+  const generationStartTime = Date.now();
   try {
     redteamConfig = await doGenerateRedteam({
       ...passThroughOptions,
       ...(options.liveRedteamConfig?.commandLineOptions || {}),
-      ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
+      ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
       config: configPath,
       output: redteamPath,
       force: options.force,
@@ -109,6 +111,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     throw error;
   }
 
+  const generationDurationMs = Date.now() - generationStartTime;
+
   // Check if redteam.yaml exists before running evaluation
   if (!redteamConfig || !fs.existsSync(redteamPath)) {
     logger.info('No test cases generated. Skipping scan.');
@@ -130,6 +134,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       output: options.output ? [options.output] : undefined,
       cache: true,
       write: true,
+      filterPrompts: options.filterPrompts,
       filterProviders: options.filterProviders,
       filterTargets: options.filterTargets,
     },
@@ -142,67 +147,34 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     },
   );
 
-  logger.info(chalk.green('\nRed team scan complete!'));
+  // Set generation duration on the eval and save
+  if (evalResult && generationDurationMs >= 0) {
+    evalResult.setGenerationDurationMs(generationDurationMs);
+    if (evalResult.persisted) {
+      await evalResult.save();
+    }
 
-  // Record completion telemetry with full results
+    const totalMs = evalResult.durationMs ?? 0;
+    const evalMs = evalResult.evaluationDurationMs ?? 0;
+    logger.info(
+      chalk.gray(
+        `Total scan time: ${formatDuration(totalMs / 1000)} (generation: ${formatDuration(generationDurationMs / 1000)}, evaluation: ${formatDuration(evalMs / 1000)})`,
+      ),
+    );
+  }
+
+  // Show appropriate completion message based on abort status
+  // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
+  // Check if scan was aborted due to target error (efficient DB query, not loading all results)
+  const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
+  if (hasTargetError) {
+    // Abort details already shown in summary - no need to repeat
+  } else {
+    logger.info(chalk.green('\nRed team scan complete!'));
+  }
+
   if (evalResult) {
-    const results = evalResult.results || [];
-    const numPasses = results.filter((r) => r.success).length;
-    const numFails = results.filter((r) => !r.success && !r.error).length;
-    const numErrors = results.filter((r) => r.error).length;
-
-    // Get config info from liveRedteamConfig or try to extract from results
-    const config = options.liveRedteamConfig;
-    const plugins =
-      (config?.plugins as Array<string | { id: string }>)?.map((p: string | { id: string }) =>
-        typeof p === 'string' ? p : p.id,
-      ) || [];
-    const strategies =
-      (config?.strategies as Array<string | { id: string }>)?.map((s: string | { id: string }) =>
-        typeof s === 'string' ? s : s.id,
-      ) || [];
-
-    // Check if using sample target (promptfoo: prefix or promptfoo.app URL)
-    // Note: targets can be a single string, function, or array per ProvidersSchema
-    const checkIsSampleTarget = (t: unknown): boolean => {
-      if (typeof t === 'string') {
-        return t.includes('promptfoo:') || t.includes('promptfoo.app');
-      }
-      if (typeof t === 'object' && t !== null) {
-        const obj = t as { id?: string; config?: { url?: string } };
-        const id = obj.id || '';
-        const url = obj.config?.url || '';
-        return (
-          id.includes('promptfoo:') ||
-          url.includes('promptfoo.app') ||
-          url.includes('promptfoo.dev')
-        );
-      }
-      return false;
-    };
-
-    const targets = config?.targets;
-    const isSampleTarget =
-      typeof targets === 'string'
-        ? checkIsSampleTarget(targets)
-        : Array.isArray(targets)
-          ? targets.some(checkIsSampleTarget)
-          : false;
-
-    telemetry.record('redteam run', {
-      phase: 'completed',
-      numPlugins: plugins.length,
-      numStrategies: strategies.length,
-      plugins: plugins.slice(0, 50),
-      strategies: strategies.slice(0, 20),
-      numTests: results.length,
-      numPasses,
-      numFails,
-      numErrors,
-      passRate: results.length > 0 ? numPasses / results.length : 0,
-      isPromptfooSampleTarget: Boolean(isSampleTarget),
-      loadedFromCloud: Boolean(options.loadedFromCloud),
-    });
+    await recordRedteamCompletionTelemetry(evalResult, options);
   }
 
   if (!evalResult?.shared) {
@@ -225,6 +197,69 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     verboseToggleCleanup();
   }
   return evalResult;
+}
+
+function getConfigIds(values: unknown): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  return values
+    .map((value) => {
+      if (typeof value === 'string') {
+        return value;
+      }
+      if (value && typeof value === 'object' && 'id' in value) {
+        return String((value as { id?: unknown }).id ?? '');
+      }
+      return '';
+    })
+    .filter(Boolean);
+}
+
+function isSampleTarget(target: unknown): boolean {
+  if (typeof target === 'string') {
+    return target.includes('promptfoo:') || target.includes('promptfoo.app');
+  }
+  if (!target || typeof target !== 'object') {
+    return false;
+  }
+  const { id, config } = target as { id?: string; config?: { url?: string } };
+  const url = config?.url || '';
+  return (
+    id?.includes('promptfoo:') || url.includes('promptfoo.app') || url.includes('promptfoo.dev')
+  );
+}
+
+async function recordRedteamCompletionTelemetry(evalResult: Eval, options: RedteamRunOptions) {
+  const results = evalResult.persisted ? await evalResult.getResults() : evalResult.results;
+  const numPasses = results.filter((result) => result.success).length;
+  const numFails = results.filter((result) => !result.success && !result.error).length;
+  const numErrors = results.filter((result) => result.error).length;
+  const config = options.liveRedteamConfig;
+  const plugins = getConfigIds(config?.plugins);
+  const strategies = getConfigIds(config?.strategies);
+  const targets = config?.targets;
+  const isPromptfooSampleTarget =
+    typeof targets === 'string'
+      ? isSampleTarget(targets)
+      : Array.isArray(targets)
+        ? targets.some(isSampleTarget)
+        : false;
+
+  telemetry.record('redteam run', {
+    phase: 'completed',
+    numPlugins: plugins.length,
+    numStrategies: strategies.length,
+    plugins: plugins.slice(0, 50),
+    strategies: strategies.slice(0, 20),
+    numTests: results.length,
+    numPasses,
+    numFails,
+    numErrors,
+    passRate: results.length > 0 ? numPasses / results.length : 0,
+    isPromptfooSampleTarget,
+    loadedFromCloud: Boolean(options.loadedFromCloud),
+  });
 }
 
 /**

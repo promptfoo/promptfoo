@@ -11,7 +11,19 @@ interface TransformersBaseOptions {
    * Device to run the model on.
    * @default 'auto'
    */
-  device?: 'auto' | 'cpu' | 'gpu' | 'wasm' | 'webgpu' | 'cuda' | 'dml';
+  device?:
+    | 'auto'
+    | 'cpu'
+    | 'gpu'
+    | 'wasm'
+    | 'webgpu'
+    | 'cuda'
+    | 'dml'
+    | 'coreml'
+    | 'webnn'
+    | 'webnn-npu'
+    | 'webnn-gpu'
+    | 'webnn-cpu';
 
   /**
    * Data type / quantization level for the model.
@@ -191,11 +203,15 @@ async function getOrCreatePipeline(
     const pipelineOptions: Record<string, unknown> = {
       progress_callback: (progress: {
         status: string;
+        name?: string;
         file?: string;
         progress?: number;
+        loaded?: number;
+        total?: number;
+        task?: string;
         model?: string;
       }) => {
-        if (progress.status === 'downloading' && progress.file) {
+        if (progress.status === 'progress' && progress.file) {
           const percent = progress.progress?.toFixed(1) || '?';
           logger.debug(`[Transformers] Downloading ${progress.file}: ${percent}%`);
         } else if (progress.status === 'ready') {
@@ -380,18 +396,6 @@ export class TransformersEmbeddingProvider implements ApiProvider {
     } catch (err) {
       const error = err as Error;
 
-      // Check for missing dependency
-      if (
-        error.message?.includes('Cannot find module') ||
-        error.message?.includes('@huggingface/transformers') ||
-        error.message?.includes('Transformers.js is not installed')
-      ) {
-        return {
-          error:
-            'Transformers.js is not installed. Install it with: npm install @huggingface/transformers',
-        };
-      }
-
       // Check for model not found
       if (error.message?.includes('Could not locate file')) {
         return {
@@ -522,17 +526,6 @@ export class TransformersTextGenerationProvider implements ApiProvider {
       };
     } catch (err) {
       const error = err as Error;
-
-      if (
-        error.message?.includes('Cannot find module') ||
-        error.message?.includes('@huggingface/transformers') ||
-        error.message?.includes('Transformers.js is not installed')
-      ) {
-        return {
-          error:
-            'Transformers.js is not installed. Install it with: npm install @huggingface/transformers',
-        };
-      }
 
       if (error.message?.includes('Could not locate file')) {
         return {

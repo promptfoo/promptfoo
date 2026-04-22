@@ -21,4 +21,5 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'model-graded-closedqa',
   'model-graded-factuality',
   'search-rubric',
+  'trajectory:goal-success',
 ]);

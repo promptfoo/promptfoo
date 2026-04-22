@@ -7,22 +7,19 @@ import {
 } from '../../../../src/redteam/constants';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
 import { getHarmfulTests } from '../../../../src/redteam/plugins/harmful/unaligned';
+import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider, CallApiFunction } from '../../../../src/types/index';
 
 vi.mock('../../../../src/envars');
 
 describe('harmful plugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
   let mockCallApi: MockInstance;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProvider = {
-      callApi: vi.fn() as CallApiFunction,
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    mockProvider = createMockProvider();
     if (mockCallApi) {
       mockCallApi.mockRestore();
     }
@@ -114,19 +111,27 @@ describe('harmful plugin', () => {
         .mockResolvedValueOnce({ output: ['Test output'] })
         .mockResolvedValueOnce({ output: ['Another output'] });
 
-      const startTime = Date.now();
-      await getHarmfulTests(
-        {
-          provider: mockProvider,
-          purpose: 'test purpose',
-          injectVar: 'testVar',
-          n: 2,
-          delayMs: 100,
-        },
-        unalignedPlugin as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
-      );
+      vi.useFakeTimers();
+      try {
+        const startTime = Date.now();
+        const testsPromise = getHarmfulTests(
+          {
+            provider: mockProvider,
+            purpose: 'test purpose',
+            injectVar: 'testVar',
+            n: 2,
+            delayMs: 100,
+          },
+          unalignedPlugin as keyof typeof UNALIGNED_PROVIDER_HARM_PLUGINS,
+        );
 
-      expect(Date.now() - startTime).toBeGreaterThanOrEqual(100);
+        await vi.runAllTimersAsync();
+        await testsPromise;
+
+        expect(Date.now() - startTime).toBeGreaterThanOrEqual(100);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should handle moderation assertions with OPENAI_API_KEY', async () => {

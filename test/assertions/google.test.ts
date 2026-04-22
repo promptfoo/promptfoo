@@ -6,6 +6,7 @@ import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleLiveProvider } from '../../src/providers/google/live';
 import { validateFunctionCall } from '../../src/providers/google/util';
 import { VertexChatProvider } from '../../src/providers/google/vertex';
+import { createMockProvider } from '../factories/provider';
 
 import type { Tool } from '../../src/providers/google//types';
 import type { ApiProvider, AtomicTestCase, GradingResult } from '../../src/types/index';
@@ -26,8 +27,7 @@ vi.mock('path', async () => {
 
 const mockedFs = vi.mocked(fs);
 
-const mockProvider = {
-  id: () => 'test-provider',
+const mockProvider = createMockProvider({
   config: {
     tools: [
       {
@@ -53,8 +53,8 @@ const mockProvider = {
       },
     ],
   },
-  callApi: async () => ({ output: '' }),
-} as ApiProvider;
+  response: { output: '' },
+}) as ApiProvider;
 
 describe('Google assertions', () => {
   beforeEach(() => {

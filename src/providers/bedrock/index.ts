@@ -5,7 +5,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { outputFromMessage, parseMessages } from '../anthropic/util';
+import { isClaudeOpus47Model, outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
@@ -411,6 +411,182 @@ interface BedrockQwenGenerationOptions extends BedrockOptions {
           name: string;
         };
       };
+}
+
+// =============================================================================
+// Video Generation Types (Nova Reel)
+// =============================================================================
+
+/**
+ * Nova Reel task types
+ */
+export type NovaReelTaskType = 'TEXT_VIDEO' | 'MULTI_SHOT_AUTOMATED' | 'MULTI_SHOT_MANUAL';
+
+/**
+ * Nova Reel video dimension (only 1280x720 supported)
+ */
+export type NovaReelDimension = '1280x720';
+
+/**
+ * Nova Reel video FPS (only 24 supported)
+ */
+export type NovaReelFPS = 24;
+
+/**
+ * Image source for Nova Reel image-to-video
+ */
+export interface NovaReelImageSource {
+  format: 'png' | 'jpeg';
+  source: {
+    bytes: string; // base64 encoded
+  };
+}
+
+/**
+ * Shot definition for multi-shot manual mode
+ */
+export interface NovaReelShot {
+  text: string;
+  image?: NovaReelImageSource;
+}
+
+/**
+ * Video generation configuration
+ */
+export interface NovaReelVideoGenerationConfig {
+  durationSeconds: number; // 6 for single shot, 12-120 (multiples of 6) for multi-shot
+  fps: NovaReelFPS;
+  dimension: NovaReelDimension;
+  seed?: number; // 0-2,147,483,646
+}
+
+/**
+ * Configuration options for Nova Reel video generation
+ */
+export interface NovaReelVideoOptions extends BedrockOptions {
+  // Task type selection
+  taskType?: NovaReelTaskType;
+
+  // S3 output configuration (required)
+  s3OutputUri: string; // e.g., "s3://my-bucket/videos"
+
+  // Video generation parameters
+  durationSeconds?: number; // Default: 6
+  seed?: number;
+
+  // For TEXT_VIDEO task type
+  image?: string; // file:// path or base64 for image-to-video
+
+  // For MULTI_SHOT_MANUAL task type
+  shots?: NovaReelShot[];
+
+  // Polling configuration
+  pollIntervalMs?: number; // Default: 10000 (10 seconds)
+  maxPollTimeMs?: number; // Default: 900000 (15 minutes for 2-min videos)
+
+  // Download configuration
+  downloadFromS3?: boolean; // Default: true - download and store to blob storage
+}
+
+/**
+ * Nova Reel async invoke response
+ */
+export interface NovaReelInvocationResponse {
+  invocationArn: string;
+  status: 'InProgress' | 'Completed' | 'Failed';
+  submitTime?: string;
+  endTime?: string;
+  outputDataConfig?: {
+    s3OutputDataConfig: {
+      s3Uri: string;
+    };
+  };
+  failureMessage?: string;
+}
+
+/**
+ * Video generation status from S3
+ */
+export interface NovaReelGenerationStatus {
+  schemaVersion: string;
+  shots: Array<{
+    status: 'SUCCESS' | 'FAILURE';
+    location?: string;
+    failureType?: string;
+    failureMessage?: string;
+  }>;
+  fullVideo: {
+    status: 'SUCCESS' | 'FAILURE';
+    location?: string;
+    failureType?: string;
+    failureMessage?: string;
+  };
+}
+
+// =============================================================================
+// Luma Ray 2 Video Generation Types
+// =============================================================================
+
+export type LumaRayAspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '21:9' | '9:21';
+export type LumaRayDuration = '5s' | '9s';
+export type LumaRayResolution = '540p' | '720p';
+
+export interface LumaRayKeyframeSource {
+  type: 'base64';
+  media_type: 'image/jpeg' | 'image/png';
+  data: string;
+}
+
+export interface LumaRayKeyframe {
+  type: 'image';
+  source: LumaRayKeyframeSource;
+}
+
+export interface LumaRayKeyframes {
+  frame0?: LumaRayKeyframe;
+  frame1?: LumaRayKeyframe;
+}
+
+export interface LumaRayVideoOptions extends BedrockOptions {
+  /** Required: S3 bucket URI for video output */
+  s3OutputUri: string;
+
+  /** Aspect ratio of output video (default: "16:9") */
+  aspectRatio?: LumaRayAspectRatio;
+  /** Video duration: "5s" or "9s" (default: "5s") */
+  duration?: LumaRayDuration;
+  /** Output resolution: "540p" or "720p" (default: "720p") */
+  resolution?: LumaRayResolution;
+  /** Whether to loop the video (default: false) */
+  loop?: boolean;
+
+  /** Keyframes for image-to-video generation */
+  keyframes?: LumaRayKeyframes;
+  /** Convenience: Start frame image (file:// path or base64) */
+  startImage?: string;
+  /** Convenience: End frame image (file:// path or base64) */
+  endImage?: string;
+
+  /** Polling interval in milliseconds (default: 10000) */
+  pollIntervalMs?: number;
+  /** Maximum polling time in milliseconds (default: 600000 = 10 min) */
+  maxPollTimeMs?: number;
+
+  /** Whether to download video from S3 to blob storage (default: true) */
+  downloadFromS3?: boolean;
+}
+
+export interface LumaRayInvocationResponse {
+  invocationArn: string;
+  status: 'InProgress' | 'Completed' | 'Failed';
+  submitTime?: string;
+  endTime?: string;
+  failureMessage?: string;
+  outputDataConfig?: {
+    s3OutputDataConfig?: {
+      s3Uri: string;
+    };
+  };
 }
 
 export interface IBedrockModel {
@@ -1243,7 +1419,7 @@ export const BEDROCK_MODEL = {
       config: BedrockClaudeMessagesCompletionOptions,
       prompt: string,
       _stop?: string[],
-      _modelName?: string,
+      modelName?: string,
       vars?: Record<string, VarValue>,
     ) => {
       let messages;
@@ -1305,7 +1481,19 @@ export const BEDROCK_MODEL = {
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         1024,
       );
-      addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
+      // Claude Opus 4.7 deprecates `temperature` at the model level — Bedrock
+      // relays the resulting 400 as a ValidationException. Drop the default
+      // regardless of which IAM-region prefix the user picked.
+      const isOpus47 = modelName ? isClaudeOpus47Model(modelName) : false;
+      if (isOpus47) {
+        if (config?.temperature != null || getEnvFloat('AWS_BEDROCK_TEMPERATURE') != null) {
+          logger.warn(
+            'temperature is deprecated on Claude Opus 4.7 and will be omitted. Remove temperature from your Bedrock config (or unset AWS_BEDROCK_TEMPERATURE) to silence this warning.',
+          );
+        }
+      } else {
+        addConfigParam(params, 'temperature', config?.temperature, undefined, 0);
+      }
       addConfigParam(
         params,
         'anthropic_version',
@@ -1674,15 +1862,16 @@ ${prompt}
         const promptTokens = coerceStrToNum(responseJson.prompt_tokens);
         const completionTokens = coerceStrToNum(responseJson.completion_tokens);
 
-        let totalTokens = responseJson.total_tokens;
-        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
-          totalTokens = promptTokens + completionTokens;
-        }
+        const totalTokens =
+          coerceStrToNum(responseJson.total_tokens) ??
+          (promptTokens !== undefined && completionTokens !== undefined
+            ? promptTokens + completionTokens
+            : undefined);
 
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: (promptTokens ?? 0) + (completionTokens ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
       }
@@ -1754,15 +1943,16 @@ ${prompt}
         const promptTokens = coerceStrToNum(responseJson.usage.prompt_tokens);
         const completionTokens = coerceStrToNum(responseJson.usage.completion_tokens);
 
-        let totalTokens = responseJson.usage.total_tokens;
-        if (!totalTokens && promptTokens !== undefined && completionTokens !== undefined) {
-          totalTokens = promptTokens + completionTokens;
-        }
+        const totalTokens =
+          coerceStrToNum(responseJson.usage.total_tokens) ??
+          (promptTokens !== undefined && completionTokens !== undefined
+            ? promptTokens + completionTokens
+            : undefined);
 
         return {
           prompt: promptTokens,
           completion: completionTokens,
-          total: (promptTokens ?? 0) + (completionTokens ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
       }
@@ -2001,7 +2191,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2039,7 +2232,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'apac.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2056,7 +2251,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'eu.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2084,7 +2282,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-3-opus-20240229-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-5-20251101-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-sonnet-4-6': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-5-20250929-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-haiku-4-5-20251001-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-sonnet-4-20250514-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2112,6 +2313,11 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
 
   // Global cross-region inference models (Nova 2)
   'global.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
+
+  // Global / Japan cross-region inference profiles for Claude Opus 4.7
+  // (verified via `aws bedrock list-inference-profiles`).
+  'global.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'jp.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -2340,16 +2546,18 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         const completionTokensNum = coerceStrToNum(completionTokens);
 
         // Get total tokens from API or calculate it
-        let totalTokens =
-          output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens;
-        if (!totalTokens && promptTokensNum !== undefined && completionTokensNum !== undefined) {
-          totalTokens = promptTokensNum + completionTokensNum;
-        }
+        const totalTokens =
+          coerceStrToNum(
+            output.usage?.totalTokens ?? output.usage?.total_tokens ?? output.total_tokens,
+          ) ??
+          (promptTokensNum !== undefined && completionTokensNum !== undefined
+            ? promptTokensNum + completionTokensNum
+            : undefined);
 
         tokenUsage = {
           prompt: promptTokensNum,
           completion: completionTokensNum,
-          total: (promptTokensNum ?? 0) + (completionTokensNum ?? 0),
+          total: totalTokens,
           numRequests: 1,
         };
 

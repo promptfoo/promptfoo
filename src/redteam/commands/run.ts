@@ -45,6 +45,15 @@ export function redteamRunCommand(program: Command) {
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option(
+      '--strict',
+      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
+      false,
+    )
+    .option(
+      '--filter-prompts <pattern>',
+      'Only run tests with prompts whose id or label matches the regex pattern',
+    )
+    .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
