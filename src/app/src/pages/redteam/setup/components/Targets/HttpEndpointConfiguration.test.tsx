@@ -1,9 +1,20 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+
+vi.mock('react-simple-code-editor', () => ({
+  default: ({ value, onValueChange }: any) => (
+    <textarea
+      data-testid="code-editor"
+      value={value}
+      onChange={(e) => onValueChange(e.target.value)}
+    />
+  ),
+}));
 
 // Wrapper component for providing tooltip context
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -271,7 +282,8 @@ describe('HttpEndpointConfiguration - Header Management', () => {
     vi.clearAllMocks();
   });
 
-  it('should add a new header row with visible Name and Value fields when the Add Header button is clicked', () => {
+  it('should add a new header row with visible Name and Value fields when the Add Header button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <HttpEndpointConfiguration
         {...defaultProps}
@@ -283,7 +295,7 @@ describe('HttpEndpointConfiguration - Header Management', () => {
     );
 
     const addHeaderButton = screen.getByText('Add Header');
-    fireEvent.click(addHeaderButton);
+    await user.click(addHeaderButton);
 
     const nameFields = screen.getAllByPlaceholderText('Name');
     const valueFields = screen.getAllByPlaceholderText('Value');

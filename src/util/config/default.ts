@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 import { maybeReadConfig } from './load';
 
 import type { UnifiedConfig } from '../../types/index';
@@ -38,10 +39,7 @@ export async function loadDefaultConfig(
   let defaultConfig: Partial<UnifiedConfig> = {};
   let defaultConfigPath: string | undefined;
 
-  // NOTE: sorted by frequency of use
-  const extensions = ['yaml', 'yml', 'json', 'cjs', 'cts', 'js', 'mjs', 'mts', 'ts'];
-
-  for (const ext of extensions) {
+  for (const ext of DEFAULT_CONFIG_EXTENSIONS) {
     const configPath = path.join(dir, `${configName}.${ext}`);
     const maybeConfig = await maybeReadConfig(configPath);
     if (maybeConfig) {

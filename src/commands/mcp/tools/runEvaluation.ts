@@ -5,6 +5,7 @@ import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
 import { escapeRegExp } from '../../../util/text';
 import { doEval } from '../../eval';
+import { filterPrompts } from '../../eval/filterPrompts';
 import { formatEvaluationResults, formatPromptsSummary } from '../lib/resultFormatter';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -72,8 +73,8 @@ export function registerRunEvaluationTool(server: McpServer) {
         .optional()
         .describe(
           dedent`
-            Filter to specific prompts by label or index.
-            Examples: "my-prompt", ["prompt1", "prompt2"]
+            Filter prompts by id/label (regex match) or index (numeric strings).
+            Examples: "my-prompt", "prompt.*", ["morning", "evening"], "0", ["0", "2"]
           `,
         ),
       providerFilter: z
@@ -153,100 +154,45 @@ export function registerRunEvaluationTool(server: McpServer) {
           );
         }
 
-        // If we need to filter test cases or prompts, we need to handle this ourselves
-        // since doEval doesn't support these specific filters
-        if (testCaseIndices !== undefined || promptFilter !== undefined) {
-          // Resolve config to get the test suite first
+        // Check if promptFilter contains numeric indices (backwards compatibility)
+        const promptFilters = promptFilter
+          ? Array.isArray(promptFilter)
+            ? promptFilter
+            : [promptFilter]
+          : null;
+
+        // Validate mixed input: error if both numeric and non-numeric filters are present
+        if (promptFilters && promptFilters.length > 1) {
+          const hasNumeric = promptFilters.some((f) => /^\d+$/.test(f));
+          const hasNonNumeric = promptFilters.some((f) => !/^\d+$/.test(f));
+
+          if (hasNumeric && hasNonNumeric) {
+            return createToolResponse(
+              'run_evaluation',
+              false,
+              undefined,
+              'Cannot mix numeric indices and regex patterns in promptFilter. Use either all numeric indices (e.g., ["0", "2"]) or all regex patterns (e.g., ["morning.*", "evening.*"]), but not both.',
+            );
+          }
+        }
+
+        const hasNumericPromptFilter = promptFilters && promptFilters.every((f) => /^\d+$/.test(f));
+
+        // Manual filtering path: handle test case, prompt, and provider filtering locally
+        // to avoid process.exit(1) and maintain MCP backwards compatibility
+        if (testCaseIndices !== undefined || promptFilter || providerFilter) {
           const configPaths = configPath ? [configPath] : ['promptfooconfig.yaml'];
           const { config, testSuite } = await resolveConfigs(
-            { config: configPaths },
+            {
+              config: configPaths,
+            },
             defaultConfig,
           );
 
-          // Apply our custom filtering
           const filteredTestSuite = { ...testSuite };
 
-          // Filter test cases if specified
-          if (testCaseIndices !== undefined && filteredTestSuite.tests) {
-            let filteredTests = filteredTestSuite.tests;
-
-            if (typeof testCaseIndices === 'number') {
-              // Single index
-              if (testCaseIndices < 0 || testCaseIndices >= filteredTests.length) {
-                return createToolResponse(
-                  'run_evaluation',
-                  false,
-                  undefined,
-                  `Test case index ${testCaseIndices} is out of range. Available indices: 0-${filteredTests.length - 1}`,
-                );
-              }
-              filteredTests = [filteredTests[testCaseIndices]];
-            } else if (Array.isArray(testCaseIndices)) {
-              // Multiple indices
-              const invalidIndices = testCaseIndices.filter(
-                (i) => i < 0 || i >= filteredTests.length,
-              );
-              if (invalidIndices.length > 0) {
-                return createToolResponse(
-                  'run_evaluation',
-                  false,
-                  undefined,
-                  `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${filteredTests.length - 1}`,
-                );
-              }
-              filteredTests = testCaseIndices.map((i) => filteredTests[i]);
-            } else {
-              // Range
-              const { start, end } = testCaseIndices;
-              if (start < 0 || end > filteredTests.length || start >= end) {
-                return createToolResponse(
-                  'run_evaluation',
-                  false,
-                  undefined,
-                  `Invalid range: start=${start}, end=${end}. Available indices: 0-${filteredTests.length - 1}`,
-                );
-              }
-              filteredTests = filteredTests.slice(start, end);
-            }
-
-            filteredTestSuite.tests = filteredTests;
-          }
-
-          // Filter prompts if specified
-          if (promptFilter !== undefined) {
-            const filters = Array.isArray(promptFilter) ? promptFilter : [promptFilter];
-            const prompts = filteredTestSuite.prompts || [];
-
-            if (prompts.length === 0) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                'No prompts defined in configuration. Add prompts to filter.',
-              );
-            }
-
-            const filteredPrompts = prompts.filter((prompt, index) => {
-              const label = prompt.label || prompt.raw;
-              return filters.includes(label) || filters.includes(index.toString());
-            });
-
-            if (filteredPrompts.length === 0) {
-              return createToolResponse(
-                'run_evaluation',
-                false,
-                undefined,
-                `No prompts matched filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
-              );
-            }
-
-            filteredTestSuite.prompts = filteredPrompts;
-          }
-
-          // Filter providers if specified
-          if (providerFilter !== undefined) {
+          if (providerFilter) {
             const filters = Array.isArray(providerFilter) ? providerFilter : [providerFilter];
-            // Build regex pattern from filters with proper escaping to prevent ReDoS
             const filterPattern = new RegExp(filters.map(escapeRegExp).join('|'), 'i');
 
             const providers = filteredTestSuite.providers || [];
@@ -275,6 +221,91 @@ export function registerRunEvaluationTool(server: McpServer) {
             }
 
             filteredTestSuite.providers = filteredProviders;
+          }
+
+          if (promptFilter) {
+            if (hasNumericPromptFilter && promptFilters) {
+              const indices = promptFilters.map((f) => parseInt(f, 10));
+              const prompts = testSuite.prompts || [];
+
+              const invalidIndices = indices.filter((i) => i < 0 || i >= prompts.length);
+              if (invalidIndices.length > 0) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `Invalid prompt indices: ${invalidIndices.join(', ')}. Available indices: 0-${prompts.length - 1}`,
+                );
+              }
+
+              filteredTestSuite.prompts = indices.map((i) => prompts[i]);
+            } else {
+              const filterPattern = Array.isArray(promptFilter)
+                ? promptFilter.join('|')
+                : promptFilter;
+
+              try {
+                filteredTestSuite.prompts = filterPrompts(testSuite.prompts, filterPattern);
+              } catch (error) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  error instanceof Error ? error.message : 'Failed to filter prompts',
+                );
+              }
+
+              if (filteredTestSuite.prompts.length === 0) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `No prompts found after applying filter: ${Array.isArray(promptFilter) ? promptFilter.join(', ') : promptFilter}`,
+                );
+              }
+            }
+          }
+
+          if (testCaseIndices !== undefined && filteredTestSuite.tests) {
+            let filteredTests = filteredTestSuite.tests;
+
+            if (typeof testCaseIndices === 'number') {
+              if (testCaseIndices < 0 || testCaseIndices >= filteredTests.length) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `Test case index ${testCaseIndices} is out of range. Available indices: 0-${filteredTests.length - 1}`,
+                );
+              }
+              filteredTests = [filteredTests[testCaseIndices]];
+            } else if (Array.isArray(testCaseIndices)) {
+              const invalidIndices = testCaseIndices.filter(
+                (i) => i < 0 || i >= filteredTests.length,
+              );
+              if (invalidIndices.length > 0) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `Invalid test case indices: ${invalidIndices.join(', ')}. Available indices: 0-${filteredTests.length - 1}`,
+                );
+              }
+              filteredTests = testCaseIndices.map((i) => filteredTests[i]);
+            } else {
+              const { start, end } = testCaseIndices;
+              if (start < 0 || end > filteredTests.length || start >= end) {
+                return createToolResponse(
+                  'run_evaluation',
+                  false,
+                  undefined,
+                  `Invalid range: start=${start}, end=${end}. Available indices: 0-${filteredTests.length - 1}`,
+                );
+              }
+              filteredTests = filteredTests.slice(start, end);
+            }
+
+            filteredTestSuite.tests = filteredTests;
           }
 
           // Use the evaluate function directly instead of doEval for filtered cases
@@ -366,8 +397,7 @@ export function registerRunEvaluationTool(server: McpServer) {
 
           return createToolResponse('run_evaluation', true, evalData);
         } else {
-          // For simple cases without custom filtering, use doEval directly
-          // Prepare command line options that doEval expects
+          // For simple cases without any filtering, use doEval directly
           const cmdObj: Partial<CommandLineOptions & Command> = {
             config: configPath ? [configPath] : ['promptfooconfig.yaml'],
             maxConcurrency,
@@ -376,10 +406,6 @@ export function registerRunEvaluationTool(server: McpServer) {
             cache,
             write,
             share,
-            // Set up provider filtering - doEval supports this natively
-            filterProviders: Array.isArray(providerFilter)
-              ? providerFilter.join('|')
-              : providerFilter,
           };
 
           // Prepare evaluate options

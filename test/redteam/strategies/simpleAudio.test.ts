@@ -4,6 +4,7 @@ import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/simpleAudio';
+import { mockConsole } from '../../util/utils';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -11,6 +12,10 @@ import type { TestCase } from '../../../src/types/index';
 vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    getRemoteGenerationExplicitlyDisabledError: vi.fn(
+      (strategyName) =>
+        `${strategyName} requires remote generation, which has been explicitly disabled.`,
+    ),
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.url'),
     neverGenerateRemote: vi.fn().mockReturnValue(false),
   };
@@ -43,13 +48,13 @@ vi.mock('cli-progress', async (importOriginal) => {
   };
 });
 
-const originalConsoleLog = console.log;
 const mockFetchWithCache = vi.mocked(fetchWithCache);
 const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
+let consoleLogSpy: ReturnType<typeof mockConsole>;
 
 describe('audio strategy', () => {
   beforeAll(() => {
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    consoleLogSpy = mockConsole('log');
   });
 
   beforeEach(() => {
@@ -64,7 +69,7 @@ describe('audio strategy', () => {
   });
 
   afterAll(() => {
-    console.log = originalConsoleLog;
+    consoleLogSpy.mockRestore();
   });
 
   describe('textToAudio', () => {
@@ -92,7 +97,9 @@ describe('audio strategy', () => {
       mockNeverGenerateRemote.mockReturnValue(true);
 
       const text = 'This should fail';
-      await expect(textToAudio(text, 'en')).rejects.toThrow('Remote generation is disabled');
+      await expect(textToAudio(text, 'en')).rejects.toThrow(
+        'Audio strategy requires remote generation, which has been explicitly disabled.',
+      );
     });
 
     it('should throw an error if remote API fails', async () => {

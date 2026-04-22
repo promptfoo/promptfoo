@@ -82,9 +82,9 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
     if (selectedTarget.id === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
       const hasConfig =
-        selectedTarget.config.request !== undefined
-          ? selectedTarget.config.request?.trim() !== ''
-          : !!selectedTarget.config.url && selectedTarget.config.url.trim() !== '';
+        selectedTarget.config.request === undefined
+          ? !!selectedTarget.config.url && selectedTarget.config.url.trim() !== ''
+          : selectedTarget.config.request?.trim() !== '';
 
       // For HTTP providers, require both tests to be completed
       return hasConfig && isTargetTested && isSessionTested;
@@ -105,13 +105,13 @@ export default function Targets({ onNext, onBack }: TargetsProps) {
 
     // Additional validation messages for HTTP and WebSocket providers
     if (selectedTarget.id === 'http') {
-      if (selectedTarget.config.request !== undefined) {
-        if (!selectedTarget.config.request?.trim()) {
-          return 'HTTP request content is required';
-        }
-      } else {
+      if (selectedTarget.config.request === undefined) {
         if (!selectedTarget.config.url || !selectedTarget.config.url.trim()) {
           return 'Valid URL is required';
+        }
+      } else {
+        if (!selectedTarget.config.request?.trim()) {
+          return 'HTTP request content is required';
         }
       }
 

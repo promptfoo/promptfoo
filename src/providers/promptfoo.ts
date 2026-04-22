@@ -17,6 +17,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  Inputs,
   PluginConfig,
   ProviderResponse,
   TokenUsage,
@@ -74,6 +75,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       };
     }
 
+    const evaluationId = context?.evaluationId || cliState.evaluationId;
     const body = {
       email: getUserEmail(),
       harmCategory: this.harmCategory,
@@ -81,9 +83,7 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
       purpose: this.purpose,
       version: VERSION,
       config: this.config,
-      ...((context?.evaluationId || cliState.evaluationId) && {
-        evaluationId: context?.evaluationId || cliState.evaluationId,
-      }),
+      ...(evaluationId && { evaluationId }),
     };
 
     try {
@@ -153,9 +153,8 @@ interface PromptfooChatCompletionOptions {
     | 'voice-crescendo-eval';
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
 }
 
 /**
@@ -197,6 +196,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       };
     }
 
+    const evaluationId = context?.evaluationId || cliState.evaluationId;
     const body = {
       jsonOnly: this.options.jsonOnly,
       preferSmallModel: this.options.preferSmallModel,
@@ -206,14 +206,12 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       email: getUserEmail(),
       // Pass inputs schema for multi-input mode
       ...(this.options.inputs && { inputs: this.options.inputs }),
-      ...((context?.evaluationId || cliState.evaluationId) && {
-        evaluationId: context?.evaluationId || cliState.evaluationId,
-      }),
+      ...(evaluationId && { evaluationId }),
       pluginId: context?.test?.metadata?.pluginId,
       strategyId: context?.test?.metadata?.strategyId,
-      ...(context?.evaluationId &&
+      ...(evaluationId &&
         context?.testCaseId && {
-          testRunId: `${context.evaluationId}-${context.testCaseId}`,
+          testRunId: `${evaluationId}-${context.testCaseId}`,
         }),
     };
 
@@ -324,15 +322,14 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
     }
 
     const messages = JSON.parse(prompt);
+    const evaluationId = context?.evaluationId || cliState.evaluationId;
     const body = {
       task: this.taskId,
       instructions: this.options.instructions,
       history: messages,
       email: getUserEmail(),
       version: VERSION,
-      ...((context?.evaluationId || cliState.evaluationId) && {
-        evaluationId: context?.evaluationId || cliState.evaluationId,
-      }),
+      ...(evaluationId && { evaluationId }),
       pluginId: context?.test?.metadata?.pluginId,
       strategyId: context?.test?.metadata?.strategyId,
     };

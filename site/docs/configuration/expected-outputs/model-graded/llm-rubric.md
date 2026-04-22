@@ -27,6 +27,7 @@ This assertion will use a language model to grade the output based on the specif
 Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available:
 
 - **OpenAI API key**: `gpt-5`
+- **Codex/ChatGPT login**: `openai:codex-sdk` when the Codex SDK package is installed, Codex is signed in, and no higher-priority API credentials are set
 - **Anthropic API key**: `claude-sonnet-4-5-20250929`
 - **Google AI Studio API key**: `gemini-2.5-pro` (GEMINI_API_KEY, GOOGLE_API_KEY, or PALM_API_KEY)
 - **Google Vertex credentials**: `gemini-2.5-pro` (service account credentials)
@@ -35,6 +36,8 @@ Under the hood, `llm-rubric` uses a model to evaluate the output based on the cr
 - **Azure credentials**: Your configured Azure GPT deployment
 
 You can override this by setting the `provider` option (see below).
+
+Codex/ChatGPT login fallback is text-only. Assertions that need embeddings or moderation still require an API-key-backed provider override.
 
 It asks the model to output a JSON object that looks like this:
 
@@ -118,6 +121,30 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
            provider: openai:gpt-5-mini
            // highlight-end
    ```
+
+### Setting grader parameters (temperature, etc.)
+
+To pin `temperature`, `max_tokens`, or other provider-specific parameters on the grader, expand the `provider` shorthand into an object with `id` and `config`. This is the supported way to push grading toward reproducibility when swapping in a custom judge:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: Is not apologetic and provides a clear, concise answer
+    // highlight-start
+    provider:
+      id: openai:gpt-5-mini
+      config:
+        temperature: 0
+    // highlight-end
+```
+
+The same shape works under `defaultTest.options.provider` and `test.options.provider`.
+
+:::note
+The built-in OpenAI grader already defaults to `temperature=0`, so this override is only needed when you're pointing at a different model or provider whose default differs. GPT-5 series reasoning models ignore `temperature` and do not need it set.
+:::
+
+Custom `llm-rubric` providers can also return a `metadata` object in their `ProviderResponse`. promptfoo copies those keys onto the assertion's `GradingResult.metadata` alongside `renderedGradingPrompt`, which makes per-assertion fields such as upload IDs or trace IDs available in hooks like `afterEach`.
 
 ## Customizing the rubric prompt
 

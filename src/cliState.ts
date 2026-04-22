@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import type { UnifiedConfig } from './types/index';
 
 interface CliState {
@@ -46,10 +48,55 @@ interface CliState {
   // Maximum concurrency from CLI -j flag (propagated to providers like Python)
   maxConcurrency?: number;
 
-  // Current evaluation ID (set by evaluator, used by remote task/grading calls)
+  // Current evaluation ID, used by remote task and grading calls for tracing.
   evaluationId?: string;
+
+  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  withEvaluationId<T>(evaluationId: string | undefined, fn: () => Promise<T>): Promise<T>;
 }
 
-const state: CliState = {};
+const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+let globalMaxConcurrency: number | undefined;
+const evaluationIdContext = new AsyncLocalStorage<{ evaluationId: string | undefined }>();
+let globalEvaluationId: string | undefined;
+
+const state: CliState = {
+  get evaluationId() {
+    const store = evaluationIdContext.getStore();
+    if (store) {
+      return store.evaluationId;
+    }
+    return globalEvaluationId;
+  },
+  set evaluationId(value: string | undefined) {
+    const store = evaluationIdContext.getStore();
+    if (store) {
+      store.evaluationId = value;
+      return;
+    }
+    globalEvaluationId = value;
+  },
+  get maxConcurrency() {
+    const store = maxConcurrencyContext.getStore();
+    if (store) {
+      return store.maxConcurrency;
+    }
+    return globalMaxConcurrency;
+  },
+  set maxConcurrency(value: number | undefined) {
+    const store = maxConcurrencyContext.getStore();
+    if (store) {
+      store.maxConcurrency = value;
+      return;
+    }
+    globalMaxConcurrency = value;
+  },
+  withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
+    return maxConcurrencyContext.run({ maxConcurrency }, fn);
+  },
+  withEvaluationId<T>(evaluationId: string | undefined, fn: () => Promise<T>): Promise<T> {
+    return evaluationIdContext.run({ evaluationId }, fn);
+  },
+};
 
 export default state;

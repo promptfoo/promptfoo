@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Read-only Codex sandbox'
+
+prompts:
+  - |
+    Try to create hello.txt in the working directory with the text WRITTEN_BY_CODEX.
+    Then reply with one short sentence describing whether the write succeeded.
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.2-codex
+      working_dir: '{{ env.CODEX_SANDBOX_WORKING_DIR | default("./sample-workspace") }}'
+      sandbox_mode: read-only
+      approval_policy: never
+      skip_git_repo_check: true
+
+tests:
+  - assert:
+      - type: icontains-any
+        value:
+          - 'did not succeed'
+          - 'read-only'
+          - 'permission'
+          - 'not allowed'
+          - 'failed'
+          - "couldn't"

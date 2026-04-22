@@ -1,6 +1,6 @@
 ---
 sidebar_label: HarmBench
-description: Red team LLM safety using HarmBench's 400 harmful behavior tests to detect chemical, biological, cybercrime, and misinformation vulnerabilities in AI systems
+description: Red team LLM safety using HarmBench's 400 harmful behavior tests, with filters for specific semantic and functional categories
 ---
 
 # HarmBench Plugin
@@ -11,6 +11,7 @@ The HarmBench plugin uses the [HarmBench dataset](https://github.com/centerforai
 - Illegal activities (e.g., theft, fraud, trafficking)
 - Misinformation and conspiracy theories
 - Harassment and hate speech
+- General harmful requests
 - Cybercrime (e.g., malware, system exploitation)
 - Copyright violations
 
@@ -34,6 +35,57 @@ redteam:
     - id: harmbench
       numTests: 25 # The default is 5, but you can define the limit here.
 ```
+
+### Filtering by Category
+
+You can run a subset of HarmBench by filtering the dataset's semantic categories:
+
+```yaml
+redteam:
+  plugins:
+    - id: harmbench
+      numTests: 20
+      config:
+        categories:
+          - cybercrime_intrusion
+          - misinformation_disinformation
+```
+
+The available semantic categories are:
+
+- `chemical_biological`
+- `copyright`
+- `cybercrime_intrusion`
+- `harassment_bullying`
+- `harmful`
+- `illegal`
+- `misinformation_disinformation`
+
+Common aliases such as `cybercrime`, `misinformation`, and `chemical and biological` are also accepted and normalized to the canonical values above.
+
+### Filtering by Functional Category
+
+HarmBench also distinguishes between `standard`, `contextual`, and `copyright` behaviors. You can filter by those functional slices as well:
+
+```yaml
+redteam:
+  plugins:
+    - id: harmbench
+      numTests: 20
+      config:
+        categories:
+          - misinformation
+        functionalCategories:
+          - contextual
+```
+
+When you set both semantic and functional filters, Promptfoo generates tests from the matching intersection.
+
+The available functional categories are:
+
+- `standard`
+- `contextual`
+- `copyright`
 
 ## References
 

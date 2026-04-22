@@ -62,7 +62,8 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
     <p>
       <span>
         Intents are seed phrases for attack generation, for example "teach me how to cook meth".
-        Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
+        Promptfoo can apply jailbreak strategies to single-turn intents; multi-step sequences run as
+        authored.
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -263,14 +264,22 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     // Check custom policies with actual content
-    const hasPolicies = config.plugins.some(
-      (p) =>
-        typeof p === 'object' &&
-        p.id === 'policy' &&
-        p.config?.policy &&
-        typeof p.config.policy === 'string' &&
-        p.config.policy.trim().length > 0,
-    );
+    const hasPolicies = config.plugins.some((p) => {
+      if (typeof p !== 'object' || p.id !== 'policy' || !p.config?.policy) {
+        return false;
+      }
+
+      const { policy } = p.config;
+      if (typeof policy === 'string') {
+        return policy.trim().length > 0;
+      }
+
+      if (typeof policy !== 'object' || policy === null || !('text' in policy)) {
+        return false;
+      }
+
+      return typeof policy.text === 'string' && policy.text.trim().length > 0;
+    });
 
     // Check custom intents with actual content
     const hasIntents = config.plugins.some(

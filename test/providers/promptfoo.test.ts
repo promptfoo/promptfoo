@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
@@ -29,6 +30,14 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 });
 
 describe('PromptfooHarmfulCompletionProvider', () => {
+  const options = {
+    harmCategory: 'test-category',
+    n: 1,
+    purpose: 'test-purpose',
+  };
+
+  let provider: PromptfooHarmfulCompletionProvider;
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getUserEmail).mockImplementation(function () {
@@ -40,17 +49,6 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
-  });
-
-  const options = {
-    harmCategory: 'test-category',
-    n: 1,
-    purpose: 'test-purpose',
-  };
-
-  let provider: PromptfooHarmfulCompletionProvider;
-
-  beforeEach(() => {
     provider = new PromptfooHarmfulCompletionProvider(options);
   });
 
@@ -174,6 +172,14 @@ describe('PromptfooHarmfulCompletionProvider', () => {
 });
 
 describe('PromptfooChatCompletionProvider', () => {
+  const options = {
+    jsonOnly: true,
+    preferSmallModel: false,
+    task: 'crescendo' as const,
+  };
+
+  let provider: PromptfooChatCompletionProvider;
+
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getUserEmail).mockImplementation(function () {
@@ -185,17 +191,6 @@ describe('PromptfooChatCompletionProvider', () => {
     vi.mocked(getEnvBool).mockImplementation(function () {
       return false;
     });
-  });
-
-  const options = {
-    jsonOnly: true,
-    preferSmallModel: false,
-    task: 'crescendo' as const,
-  };
-
-  let provider: PromptfooChatCompletionProvider;
-
-  beforeEach(() => {
     provider = new PromptfooChatCompletionProvider(options);
   });
 
@@ -310,16 +305,6 @@ describe('PromptfooChatCompletionProvider', () => {
 });
 
 describe('PromptfooSimulatedUserProvider', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-    vi.mocked(getUserEmail).mockImplementation(function () {
-      return 'test@example.com';
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
-  });
-
   const options = {
     id: 'test-agent',
     instructions: 'test instructions',
@@ -328,6 +313,13 @@ describe('PromptfooSimulatedUserProvider', () => {
   let provider: PromptfooSimulatedUserProvider;
 
   beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(getUserEmail).mockImplementation(function () {
+      return 'test@example.com';
+    });
+    vi.mocked(getEnvBool).mockImplementation(function () {
+      return false;
+    });
     provider = new PromptfooSimulatedUserProvider(options, 'test-id');
   });
 
@@ -545,6 +537,7 @@ describe('Metadata forwarding', () => {
     vi.mocked(getUserEmail).mockImplementation(() => 'test@example.com');
     vi.mocked(getEnvString).mockImplementation(() => '');
     vi.mocked(getEnvBool).mockImplementation(() => false);
+    cliState.evaluationId = undefined;
   });
 
   const contextWithMetadata = {
@@ -625,5 +618,31 @@ describe('Metadata forwarding', () => {
     const body = JSON.parse(callArgs[1]!.body as string);
     expect(body.pluginId).toBe('harmful:hate');
     expect(body.testRunId).toBeUndefined();
+  });
+
+  it('PromptfooChatCompletionProvider uses cliState evaluationId fallback for testRunId', async () => {
+    const chatProvider = new PromptfooChatCompletionProvider({
+      jsonOnly: true,
+      preferSmallModel: false,
+      task: 'iterative',
+    });
+
+    const mockResponse = new Response(
+      JSON.stringify({ result: 'test', tokenUsage: { total: 10 } }),
+      { status: 200 },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    cliState.evaluationId = 'eval-global';
+
+    await chatProvider.callApi('test prompt', {
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+      testCaseId: 'tc-789',
+    });
+
+    const callArgs = vi.mocked(fetchWithRetries).mock.calls[0];
+    const body = JSON.parse(callArgs[1]!.body as string);
+    expect(body.evaluationId).toBe('eval-global');
+    expect(body.testRunId).toBe('eval-global-tc-789');
   });
 });

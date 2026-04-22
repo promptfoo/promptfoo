@@ -1,4 +1,4 @@
-# google-imagen
+# google-imagen (Google Imagen)
 
 This example demonstrates Google image generation models, including both Imagen and Gemini native image generation.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example google-imagen
+cd google-imagen
 ```
 
 ## Prerequisites
@@ -75,7 +76,8 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ### Gemini Native Image Generation
 
-- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with native image generation (~$0.13/image)
+- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
+- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with native image generation (~$0.05/image, estimated)
 - `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
 
 ## Running the Example
@@ -114,11 +116,13 @@ See `promptfooconfig-advanced.yaml` for examples of platform-specific configurat
 Gemini models can generate images natively using the `generateContent` API with `responseModalities` set to include images. This is different from Imagen which uses a dedicated image generation endpoint.
 
 See `promptfooconfig-gemini.yaml` for Gemini native image generation examples.
+See `promptfooconfig-gemini-grounding.yaml` for Google Search-grounded Gemini image generation.
 
 Key differences from Imagen:
 
 - Uses the same `google:` provider namespace as Gemini chat (models with `-image` in the name automatically enable image generation)
-- Supports additional aspect ratios: `2:3`, `3:2`, `4:5`, `5:4`, `21:9`
-- Supports image resolution: `1K`, `2K`, `4K`
+- Supports additional aspect ratios: `1:4`, `1:8`, `2:3`, `3:2`, `4:1`, `4:5`, `5:4`, `8:1`, `21:9`
+- Supports image resolution: `512px` (Gemini 3.1), `1K`, `2K`, `4K`
 - Can return both text and images in the same response
 - Uses the same authentication as Gemini chat models
+- Supports Google Search grounding via `tools: [{ googleSearch: {} }]`

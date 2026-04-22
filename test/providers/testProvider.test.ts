@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, Mock, Mocked, MockedClass, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, Mock, Mocked, MockedClass, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -7,6 +7,7 @@ import { doRemoteGrading } from '../../src/remoteGrading';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
+import { mockGlobal } from '../util/utils';
 
 import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
@@ -29,9 +30,13 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
     },
   };
 });
-vi.stubGlobal('crypto', {
+const restoreCrypto = mockGlobal('crypto', {
   ...crypto,
   randomUUID: vi.fn(() => 'test-uuid-1234'),
+} as Crypto);
+
+afterAll(() => {
+  restoreCrypto();
 });
 
 describe('Provider Test Functions', () => {

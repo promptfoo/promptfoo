@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
+import { mockProcessEnv } from '../../util/utils';
 
 // Mock dependencies
 vi.mock('../../../src/envars', () => ({
@@ -45,13 +46,13 @@ describe('GoogleAuthManager', () => {
     mockGoogleAuthInstance.getProjectId.mockClear().mockResolvedValue('detected-project');
     mockGoogleAuthInstance.fromJSON.mockClear().mockResolvedValue({});
     // Clear environment variables
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.VERTEX_API_KEY;
-    delete process.env.PALM_API_KEY;
-    delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
-    delete process.env.GOOGLE_CLOUD_PROJECT;
-    delete process.env.GOOGLE_CLOUD_LOCATION;
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ VERTEX_API_KEY: undefined });
+    mockProcessEnv({ PALM_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
   });
 
   afterEach(() => {
@@ -504,6 +505,87 @@ describe('GoogleAuthManager', () => {
     });
   });
 
+  describe('hasDefaultCredentials', () => {
+    it('should cache successful default credential probes', async () => {
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockResolvedValue({ client: {}, projectId: 'detected-project' });
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
+
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(1);
+      getOAuthClientSpy.mockRestore();
+    });
+
+    it('should cache failed default credential probes', async () => {
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockRejectedValue(new Error('no default credentials'));
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(1);
+      getOAuthClientSpy.mockRestore();
+    });
+
+    it('should clear cached default credential probe results', async () => {
+      const getOAuthClientSpy = vi
+        .spyOn(GoogleAuthManager, 'getOAuthClient')
+        .mockRejectedValue(new Error('no default credentials'));
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+      GoogleAuthManager.clearCache();
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(false);
+
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(2);
+      getOAuthClientSpy.mockRestore();
+    });
+
+    it('should deduplicate concurrent default credential probes', async () => {
+      const getOAuthClientSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve({ client: {}, projectId: 'detected-project' }), 0);
+          }),
+      );
+
+      const firstProbe = GoogleAuthManager.hasDefaultCredentials();
+      const secondProbe = GoogleAuthManager.hasDefaultCredentials();
+      const [firstResult, secondResult] = await Promise.all([firstProbe, secondProbe]);
+
+      expect(firstResult).toBe(true);
+      expect(secondResult).toBe(true);
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(1);
+      getOAuthClientSpy.mockRestore();
+    });
+
+    it('should not allow a stale probe to overwrite cache after clearCache', async () => {
+      let rejectFirstProbe!: (reason?: unknown) => void;
+      const firstProbeAuthCall = new Promise((_, reject) => {
+        rejectFirstProbe = reject;
+      });
+
+      const getOAuthClientSpy = vi.spyOn(GoogleAuthManager, 'getOAuthClient');
+      getOAuthClientSpy
+        .mockImplementationOnce(() => firstProbeAuthCall as Promise<any>)
+        .mockResolvedValueOnce({ client: {}, projectId: 'detected-project' });
+
+      const firstProbe = GoogleAuthManager.hasDefaultCredentials();
+      GoogleAuthManager.clearCache();
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
+
+      rejectFirstProbe(new Error('first probe failed'));
+      await expect(firstProbe).resolves.toBe(false);
+
+      await expect(GoogleAuthManager.hasDefaultCredentials()).resolves.toBe(true);
+      expect(getOAuthClientSpy).toHaveBeenCalledTimes(2);
+      getOAuthClientSpy.mockRestore();
+    });
+  });
+
   describe('loadCredentials', () => {
     it('should return undefined for undefined input', () => {
       expect(GoogleAuthManager.loadCredentials(undefined)).toBeUndefined();
@@ -566,9 +648,7 @@ describe('GoogleAuthManager', () => {
   // See: test/providers/google/vertex.test.ts for integration coverage
 
   describe('clearCache', () => {
-    it('should reset cachedAuth to undefined', () => {
-      // clearCache is a simple function that can be tested in isolation
-      // The actual caching behavior is tested in integration tests
+    it('should clear internal credential detection caches', () => {
       expect(() => GoogleAuthManager.clearCache()).not.toThrow();
     });
   });
