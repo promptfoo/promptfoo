@@ -115,13 +115,20 @@ vi.mock('../src/envars', () => {
     }),
     getEnvBool: vi.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true';
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true' || false;
+        const raw = (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL;
+        if (raw === 'true') {
+          return true;
+        }
+        if (raw === 'false') {
+          return false;
+        }
+        return defaultValue;
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true';
       }
       return defaultValue;
     }),
@@ -507,6 +514,32 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should enable SSL verification by default when PROMPTFOO_INSECURE_SSL is unset', async () => {
+    const mockProxyUrl = 'http://proxy.example.com';
+
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+      if (key === 'HTTPS_PROXY') {
+        return mockProxyUrl;
+      }
+      return defaultValue;
+    });
+
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
+    global.fetch = mockFetch;
+
+    await fetchWithProxy('https://example.com');
+
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        proxyTls: { rejectUnauthorized: true },
+        requestTls: { rejectUnauthorized: true },
+      }),
+    );
+  });
+
   it('should disable SSL verification when PROMPTFOO_INSECURE_SSL is true', async () => {
     const mockProxyUrl = 'http://proxy.example.com';
 
@@ -688,10 +721,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         headersTimeout: REQUEST_TIMEOUT_MS,
         keepAliveTimeout: 30_000,
@@ -728,10 +761,10 @@ describe('fetchWithProxy', () => {
       expect(ProxyAgent).toHaveBeenCalledWith({
         uri: testCase.expected.url,
         proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
+          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', false),
         },
         headersTimeout: REQUEST_TIMEOUT_MS,
         keepAliveTimeout: 30_000,
