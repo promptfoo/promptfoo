@@ -50,6 +50,17 @@ describe('EvalLockManager', () => {
       evalLockManager.acquire('eval-123', 'test-operation');
       expect(evalLockManager.isLocked('eval-123')).toBe(true);
     });
+
+    it('should replace expired locks on acquire', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      expect(evalLockManager.acquire('eval-123', 'old-operation')).toBe(true);
+
+      vi.mocked(Date.now).mockReturnValue(1_000 + evalLockManager.getTtlMs() + 1);
+
+      expect(evalLockManager.acquire('eval-123', 'new-operation')).toBe(true);
+      expect(evalLockManager.getLockInfo('eval-123')?.operation).toBe('new-operation');
+      expect(evalLockManager.getLockCount()).toBe(1);
+    });
   });
 
   describe('release', () => {
@@ -94,6 +105,45 @@ describe('EvalLockManager', () => {
       evalLockManager.release('eval-123');
       expect(evalLockManager.isLocked('eval-123')).toBe(false);
     });
+
+    it('should clean up and return false for expired locks', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      evalLockManager.acquire('eval-123', 'bulk-rating');
+
+      vi.mocked(Date.now).mockReturnValue(1_000 + evalLockManager.getTtlMs() + 1);
+
+      expect(evalLockManager.isLocked('eval-123')).toBe(false);
+      expect(evalLockManager.getLockCount()).toBe(0);
+    });
+  });
+
+  describe('getLockInfo', () => {
+    it('returns null for unlocked evals', () => {
+      expect(evalLockManager.getLockInfo('eval-123')).toBeNull();
+    });
+
+    it('returns lock metadata for active locks', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      evalLockManager.acquire('eval-123', 'bulk-rating');
+
+      vi.mocked(Date.now).mockReturnValue(1_250);
+
+      expect(evalLockManager.getLockInfo('eval-123')).toEqual({
+        acquiredAt: 1_000,
+        operation: 'bulk-rating',
+        ageMs: 250,
+      });
+    });
+
+    it('cleans up and returns null for expired locks', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      evalLockManager.acquire('eval-123', 'bulk-rating');
+
+      vi.mocked(Date.now).mockReturnValue(1_000 + evalLockManager.getTtlMs() + 1);
+
+      expect(evalLockManager.getLockInfo('eval-123')).toBeNull();
+      expect(evalLockManager.getLockCount()).toBe(0);
+    });
   });
 
   describe('getLockCount', () => {
@@ -115,6 +165,41 @@ describe('EvalLockManager', () => {
 
       evalLockManager.release('eval-1');
 
+      expect(evalLockManager.getLockCount()).toBe(1);
+    });
+  });
+
+  describe('getTtlMs', () => {
+    it('returns the default TTL', () => {
+      expect(evalLockManager.getTtlMs()).toBe(5 * 60 * 1000);
+    });
+  });
+
+  describe('cleanupExpiredLocks', () => {
+    it('removes expired locks and keeps active locks', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      evalLockManager.acquire('expired-1', 'old-op-1');
+      evalLockManager.acquire('expired-2', 'old-op-2');
+
+      vi.mocked(Date.now).mockReturnValue(1_000 + evalLockManager.getTtlMs());
+      evalLockManager.acquire('active', 'new-op');
+
+      vi.mocked(Date.now).mockReturnValue(1_000 + evalLockManager.getTtlMs() + 1);
+
+      expect(evalLockManager.cleanupExpiredLocks()).toBe(2);
+      expect(evalLockManager.getLockCount()).toBe(1);
+      expect(evalLockManager.isLocked('active')).toBe(true);
+      expect(evalLockManager.isLocked('expired-1')).toBe(false);
+      expect(evalLockManager.isLocked('expired-2')).toBe(false);
+    });
+
+    it('returns 0 when no locks are expired', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      evalLockManager.acquire('eval-123', 'bulk-rating');
+
+      vi.mocked(Date.now).mockReturnValue(1_000 + evalLockManager.getTtlMs());
+
+      expect(evalLockManager.cleanupExpiredLocks()).toBe(0);
       expect(evalLockManager.getLockCount()).toBe(1);
     });
   });

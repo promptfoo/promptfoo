@@ -1,3 +1,9 @@
+import {
+  getCallApiMock,
+  mockCallApiResponseOnce,
+  rejectCallApiOnce,
+  resetCallApiMock,
+} from '@app/tests/apiMocks';
 import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,7 +16,7 @@ vi.mock('@app/utils/api', () => ({
 
 describe('useBulkRating', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetCallApiMock();
   });
 
   describe('initial state', () => {
@@ -34,10 +40,7 @@ describe('useBulkRating', () => {
 
   describe('fetchPreviewCount', () => {
     it('fetches preview count successfully', async () => {
-      vi.mocked(callApi).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ count: 42 }),
-      } as Response);
+      mockCallApiResponseOnce({ count: 42 });
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -55,10 +58,7 @@ describe('useBulkRating', () => {
     });
 
     it('includes filters in query params', async () => {
-      vi.mocked(callApi).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ count: 10 }),
-      } as Response);
+      mockCallApiResponseOnce({ count: 10 });
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -74,10 +74,7 @@ describe('useBulkRating', () => {
     });
 
     it('handles fetch error and sets previewError', async () => {
-      vi.mocked(callApi).mockResolvedValueOnce({
-        ok: false,
-        text: () => Promise.resolve('Server error'),
-      } as Response);
+      mockCallApiResponseOnce({}, { ok: false, text: 'Server error' });
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -94,7 +91,7 @@ describe('useBulkRating', () => {
     });
 
     it('handles network error', async () => {
-      vi.mocked(callApi).mockRejectedValueOnce(new Error('Network error'));
+      rejectCallApiOnce(new Error('Network error'));
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -114,7 +111,7 @@ describe('useBulkRating', () => {
       const slowPromise = new Promise<Response>((resolve) => {
         resolvePromise = resolve;
       });
-      vi.mocked(callApi).mockReturnValue(slowPromise);
+      getCallApiMock().mockImplementationOnce(() => slowPromise);
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -144,7 +141,7 @@ describe('useBulkRating', () => {
 
   describe('clearPreviewError', () => {
     it('clears preview error', async () => {
-      vi.mocked(callApi).mockRejectedValueOnce(new Error('Error'));
+      rejectCallApiOnce(new Error('Error'));
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -184,16 +181,12 @@ describe('useBulkRating', () => {
     });
 
     it('performs bulk rating successfully', async () => {
-      vi.mocked(callApi).mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            success: true,
-            matched: 100,
-            updated: 95,
-            skipped: 5,
-          }),
-      } as Response);
+      mockCallApiResponseOnce({
+        success: true,
+        matched: 100,
+        updated: 95,
+        skipped: 5,
+      });
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -223,16 +216,14 @@ describe('useBulkRating', () => {
     });
 
     it('handles API error response', async () => {
-      vi.mocked(callApi).mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            success: false,
-            matched: 50,
-            error: 'Validation error',
-          }),
-      } as Response);
+      mockCallApiResponseOnce(
+        {
+          success: false,
+          matched: 50,
+          error: 'Validation error',
+        },
+        { status: 400 },
+      );
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -251,7 +242,7 @@ describe('useBulkRating', () => {
     });
 
     it('handles network error', async () => {
-      vi.mocked(callApi).mockRejectedValueOnce(new Error('Connection failed'));
+      rejectCallApiOnce(new Error('Connection failed'));
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -273,7 +264,7 @@ describe('useBulkRating', () => {
       const slowPromise = new Promise<Response>((resolve) => {
         resolvePromise = resolve;
       });
-      vi.mocked(callApi).mockReturnValue(slowPromise);
+      getCallApiMock().mockImplementationOnce(() => slowPromise);
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
@@ -311,16 +302,14 @@ describe('useBulkRating', () => {
     });
 
     it('handles 409 conflict error for concurrent operations', async () => {
-      vi.mocked(callApi).mockResolvedValueOnce({
-        ok: false,
-        status: 409,
-        json: () =>
-          Promise.resolve({
-            success: false,
-            matched: 0,
-            error: 'Another bulk operation is in progress',
-          }),
-      } as Response);
+      mockCallApiResponseOnce(
+        {
+          success: false,
+          matched: 0,
+          error: 'Another bulk operation is in progress',
+        },
+        { status: 409 },
+      );
 
       const { result } = renderHook(() => useBulkRating('eval-123'));
 
