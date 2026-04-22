@@ -9,6 +9,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import {
   applyRuntimeTransforms,
@@ -17,7 +18,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { getSessionId } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent } from './shared';
 
@@ -27,6 +28,7 @@ import type {
   AssertionValue,
   AtomicTestCase,
   GradingResult,
+  VarValue,
 } from '../../types/index';
 import type {
   ApiProvider,
@@ -66,6 +68,7 @@ interface OdcvHistoryItem {
   output: string;
   outputAudio?: MediaData;
   outputImage?: MediaData;
+  inputVars?: Record<string, string>;
 }
 
 interface OdcvAttackerMessage {
@@ -93,6 +96,11 @@ interface TargetPromptResult {
 interface TargetCallResult {
   response: ProviderResponse;
   output: string;
+}
+
+interface RenderedAttackerMessage {
+  content: string;
+  inputVars?: Record<string, string>;
 }
 
 interface TurnResult {
@@ -216,7 +224,11 @@ export default class RedteamOdcvProvider implements ApiProvider {
       return {};
     }
 
-    await this.addRenderedAttackerMessage(attackerMessage, state);
+    const renderedAttackerMessage = await this.addRenderedAttackerMessage(
+      turn,
+      attackerMessage,
+      state,
+    );
     this.logHistory(turn, state.messages);
 
     const latestMessageContent = state.messages[state.messages.length - 1].content;
@@ -234,9 +246,9 @@ export default class RedteamOdcvProvider implements ApiProvider {
       role: 'assistant',
       content: targetCall.output,
     });
-    this.addHistoryItem(attackerMessage, targetPrompt.transformResult, targetCall, state);
+    this.addHistoryItem(renderedAttackerMessage, targetPrompt.transformResult, targetCall, state);
 
-    const grading = await this.gradeTurn(attackerMessage.content, targetCall.output, state);
+    const grading = await this.gradeTurn(renderedAttackerMessage.content, targetCall.output, state);
     return {
       lastTargetResponse: targetCall.response,
       ...grading,
@@ -300,24 +312,63 @@ export default class RedteamOdcvProvider implements ApiProvider {
   }
 
   private async addRenderedAttackerMessage(
+    turn: number,
     attackerMessage: OdcvAttackerMessage,
     state: OdcvState,
-  ): Promise<void> {
+  ): Promise<RenderedAttackerMessage> {
+    let processedMessage = attackerMessage.content;
+    const extractedPrompt = extractPromptFromTags(attackerMessage.content);
+    if (extractedPrompt) {
+      processedMessage = extractedPrompt;
+    }
+
+    const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+    const materializedInputVars =
+      currentInputVars && this.config.inputs
+        ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+            materializationIndex: turn,
+            pluginId: 'odcv',
+            provider: state.targetProvider,
+            purpose: state.targetContext.test?.metadata?.purpose as string | undefined,
+          })
+        : undefined;
+    const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
+
+    if (currentInputVars && this.config.inputs) {
+      try {
+        const parsed = JSON.parse(processedMessage);
+        if (typeof parsed.prompt === 'string') {
+          processedMessage = parsed.prompt;
+        }
+      } catch {
+        // Plain-text ODCV prompts do not carry separate input variables.
+      }
+    }
+
+    const attackerVars: Record<string, VarValue> = {
+      [this.config.injectVar]: processedMessage,
+      ...(currentRenderInputVars || {}),
+    };
     const renderedAttackerPrompt = await renderPrompt(
       state.targetContext.prompt,
       {
         ...state.targetContext.vars,
-        [this.config.injectVar]: attackerMessage.content,
+        ...attackerVars,
       },
       state.targetContext.filters,
       state.targetProvider,
-      [this.config.injectVar],
+      Object.keys(attackerVars),
     );
 
     state.messages.push({
       role: attackerMessage.role,
       content: renderedAttackerPrompt,
     });
+
+    return {
+      content: processedMessage,
+      inputVars: currentRenderInputVars,
+    };
   }
 
   private logHistory(turn: number, messages: Message[]): void {
@@ -441,7 +492,7 @@ export default class RedteamOdcvProvider implements ApiProvider {
   }
 
   private addHistoryItem(
-    attackerMessage: OdcvAttackerMessage,
+    attackerMessage: RenderedAttackerMessage,
     transformResult: TransformResult | undefined,
     targetCall: TargetCallResult,
     state: OdcvState,
@@ -458,6 +509,7 @@ export default class RedteamOdcvProvider implements ApiProvider {
               format: targetCall.response.audio.format,
             }
           : undefined,
+      inputVars: attackerMessage.inputVars,
     });
   }
 

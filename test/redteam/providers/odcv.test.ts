@@ -263,6 +263,55 @@ describe('RedteamOdcvProvider', () => {
     });
   });
 
+  it('should render multi-input attacker vars without evaluating attacker templates', async () => {
+    mockFetchWithProxy.mockResolvedValueOnce(
+      createMockResponse({
+        body: {
+          message: {
+            role: 'user',
+            content: JSON.stringify({
+              prompt: '  Keep {{7*7}}  ',
+              email: '  USER@EXAMPLE.COM  ',
+            }),
+          },
+        },
+      }),
+    );
+    context.vars = {
+      prompt: 'initial goal',
+      email: 'safe@example.com',
+    };
+    context.prompt = {
+      raw: 'Goal={{prompt | trim}}; Email={{email | trim | lower}}',
+      label: 'target',
+    };
+
+    const provider = new RedteamOdcvProvider({
+      injectVar: 'prompt',
+      maxTurns: 1,
+      stateful: true,
+      inputs: {
+        email: 'The user email',
+      },
+    });
+
+    const result = await provider.callApi('', context);
+
+    expect(targetProvider.callApi).toHaveBeenCalledWith(
+      'Goal=Keep {{7*7}}; Email=user@example.com',
+      expect.anything(),
+      undefined,
+    );
+    expect(result.metadata.redteamHistory).toBeDefined();
+    expect(result.metadata.redteamHistory?.[0]).toMatchObject({
+      prompt: '  Keep {{7*7}}  ',
+      inputVars: {
+        email: '  USER@EXAMPLE.COM  ',
+      },
+    });
+    expect(context.vars.email).toBe('safe@example.com');
+  });
+
   it('should build hybrid prompts for per-turn media transforms', async () => {
     context.evaluationId = 'eval-123';
     context.test!.metadata!.testCaseId = 'case-456';
