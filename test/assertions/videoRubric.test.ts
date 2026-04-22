@@ -4,11 +4,11 @@ import { handleVideoRubric } from '../../src/assertions/videoRubric';
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
 // Mock the matcher
-vi.mock('../../src/matchers', () => ({
+vi.mock('../../src/matchers/video', () => ({
   matchesVideoRubric: vi.fn(),
 }));
 
-import { matchesVideoRubric } from '../../src/matchers';
+import { matchesVideoRubric } from '../../src/matchers/video';
 
 // Helper to create minimal valid AssertionParams
 function createParams(overrides: Partial<AssertionParams> = {}): AssertionParams {

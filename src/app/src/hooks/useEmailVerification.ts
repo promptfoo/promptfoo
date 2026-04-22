@@ -59,6 +59,17 @@ export function useEmailVerification() {
           };
         }
 
+        if (status.status === EmailValidationStatus.EMAIL_VERIFICATION_REQUIRED) {
+          return {
+            canProceed: false,
+            needsEmail: false,
+            status,
+            error:
+              status.message ||
+              'Your email address is not verified. Check your inbox for a verification link, then try again.',
+          };
+        }
+
         return {
           canProceed: true,
           needsEmail: false,

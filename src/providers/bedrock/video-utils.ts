@@ -29,11 +29,10 @@ export type ImageFormat = 'png' | 'jpeg';
 export function loadImageData(imagePath: string): ImageLoadResult {
   if (imagePath.startsWith('file://')) {
     const filePath = imagePath.slice(7);
-    // Resolve to absolute path and validate no path traversal
-    const resolvedPath = path.resolve(filePath);
-    if (filePath.includes('..') && resolvedPath !== path.resolve(path.normalize(filePath))) {
+    if (filePath.split(/[\\/]+/).includes('..')) {
       return { error: `Invalid image path (path traversal detected): ${filePath}` };
     }
+    const resolvedPath = path.resolve(filePath);
     if (!fs.existsSync(resolvedPath)) {
       return { error: `Image file not found: ${resolvedPath}` };
     }

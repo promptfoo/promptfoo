@@ -4,7 +4,7 @@
  * Uses a multimodal LLM (Gemini) to evaluate video outputs against a rubric.
  */
 
-import { matchesVideoRubric } from '../matchers';
+import { matchesVideoRubric } from '../matchers/video';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';

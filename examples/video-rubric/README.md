@@ -2,7 +2,7 @@
 
 Demonstrates using `video-rubric` assertion to evaluate generated videos using LLM-as-a-judge.
 
-The `video-rubric` assertion uses a multimodal LLM (Gemini 3.0 Flash Preview by default) to evaluate video outputs against a custom rubric. This is useful for:
+The `video-rubric` assertion uses a multimodal LLM (Gemini 3 Flash Preview by default) to evaluate video outputs against a custom rubric. This is useful for:
 
 - Quality assessment of AI-generated videos
 - Checking if generated videos match the prompt
@@ -14,7 +14,7 @@ Set the following environment variables:
 
 ```bash
 export GOOGLE_API_KEY=your-google-api-key  # For video generation (Veo)
-export GEMINI_API_KEY=your-gemini-key      # For video evaluation (Gemini 3.0 Flash)
+export GEMINI_API_KEY=your-gemini-key      # For video evaluation (Gemini 3 Flash)
 ```
 
 ## Usage

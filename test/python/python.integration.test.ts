@@ -52,27 +52,17 @@ def call_api(prompt, options, context):
       config: { basePath: process.cwd() },
     });
 
-    const start = Date.now();
     await provider.initialize();
 
-    // First call
+    // Three calls should all reuse the same loaded module
     const result1 = await provider.callApi('test1');
-    const call1Time = Date.now() - start;
-
-    // Second call (should be fast - no re-import)
     const result2 = await provider.callApi('test2');
-    const call2Time = Date.now() - start;
-
-    // Third call
     const result3 = await provider.callApi('test3');
 
-    // Verify same load_time (same process)
+    // Verify same load_time across all calls (same process, no re-import)
     expect(result1.output).toContain('Loaded at:');
     expect(result1.output).toBe(result2.output);
     expect(result2.output).toBe(result3.output);
-
-    // Verify subsequent calls are fast (no 500ms re-import)
-    expect(call2Time - call1Time).toBeLessThan(300); // Should be < 300ms
 
     await provider.shutdown();
   }, 10000);

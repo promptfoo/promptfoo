@@ -16,7 +16,7 @@ providers:
 defaultTest:
   options:
     provider:
-      id: vertex:gemini-2.5-flash
+      id: vertex:gemini-3-flash-preview
       config:
         generationConfig:
           response_mime_type: application/json
@@ -27,7 +27,7 @@ tests:
     assert:
       - type: video-rubric
         # Override grading provider to use Vertex AI Gemini
-        provider: vertex:gemini-2.5-flash
+        provider: vertex:gemini-3-flash-preview
         value: |
           Evaluate the video based on the following criteria:
           1. Scene: A forest with trees visible

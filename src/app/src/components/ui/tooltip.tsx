@@ -32,4 +32,4 @@ function TooltipContent({
 
 const TooltipArrow = TooltipPrimitive.Arrow;
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, TooltipArrow };
+export { Tooltip, TooltipArrow, TooltipContent, TooltipProvider, TooltipTrigger };

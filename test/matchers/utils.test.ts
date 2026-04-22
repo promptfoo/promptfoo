@@ -1,11 +1,14 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { getAndCheckProvider, getGradingProvider, renderLlmRubricPrompt } from '../../src/matchers';
+import { getAndCheckProvider, getGradingProvider } from '../../src/matchers/providers';
+import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
+import { createMockProvider } from '../factories/provider';
+import { mockProcessEnv } from '../util/utils';
 
-import type { ApiProvider, ProviderTypeMap } from '../../src/types/index';
+import type { ProviderTypeMap } from '../../src/types/index';
 
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {
@@ -52,14 +55,14 @@ describe('getAndCheckProvider', () => {
     ).resolves.toBe(DefaultGradingProvider);
   });
 
-  it('should return the default provider when provider does not support type', async () => {
+  it('should throw when explicitly configured provider does not support type', async () => {
     const provider = {
       id: () => 'test-provider',
       callApi: () => Promise.resolve({ output: 'test' }),
     };
     await expect(
       getAndCheckProvider('embedding', provider, DefaultEmbeddingProvider, 'test check'),
-    ).resolves.toBe(DefaultEmbeddingProvider);
+    ).rejects.toThrow('is not a valid embedding provider');
   });
 
   it('should return the provider if it implements the required method', async () => {
@@ -89,10 +92,7 @@ describe('getAndCheckProvider', () => {
   });
 
   it('should return a provider from ApiProvider when specified', async () => {
-    const providerOptions: ApiProvider = {
-      id: () => 'custom-provider',
-      callApi: async () => ({}),
-    };
+    const providerOptions = createMockProvider({ id: 'custom-provider', response: {} });
     const provider = await getGradingProvider('text', providerOptions, DefaultGradingProvider);
     expect(provider?.id()).toBe('custom-provider');
   });
@@ -362,12 +362,12 @@ describe('tryParse and renderLlmRubricPrompt', () => {
 describe('PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
   afterEach(() => {
     // Clean up environment variable after each test
-    delete process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY;
+    mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: undefined });
   });
 
   describe('Default behavior (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=false)', () => {
     beforeEach(() => {
-      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'false';
+      mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: 'false' });
     });
 
     it('should stringify objects to prevent [object Object] issues', async () => {
@@ -395,7 +395,7 @@ describe('PROMPTFOO_DISABLE_OBJECT_STRINGIFY environment variable', () => {
 
   describe('Object access enabled (PROMPTFOO_DISABLE_OBJECT_STRINGIFY=true)', () => {
     beforeEach(() => {
-      process.env.PROMPTFOO_DISABLE_OBJECT_STRINGIFY = 'true';
+      mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: 'true' });
     });
 
     it('should allow direct object property access', async () => {

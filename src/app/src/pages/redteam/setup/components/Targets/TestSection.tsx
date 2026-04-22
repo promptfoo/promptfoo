@@ -15,11 +15,22 @@ import { AlertCircle, CheckCircle, ChevronDown, Info, Play, Send } from 'lucide-
 
 import type { ProviderOptions } from '../../types';
 
+interface ProviderResponseData {
+  metadata?: {
+    http?: { headers?: Record<string, string> };
+    finalRequestBody?: string;
+  };
+  raw?: unknown;
+  output?: unknown;
+  sessionId?: string;
+  error?: string;
+}
+
 export interface TestResult {
   success: boolean;
   message: string;
-  providerResponse?: any;
-  transformedRequest?: string | Record<string, any>;
+  providerResponse?: ProviderResponseData;
+  transformedRequest?: string | Record<string, unknown>;
   changes_needed?: boolean;
   changes_needed_suggestions?: string[];
 }
@@ -216,18 +227,14 @@ const TestSection: React.FC<TestSectionProps> = ({
                         {(testResult?.providerResponse?.metadata?.finalRequestBody ||
                           testResult?.transformedRequest) && (
                           <CodeBlock label="Rendered Body">
-                            {typeof (
-                              testResult?.providerResponse?.metadata?.finalRequestBody ||
-                              testResult?.transformedRequest
-                            ) === 'string'
-                              ? testResult?.providerResponse?.metadata?.finalRequestBody ||
-                                testResult?.transformedRequest
-                              : JSON.stringify(
-                                  testResult?.providerResponse?.metadata?.finalRequestBody ||
-                                    testResult?.transformedRequest,
-                                  null,
-                                  2,
-                                )}
+                            {(() => {
+                              const rendered =
+                                testResult?.providerResponse?.metadata?.finalRequestBody ||
+                                testResult?.transformedRequest;
+                              return typeof rendered === 'string'
+                                ? rendered
+                                : JSON.stringify(rendered, null, 2);
+                            })()}
                           </CodeBlock>
                         )}
                       </div>
@@ -237,8 +244,13 @@ const TestSection: React.FC<TestSectionProps> = ({
                     <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
                       <Label className="text-sm font-medium">Response</Label>
                       <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
-                        {testResult.providerResponse &&
-                        testResult.providerResponse.raw !== undefined ? (
+                        {testResult.providerResponse?.raw === undefined ? (
+                          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
+                            <p className="text-sm text-destructive">
+                              {testResult.providerResponse?.error || 'No response from provider'}
+                            </p>
+                          </div>
+                        ) : (
                           <>
                             {responseHeaders && Object.keys(responseHeaders).length > 0 && (
                               <CodeBlock label="Headers">
@@ -269,12 +281,6 @@ const TestSection: React.FC<TestSectionProps> = ({
                               </CodeBlock>
                             )}
                           </>
-                        ) : (
-                          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
-                            <p className="text-sm text-destructive">
-                              {testResult.providerResponse?.error || 'No response from provider'}
-                            </p>
-                          </div>
                         )}
                       </div>
                     </div>

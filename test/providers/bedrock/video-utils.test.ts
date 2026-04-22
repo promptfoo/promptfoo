@@ -47,14 +47,12 @@ describe('video-utils', () => {
       expect(result.error).toBeUndefined();
     });
 
-    it('should return error when file with path traversal does not exist', () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
+    it('should reject path traversal before checking the filesystem', () => {
       const result = loadImageData('file://../../../etc/passwd');
 
-      // Path traversal attempts that resolve to non-existent files return file not found error
-      expect(result.error).toContain('Image file not found');
+      expect(result.error).toContain('Invalid image path');
       expect(result.data).toBeUndefined();
+      expect(fs.existsSync).not.toHaveBeenCalled();
     });
 
     it('should return error when file does not exist', () => {

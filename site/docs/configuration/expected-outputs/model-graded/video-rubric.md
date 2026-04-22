@@ -148,7 +148,7 @@ tests:
 
 ## Requirements
 
-- A multimodal model that supports video understanding (Gemini 2.5 Flash/Pro recommended)
+- A multimodal model that supports video understanding (Gemini 3 Flash/Pro Preview recommended)
 - For Vertex AI: `GOOGLE_PROJECT_ID` environment variable and application default credentials
 - For AI Studio: `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable
 

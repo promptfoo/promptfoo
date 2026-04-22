@@ -6,8 +6,10 @@ import {
   XAI_VOICE_DEFAULT_API_URL,
   XAI_VOICE_DEFAULT_WS_URL,
   XAI_VOICE_DEFAULTS,
+  type XAIFunctionCallOutput,
   XAIVoiceProvider,
 } from '../../../src/providers/xai/voice';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
 
@@ -138,7 +140,7 @@ describe('XAI Voice Provider', () => {
   describe('API key handling', () => {
     it('returns error when API key is not set', async () => {
       const originalKey = process.env.XAI_API_KEY;
-      delete process.env.XAI_API_KEY;
+      mockProcessEnv({ XAI_API_KEY: undefined });
 
       try {
         const provider = new XAIVoiceProvider('grok-3');
@@ -149,7 +151,7 @@ describe('XAI Voice Provider', () => {
         );
       } finally {
         if (originalKey) {
-          process.env.XAI_API_KEY = originalKey;
+          mockProcessEnv({ XAI_API_KEY: originalKey });
         }
       }
     });
@@ -372,14 +374,14 @@ describe('XAI Voice Provider', () => {
 
     beforeEach(() => {
       originalEnvValue = process.env.XAI_API_BASE_URL;
-      delete process.env.XAI_API_BASE_URL;
+      mockProcessEnv({ XAI_API_BASE_URL: undefined });
     });
 
     afterEach(() => {
-      if (originalEnvValue !== undefined) {
-        process.env.XAI_API_BASE_URL = originalEnvValue;
+      if (originalEnvValue === undefined) {
+        mockProcessEnv({ XAI_API_BASE_URL: undefined });
       } else {
-        delete process.env.XAI_API_BASE_URL;
+        mockProcessEnv({ XAI_API_BASE_URL: originalEnvValue });
       }
     });
 
@@ -444,14 +446,14 @@ describe('XAI Voice Provider', () => {
     });
 
     it('uses XAI_API_BASE_URL environment variable', () => {
-      process.env.XAI_API_BASE_URL = 'https://env-proxy.com/v1';
+      mockProcessEnv({ XAI_API_BASE_URL: 'https://env-proxy.com/v1' });
       const provider = new TestableXAIVoiceProvider('grok-3');
       expect(provider.getApiUrl()).toBe('https://env-proxy.com/v1');
       expect(provider.getWebSocketUrl()).toBe('wss://env-proxy.com/v1/realtime');
     });
 
     it('config apiBaseUrl takes priority over environment variable', () => {
-      process.env.XAI_API_BASE_URL = 'https://env-proxy.com/v1';
+      mockProcessEnv({ XAI_API_BASE_URL: 'https://env-proxy.com/v1' });
       const provider = new TestableXAIVoiceProvider('grok-3', {
         config: { apiBaseUrl: 'https://config-proxy.com/v1' },
       });
@@ -467,7 +469,7 @@ describe('XAI Voice Provider', () => {
     });
 
     it('env overrides take priority over environment variable', () => {
-      process.env.XAI_API_BASE_URL = 'https://env-proxy.com/v1';
+      mockProcessEnv({ XAI_API_BASE_URL: 'https://env-proxy.com/v1' });
       const provider = new TestableXAIVoiceProvider('grok-3', {
         env: { XAI_API_BASE_URL: 'https://override-proxy.com/v1' },
       });
@@ -483,6 +485,110 @@ describe('XAI Voice Provider', () => {
       });
       expect(provider.config.apiBaseUrl).toBe('https://custom.example.com/v1');
       expect(provider.config.apiHost).toBe('host.example.com');
+    });
+
+    it('uses websocketUrl exactly as provided', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: { websocketUrl: 'wss://custom.example.com/path?token=xyz&session=abc' },
+      });
+      expect(provider.getWebSocketUrl()).toBe(
+        'wss://custom.example.com/path?token=xyz&session=abc',
+      );
+    });
+
+    it('websocketUrl takes priority over apiBaseUrl', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: {
+          websocketUrl: 'wss://override.example.com/custom',
+          apiBaseUrl: 'https://fallback.com/v1',
+        },
+      });
+      expect(provider.getWebSocketUrl()).toBe('wss://override.example.com/custom');
+    });
+
+    it('websocketUrl takes priority over apiHost', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: {
+          websocketUrl: 'wss://override.example.com/custom',
+          apiHost: 'fallback.com',
+        },
+      });
+      expect(provider.getWebSocketUrl()).toBe('wss://override.example.com/custom');
+    });
+
+    it('preserves query parameters in websocketUrl', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: { websocketUrl: 'wss://mock.local:8080/ws?auth=token123&debug=true' },
+      });
+      expect(provider.getWebSocketUrl()).toBe('wss://mock.local:8080/ws?auth=token123&debug=true');
+    });
+
+    it('allows ws:// protocol in websocketUrl', () => {
+      const provider = new TestableXAIVoiceProvider('grok-3', {
+        config: { websocketUrl: 'ws://localhost:3000/realtime' },
+      });
+      expect(provider.getWebSocketUrl()).toBe('ws://localhost:3000/realtime');
+    });
+
+    it('accepts websocketUrl in config', () => {
+      const provider = new XAIVoiceProvider('grok-3', {
+        config: {
+          websocketUrl: 'wss://custom.example.com/path',
+        },
+      });
+      expect(provider.config.websocketUrl).toBe('wss://custom.example.com/path');
+    });
+  });
+
+  // ============================================================================
+  // Function call output interface
+  // ============================================================================
+
+  describe('Function call output interface', () => {
+    it('XAIFunctionCallOutput has correct structure', () => {
+      const output: XAIFunctionCallOutput = {
+        name: 'set_volume',
+        arguments: { level: 50 },
+        result: 'success',
+      };
+      expect(output.name).toBe('set_volume');
+      expect(output.arguments).toEqual({ level: 50 });
+      expect(output.result).toBe('success');
+    });
+
+    it('XAIFunctionCallOutput allows optional result', () => {
+      const output: XAIFunctionCallOutput = {
+        name: 'get_weather',
+        arguments: { location: 'San Francisco' },
+      };
+      expect(output.name).toBe('get_weather');
+      expect(output.arguments).toEqual({ location: 'San Francisco' });
+      expect(output.result).toBeUndefined();
+    });
+
+    it('XAIFunctionCallOutput supports complex arguments', () => {
+      const output: XAIFunctionCallOutput = {
+        name: 'search',
+        arguments: {
+          query: 'test',
+          filters: { category: 'news', limit: 10 },
+          options: ['featured', 'recent'],
+        },
+        result: JSON.stringify({ results: [] }),
+      };
+      expect(output.arguments.query).toBe('test');
+      expect((output.arguments.filters as Record<string, unknown>).category).toBe('news');
+      expect(output.arguments.options).toEqual(['featured', 'recent']);
+    });
+
+    it('accepts functionCallHandler in config', () => {
+      const handler = async (_name: string, _args: string) => {
+        return JSON.stringify({ success: true });
+      };
+      const provider = new XAIVoiceProvider('grok-3', {
+        config: { functionCallHandler: handler },
+      });
+      expect(provider.config.functionCallHandler).toBe(handler);
     });
   });
 });
