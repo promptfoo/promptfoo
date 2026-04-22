@@ -18,7 +18,9 @@ Use custom policies for requirements such as:
 
 In the red team setup flow, go to **Application Details** first and describe the app. Then open **Plugins** and select the **Custom Policies** tab.
 
-<img src="/img/docs/red-team/custom-policies-empty.png" alt="Custom policies tab with Add Policy, Upload CSV, and Suggested Policies controls" style={{ width: '90%' }} />
+<a href="/img/docs/red-team/custom-policies-empty.png" className="redteamPolicyScreenshotLink">
+  <img src="/img/docs/red-team/custom-policies-empty.png" alt="Custom policies tab with Add Policy, Upload CSV, and Suggested Policies controls" className="redteamPolicyScreenshot" loading="lazy" />
+</a>
 
 From this screen you can:
 
@@ -29,11 +31,15 @@ From this screen you can:
 
 When adding a policy manually, give it a short name and write the rule as the target behavior you want enforced.
 
-<img src="/img/docs/red-team/custom-policies-add-dialog.png" alt="Add New Policy dialog with policy name and policy text fields" style={{ width: '90%' }} />
+<a href="/img/docs/red-team/custom-policies-add-dialog.png" className="redteamPolicyScreenshotLink">
+  <img src="/img/docs/red-team/custom-policies-add-dialog.png" alt="Add New Policy dialog with policy name and policy text fields" className="redteamPolicyScreenshot" loading="lazy" />
+</a>
 
 Uploaded CSV policies are added as separate policy rows. You can edit the generated names afterward.
 
-<img src="/img/docs/red-team/custom-policies-table.png" alt="Custom policies table after adding one policy manually and importing two policies from CSV" style={{ width: '90%' }} />
+<a href="/img/docs/red-team/custom-policies-table.png" className="redteamPolicyScreenshotLink">
+  <img src="/img/docs/red-team/custom-policies-table.png" alt="Custom policies table after adding one policy manually and importing two policies from CSV" className="redteamPolicyScreenshot" loading="lazy" />
+</a>
 
 ## Configure Policies In YAML
 
