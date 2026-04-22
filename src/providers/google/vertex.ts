@@ -42,7 +42,12 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { ClaudeRequest, ClaudeResponse, ClaudeThinkingConfig } from './types';
+import type {
+  ClaudeRequest,
+  ClaudeResponse,
+  ClaudeThinkingConfig,
+  GoogleProviderConfig,
+} from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -53,6 +58,21 @@ import type {
 
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
+
+type VertexEmbeddingPredictResponse = {
+  predictions?: Array<{
+    embeddings?: {
+      values?: number[];
+      statistics?: {
+        token_count?: number;
+      };
+    };
+  }>;
+};
+
+type VertexEmbeddingProviderConfig = GoogleProviderConfig & {
+  autoTruncate?: boolean;
+};
 
 function getVertexApiHost(
   region: string,
@@ -1068,13 +1088,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;
-  config: any;
-  env?: any;
+  config: VertexEmbeddingProviderConfig;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, config: any = {}, env?: any) {
+  constructor(modelName: string, options: GoogleProviderOptions = {}) {
     this.modelName = modelName;
-    this.config = config;
-    this.env = env;
+    this.config = options.config || {};
+    this.env = options.env;
   }
 
   /**
@@ -1124,7 +1144,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       },
     };
 
-    let data: any;
+    let data: VertexEmbeddingPredictResponse = {};
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
@@ -1136,7 +1156,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         method: 'POST',
         data: body,
       });
-      data = res.data;
+      data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
       logger.error(`Vertex API call error: ${err}`);
       throw err;
@@ -1163,4 +1183,4 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 }
 
 export const DefaultGradingProvider = new VertexChatProvider('gemini-2.5-pro');
-export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');
+export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('gemini-embedding-001');
