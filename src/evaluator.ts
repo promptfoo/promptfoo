@@ -2727,12 +2727,14 @@ function configureEvaluationTimeout({
   combinedAbortSignal,
   concurrency,
   options,
+  providerAbortSignal,
   runEvalOptions,
   testSuite,
 }: {
   combinedAbortSignal: AbortSignal;
   concurrency: number;
   options: EvaluateOptions;
+  providerAbortSignal?: AbortSignal;
   runEvalOptions: RunEvalOptions[];
   testSuite: TestSuite;
 }): {
@@ -2740,6 +2742,7 @@ function configureEvaluationTimeout({
   globalTimeout?: NodeJS.Timeout;
   isEvalTimedOut: () => boolean;
   maxEvalTimeMs: number;
+  providerAbortSignal?: AbortSignal;
 } {
   const testCaseTimeoutMs =
     options.timeoutMs === undefined ? getEvalTimeoutMs() : options.timeoutMs;
@@ -2751,6 +2754,7 @@ function configureEvaluationTimeout({
   let evalTimedOut = false;
   let globalTimeout: NodeJS.Timeout | undefined;
   let configuredAbortSignal = combinedAbortSignal;
+  let configuredProviderAbortSignal = providerAbortSignal;
 
   if (maxEvalTimeMs > 0) {
     const globalAbortController = new AbortController();
@@ -2760,6 +2764,9 @@ function configureEvaluationTimeout({
         : globalAbortController.signal;
     }
     configuredAbortSignal = AbortSignal.any([combinedAbortSignal, globalAbortController.signal]);
+    configuredProviderAbortSignal = providerAbortSignal
+      ? AbortSignal.any([providerAbortSignal, globalAbortController.signal])
+      : globalAbortController.signal;
     globalTimeout = setTimeout(() => {
       evalTimedOut = true;
       globalAbortController.abort();
@@ -2775,6 +2782,7 @@ function configureEvaluationTimeout({
     globalTimeout,
     isEvalTimedOut: () => evalTimedOut,
     maxEvalTimeMs,
+    providerAbortSignal: configuredProviderAbortSignal,
   };
 }
 
@@ -4314,6 +4322,7 @@ class Evaluator {
       combinedAbortSignal,
       concurrency,
       options,
+      providerAbortSignal,
       runEvalOptions,
       testSuite,
     });
@@ -4449,17 +4458,26 @@ class Evaluator {
       return interruptedEval;
     }
 
-    await this.processComparisonAssertions({
-      ciProgressReporter,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      providerAbortSignal,
-      repeatCacheContextByTestIdx,
-      rowsWithMaxScoreAssertion,
-      rowsWithSelectBestAssertion,
-      runEvalOptions,
-    });
+    try {
+      if (!timeoutConfig.isEvalTimedOut()) {
+        await this.processComparisonAssertions({
+          ciProgressReporter,
+          isWebUI,
+          progressBarManager,
+          prompts,
+          providerAbortSignal: timeoutConfig.providerAbortSignal,
+          repeatCacheContextByTestIdx,
+          rowsWithMaxScoreAssertion,
+          rowsWithSelectBestAssertion,
+          runEvalOptions,
+        });
+      }
+    } catch (err) {
+      if (!timeoutConfig.isEvalTimedOut()) {
+        throw err;
+      }
+      logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+    }
 
     await this.finalizeEvaluation({
       assertionTypes,

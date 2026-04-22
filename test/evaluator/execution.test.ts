@@ -835,6 +835,80 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('applies maxEvalTimeMs to select-best comparison grading', async () => {
+    vi.useFakeTimers();
+
+    const matchers = await import('../../src/matchers/comparison');
+    const { getProviderCallExecutionContext } = await import(
+      '../../src/scheduler/providerCallExecutionContext'
+    );
+
+    let comparisonTimer: NodeJS.Timeout | null = null;
+    let evalPromise: Promise<Eval> | undefined;
+    let observedComparisonAbortSignal: AbortSignal | undefined;
+    const matchesSelectBestSpy = vi.spyOn(matchers, 'matchesSelectBest').mockImplementation(() => {
+      observedComparisonAbortSignal = getProviderCallExecutionContext()?.abortSignal;
+      return new Promise((resolve, reject) => {
+        comparisonTimer = setTimeout(() => {
+          resolve([
+            { pass: true, score: 1, reason: 'Selected as best' },
+            { pass: false, score: 0, reason: 'Not selected' },
+          ]);
+        }, 1_000);
+
+        observedComparisonAbortSignal?.addEventListener(
+          'abort',
+          () => {
+            if (comparisonTimer) {
+              clearTimeout(comparisonTimer);
+            }
+            reject(new Error('comparison aborted'));
+          },
+          { once: true },
+        );
+      });
+    });
+    const targetProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'Target output',
+        tokenUsage: createEmptyTokenUsage(),
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [targetProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [{ type: 'select-best', value: 'pick the best response' }],
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    try {
+      evalPromise = evaluate(testSuite, evalRecord, { maxEvalTimeMs: 50 });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(matchesSelectBestSpy).toHaveBeenCalledTimes(1);
+      expect(observedComparisonAbortSignal?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(observedComparisonAbortSignal?.aborted).toBe(true);
+
+      await evalPromise;
+    } finally {
+      await vi.runOnlyPendingTimersAsync();
+      await evalPromise?.catch(() => undefined);
+      matchesSelectBestSpy.mockRestore();
+      if (comparisonTimer) {
+        clearTimeout(comparisonTimer);
+      }
+      vi.useRealTimers();
+    }
+  });
+
   it('flushes queued grouped grading before writing max-duration timeout rows', async () => {
     vi.useFakeTimers();
 
