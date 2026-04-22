@@ -202,6 +202,24 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     expect(response.body.table.body[0].test.vars.image).toBe(oversized);
   });
 
+  it('returns 413 for legacy eval tables that overflow instead of persisting placeholders on the round-trip', async () => {
+    const eval_ = (await Eval.findById('large-eval')) as unknown as Eval;
+    vi.mocked(Eval.findById).mockResolvedValueOnce({
+      ...eval_,
+      version: () => 3,
+    } as unknown as Eval);
+
+    mockNextPayloadStringifyRangeError(
+      (value) => value !== null && typeof value === 'object' && 'table' in value,
+    );
+
+    const response = await request(app).get('/api/eval/large-eval/table');
+
+    expect(response.status).toBe(413);
+    expect(response.body).toEqual({ error: 'Eval table response is too large to serialize' });
+    expect(response.headers['x-promptfoo-response-truncated']).toBeUndefined();
+  });
+
   it('strips oversized table strings and preserves table shape when JSON serialization overflows', async () => {
     mockNextPayloadStringifyRangeError(
       (value) => value !== null && typeof value === 'object' && 'table' in value,

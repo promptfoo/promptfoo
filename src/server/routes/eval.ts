@@ -407,7 +407,8 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   // Version 3 evals persist the client table for legacy manual-rating updates.
   // Keep those tables full so a rating PATCH does not write trimmed detail back to storage.
-  const tableForResponse = eval_.version() < 4 ? returnTable : trimEvalTableForApi(returnTable);
+  const isLegacyTable = eval_.version() < 4;
+  const tableForResponse = isLegacyTable ? returnTable : trimEvalTableForApi(returnTable);
   const leanConfig = trimEvalConfigForTableApi(eval_.config);
   const responsePayload = EvalSchemas.Table.Response.parse({
     table: tableForResponse,
@@ -424,7 +425,10 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   sendJsonResponse(res, responsePayload as unknown as EvalTableDTO, {
     evalId: id,
-    stripOversizedStringsOnRangeError: true,
+    // Legacy v3 clients PATCH the whole table back via saveManualRating; returning
+    // placeholder strings on overflow would silently overwrite stored content, so
+    // we return 413 instead and let the client surface the error.
+    stripOversizedStringsOnRangeError: !isLegacyTable,
     tooLargeMessage: 'Eval table response is too large to serialize',
   });
 });
