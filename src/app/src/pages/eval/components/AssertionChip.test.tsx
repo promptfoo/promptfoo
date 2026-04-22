@@ -399,6 +399,7 @@ describe('AssertionChip', () => {
     await userEvent.click(screen.getByLabelText('Show failed-set details'));
 
     expect(screen.getByText('failed-child')).toBeInTheDocument();
+    expect(screen.getByText('ALL must pass')).toBeInTheDocument();
     expect(screen.getAllByTestId(/child-assertion-/)[0]).toHaveTextContent('0.00');
   });
 
