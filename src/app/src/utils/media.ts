@@ -60,19 +60,17 @@ function resolveInlineMediaSource(
     kind,
     format,
     minimumBase64Length = 1,
-    allowExternalUrls = false,
   }: {
     kind: 'audio' | 'image';
     format: string;
     minimumBase64Length?: number;
-    allowExternalUrls?: boolean;
   },
 ): string | undefined {
   if (!data) {
     return undefined;
   }
 
-  const resolvedUrl = allowExternalUrls ? resolveMediaUrl(data) : resolveBlobUri(data);
+  const resolvedUrl = resolveBlobUri(data);
   if (resolvedUrl) {
     return resolvedUrl;
   }
