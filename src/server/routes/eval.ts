@@ -169,8 +169,12 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const { table, config, configPatch } = bodyResult.data;
 
   try {
-    // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvaluateTable
-    await updateResult(id, config, table as unknown as EvaluateTable | undefined, configPatch);
+    await updateResult(id, {
+      config,
+      configPatch,
+      // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with EvaluateTable
+      table: table as unknown as EvaluateTable | undefined,
+    });
     res.json(EvalSchemas.Update.Response.parse({ message: 'Eval updated successfully' }));
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });

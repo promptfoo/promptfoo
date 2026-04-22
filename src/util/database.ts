@@ -181,14 +181,18 @@ export async function readResult(
   }
 }
 
-export async function updateResult(
-  id: string,
-  newConfig?: Partial<UnifiedConfig>,
-  newTable?: EvaluateTable,
-  configPatch?: Partial<UnifiedConfig>,
-): Promise<void> {
+export type UpdateResultOptions = {
+  /** Replace the stored config entirely. */
+  config?: Partial<UnifiedConfig>;
+  /** Shallow-merge over the current config. Applied after `config`. */
+  configPatch?: Partial<UnifiedConfig>;
+  /** Replace the stored table. */
+  table?: EvaluateTable;
+};
+
+export async function updateResult(id: string, options: UpdateResultOptions = {}): Promise<void> {
+  const { config, configPatch, table } = options;
   try {
-    // Fetch the existing eval data from the database
     const existingEval = await Eval.findById(id);
 
     if (!existingEval) {
@@ -196,8 +200,8 @@ export async function updateResult(
       return;
     }
 
-    if (newConfig) {
-      existingEval.config = newConfig;
+    if (config) {
+      existingEval.config = config;
     }
     if (configPatch) {
       existingEval.config = {
@@ -205,8 +209,8 @@ export async function updateResult(
         ...configPatch,
       };
     }
-    if (newTable) {
-      existingEval.setTable(newTable);
+    if (table) {
+      existingEval.setTable(table);
     }
 
     await existingEval.save();
