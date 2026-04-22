@@ -71,12 +71,29 @@ export function GenerateTestCasesDialog({
   // Dialog state
   const [showProgress, setShowProgress] = useState(false);
 
-  // Fetch capabilities on mount
+  // Fetch capabilities when the dialog opens.
   useEffect(() => {
-    getGenerationCapabilities().then((caps) => {
-      setAssertionType(caps.defaultAssertionType);
-    });
-  }, []);
+    if (!open) {
+      return;
+    }
+
+    let isMounted = true;
+    getGenerationCapabilities()
+      .then((caps) => {
+        if (isMounted) {
+          setAssertionType(caps.defaultAssertionType);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setAssertionType('llm-rubric');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [open]);
 
   // Generation job hook
   const { startJob, cancelJob, jobId, status, progress, total, phase, error, reset } =

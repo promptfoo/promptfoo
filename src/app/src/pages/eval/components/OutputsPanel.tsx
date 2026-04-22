@@ -2,6 +2,8 @@ import React from 'react';
 
 import Citations from './Citations';
 
+import type { Citation } from './Citations';
+
 interface CodeDisplayProps {
   content: string;
   title: string;
@@ -26,7 +28,7 @@ interface OutputsPanelProps {
   onMouseEnter: (element: string) => void;
   onMouseLeave: () => void;
   CodeDisplay: CodeDisplayComponent;
-  citations?: any;
+  citations?: Citation | Citation[];
 }
 
 export function OutputsPanel({

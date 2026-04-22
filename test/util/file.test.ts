@@ -22,6 +22,7 @@ import {
   isJavascriptFile,
   isVideoFile,
 } from '../../src/util/fileExtensions';
+import { mockProcessEnv } from './utils';
 
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
@@ -323,7 +324,7 @@ describe('file utilities', () => {
     });
 
     it('should handle a path with environment variables in Nunjucks template', () => {
-      process.env.TEST_ROOT_PATH = '/root/dir';
+      mockProcessEnv({ TEST_ROOT_PATH: '/root/dir' });
       const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
 
       const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
@@ -331,7 +332,7 @@ describe('file utilities', () => {
 
       expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
 
-      delete process.env.TEST_ROOT_PATH;
+      mockProcessEnv({ TEST_ROOT_PATH: undefined });
     });
 
     it('should ignore basePath when file path is absolute', () => {
@@ -542,8 +543,9 @@ describe('file utilities', () => {
     it('should handle objects with prototype pollution attempts safely', () => {
       vi.mocked(fs.readFileSync).mockReturnValueOnce('malicious content');
 
+      const protoKey = '__proto__';
       const config = {
-        __proto__: 'file://malicious.txt',
+        [protoKey]: 'file://malicious.txt',
         constructor: { normal: 'value' },
         prototype: ['safe', 'array'],
         normal: 'safe value',
@@ -552,11 +554,12 @@ describe('file utilities', () => {
       const result = maybeLoadConfigFromExternalFile(config);
 
       expect(result).toEqual({
-        __proto__: 'malicious content',
+        [protoKey]: 'malicious content',
         constructor: { normal: 'value' },
         prototype: ['safe', 'array'],
         normal: 'safe value',
       });
+      expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     });
 
     it('should handle very large nested structures efficiently', () => {
@@ -1650,12 +1653,12 @@ describe('file utilities', () => {
     });
 
     it('should throw an error for non-existent file path when PROMPTFOO_STRICT_FILES is true', async () => {
-      process.env.PROMPTFOO_STRICT_FILES = 'true';
+      mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
       vi.spyOn(fs, 'statSync').mockImplementation(() => {
         throw new Error('File does not exist');
       });
       expect(() => parsePathOrGlob('/base', 'nonexistent.js')).toThrow('File does not exist');
-      delete process.env.PROMPTFOO_STRICT_FILES;
+      mockProcessEnv({ PROMPTFOO_STRICT_FILES: undefined });
     });
 
     it('should properly test file existence when function name in the path', async () => {
@@ -1686,14 +1689,15 @@ describe('file utilities', () => {
 
     it('should handle paths with environment variables', async () => {
       vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
-      process.env.FILE_PATH = 'file.txt';
-      expect(parsePathOrGlob('/base', process.env.FILE_PATH)).toEqual({
+      mockProcessEnv({ FILE_PATH: 'file.txt' });
+      const filePath = process.env.FILE_PATH as string;
+      expect(parsePathOrGlob('/base', filePath)).toEqual({
         extension: '.txt',
         functionName: undefined,
         isPathPattern: false,
         filePath: path.join('/base', 'file.txt'),
       });
-      delete process.env.FILE_PATH;
+      mockProcessEnv({ FILE_PATH: undefined });
     });
 
     it('should handle glob patterns in file path', async () => {

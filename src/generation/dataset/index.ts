@@ -228,7 +228,7 @@ export async function generateDataset(
   if (mergedOptions.diversity?.enabled) {
     progress.setPhase('Measuring diversity');
     logger.debug('Measuring test case diversity');
-    diversity = await measureDiversity(testCases, provider);
+    diversity = await measureDiversity(testCases, provider, mergedOptions.diversity);
     progress.increment();
     logger.debug(`Diversity score: ${diversity.score.toFixed(3)}`);
   }
@@ -244,7 +244,8 @@ export async function generateDataset(
 
     while (iterationRounds < maxRounds) {
       // Check if we need more iterations
-      const currentDiversity = diversity || (await measureDiversity(finalTestCases, provider));
+      const currentDiversity =
+        diversity || (await measureDiversity(finalTestCases, provider, mergedOptions.diversity));
       if (currentDiversity.score >= targetDiversity) {
         logger.debug(`Target diversity reached (${currentDiversity.score.toFixed(3)})`);
         break;
@@ -269,7 +270,7 @@ export async function generateDataset(
       );
 
       finalTestCases = [...finalTestCases, ...additionalCases];
-      diversity = await measureDiversity(finalTestCases, provider);
+      diversity = await measureDiversity(finalTestCases, provider, mergedOptions.diversity);
 
       iterationRounds++;
       progress.increment();

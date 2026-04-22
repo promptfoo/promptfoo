@@ -4,13 +4,6 @@ import { getDefaultProviders } from '../../providers/defaults';
 import type { ApiEmbeddingProvider, ApiProvider, VarMapping } from '../../types';
 import type { ConceptAnalysis, DiversityMetrics, DiversityOptions } from '../types';
 
-// Default diversity options for reference (not currently used but defines API defaults)
-const _DEFAULT_OPTIONS: DiversityOptions = {
-  enabled: true,
-  targetScore: 0.7,
-  measureMethod: 'embedding',
-};
-
 /**
  * Calculates cosine similarity between two vectors.
  * Replicates the function from src/matchers.ts for local use.
@@ -123,15 +116,17 @@ async function getEmbeddings(
 }
 
 /**
- * Measures diversity of test cases using embeddings.
+ * Measures diversity of test cases using embeddings or local text distance.
  *
  * @param testCases - Array of test cases to measure
- * @param provider - Optional embedding provider (uses default if not provided)
+ * @param provider - Optional embedding provider
+ * @param options - Diversity measurement options
  * @returns Diversity metrics
  */
 export async function measureDiversity(
   testCases: VarMapping[],
   provider?: ApiProvider,
+  options: Partial<DiversityOptions> = {},
 ): Promise<DiversityMetrics> {
   if (testCases.length <= 1) {
     return {
@@ -143,6 +138,12 @@ export async function measureDiversity(
   }
 
   logger.debug(`Measuring diversity of ${testCases.length} test cases`);
+
+  const measureMethod = options.measureMethod ?? (provider ? 'embedding' : 'text');
+  if (measureMethod === 'text') {
+    logger.debug('Using text-based diversity measurement');
+    return calculateTextDiversity(testCases);
+  }
 
   // Try to get an embedding provider
   let embeddingProvider: ApiEmbeddingProvider | undefined;

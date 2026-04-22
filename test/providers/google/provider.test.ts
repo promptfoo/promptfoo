@@ -7,6 +7,7 @@ import * as util from '../../../src/providers/google/util';
 import * as fetchUtil from '../../../src/util/fetch/index';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import * as templates from '../../../src/util/templates';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -207,6 +208,15 @@ describe('GoogleProvider', () => {
       expect(endpoint).toContain('/v1alpha/');
     });
 
+    it('should use v1beta for gemini-3.1 models', () => {
+      const gemini31Provider = new GoogleProvider('gemini-3.1-pro-preview', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const endpoint = gemini31Provider.getApiEndpoint('generateContent');
+      expect(endpoint).toContain('/v1beta/');
+    });
+
     it('should allow explicit apiVersion override in AI Studio mode', () => {
       // Test that config.apiVersion takes precedence over auto-detection
       const overrideProvider = new GoogleProvider('gemini-pro', {
@@ -256,15 +266,15 @@ describe('GoogleProvider', () => {
 
     it('should throw error when API key is missing in AI Studio mode', async () => {
       // Delete all possible API key env vars
-      delete process.env.GEMINI_API_KEY;
-      delete process.env.GOOGLE_API_KEY;
-      delete process.env.PALM_API_KEY;
-      delete process.env.VERTEX_API_KEY;
+      mockProcessEnv({ GEMINI_API_KEY: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: undefined });
+      mockProcessEnv({ PALM_API_KEY: undefined });
+      mockProcessEnv({ VERTEX_API_KEY: undefined });
       // Also delete project-related env vars that would trigger Vertex mode detection
-      delete process.env.GOOGLE_PROJECT_ID;
-      delete process.env.VERTEX_PROJECT_ID;
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_GENAI_USE_VERTEXAI;
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+      mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+      mockProcessEnv({ GOOGLE_GENAI_USE_VERTEXAI: undefined });
 
       // Explicitly set vertexai: false to ensure AI Studio mode regardless of env vars
       const noKeyProvider = new GoogleProvider('gemini-pro', {
@@ -353,7 +363,15 @@ describe('GoogleProvider', () => {
       });
 
       it('should call API using Google client for OAuth mode', async () => {
-        await provider.callApi('test prompt');
+        const getProjectIdSpy = vi
+          .spyOn(provider as any, 'getProjectId')
+          .mockResolvedValue('my-project');
+
+        try {
+          await provider.callApi('test prompt');
+        } finally {
+          getProjectIdSpy.mockRestore();
+        }
 
         expect(vi.mocked(util.getGoogleClient)).toHaveBeenCalled();
       });
@@ -555,6 +573,222 @@ describe('GoogleProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result.tokenUsage?.completionDetails?.reasoning).toBe(100);
+    });
+  });
+
+  describe('cost calculation', () => {
+    it('should return cost for AI Studio mode with known model', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-pro: input=0.5/1e6, output=1.5/1e6
+      // cost = 0.5e-6 * 10 + 1.5e-6 * 5 = 1.25e-5
+      expect(result.cost).toBeCloseTo(1.25e-5, 10);
+    });
+
+    it('should return cost for Vertex AI mode with known model', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { vertexai: true, apiKey: 'test-vertex-key' },
+      });
+
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 20, totalTokenCount: 30 },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+      // gemini-pro: input 0.5/1e6, output 1.5/1e6
+      // 10 prompt + 20 completion = 0.000035
+      expect(result.cost).toBeCloseTo(0.000035, 10);
+    });
+
+    it('should use Vertex-specific pricing when it differs from AI Studio', async () => {
+      const provider = new GoogleProvider('gemini-2.0-flash', {
+        config: { vertexai: true, apiKey: 'test-vertex-key' },
+      });
+
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+      // Vertex pricing for gemini-2.0-flash: input $0.15/1M, output $0.60/1M
+      // 1000 * 0.15/1e6 + 500 * 0.60/1e6 = 0.00045
+      expect(result.cost).toBeCloseTo(0.00045, 10);
+    });
+
+    it('should return undefined cost for cached responses', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should use tiered pricing when prompt tokens exceed threshold', async () => {
+      const provider = new GoogleProvider('gemini-2.5-pro', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 250_000,
+            candidatesTokenCount: 1000,
+            totalTokenCount: 251_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-2.5-pro tiered: input=2.5/1e6, output=15.0/1e6 (above 200k threshold)
+      // cost = 2.5e-6 * 250000 + 15.0e-6 * 1000 = 0.625 + 0.015 = 0.64
+      expect(result.cost).toBeCloseTo(0.64, 5);
+    });
+
+    it('should use standard pricing when prompt tokens are below threshold', async () => {
+      const provider = new GoogleProvider('gemini-2.5-pro', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 100_000,
+            candidatesTokenCount: 1000,
+            totalTokenCount: 101_000,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-2.5-pro standard: input=1.25/1e6, output=10.0/1e6 (below 200k threshold)
+      // cost = 1.25e-6 * 100000 + 10.0e-6 * 1000 = 0.125 + 0.01 = 0.135
+      expect(result.cost).toBeCloseTo(0.135, 5);
+    });
+
+    it('should use config.cost override when provided', async () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        config: { apiKey: 'test-key', cost: 0.001 },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 50, totalTokenCount: 150 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // config.cost=0.001 applied to both input and output
+      // cost = 0.001 * 100 + 0.001 * 50 = 0.15
+      expect(result.cost).toBeCloseTo(0.15, 5);
+    });
+
+    it('should include thinking tokens in cost calculation', async () => {
+      const provider = new GoogleProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 315,
+            thoughtsTokenCount: 300,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-2.5-flash: input=0.3/1e6, output=2.5/1e6
+      // completionForCost = candidatesTokenCount + thoughtsTokenCount = 5 + 300 = 305
+      // cost = 0.3e-6 * 10 + 2.5e-6 * 305 = 0.000003 + 0.0007625 = 0.0007655
+      expect(result.cost).toBeCloseTo(0.0007655, 10);
+    });
+
+    it('should not double-count when thoughtsTokenCount is zero', async () => {
+      const provider = new GoogleProvider('gemini-2.5-flash', {
+        config: { apiKey: 'test-key' },
+      });
+
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 5,
+            totalTokenCount: 15,
+            thoughtsTokenCount: 0,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      // gemini-2.5-flash: input=0.3/1e6, output=2.5/1e6
+      // completionForCost = 5 + 0 = 5
+      // cost = 0.3e-6 * 10 + 2.5e-6 * 5 = 0.000003 + 0.0000125 = 0.0000155
+      expect(result.cost).toBeCloseTo(0.0000155, 10);
     });
   });
 

@@ -16,6 +16,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  Inputs,
   PluginConfig,
   ProviderResponse,
   TokenUsage,
@@ -149,9 +150,8 @@ interface PromptfooChatCompletionOptions {
     | 'voice-crescendo-eval';
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
 }
 
 /**

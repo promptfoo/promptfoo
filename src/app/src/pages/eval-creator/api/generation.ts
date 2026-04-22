@@ -84,6 +84,11 @@ const ConceptAnalysisSchema = z.object({
 
 const DiversityMetricsSchema = z.object({
   score: z.number(),
+  averageDistance: z.number().optional(),
+  minDistance: z.number().optional(),
+  maxDistance: z.number().optional(),
+  clusterCount: z.number().optional(),
+  coverageGaps: z.array(z.string()).optional(),
   clusters: z.number().optional(),
   gaps: z.array(z.string()).optional(),
 });
@@ -141,7 +146,9 @@ function normalizeCoverage(coverage: unknown):
         id: String(r.id || ''),
         description: String(r.description || ''),
         coverageLevel: (r.coverageLevel as 'none' | 'partial' | 'full') || 'none',
-        matchingAssertions: Array.isArray(r.matchingAssertions) ? r.matchingAssertions : [],
+        matchingAssertions: Array.isArray(r.matchingAssertions)
+          ? r.matchingAssertions.map(String)
+          : [],
       };
     }
 
@@ -151,15 +158,18 @@ function normalizeCoverage(coverage: unknown):
       id: String(requirement?.id || requirement?.description?.toString().slice(0, 20) || ''),
       description: String(requirement?.description || ''),
       coverageLevel: (r.coverageLevel as 'none' | 'partial' | 'full') || 'none',
-      matchingAssertions: Array.isArray(r.coveredBy) ? r.coveredBy : [],
+      matchingAssertions: Array.isArray(r.coveredBy) ? r.coveredBy.map(String) : [],
     };
   });
 
-  return {
+  const normalized = {
     requirements: normalizedRequirements,
     overallScore: typeof cov.overallScore === 'number' ? cov.overallScore : 0,
-    gaps: Array.isArray(cov.gaps) ? cov.gaps : [],
+    gaps: Array.isArray(cov.gaps) ? cov.gaps.map(String) : [],
   };
+
+  const parsed = CoverageAnalysisSchema.safeParse(normalized);
+  return parsed.success ? parsed.data : undefined;
 }
 
 /**
@@ -492,7 +502,7 @@ const CoverageAnalysisResponseSchema = z.object({
   success: z.boolean(),
   data: z
     .object({
-      coverage: CoverageAnalysisSchema,
+      coverage: z.unknown(),
     })
     .optional(),
   error: z.string().optional(),
@@ -552,7 +562,11 @@ export async function measureDiversitySync(
     throw new Error(response.error || 'Failed to measure diversity');
   }
 
-  return response.data.diversity;
+  return {
+    score: response.data.diversity.score,
+    clusters: response.data.diversity.clusters ?? response.data.diversity.clusterCount,
+    gaps: response.data.diversity.gaps ?? response.data.diversity.coverageGaps,
+  };
 }
 
 /**

@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - negated script assertions'
+
+providers:
+  - echo
+
+prompts:
+  - '{{value}}'
+
+tests:
+  - description: not-javascript inverts a boolean return
+    vars:
+      value: safe-output
+    assert:
+      - type: not-javascript
+        value: output.includes('forbidden')
+
+  - description: not-python preserves score when a numeric return is below threshold
+    vars:
+      value: safe-output
+    assert:
+      - type: not-python
+        value: '0.25'
+        threshold: 0.5
+
+  - description: not-python inverts a JSON-stringified low-score GradingResult
+    vars:
+      value: safe-output
+    assert:
+      - type: not-python
+        value: |
+          return '{"pass": true, "score": 0.25, "reason": "Python raw low score"}'
+        threshold: 0.5
+
+  - description: not-ruby inverts an object return
+    vars:
+      value: safe-output
+    assert:
+      - type: not-ruby
+        value: "{ pass_: false, score: 0.4, reason: 'Ruby raw false' }"
+
+  - description: not-ruby inverts a JSON-stringified low-score GradingResult
+    vars:
+      value: safe-output
+    assert:
+      - type: not-ruby
+        value: |
+          return '{"pass": true, "score": 0.4, "reason": "Ruby raw low score"}'
+        threshold: 0.5

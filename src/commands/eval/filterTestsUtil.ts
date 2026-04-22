@@ -1,5 +1,6 @@
 import logger from '../../logger';
 import Eval from '../../models/eval';
+import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
 
 import type { EvaluateResult, TestCase, TestSuite } from '../../types/index';
@@ -82,44 +83,159 @@ export async function filterTestsByResults(
     return [];
   }
 
-  // Match tests against filtered results.
+  // Log unique test cases in filtered results for debugging
+  const uniqueVarsInResults = new Set(
+    filteredResults.map((r) => JSON.stringify(filterRuntimeVars(r.vars))),
+  );
+  logger.debug(
+    `[filterTestsByResults] ${uniqueVarsInResults.size} unique test cases (by vars) in filtered results`,
+  );
+
+  // Match tests against filtered results and restore runtime vars.
   // We try two matching strategies:
   // 1. First, try with defaultTest.vars merged (for new results where defaults are merged)
   // 2. Fallback: try without merging defaults (for old results that don't have defaults merged)
   // This ensures backward compatibility with results stored before the merge was consistent.
-  const matchedTests = [...testSuite.tests].filter((test) => {
+  //
+  // When a match is found, we restore runtime variables (like _conversation, sessionId)
+  // from the result into the test so they're available during re-evaluation.
+  const matchedTests: Tests = [];
+
+  for (const test of testSuite.tests) {
     const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
 
     // Try matching with merged defaults first (new results)
-    if (filteredResults.some((result) => resultIsForTestCase(result, testWithDefaults))) {
-      return true;
+    // Prefer results that have runtime vars to ensure we restore them when available.
+    // This prevents issues when a test matches multiple results and only some have runtime vars.
+    let matchedResult = filteredResults.find(
+      (result) =>
+        resultIsForTestCase(result, testWithDefaults) &&
+        extractRuntimeVars(result.vars) !== undefined,
+    );
+
+    // Fallback: any matching result (even without runtime vars)
+    if (!matchedResult) {
+      matchedResult = filteredResults.find((result) =>
+        resultIsForTestCase(result, testWithDefaults),
+      );
     }
 
     // Fallback: try matching without defaults (old results that don't have defaults merged)
-    // Only try fallback if defaultTest.vars actually adds something
-    const hasDefaultVars =
-      testSuite.defaultTest &&
-      typeof testSuite.defaultTest !== 'string' &&
-      testSuite.defaultTest.vars &&
-      Object.keys(testSuite.defaultTest.vars).length > 0;
+    if (!matchedResult) {
+      const hasDefaultVars =
+        testSuite.defaultTest &&
+        typeof testSuite.defaultTest !== 'string' &&
+        testSuite.defaultTest.vars &&
+        Object.keys(testSuite.defaultTest.vars).length > 0;
 
-    if (hasDefaultVars) {
-      return filteredResults.some((result) => resultIsForTestCase(result, test));
+      if (hasDefaultVars) {
+        // Again, prefer results with runtime vars first
+        matchedResult = filteredResults.find(
+          (result) =>
+            resultIsForTestCase(result, test) && extractRuntimeVars(result.vars) !== undefined,
+        );
+        if (!matchedResult) {
+          matchedResult = filteredResults.find((result) => resultIsForTestCase(result, test));
+        }
+      }
     }
 
-    return false;
-  });
+    if (matchedResult) {
+      // Restore runtime variables from the matched result into the test.
+      // This ensures variables like _conversation and sessionId are available
+      // during re-evaluation, preventing template render errors.
+      const runtimeVars = extractRuntimeVars(matchedResult.vars);
+      if (runtimeVars) {
+        const testWithRuntimeVars: TestCase = {
+          ...test,
+          vars: {
+            ...test.vars,
+            ...runtimeVars,
+          },
+        };
+        logger.debug('[filterTestsByResults] Restored runtime vars for test', {
+          varKeys: Object.keys(runtimeVars),
+        });
+        matchedTests.push(testWithRuntimeVars);
+      } else {
+        logger.debug('[filterTestsByResults] Matched test has no runtime vars to restore');
+        matchedTests.push(test);
+      }
+    }
+  }
 
   logger.debug(
     `[filterTestsByResults] Matched ${matchedTests.length} tests out of ${testSuite.tests.length} in test suite`,
   );
 
-  if (matchedTests.length === 0 && filteredResults.length > 0) {
-    logger.warn(
-      `[filterTestsByResults] No tests matched ${filteredResults.length} filtered results. ` +
-        'This may indicate a vars mismatch between stored results and current test suite.',
+  // Extract tests from results that didn't match any config test.
+  // This captures runtime-generated tests (e.g., from remote plugins like cipher-code, wordplay)
+  // that exist in results but not in the config file.
+  const extractedTests: TestCase[] = [];
+  const matchedResultKeys = new Set<string>();
+
+  // Track which results matched config tests
+  for (const result of filteredResults) {
+    for (const test of matchedTests) {
+      const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
+      if (resultIsForTestCase(result, testWithDefaults)) {
+        matchedResultKeys.add(JSON.stringify(filterRuntimeVars(result.vars)));
+        break;
+      }
+    }
+  }
+
+  // Extract tests from unmatched results
+  for (const result of filteredResults) {
+    const resultKey = JSON.stringify(filterRuntimeVars(result.vars));
+
+    // Skip if this result already matched a config test
+    if (matchedResultKeys.has(resultKey)) {
+      continue;
+    }
+
+    // Skip if no testCase data available
+    if (!result.testCase) {
+      logger.debug('[filterTestsByResults] Skipping result without testCase data for extraction');
+      continue;
+    }
+
+    // Skip if we already extracted a test with these vars (dedup within extraction)
+    if (extractedTests.some((t) => JSON.stringify(filterRuntimeVars(t.vars)) === resultKey)) {
+      continue;
+    }
+
+    // Extract test case, filtering runtime vars and omitting provider (security)
+    extractedTests.push({
+      description: result.testCase.description,
+      vars: filterRuntimeVars(result.testCase.vars) || {},
+      assert: result.testCase.assert,
+      metadata: result.testCase.metadata,
+      options: result.testCase.options,
+      // Intentionally omit: provider (security - may contain stale credentials)
+    });
+  }
+
+  if (extractedTests.length > 0) {
+    logger.info(
+      `[filterTestsByResults] Extracted ${extractedTests.length} runtime-generated test(s) from results`,
     );
   }
 
-  return matchedTests;
+  if (matchedTests.length === 0 && extractedTests.length === 0 && filteredResults.length > 0) {
+    logger.warn(
+      `[filterTestsByResults] No tests matched ${filteredResults.length} filtered results. ` +
+        'This may indicate a vars or provider mismatch between stored results and current test suite. ' +
+        'Use LOG_LEVEL=debug for detailed matching info.',
+    );
+  } else if (matchedTests.length + extractedTests.length < uniqueVarsInResults.size) {
+    logger.debug(
+      `[filterTestsByResults] Note: ${uniqueVarsInResults.size - matchedTests.length - extractedTests.length} unique test cases in results ` +
+        'did not match any test in the current test suite and could not be extracted. ' +
+        'This may indicate results without testCase data.',
+    );
+  }
+
+  // Deduplicate and return combined tests
+  return deduplicateTestCases([...matchedTests, ...extractedTests]);
 }

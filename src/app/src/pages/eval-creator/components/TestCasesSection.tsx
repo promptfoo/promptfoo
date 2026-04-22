@@ -289,6 +289,8 @@ const TestCasesSection = ({ varsList, prompts = [] }: TestCasesSectionProps) => 
             <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
           </Tooltip>
 
+          <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
+
           {testCases.length === 0 && (
             <Button
               variant="secondary"
@@ -330,7 +332,6 @@ const TestCasesSection = ({ varsList, prompts = [] }: TestCasesSectionProps) => 
             </TooltipTrigger>
             <TooltipContent>Generate diverse test cases from your prompts</TooltipContent>
           </Tooltip>
-          <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
         </div>
       </div>
 

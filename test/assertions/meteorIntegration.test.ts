@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Special test for METEOR assertion integration
-// Uses vi.resetModules() + dynamic imports which can be slow on Windows
-describe('METEOR assertion', { timeout: 15000 }, () => {
+// Use vi.hoisted() + vi.mock() instead of vi.resetModules() + vi.doMock() + dynamic import.
+// The old pattern re-imported the entire assertions module (~90 imports) for each test,
+// which caused timeouts on Windows due to slow module resolution.
+const mockHandleMeteorAssertion = vi.hoisted(() => vi.fn());
+
+vi.mock('../../src/assertions/meteor', () => ({
+  handleMeteorAssertion: mockHandleMeteorAssertion,
+}));
+
+import { runAssertion } from '../../src/assertions';
+
+describe('METEOR assertion', () => {
   beforeEach(() => {
-    vi.resetModules();
+    mockHandleMeteorAssertion.mockReset();
   });
 
   afterEach(() => {
@@ -12,20 +21,12 @@ describe('METEOR assertion', { timeout: 15000 }, () => {
   });
 
   it('should use the handleMeteorAssertion when natural is available', async () => {
-    const mockHandleMeteorAssertion = vi.fn().mockResolvedValue({
+    mockHandleMeteorAssertion.mockResolvedValue({
       pass: true,
       score: 0.85,
       reason: 'METEOR test passed',
       assertion: { type: 'meteor' },
     });
-
-    // Setup mock before import
-    vi.doMock('../../src/assertions/meteor', () => ({
-      handleMeteorAssertion: mockHandleMeteorAssertion,
-    }));
-
-    // Import the module
-    const { runAssertion } = await import('../../src/assertions');
 
     const result = await runAssertion({
       prompt: 'Test prompt',
@@ -48,15 +49,9 @@ describe('METEOR assertion', { timeout: 15000 }, () => {
 
   it('should handle errors when natural package is missing', async () => {
     // Mock handleMeteorAssertion to throw when called (simulates missing 'natural' module)
-    const mockHandleMeteorAssertion = vi.fn().mockImplementation(() => {
+    mockHandleMeteorAssertion.mockImplementation(() => {
       throw new Error("Cannot find module 'natural'");
     });
-
-    vi.doMock('../../src/assertions/meteor', () => ({
-      handleMeteorAssertion: mockHandleMeteorAssertion,
-    }));
-
-    const { runAssertion } = await import('../../src/assertions');
 
     const result = await runAssertion({
       prompt: 'Test prompt',
@@ -85,15 +80,9 @@ describe('METEOR assertion', { timeout: 15000 }, () => {
 
   it('should rethrow other errors that are not related to missing module', async () => {
     // Mock handleMeteorAssertion to throw a non-module-related error
-    const mockHandleMeteorAssertion = vi.fn().mockImplementation(() => {
+    mockHandleMeteorAssertion.mockImplementation(() => {
       throw new Error('Some other error');
     });
-
-    vi.doMock('../../src/assertions/meteor', () => ({
-      handleMeteorAssertion: mockHandleMeteorAssertion,
-    }));
-
-    const { runAssertion } = await import('../../src/assertions');
 
     // The error should be rethrown since it's not a "Cannot find module" error
     await expect(

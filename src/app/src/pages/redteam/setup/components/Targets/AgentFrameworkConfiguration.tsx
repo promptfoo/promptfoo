@@ -19,7 +19,7 @@ import type { ProviderOptions } from '../../types';
 
 interface AgentFrameworkConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   agentType: string;
 }
 

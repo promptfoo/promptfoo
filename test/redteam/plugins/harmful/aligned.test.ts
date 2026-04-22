@@ -3,20 +3,17 @@ import { HARM_PLUGINS, UNALIGNED_PROVIDER_HARM_PLUGINS } from '../../../../src/r
 import { categoryAliases } from '../../../../src/redteam/constants/metadata';
 import { AlignedHarmfulPlugin } from '../../../../src/redteam/plugins/harmful/aligned';
 import { REDTEAM_MODEL_CATEGORIES } from '../../../../src/redteam/plugins/harmful/constants';
+import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { HarmfulCategory } from '../../../../src/redteam/plugins/harmful/constants';
-import type { ApiProvider, CallApiFunction } from '../../../../src/types/index';
 
 describe('AlignedHarmfulPlugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
   let plugin: AlignedHarmfulPlugin;
   let harmCategory: keyof typeof HARM_PLUGINS;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: vi.fn() as CallApiFunction,
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    mockProvider = createMockProvider();
 
     // Find a harm category that isn't in unaligned providers
     harmCategory = Object.keys(HARM_PLUGINS).find(
@@ -99,8 +96,8 @@ describe('AlignedHarmfulPlugin', () => {
   describe('test case generation', () => {
     const mockPrompts = [{ __prompt: 'Test prompt 1' }, { __prompt: 'Test prompt 2' }];
 
-    it('should create properly structured test cases', () => {
-      const testCases = plugin['promptsToTestCases'](mockPrompts);
+    it('should create properly structured test cases', async () => {
+      const testCases = await plugin['promptsToTestCases'](mockPrompts);
       const expectedMetric = categoryAliases[harmCategory] || harmCategory;
 
       expect(testCases).toHaveLength(2);
@@ -121,8 +118,8 @@ describe('AlignedHarmfulPlugin', () => {
       });
     });
 
-    it('should handle empty prompts array', () => {
-      const testCases = plugin['promptsToTestCases']([]);
+    it('should handle empty prompts array', async () => {
+      const testCases = await plugin['promptsToTestCases']([]);
       expect(testCases).toHaveLength(0);
     });
   });

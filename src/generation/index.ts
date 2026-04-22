@@ -189,7 +189,7 @@ export async function generateTestSuite(
   prompts: Prompt[],
   existingTests: TestCase[],
   options: Partial<TestSuiteGenerationOptions> = {},
-  callbacks?: { onProgress?: ProgressCallback },
+  callbacks?: { onProgress?: ProgressCallback; jobId?: string },
 ): Promise<TestSuiteGenerationResult> {
   const startTime = Date.now();
 

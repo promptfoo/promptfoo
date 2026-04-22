@@ -1,4 +1,4 @@
-# google-aistudio-tools
+# google-aistudio-tools (Google AI Studio Tools)
 
 This example demonstrates how to use Google AI Studio's function calling, search capabilities, code execution, and URL context features with promptfoo.
 
@@ -6,6 +6,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example google-aistudio-tools
+cd google-aistudio-tools
 ```
 
 ## Prerequisites

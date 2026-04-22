@@ -20,6 +20,7 @@ import {
 import {
   AssertionGenerationOptionsSchema,
   DatasetGenerationOptionsSchema,
+  DiversityOptionsSchema,
   TestSuiteGenerationOptionsSchema,
 } from '../../generation/types';
 import logger from '../../logger';
@@ -89,6 +90,7 @@ const AnalyzeConceptsRequestSchema = z.object({
 
 const MeasureDiversityRequestSchema = z.object({
   testCases: z.array(z.record(z.string(), z.string())).min(1),
+  options: DiversityOptionsSchema.partial().optional(),
 });
 
 const AnalyzeCoverageRequestSchema = z.object({
@@ -240,8 +242,11 @@ generationRouter.post(
         return;
       }
 
-      const { testCases } = parseResult.data;
-      const diversity = await measureDiversity(testCases);
+      const { testCases, options } = parseResult.data;
+      const diversity = await measureDiversity(testCases, undefined, {
+        measureMethod: 'text',
+        ...options,
+      });
 
       res.json({ success: true, data: { diversity } });
     } catch (error) {
@@ -420,6 +425,7 @@ generationRouter.post('/tests/generate', (req: Request, res: Response): void => 
 
     // Start generation in background
     generateTestSuite(prompts as Prompt[], tests as TestCase[], options || {}, {
+      jobId: job.id, // Pass jobId for SSE streaming
       onProgress: (current, total, phase) => {
         const existingJob = getJob(job.id);
         if (existingJob) {
