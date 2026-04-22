@@ -15,6 +15,7 @@ import { AnthropicCompletionProvider } from '../../src/providers/anthropic/compl
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
 import { AwsBedrockCompletionProvider } from '../../src/providers/bedrock/index';
+import { AIStudioEmbeddingProvider } from '../../src/providers/google/ai.studio';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import { GoogleVideoProvider } from '../../src/providers/google/video';
 import {
@@ -808,6 +809,18 @@ describe('loadApiProvider', () => {
     const provider = await loadApiProvider('vertex:embeddings:vertex-embedding-model');
     expect(provider).toBeInstanceOf(VertexEmbeddingProvider);
     expect(provider.id()).toBe('vertex:vertex-embedding-model');
+  });
+
+  it('loadApiProvider with google:embedding', async () => {
+    const provider = await loadApiProvider('google:embedding:gemini-embedding-001');
+    expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
+  });
+
+  it('loadApiProvider with google:embeddings', async () => {
+    const provider = await loadApiProvider('google:embeddings:gemini-embedding-001');
+    expect(provider).toBeInstanceOf(AIStudioEmbeddingProvider);
+    expect(provider.id()).toBe('google:embedding:gemini-embedding-001');
   });
 
   it('loadApiProvider with vertex:modelname', async () => {
