@@ -11,6 +11,14 @@ interface AssertSetCardProps {
   defaultExpanded?: boolean;
 }
 
+function getChildResults(result: GradingResult): GradingResult[] {
+  return (
+    result.componentResults?.filter((childResult): childResult is GradingResult =>
+      Boolean(childResult),
+    ) ?? []
+  );
+}
+
 function AssertionRow({
   result,
   parentPassed,
@@ -142,9 +150,24 @@ export function AssertSetCard({ result, children, defaultExpanded }: AssertSetCa
       {/* Children */}
       {isExpanded && (
         <div className="border-t border-border bg-background/50">
-          {children.map((child, index) => (
-            <AssertionRow key={index} result={child} parentPassed={result.pass} isChild={true} />
-          ))}
+          {children.map((child, index) => {
+            const nestedChildren = getChildResults(child);
+            if (child.metadata?.isAssertSet || nestedChildren.length > 0) {
+              return (
+                <div key={index} className="ml-3 border-l-2 border-border py-2 pl-5 pr-3">
+                  <AssertSetCard
+                    result={child}
+                    children={nestedChildren}
+                    defaultExpanded={!child.pass}
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <AssertionRow key={index} result={child} parentPassed={result.pass} isChild={true} />
+            );
+          })}
         </div>
       )}
     </div>

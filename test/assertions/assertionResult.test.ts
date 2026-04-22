@@ -1,13 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssertionsResult, GUARDRAIL_BLOCKED_REASON } from '../../src/assertions/assertionsResult';
+import { mockProcessEnv } from '../util/utils';
 
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
 describe('AssertionsResult', () => {
-  beforeEach(() => {
-    delete process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES;
-  });
-
   const succeedingResult = {
     pass: true,
     score: 1,
@@ -31,6 +28,7 @@ describe('AssertionsResult', () => {
   let assertionsResult: AssertionsResult;
 
   beforeEach(() => {
+    mockProcessEnv({ PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: undefined });
     assertionsResult = new AssertionsResult();
   });
 
@@ -59,7 +57,7 @@ describe('AssertionsResult', () => {
   });
 
   it('handles PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', () => {
-    process.env.PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES = 'true';
+    mockProcessEnv({ PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: 'true' });
     expect(() =>
       assertionsResult.addResult({
         index: 0,
@@ -80,6 +78,9 @@ describe('AssertionsResult', () => {
     await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       namedScores: {
+        [metric]: 1,
+      },
+      namedScoreWeights: {
         [metric]: 1,
       },
       componentResults: [
@@ -162,6 +163,78 @@ describe('AssertionsResult', () => {
     expect(assertionsResult.parentAssertionSet).toBe(parentAssertionSet);
   });
 
+  it('stores compact assertion set metadata without nested assertions or config', async () => {
+    assertionsResult = new AssertionsResult({
+      parentAssertionSet: {
+        index: 0,
+        assertionSet: {
+          type: 'assert-set',
+          metric: 'tool-calls',
+          threshold: 0.8,
+          weight: 2,
+          config: { secretValue: 'redacted' },
+          assert: [{ type: 'contains', value: 'google_docs/create_document' }],
+        },
+      },
+    });
+
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult();
+
+    expect(result.metadata?.assertionSet).toEqual({
+      type: 'assert-set',
+      metric: 'tool-calls',
+      threshold: 0.8,
+      weight: 2,
+      assertionCount: 1,
+    });
+  });
+
+  it('preserves assertion set metadata when a scoring function returns metadata', async () => {
+    assertionsResult = new AssertionsResult({
+      parentAssertionSet: {
+        index: 0,
+        assertionSet: {
+          type: 'assert-set',
+          metric: 'tool-calls',
+          assert: [{ type: 'contains', value: 'google_docs/create_document' }],
+        },
+      },
+    });
+
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult(() => ({
+      pass: true,
+      score: 0.9,
+      reason: 'Custom score',
+      metadata: {
+        pluginId: 'example-plugin',
+      },
+    }));
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0.9,
+      reason: 'Custom score',
+      metadata: {
+        pluginId: 'example-plugin',
+        assertionSet: {
+          type: 'assert-set',
+          metric: 'tool-calls',
+          assertionCount: 1,
+        },
+      },
+    });
+  });
+
   it('flattens nested componentResults', async () => {
     assertionsResult = new AssertionsResult();
 
@@ -195,35 +268,66 @@ describe('AssertionsResult', () => {
 
     expect(result.componentResults).toBeDefined();
     expect(result.componentResults).toHaveLength(3);
-
-    // Parent result should have isAssertSet metadata
     expect(result.componentResults?.[0]).toEqual({
       ...nestedResult,
-      metadata: {
-        isAssertSet: true,
-        childCount: 2,
-        assertSetThreshold: undefined,
-        assertSetWeight: undefined,
-      },
+      metadata: { isAssertSet: true, childCount: 2 },
     });
-
-    // Child results should have parentAssertSetIndex metadata
     expect(result.componentResults?.[1]).toEqual({
       ...nestedResult.componentResults?.[0],
       assertion: nestedResult.componentResults?.[0].assertion || nestedResult.assertion,
-      metadata: {
-        parentAssertSetIndex: 0,
-        assertSetWeight: undefined,
-      },
+      metadata: { parentAssertSetIndex: 0 },
     });
     expect(result.componentResults?.[2]).toEqual({
       ...nestedResult.componentResults?.[1],
       assertion: nestedResult.componentResults?.[1].assertion || nestedResult.assertion,
-      metadata: {
-        parentAssertSetIndex: 0,
-        assertSetWeight: undefined,
-      },
+      metadata: { parentAssertSetIndex: 0 },
     });
+  });
+
+  it('recursively flattens nested componentResults with parent indexes', async () => {
+    const nestedResult: GradingResult = {
+      pass: false,
+      score: 0.5,
+      reason: 'Outer set failed',
+      assertion: { type: 'contains', metric: 'outer', threshold: 1 },
+      componentResults: [
+        {
+          pass: false,
+          score: 0.5,
+          reason: 'Inner set failed',
+          assertion: { type: 'contains', metric: 'inner', threshold: 1 },
+          componentResults: [
+            {
+              pass: false,
+              score: 0,
+              reason: 'Leaf failed',
+              assertion: { type: 'contains', metric: 'leaf' },
+            },
+          ],
+        },
+      ],
+    };
+
+    assertionsResult.addResult({
+      index: 0,
+      result: nestedResult,
+    });
+
+    const result = await assertionsResult.testResult();
+
+    expect(result.componentResults).toHaveLength(3);
+    expect(result.componentResults?.[0].metadata).toEqual({
+      isAssertSet: true,
+      childCount: 1,
+      assertSetThreshold: 1,
+    });
+    expect(result.componentResults?.[1].metadata).toEqual({
+      parentAssertSetIndex: 0,
+      isAssertSet: true,
+      childCount: 1,
+      assertSetThreshold: 1,
+    });
+    expect(result.componentResults?.[2].metadata).toEqual({ parentAssertSetIndex: 1 });
   });
 
   describe('noAssertsResult', () => {
@@ -285,6 +389,22 @@ describe('AssertionsResult', () => {
       'metric-2': 0.9,
       'metric-3': 1,
     });
+    expect(result.namedScoreWeights).toEqual({
+      'metric-1': 1,
+      'metric-2': 1,
+      'metric-3': 1,
+    });
+  });
+
+  it('omits empty namedScoreWeights from the final result', async () => {
+    assertionsResult.addResult({
+      index: 0,
+      result: succeedingResult,
+    });
+
+    const result = await assertionsResult.testResult();
+
+    expect(result).not.toHaveProperty('namedScoreWeights');
   });
 
   it('handles scoring function errors', async () => {

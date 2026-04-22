@@ -18,6 +18,31 @@ interface ParentAssertionSet {
   assertionSet: AssertionSet;
 }
 
+function buildAssertionSetMetadata(assertionSet: AssertionSet) {
+  return {
+    type: assertionSet.type,
+    assertionCount: assertionSet.assert.length,
+    ...(assertionSet.metric !== undefined && { metric: assertionSet.metric }),
+    ...(assertionSet.threshold !== undefined && { threshold: assertionSet.threshold }),
+    ...(assertionSet.weight !== undefined && { weight: assertionSet.weight }),
+  };
+}
+
+function mergeMetadata(
+  baseMetadata: GradingResult['metadata'],
+  incomingMetadata: GradingResult['metadata'],
+): GradingResult['metadata'] | undefined {
+  if (!baseMetadata && !incomingMetadata) {
+    return undefined;
+  }
+
+  return {
+    ...incomingMetadata,
+    ...baseMetadata,
+    ...(baseMetadata?.assertionSet && { assertionSet: baseMetadata.assertionSet }),
+  };
+}
+
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -38,6 +63,7 @@ export class AssertionsResult {
   private failedReason: string | undefined;
   private componentResults: GradingResult[] = [];
   private namedScores: Record<string, number> = {};
+  private namedScoreWeights: Record<string, number> = {};
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
 
@@ -93,13 +119,19 @@ export class AssertionsResult {
     }
 
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score;
+      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
+      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
     }
 
     if (result.namedScores) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
         if (metricName !== metric) {
-          this.namedScores[metricName] = (this.namedScores[metricName] || 0) + score;
+          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
+          const weightedIncomingWeight = incomingWeight * weight;
+          this.namedScores[metricName] =
+            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
+          this.namedScoreWeights[metricName] =
+            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
         }
       });
     }
@@ -149,63 +181,105 @@ export class AssertionsResult {
       reason = GUARDRAIL_BLOCKED_REASON;
     }
 
-    // Flatten nested component results, annotating parent-child relationships for hierarchy display.
-    // Parent assert-sets are marked with isAssertSet=true and childCount.
-    // Child assertions are marked with parentAssertSetIndex pointing to their parent.
-    let parentIndex = 0;
-    const flattenedComponentResults = this.componentResults.flatMap((result) => {
-      if (result.componentResults) {
-        const currentParentIndex = parentIndex;
-        const parentResult = {
-          ...result,
-          metadata: {
-            ...result.metadata,
-            isAssertSet: true,
-            childCount: result.componentResults.length,
-            assertSetThreshold: result.assertion?.threshold,
-            assertSetWeight: result.assertion?.weight,
-          },
-        };
-        const childResults = result.componentResults.map((subResult) => ({
-          ...subResult,
-          assertion: subResult.assertion || result.assertion,
-          metadata: {
-            ...subResult.metadata,
-            parentAssertSetIndex: currentParentIndex,
-            assertSetWeight: subResult.assertion?.weight,
-          },
-        }));
-        // Increment parentIndex by 1 (for parent) + number of children
-        parentIndex += 1 + result.componentResults.length;
-        return [parentResult, ...childResults];
-      } else {
-        parentIndex += 1;
-        // Only add metadata if there's actually weight to record
-        if (result.assertion?.weight !== undefined) {
-          return {
-            ...result,
-            metadata: {
-              ...result.metadata,
-              assertSetWeight: result.assertion.weight,
-            },
-          };
-        }
-        return result;
+    // Flatten nested component results while preserving enough metadata for
+    // display layers to rebuild the hierarchy without re-running assertions.
+    const flattenedComponentResults: GradingResult[] = [];
+    const flattenComponentResult = (
+      result: GradingResult,
+      options: {
+        parentAssertSetIndex?: number;
+        inheritedAssertion?: GradingResult['assertion'];
+        inheritedWeight?: number;
+      } = {},
+    ) => {
+      const currentIndex = flattenedComponentResults.length;
+      const rawChildResults =
+        result.componentResults?.filter((childResult): childResult is GradingResult =>
+          Boolean(childResult),
+        ) ?? [];
+      const hasFlattenedHierarchy = rawChildResults.some(
+        (childResult) => childResult.metadata?.parentAssertSetIndex !== undefined,
+      );
+      const childResults = hasFlattenedHierarchy
+        ? rawChildResults.filter(
+            (childResult) => childResult.metadata?.parentAssertSetIndex === undefined,
+          )
+        : rawChildResults;
+      const assertion = result.assertion || options.inheritedAssertion;
+      const assertionSetMetadata = result.metadata?.assertionSet as
+        | { threshold?: number; weight?: number }
+        | undefined;
+      const weight =
+        result.assertion?.weight ?? assertionSetMetadata?.weight ?? options.inheritedWeight;
+      const metadata = { ...result.metadata };
+
+      if (options.parentAssertSetIndex !== undefined) {
+        metadata.parentAssertSetIndex = options.parentAssertSetIndex;
       }
-    });
+
+      if (childResults.length > 0) {
+        metadata.isAssertSet = true;
+        metadata.childCount = childResults.length;
+        const assertSetThreshold =
+          result.assertion?.threshold ??
+          result.metadata?.assertSetThreshold ??
+          assertionSetMetadata?.threshold;
+        if (assertSetThreshold !== undefined) {
+          metadata.assertSetThreshold = assertSetThreshold;
+        }
+      }
+
+      if (weight !== undefined) {
+        metadata.assertSetWeight = weight;
+      }
+
+      flattenedComponentResults.push({
+        ...result,
+        ...(assertion && { assertion }),
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      });
+
+      for (const childResult of childResults) {
+        flattenComponentResult(childResult, {
+          parentAssertSetIndex: currentIndex,
+          inheritedAssertion: assertion,
+          inheritedWeight: weight,
+        });
+      }
+    };
+
+    for (const result of this.componentResults) {
+      if (result) {
+        flattenComponentResult(result);
+      }
+    }
+
+    const normalizedNamedScores: Record<string, number> = {};
+    for (const [key, value] of Object.entries(this.namedScores)) {
+      const totalWeight = this.namedScoreWeights[key] ?? 0;
+      normalizedNamedScores[key] = totalWeight > 0 ? value / totalWeight : 0;
+    }
+
+    const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
 
     this.result = {
       pass,
       score,
       reason,
-      namedScores: this.namedScores,
+      namedScores: normalizedNamedScores,
+      ...(hasNamedScoreWeights ? { namedScoreWeights: this.namedScoreWeights } : {}),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
+      ...(this._parentAssertionSet && {
+        metadata: {
+          assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+        },
+      }),
     };
 
     if (scoringFunction) {
       try {
-        const scoringResult = await scoringFunction(this.namedScores, {
+        const scoringResult = await scoringFunction(normalizedNamedScores, {
           threshold: this.threshold,
           parentAssertionSet: this._parentAssertionSet,
           componentResults: flattenedComponentResults,
@@ -217,6 +291,9 @@ export class AssertionsResult {
         this.result = {
           ...this.result,
           ...scoringResult,
+          ...((this.result.metadata || scoringResult.metadata) && {
+            metadata: mergeMetadata(this.result.metadata, scoringResult.metadata),
+          }),
         };
       } catch (err) {
         this.result.pass = false;

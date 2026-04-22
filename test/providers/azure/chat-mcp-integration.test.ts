@@ -46,16 +46,16 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   beforeEach(() => {
     // Reset mocks
-    mcpMocks.mockInitialize.mockResolvedValue(undefined);
-    mcpMocks.mockCleanup.mockResolvedValue(undefined);
-    mcpMocks.mockGetAllTools.mockReturnValue([
+    mcpMocks.mockInitialize.mockReset().mockResolvedValue(undefined);
+    mcpMocks.mockCleanup.mockReset().mockResolvedValue(undefined);
+    mcpMocks.mockGetAllTools.mockReset().mockReturnValue([
       {
         name: 'list_resources',
         description: 'List available token system resources',
         inputSchema: { type: 'object' },
       },
     ]);
-    mcpMocks.mockCallTool.mockResolvedValue({
+    mcpMocks.mockCallTool.mockReset().mockResolvedValue({
       content: 'Available resources: [button-tokens.json, color-tokens.json, spacing-tokens.json]',
     });
 

@@ -1,5 +1,5 @@
 ---
-sidebar_label: Preventing hallucinations
+sidebar_label: Preventing Hallucinations
 description: Measure and reduce LLM hallucinations using perplexity metrics, RAG, and controlled decoding techniques to achieve 85%+ factual accuracy in AI outputs
 ---
 
@@ -230,13 +230,13 @@ Running `promptfoo eval` and `promptfoo view` will produce a similar view to the
 
 Suppose you spent some time fine-tuning a model and wanted to compare different versions of the same model. Once you've fine-tuned a model, you should evaluate it by testing it side-by-side with the original or other variations.
 
-In this example, we use the Ollama provider to test two versions of Meta's Llama 2 model that are fine-tuned on different data:
+In this example, we use the Ollama provider to test two models fine-tuned on different data — a modern censored model and an older uncensored variant:
 
 ```yaml
 prompts:
   - file://prompt1.txt
 providers:
-  - ollama:chat:llama3.3
+  - ollama:chat:llama4:scout
   - ollama:llama2-uncensored
 tests:
   - vars:

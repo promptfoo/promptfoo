@@ -80,8 +80,9 @@ vi.mock('../../src/cliState', () => ({
   },
   basePath: '/base/path',
 }));
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
+vi.mock('../../src/matchers/rag', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');
   return {
     ...actual,
     matchesContextRelevance: vi
@@ -376,6 +377,45 @@ describe('runAssertions', () => {
       });
     });
 
+    it('preserves child metric weights inside assert-set', async () => {
+      const output = 'Expected output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            assert: [
+              {
+                type: 'equals',
+                value: 'Expected output',
+                metric: 'Accuracy',
+                weight: 3,
+              },
+              {
+                type: 'equals',
+                value: 'Nope',
+                metric: 'Accuracy',
+                weight: 1,
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        providerResponse: { output },
+      });
+
+      expect(result.namedScores).toEqual({
+        Accuracy: 0.75,
+      });
+      expect(result.namedScoreWeights).toEqual({
+        Accuracy: 4,
+      });
+    });
+
     it('uses assert-set weight', async () => {
       const output = 'Expected';
       const test: AtomicTestCase = {
@@ -405,6 +445,71 @@ describe('runAssertions', () => {
         providerResponse: { output },
       });
       expect(result.score).toBe(0.9);
+    });
+
+    it('supports nested assert-sets without duplicating descendant results', async () => {
+      const output = 'Expected output';
+      const test: AtomicTestCase = {
+        assert: [
+          {
+            type: 'assert-set',
+            metric: 'Outer',
+            threshold: 0.5,
+            assert: [
+              {
+                type: 'assert-set',
+                metric: 'Inner',
+                threshold: 0.5,
+                assert: [
+                  {
+                    type: 'equals',
+                    value: 'Nope',
+                  },
+                  {
+                    type: 'contains',
+                    value: 'Expected',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0.5,
+        reason: 'All assertions passed',
+        namedScores: {
+          Outer: 0.5,
+          Inner: 0.5,
+        },
+      });
+      expect(result.componentResults).toHaveLength(4);
+      expect(result.componentResults?.map((componentResult) => componentResult.metadata)).toEqual([
+        expect.objectContaining({
+          assertSetMetric: 'Outer',
+          isAssertSet: true,
+          childCount: 1,
+          assertSetThreshold: 0.5,
+        }),
+        expect.objectContaining({
+          assertSetMetric: 'Inner',
+          parentAssertSetIndex: 0,
+          isAssertSet: true,
+          childCount: 2,
+          assertSetThreshold: 0.5,
+        }),
+        { parentAssertSetIndex: 1 },
+        { parentAssertSetIndex: 1 },
+      ]);
     });
   });
 

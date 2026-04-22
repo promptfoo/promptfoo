@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example redteam-bestOfN-strategy
+cd redteam-bestOfN-strategy
 ```
 
 This example runs a red team using the `best-of-n` attack strategy to generate multiple adversarial prompts.

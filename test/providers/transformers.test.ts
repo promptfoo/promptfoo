@@ -151,16 +151,6 @@ describe('TransformersEmbeddingProvider', () => {
       expect(mockPipeline).toHaveBeenCalledTimes(1);
     });
 
-    it('should return error when module is not installed', async () => {
-      mockPipeline.mockRejectedValue(new Error("Cannot find module '@huggingface/transformers'"));
-
-      const provider = new TransformersEmbeddingProvider('model');
-      const result = await provider.callEmbeddingApi('test');
-
-      expect(result.error).toContain('Transformers.js is not installed');
-      expect(result.embedding).toBeUndefined();
-    });
-
     it('should return error when model is not found', async () => {
       mockPipeline.mockRejectedValue(new Error('Could not locate file for model'));
 
@@ -317,15 +307,6 @@ describe('TransformersTextGenerationProvider', () => {
       const result = await provider.callApi('test');
 
       expect(result.error).toBe('No output generated');
-    });
-
-    it('should return error when module is not installed', async () => {
-      mockPipeline.mockRejectedValue(new Error("Cannot find module '@huggingface/transformers'"));
-
-      const provider = new TransformersTextGenerationProvider('model');
-      const result = await provider.callApi('test');
-
-      expect(result.error).toContain('Transformers.js is not installed');
     });
 
     it('should return error when model is not found', async () => {

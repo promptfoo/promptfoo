@@ -1,6 +1,9 @@
+import React from 'react';
+
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 
@@ -21,9 +24,19 @@ vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({ showToast: mockShowToast }),
 }));
 
-vi.mock('react-router-dom', () => ({
-  useNavigate: () => mockNavigate,
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  };
+});
+
+vi.mock('./FilterModeProvider', () => ({
+  useFilterMode: () => ({ filterMode: 'all', setFilterMode: vi.fn() }),
+  DEFAULT_FILTER_MODE: 'all',
+  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('./store', () => ({
@@ -35,6 +48,120 @@ vi.mock('@app/stores/evalConfig', () => ({
   useStore: () => ({
     updateConfig: vi.fn(),
   }),
+}));
+
+vi.mock('@app/components/ui/dialog', () => ({
+  Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
+    open ? <div>{children}</div> : null,
+  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
+}));
+
+vi.mock('@app/components/ui/dropdown-menu', () => ({
+  DropdownMenuItem: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode;
+    onClick?: () => void;
+  }) => (
+    <button type="button" onClick={onClick}>
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock('@app/components/ui/tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock('./EvalHeader', async () => {
+  const React = await import('react');
+  return {
+    default: ({ actions, children }: { actions?: React.ReactNode; children?: React.ReactNode }) => {
+      const [isActionsOpen, setIsActionsOpen] = React.useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setIsActionsOpen((prev) => !prev)}>
+            Eval actions
+          </button>
+          {isActionsOpen && <div onClick={() => setIsActionsOpen(false)}>{actions}</div>}
+          {children}
+        </div>
+      );
+    },
+  };
+});
+
+vi.mock('./ResultsTable', () => ({
+  default: () => <div data-testid="results-table" />,
+}));
+
+vi.mock('./ResultsCharts', () => ({
+  default: () => <div data-testid="results-charts" />,
+}));
+
+vi.mock('./ColumnSelector', () => ({
+  ColumnSelector: () => <div data-testid="column-selector" />,
+}));
+
+vi.mock('./ConfigModal', () => ({
+  default: ({ open }: { open: boolean }) => (open ? <div>Config modal</div> : null),
+}));
+
+vi.mock('./ConfirmEvalNameDialog', () => ({
+  ConfirmEvalNameDialog: ({ open, title }: { open: boolean; title: string }) =>
+    open ? <div>{title}</div> : null,
+}));
+
+vi.mock('./DownloadMenu', () => ({
+  DownloadDialog: ({ open }: { open: boolean }) => (open ? <div>Download dialog</div> : null),
+  DownloadMenuItem: ({ onClick }: { onClick?: () => void }) => (
+    <button type="button" onClick={onClick}>
+      Download
+    </button>
+  ),
+}));
+
+vi.mock('./EvalSelectorDialog', () => ({
+  default: ({ open }: { open: boolean }) => (open ? <div>Eval selector</div> : null),
+}));
+
+vi.mock('./FilterChips', () => ({
+  FilterChips: () => <div data-testid="filter-chips" />,
+}));
+
+vi.mock('./FilterModeSelector', () => ({
+  FilterModeSelector: () => <div data-testid="filter-mode-selector" />,
+}));
+
+vi.mock('./HiddenColumnChips', () => ({
+  HiddenColumnChips: () => <div data-testid="hidden-column-chips" />,
+}));
+
+vi.mock('./ResultsFilters/FiltersForm', () => ({
+  default: () => <div data-testid="filters-form" />,
+}));
+
+vi.mock('./ShareModal', () => ({
+  default: ({ open }: { open: boolean }) => (open ? <div>Share modal</div> : null),
+}));
+
+vi.mock('./TableSettings/TableSettingsModal', () => ({
+  default: ({ open }: { open: boolean }) => (open ? <div>Settings modal</div> : null),
+}));
+
+vi.mock('./CompareEvalMenuItem', () => ({
+  default: ({ onClick }: { onClick?: () => void }) => (
+    <button type="button" onClick={onClick}>
+      Compare
+    </button>
+  ),
 }));
 
 describe('ResultsView - Delete Functionality', () => {
@@ -116,21 +243,28 @@ describe('ResultsView - Delete Functionality', () => {
       comparisonEvalIds: [],
       setComparisonEvalIds: vi.fn(),
       setInComparisonMode: vi.fn(),
+      hiddenVarNamesBySchema: {},
+      setHiddenVarNamesForSchema: vi.fn(),
     });
 
-    return renderWithProviders(<ResultsView {...props} />);
+    return renderWithProviders(
+      <MemoryRouter>
+        <ResultsView {...props} />
+      </MemoryRouter>,
+    );
   };
 
   it('should open delete confirmation dialog when delete is clicked', async () => {
+    const user = userEvent.setup();
     renderWithMockData();
 
     // Open eval actions menu
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
+    await user.click(actionsButton);
 
     // Click delete
     const deleteMenuItem = screen.getByText('Delete');
-    await userEvent.click(deleteMenuItem);
+    await user.click(deleteMenuItem);
 
     // Dialog should appear
     await waitFor(() => {
@@ -148,12 +282,13 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should close dialog when cancel is clicked', async () => {
+    const user = userEvent.setup();
     renderWithMockData();
 
     // Open delete dialog
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
@@ -161,7 +296,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Click cancel
     const cancelButton = screen.getByRole('button', { name: 'Cancel' });
-    await userEvent.click(cancelButton);
+    await user.click(cancelButton);
 
     // Dialog should close
     await waitFor(() => {
@@ -170,6 +305,7 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should successfully delete and navigate to next eval', async () => {
+    const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
@@ -180,8 +316,8 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Open delete dialog
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
@@ -189,7 +325,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Confirm delete
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
-    await userEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith('Eval deleted', 'success');
@@ -200,6 +336,7 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should navigate to previous eval when deleting last eval', async () => {
+    const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
@@ -211,8 +348,8 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Open delete dialog
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
@@ -220,7 +357,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Confirm delete
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
-    await userEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     await waitFor(() => {
       expect(mockOnRecentEvalSelected).toHaveBeenCalledWith('eval-2');
@@ -228,6 +365,7 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should navigate home when deleting only eval', async () => {
+    const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
@@ -251,8 +389,8 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Open delete dialog
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
@@ -260,7 +398,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Confirm delete
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
-    await userEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
@@ -268,6 +406,7 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should show error toast on delete failure', async () => {
+    const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
     vi.mocked(callApi).mockResolvedValue({
       ok: false,
@@ -278,8 +417,8 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Open delete dialog
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
@@ -287,7 +426,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Confirm delete
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
-    await userEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith('Failed to delete eval: Database error', 'error');
@@ -295,6 +434,7 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should show loading state during deletion', async () => {
+    const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
     let resolveDelete: () => void;
     vi.mocked(callApi).mockReturnValue(
@@ -311,8 +451,8 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Open delete dialog
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
@@ -320,7 +460,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Confirm delete
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
-    await userEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     // Should show loading state
     await waitFor(() => {
@@ -341,6 +481,7 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should handle network errors gracefully', async () => {
+    const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
     vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
 
@@ -348,8 +489,8 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Open delete dialog
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
@@ -357,7 +498,7 @@ describe('ResultsView - Delete Functionality', () => {
 
     // Confirm delete
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
-    await userEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     await waitFor(() => {
       expect(mockShowToast).toHaveBeenCalledWith('Failed to delete eval: Network error', 'error');
@@ -365,6 +506,7 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should not close delete confirmation dialog by clicking outside or pressing escape when deletion is in progress', async () => {
+    const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
     let resolveDelete: () => void;
     vi.mocked(callApi).mockReturnValue(
@@ -380,21 +522,18 @@ describe('ResultsView - Delete Functionality', () => {
     renderWithMockData();
 
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
-    await userEvent.click(deleteButton);
-
-    // Radix Dialog sets pointer-events: none on body when modal is open, use fireEvent instead
-    fireEvent.click(document.body);
-
-    // Use fireEvent for Escape key as well since pointer-events may affect keyboard events
-    fireEvent.keyDown(document.body, { key: 'Escape', code: 'Escape' });
+    await user.click(deleteButton);
+    await user.click(document.body);
+    document.body.focus();
+    await user.keyboard('{Escape}');
 
     await waitFor(() => {
       expect(screen.getByText('Deleting...')).toBeInTheDocument();
@@ -409,6 +548,7 @@ describe('ResultsView - Delete Functionality', () => {
   });
 
   it('should navigate home when deleting an eval not in recentEvals', async () => {
+    const user = userEvent.setup();
     const { callApi } = await import('@app/utils/api');
     vi.mocked(callApi).mockResolvedValue({
       ok: true,
@@ -421,15 +561,15 @@ describe('ResultsView - Delete Functionality', () => {
     });
 
     const actionsButton = screen.getByText('Eval actions');
-    await userEvent.click(actionsButton);
-    await userEvent.click(screen.getByText('Delete'));
+    await user.click(actionsButton);
+    await user.click(screen.getByText('Delete'));
 
     await waitFor(() => {
       expect(screen.getByText('Delete eval?')).toBeInTheDocument();
     });
 
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
-    await userEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });

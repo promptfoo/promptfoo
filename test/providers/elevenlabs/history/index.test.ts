@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsHistoryProvider } from '../../../../src/providers/elevenlabs/history';
+import { mockProcessEnv } from '../../../util/utils';
 
 import type { CallApiContextParams } from '../../../../src/types/providers';
 
@@ -9,11 +10,11 @@ vi.mock('../../../../src/providers/elevenlabs/client');
 describe('ElevenLabsHistoryProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ELEVENLABS_API_KEY = 'test-api-key';
+    mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
-    delete process.env.ELEVENLABS_API_KEY;
+    mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -25,7 +26,7 @@ describe('ElevenLabsHistoryProvider', () => {
     });
 
     it('should throw error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsHistoryProvider('elevenlabs:history')).toThrow(
         'ELEVENLABS_API_KEY environment variable is not set',
@@ -95,7 +96,7 @@ describe('ElevenLabsHistoryProvider', () => {
     });
 
     it('should support custom API key environment variable', () => {
-      process.env.CUSTOM_ELEVENLABS_KEY = 'custom-key';
+      mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: 'custom-key' });
 
       const provider = new ElevenLabsHistoryProvider('elevenlabs:history', {
         config: { apiKeyEnvar: 'CUSTOM_ELEVENLABS_KEY' },
@@ -103,7 +104,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
       expect(provider).toBeDefined();
 
-      delete process.env.CUSTOM_ELEVENLABS_KEY;
+      mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: undefined });
     });
   });
 
@@ -299,7 +300,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
   describe('error handling', () => {
     it('should throw meaningful error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsHistoryProvider('elevenlabs:history')).toThrow(
         /ELEVENLABS_API_KEY/i,

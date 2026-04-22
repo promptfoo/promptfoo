@@ -168,12 +168,12 @@ export function LogViewer({ logs }: LogViewerProps) {
         ref={containerRef}
         onScroll={onScroll}
         className={cn(
-          'overflow-auto rounded-md border border-border bg-muted/50 p-4 font-mono text-sm dark:bg-zinc-900',
+          'overflow-y-auto overflow-x-hidden rounded-md border border-border bg-muted/50 p-4 font-mono text-sm dark:bg-zinc-900',
           className,
         )}
       >
         <div
-          className="min-w-max whitespace-pre"
+          className="w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
           dangerouslySetInnerHTML={{
             __html: logs.map((log) => convertAnsiToHtml(log)).join('<br/>'),
           }}

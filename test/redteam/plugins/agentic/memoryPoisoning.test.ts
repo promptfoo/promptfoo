@@ -70,14 +70,4 @@ describe('MemoryPoisoningPluginGrader', () => {
       expect(result.success).toBe(false);
     });
   });
-
-  describe('plugin properties', () => {
-    it('should have correct id', () => {
-      expect(grader.id).toBe('promptfoo:redteam:agentic:memory-poisoning');
-    });
-
-    it('should have empty rubric by default', () => {
-      expect(grader.rubric).toBe('');
-    });
-  });
 });

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
   deserializePolicyIdFromMetric,
@@ -143,6 +143,7 @@ const CustomMetrics = ({
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
+  const [showAllMetrics, setShowAllMetrics] = useState(false);
 
   // Memoize the metric result lookup to avoid rebuilding on every render
   const metricResultLookup = useMemo(
@@ -156,7 +157,7 @@ const CustomMetrics = ({
   }
 
   const metrics = Object.entries(lookup);
-  const displayMetrics = metrics.slice(0, truncationCount);
+  const displayMetrics = showAllMetrics ? metrics : metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
 
@@ -254,13 +255,15 @@ const CustomMetrics = ({
           );
         })}
       {metrics.length > truncationCount && (
-        <div
-          className="show-more-toggle clickable"
+        <button
+          type="button"
+          className="show-more-toggle"
           data-testid="toggle-show-more"
-          onClick={onShowMore}
+          onClick={onShowMore ?? (() => setShowAllMetrics(!showAllMetrics))}
+          aria-expanded={showAllMetrics}
         >
-          Show more...
-        </div>
+          {showAllMetrics ? 'Show less...' : 'Show more...'}
+        </button>
       )}
     </div>
   );

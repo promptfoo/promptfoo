@@ -1,10 +1,9 @@
-# 4) French greeting: correctness + tone + (cheap OR fast)
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: "Require a friendly French greeting that includes 'Bonjour' and stays within budget (either cheap or fast)."
-providers:
-  - openai:gpt-4o-mini
-
 prompts:
   - 'Greet the user in French.'
+providers:
+  - openai:gpt-4o-mini
 
 tests:
   - type: assert-set

@@ -1,15 +1,15 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
-import { type EvaluateTable, type EvaluateTableOutput, ResultFailureReason } from './types/index';
+import {
+  type EvaluateTable,
+  type EvaluateTableOutput,
+  type GradingResult,
+  ResultFailureReason,
+} from './types/index';
 import { ellipsize } from './util/text';
 
-import type { GradingResult } from './types/index';
-
-/**
- * Get a human-readable label for an assert-set threshold
- */
-function getThresholdLabel(threshold: number | undefined): string {
+function getThresholdLabel(threshold: number | undefined, childCount?: number): string {
   if (threshold === undefined || threshold === 1) {
     return 'ALL must pass';
   }
@@ -20,18 +20,41 @@ function getThresholdLabel(threshold: number | undefined): string {
     return 'At least one';
   }
   if (threshold > 0.5 && threshold < 1) {
+    if (childCount) {
+      return `Most must pass (${Math.ceil(threshold * childCount)}/${childCount})`;
+    }
     return 'Most must pass';
   }
   return '';
 }
 
-/**
- * Format an assertion result for CLI display
- */
+function getAssertionMetric(result: GradingResult): string {
+  return (
+    result.assertion?.metric ||
+    result.metadata?.assertSetMetric ||
+    result.assertion?.type ||
+    (result.metadata?.isAssertSet ? 'assert-set' : 'assertion')
+  );
+}
+
+function formatTreePrefix(ancestorLastFlags: boolean[]): string {
+  if (ancestorLastFlags.length === 0) {
+    return '';
+  }
+
+  const prefix = ancestorLastFlags
+    .slice(0, -1)
+    .map((isLast) => (isLast ? '  ' : '│ '))
+    .join('');
+  return `${prefix}${ancestorLastFlags[ancestorLastFlags.length - 1] ? '└ ' : '├ '}`;
+}
+
 function formatAssertionResult(
   result: GradingResult,
-  parentPassed?: boolean,
-  indentLevel = 0,
+  options: {
+    parentPassed?: boolean;
+    ancestorLastFlags?: boolean[];
+  } = {},
 ): {
   metric: string;
   pass: string;
@@ -39,43 +62,31 @@ function formatAssertionResult(
   weight: string;
   reason: string;
 } {
-  const indent = indentLevel > 0 ? '  '.repeat(indentLevel) : '';
-  const prefix = indentLevel === 1 ? '├ ' : indentLevel > 1 ? '└ ' : '';
+  const { parentPassed, ancestorLastFlags = [] } = options;
+  const passIndicator = result.pass
+    ? chalk.green('✓')
+    : parentPassed && ancestorLastFlags.length > 0
+      ? chalk.gray('─')
+      : chalk.red('✗');
 
-  // Determine the pass/fail indicator
-  let passIndicator: string;
-  if (result.pass) {
-    passIndicator = chalk.green('✓');
-  } else if (parentPassed && indentLevel > 0) {
-    // Child "failed" but parent passed (e.g., in an OR group)
-    passIndicator = chalk.gray('─');
-  } else {
-    passIndicator = chalk.red('✗');
-  }
-
-  // Get metric name (check assertSetMetric for assert-set aggregate results)
-  let metric =
-    result.assertion?.metric ||
-    result.metadata?.assertSetMetric ||
-    result.assertion?.type ||
-    (result.metadata?.isAssertSet ? 'assert-set' : '');
-
-  // Add threshold label for assert-sets
-  if (result.metadata?.isAssertSet && result.metadata?.assertSetThreshold !== undefined) {
-    const thresholdLabel = getThresholdLabel(result.metadata.assertSetThreshold);
+  let metric = getAssertionMetric(result);
+  if (result.metadata?.isAssertSet) {
+    const thresholdLabel = getThresholdLabel(
+      result.metadata.assertSetThreshold,
+      result.metadata.childCount,
+    );
     if (thresholdLabel) {
       metric = `${metric} (${thresholdLabel})`;
     }
   }
 
-  // Format reason with additional context for failed children in passing parents
   let reason = result.reason || '';
-  if (!result.pass && parentPassed && indentLevel > 0) {
+  if (!result.pass && parentPassed && ancestorLastFlags.length > 0) {
     reason = `${reason} (not required)`;
   }
 
   return {
-    metric: `${indent}${prefix}${metric}`,
+    metric: `${formatTreePrefix(ancestorLastFlags)}${metric}`,
     pass: passIndicator,
     score: result.score?.toFixed(2) || '0.00',
     weight: result.metadata?.assertSetWeight?.toString() || '-',
@@ -83,20 +94,13 @@ function formatAssertionResult(
   };
 }
 
-/**
- * Generate a table showing assertion details for a single output
- */
 export function generateAssertionTable(output: EvaluateTableOutput): string {
   const componentResults = output.gradingResult?.componentResults;
   if (!componentResults || componentResults.length === 0) {
     return '';
   }
 
-  // Build hierarchical display
-  const rows: ReturnType<typeof formatAssertionResult>[] = [];
-
-  // Group results by parent
-  const parentMap = new Map<number, GradingResult[]>();
+  const parentMap = new Map<number, { index: number; result: GradingResult }[]>();
   const topLevel: { index: number; result: GradingResult }[] = [];
 
   componentResults.forEach((result, index) => {
@@ -105,31 +109,34 @@ export function generateAssertionTable(output: EvaluateTableOutput): string {
     }
 
     const parentIndex = result.metadata?.parentAssertSetIndex;
-    if (parentIndex !== undefined) {
-      if (!parentMap.has(parentIndex)) {
-        parentMap.set(parentIndex, []);
-      }
-      parentMap.get(parentIndex)!.push(result);
+    if (parentIndex !== undefined && componentResults[parentIndex]) {
+      const children = parentMap.get(parentIndex) ?? [];
+      children.push({ index, result });
+      parentMap.set(parentIndex, children);
     } else {
       topLevel.push({ index, result });
     }
   });
 
-  // Render top-level items with their children
-  for (const { index, result } of topLevel) {
-    const isAssertSet = result.metadata?.isAssertSet;
-    rows.push(formatAssertionResult(result));
+  const rows: ReturnType<typeof formatAssertionResult>[] = [];
+  const renderResult = (
+    item: { index: number; result: GradingResult },
+    ancestorLastFlags: boolean[] = [],
+    parentPassed?: boolean,
+  ) => {
+    rows.push(formatAssertionResult(item.result, { parentPassed, ancestorLastFlags }));
 
-    // Add children if this is an assert-set
-    if (isAssertSet) {
-      const children = parentMap.get(index) || [];
-      const parentPassed = result.pass;
-      children.forEach((child, childIdx) => {
-        const isLast = childIdx === children.length - 1;
-        rows.push(formatAssertionResult(child, parentPassed, isLast ? 2 : 1));
-      });
-    }
-  }
+    const children = parentMap.get(item.index) ?? [];
+    children.forEach((child, childIndex) => {
+      renderResult(
+        child,
+        [...ancestorLastFlags, childIndex === children.length - 1],
+        item.result.pass,
+      );
+    });
+  };
+
+  topLevel.forEach((item) => renderResult(item));
 
   if (rows.length === 0) {
     return '';
@@ -137,27 +144,10 @@ export function generateAssertionTable(output: EvaluateTableOutput): string {
 
   const table = new Table({
     head: ['Metric', 'Pass', 'Score', 'Weight', 'Reason'].map((h) => chalk.dim(h)),
-    colWidths: [25, 6, 8, 8, 45],
+    colWidths: [30, 6, 8, 8, 45],
     wordWrap: true,
     wrapOnWordBoundary: true,
     style: { head: [] },
-    chars: {
-      top: '─',
-      'top-mid': '┬',
-      'top-left': '┌',
-      'top-right': '┐',
-      bottom: '─',
-      'bottom-mid': '┴',
-      'bottom-left': '└',
-      'bottom-right': '┘',
-      left: '│',
-      'left-mid': '├',
-      mid: '─',
-      'mid-mid': '┼',
-      right: '│',
-      'right-mid': '┤',
-      middle: '│',
-    },
   });
 
   for (const row of rows) {
@@ -167,72 +157,39 @@ export function generateAssertionTable(output: EvaluateTableOutput): string {
   return table.toString();
 }
 
-/**
- * Generate a compact inline summary of assertions
- */
 export function generateAssertionSummary(output: EvaluateTableOutput): string {
   const componentResults = output.gradingResult?.componentResults;
   if (!componentResults || componentResults.length === 0) {
     return '';
   }
 
-  // Filter to top-level assertions only (not children)
-  const topLevelResults = componentResults.filter(
-    (r) => r && r.metadata?.parentAssertSetIndex === undefined,
-  );
-
-  if (topLevelResults.length === 0) {
-    return '';
-  }
-
-  const parts = topLevelResults.map((result) => {
-    if (!result) {
-      return '';
-    }
-    const name =
-      result.assertion?.metric ||
-      result.metadata?.assertSetMetric ||
-      result.assertion?.type ||
-      'assertion';
-    if (result.pass) {
-      return chalk.green(`✓ ${name}`);
-    } else {
-      const scoreStr = result.score !== undefined ? ` (${result.score.toFixed(2)})` : '';
-      return chalk.red(`✗ ${name}${scoreStr}`);
-    }
-  });
-
-  return parts.filter(Boolean).join('  ');
+  return componentResults
+    .filter((result) => result && result.metadata?.parentAssertSetIndex === undefined)
+    .map((result) => {
+      const name = getAssertionMetric(result);
+      if (result.pass) {
+        return chalk.green(`✓ ${name}`);
+      }
+      const score = result.score === undefined ? '' : ` (${result.score.toFixed(2)})`;
+      return chalk.red(`✗ ${name}${score}`);
+    })
+    .join('  ');
 }
 
-/**
- * Format the score vs threshold display
- */
 function formatScoreThreshold(output: EvaluateTableOutput): string {
-  const gradingResult = output.gradingResult;
-  if (!gradingResult) {
+  const thresholdMatch = output.gradingResult?.reason?.match(/(\d+\.?\d*)\s*(?:≥|<)\s*(\d+\.?\d*)/);
+  if (!thresholdMatch) {
     return '';
   }
 
-  // Check if there's a threshold in the reason
-  const thresholdMatch = gradingResult.reason?.match(/(\d+\.?\d*)\s*(?:≥|<)\s*(\d+\.?\d*)/);
-  if (thresholdMatch) {
-    const score = parseFloat(thresholdMatch[1]);
-    const threshold = parseFloat(thresholdMatch[2]);
-    const passed = gradingResult.pass;
-    const color = passed ? chalk.green : chalk.red;
-    return color(
-      `Score: ${(score * 100).toFixed(0)}% ${passed ? '≥' : '<'} ${(threshold * 100).toFixed(0)}% threshold`,
-    );
-  }
-
-  return '';
-}
-
-export interface GenerateTableOptions {
-  tableCellMaxLength?: number;
-  maxRows?: number;
-  showAssertions?: boolean;
+  const score = Number.parseFloat(thresholdMatch[1]);
+  const threshold = Number.parseFloat(thresholdMatch[2]);
+  const color = output.gradingResult?.pass ? chalk.green : chalk.red;
+  return color(
+    `Score: ${(score * 100).toFixed(0)}% ${output.gradingResult?.pass ? '≥' : '<'} ${(
+      threshold * 100
+    ).toFixed(0)}% threshold`,
+  );
 }
 
 export function generateTable(
@@ -256,54 +213,41 @@ export function generateTable(
       head: ['blue', 'bold'],
     },
   });
-
-  const outputLines: string[] = [];
+  const assertionTables: string[] = [];
 
   // Skip first row (header) and add the rest. Color PASS/FAIL
   for (const row of evaluateTable.body.slice(0, maxRows)) {
-    const rowCells: string[] = [];
-
-    for (const v of row.vars) {
-      rowCells.push(ellipsize(v, tableCellMaxLength));
-    }
+    const rowCells = [...row.vars.map((v) => ellipsize(v, tableCellMaxLength))];
 
     for (const output of row.outputs) {
       const text = ellipsize(output.text, tableCellMaxLength);
-      const isFail = !output.pass;
-
-      // Build the cell content
       let cellContent: string;
+
       if (output.pass) {
         cellContent = chalk.green('[PASS] ') + text;
       } else {
-        // Color everything red up until '---'
         cellContent =
           chalk.red(output.failureReason === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +
           text
             .split('---')
             .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
             .join('---');
-      }
 
-      // Add score/threshold info for failures
-      if (isFail) {
         const scoreThreshold = formatScoreThreshold(output);
         if (scoreThreshold) {
-          cellContent += '\n       ' + scoreThreshold;
+          cellContent += `\n       ${scoreThreshold}`;
         }
 
-        // Add assertion summary for failures
-        const summary = generateAssertionSummary(output);
-        if (summary) {
-          cellContent += '\n       ' + summary;
+        const assertionSummary = generateAssertionSummary(output);
+        if (assertionSummary) {
+          cellContent += `\n       ${assertionSummary}`;
         }
       }
 
       rowCells.push(cellContent);
 
-      // If showAssertions is true or this is a failure, track assertion table for later
-      if ((showAssertions || isFail) && output.gradingResult?.componentResults?.length) {
-        outputLines.push(generateAssertionTable(output));
+      if (showAssertions && output.gradingResult?.componentResults?.length) {
+        assertionTables.push(generateAssertionTable(output));
       }
     }
 
@@ -311,13 +255,10 @@ export function generateTable(
   }
 
   let result = table.toString();
-
-  // Append assertion tables if requested
-  if (showAssertions && outputLines.length > 0) {
-    result += '\n\n' + chalk.bold('Assertion Details:') + '\n';
-    result += outputLines.join('\n');
+  if (showAssertions && assertionTables.length > 0) {
+    result += `\n\n${chalk.bold('Assertion Details:')}\n`;
+    result += assertionTables.filter(Boolean).join('\n');
   }
-
   return result;
 }
 

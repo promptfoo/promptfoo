@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AssertsForm from './AssertsForm';
@@ -51,17 +51,18 @@ describe('AssertsForm', () => {
     expect(valueInputs[2]).toHaveValue(String(1000));
   });
 
-  it('should add a new assertion with type equals and empty value when the Add Assertion button is clicked, and call onAdd with the updated assertions array', () => {
+  it('should add a new assertion with type equals and empty value when the Add Assertion button is clicked, and call onAdd with the updated assertions array', async () => {
+    const user = userEvent.setup();
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
 
     const addButton = screen.getByRole('button', { name: 'Add Assertion' });
 
-    fireEvent.click(addButton);
+    await user.click(addButton);
 
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith([{ type: 'equals', value: '' }]);
 
-    fireEvent.click(addButton);
+    await user.click(addButton);
 
     expect(onAdd).toHaveBeenCalledTimes(2);
     expect(onAdd).toHaveBeenCalledWith([
@@ -70,13 +71,16 @@ describe('AssertsForm', () => {
     ]);
   });
 
-  it('should update the value of an assertion and call onAdd with the updated assertions array when the value is changed in the TextField', () => {
+  it('should update the value of an assertion and call onAdd with the updated assertions array when the value is changed in the TextField', async () => {
+    const user = userEvent.setup();
     initialValues = [{ type: 'equals', value: 'initial value' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
 
     const valueInput = screen.getByRole('textbox', { name: 'Value' });
 
-    fireEvent.change(valueInput, { target: { value: 'new value' } });
+    await user.click(valueInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('new value');
 
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith([{ type: 'equals', value: 'new value' }]);
@@ -102,7 +106,8 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: 'initial value' }]);
   });
 
-  it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', () => {
+  it('should remove an assertion and call onAdd with the updated assertions array when the delete button is clicked for that assertion', async () => {
+    const user = userEvent.setup();
     initialValues = [
       { type: 'equals', value: 'expected output' },
       { type: 'contains-all', value: '["foo", "bar"]' },
@@ -110,7 +115,7 @@ describe('AssertsForm', () => {
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
 
     const deleteButtons = screen.getAllByRole('button', { name: 'Remove assertion' });
-    fireEvent.click(deleteButtons[0]);
+    await user.click(deleteButtons[0]);
 
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains-all', value: '["foo", "bar"]' }]);
@@ -126,12 +131,13 @@ describe('AssertsForm', () => {
     expect(addAssertButton).toBeInTheDocument();
   });
 
-  it('should call onAdd with an empty array when all assertions are removed', () => {
+  it('should call onAdd with an empty array when all assertions are removed', async () => {
+    const user = userEvent.setup();
     initialValues = [{ type: 'equals', value: 'initial value' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
 
     const deleteButton = screen.getByRole('button', { name: 'Remove assertion' });
-    fireEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onAdd).toHaveBeenCalledWith([]);

@@ -46,6 +46,9 @@ export interface PromptFunction {
 export interface Prompt {
   id?: string;
   raw: string;
+  // Internal-only copy of the undecorated prompt template used when prefix/suffix
+  // wraps the runtime prompt.
+  template?: string;
   display?: string;
   label: string;
   function?: PromptFunction;

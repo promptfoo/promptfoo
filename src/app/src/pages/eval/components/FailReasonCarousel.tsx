@@ -45,12 +45,11 @@ function formatFailReason(item: string | FailReasonWithContext): string {
 }
 
 const FailReasonCarousel = ({ failReasons }: FailReasonCarouselProps) => {
-  // Validate props BEFORE hooks to comply with Rules of Hooks
+  const [currentIndex, setCurrentIndex] = useState(0);
+
   if (failReasons.length < 1) {
     return null;
   }
-
-  const [currentIndex, setCurrentIndex] = useState(0);
 
   const handlePrev = () => {
     setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : failReasons.length - 1));

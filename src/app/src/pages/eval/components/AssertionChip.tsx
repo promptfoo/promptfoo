@@ -212,7 +212,8 @@ function AssertionChip({
 }
 
 export default AssertionChip;
-export { AssertionChip };
 
 export { getThresholdLabel } from '@app/utils/assertSetThreshold';
+
 export type { AssertionChipProps };
+export { AssertionChip };
