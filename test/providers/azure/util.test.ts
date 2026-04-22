@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { calculateAzureCost, throwConfigurationError } from '../../../src/providers/azure/util';
 
 describe('throwConfigurationError', () => {
@@ -14,11 +13,23 @@ describe('throwConfigurationError', () => {
 describe('calculateAzureCost', () => {
   it('calculates cost for valid model and tokens', () => {
     const cost = calculateAzureCost(
-      'gpt-4',
+      'gpt-5.4',
       {},
       100, // prompt tokens
       50, // completion tokens
     );
+    expect(cost).toBeDefined();
+    expect(typeof cost).toBe('number');
+  });
+
+  it('calculates cost for dated GPT-5.4 mini snapshots', () => {
+    const cost = calculateAzureCost('gpt-5.4-mini-2026-03-17', {}, 100, 50);
+    expect(cost).toBeDefined();
+    expect(typeof cost).toBe('number');
+  });
+
+  it('calculates cost for dated GPT-5.4 nano snapshots', () => {
+    const cost = calculateAzureCost('gpt-5.4-nano-2026-03-17', {}, 100, 50);
     expect(cost).toBeDefined();
     expect(typeof cost).toBe('number');
   });
@@ -33,9 +44,9 @@ describe('calculateAzureCost', () => {
     expect(cost).toBeUndefined();
   });
 
-  it('returns undefined with zero tokens', () => {
+  it('returns zero cost with zero tokens', () => {
     const cost = calculateAzureCost('gpt-4', {}, 0, 0);
-    expect(cost).toBeUndefined();
+    expect(cost).toBe(0);
   });
 
   it('handles empty config object', () => {

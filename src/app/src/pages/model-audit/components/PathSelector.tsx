@@ -1,36 +1,30 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Card, CardContent } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
 import {
-  Clear as ClearIcon,
-  Cloud as CloudIcon,
-  CloudUpload as CloudUploadIcon,
-  Computer as ComputerIcon,
-  Delete as DeleteIcon,
-  InsertDriveFile as FileIcon,
-  Folder as FolderIcon,
-  FolderOpen as FolderOpenIcon,
-  GitHub as GitHubIcon,
-  Lock as LockIcon,
-  Storage as StorageIcon,
-  Upload as UploadIcon,
-} from '@mui/icons-material';
-import Alert from '@mui/material/Alert';
-import Badge from '@mui/material/Badge';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Grid from '@mui/material/Grid';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import Paper from '@mui/material/Paper';
-import Stack from '@mui/material/Stack';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
+  ClearIcon,
+  CloudIcon,
+  CloudUploadIcon,
+  ComputerIcon,
+  DeleteIcon,
+  FileIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  GitHubIcon,
+  LockIcon,
+  StorageIcon,
+  UploadIcon,
+} from '@app/components/ui/icons';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import { callApi } from '@app/utils/api';
 import { useModelAuditConfigStore } from '../stores';
 
 import type { ScanPath } from '../ModelAudit.types';
@@ -42,9 +36,6 @@ interface PathSelectorProps {
   currentWorkingDir?: string;
 }
 
-// File input functionality removed to avoid browser security warnings
-// Using drag-drop and manual path input instead
-
 const SUPPORTED_FILE_TYPES = {
   PyTorch: ['.pt', '.pth', '.bin'],
   TensorFlow: ['.pb', '.h5', '.keras', '.tflite'],
@@ -54,13 +45,72 @@ const SUPPORTED_FILE_TYPES = {
   Checkpoint: ['.ckpt'],
 };
 
-// Helper function to extract name from path, handling trailing slashes
 const extractNameFromPath = (path: string): string => {
-  // Remove trailing slash if present
   const normalizedPath = path.endsWith('/') && path.length > 1 ? path.slice(0, -1) : path;
   const parts = normalizedPath.split('/');
   return parts[parts.length - 1] || normalizedPath;
 };
+
+function getFileTypeBadge(filename: string) {
+  const ext = filename.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
+
+  for (const [type, extensions] of Object.entries(SUPPORTED_FILE_TYPES)) {
+    if (extensions.includes(ext)) {
+      return (
+        <Badge variant="secondary" className="ml-2 text-xs">
+          {type}
+        </Badge>
+      );
+    }
+  }
+  return null;
+}
+
+function EnterpriseTabContent({
+  icon: Icon,
+  title,
+  description,
+  examples,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  examples?: { provider: string; desc: string; example: string }[];
+}) {
+  return (
+    <div className="py-8 text-center">
+      <Icon className="size-16 text-muted-foreground/50 mx-auto mb-4" />
+      <h3 className="text-lg font-medium text-muted-foreground mb-2">{title}</h3>
+      <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">{description}</p>
+
+      {examples && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 max-w-3xl mx-auto">
+          {examples.map(({ provider, desc, example }) => (
+            <Card key={provider} className="bg-muted/50">
+              <CardContent className="p-4 text-center">
+                <CloudUploadIcon className="size-8 text-muted-foreground/50 mx-auto mb-2" />
+                <h4 className="font-medium mb-1">{provider}</h4>
+                <p className="text-xs text-muted-foreground mb-2">{desc}</p>
+                <code className="text-xs bg-muted px-2 py-1 rounded">{example}</code>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Button variant="outline" asChild>
+        <a
+          href="https://promptfoo.dev/docs/guides/enterprise"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <LockIcon className="size-4 mr-2" />
+          Available in Enterprise
+        </a>
+      </Button>
+    </div>
+  );
+}
 
 export default function PathSelector({
   paths,
@@ -68,16 +118,12 @@ export default function PathSelector({
   onRemovePath,
   currentWorkingDir,
 }: PathSelectorProps) {
-  const theme = useTheme();
   const [pathInput, setPathInput] = useState('');
-  const [activeTab, setActiveTab] = useState(0);
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const { recentScans, clearRecentScans, removeRecentPath } = useModelAuditConfigStore();
   const [hoveredChipIndex, setHoveredChipIndex] = useState<number | null>(null);
-
-  // Removed file input refs - using only drag-drop and manual input
 
   const handleAddPath = async (input: string) => {
     const trimmedPath = input.trim();
@@ -85,7 +131,6 @@ export default function PathSelector({
       return;
     }
 
-    // Check if path already exists
     if (paths.some((p) => p.path === trimmedPath)) {
       setError('Path already added');
       setTimeout(() => setError(null), 3000);
@@ -96,19 +141,15 @@ export default function PathSelector({
     setError(null);
 
     try {
-      // Check path type using the API
       const response = await callApi('/model-audit/check-path', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: trimmedPath }),
       });
 
       const data = await response.json();
 
       if (data.exists) {
-        // Use the actual type from the filesystem
         onAddPath({
           path: trimmedPath,
           type: data.type,
@@ -116,10 +157,7 @@ export default function PathSelector({
         });
         setPathInput('');
       } else {
-        // Path doesn't exist but we'll still add it with a warning
         setError('Path does not exist or is not accessible');
-
-        // Make a best guess based on the input
         const isDirectory = trimmedPath.endsWith('/');
         onAddPath({
           path: trimmedPath,
@@ -131,8 +169,6 @@ export default function PathSelector({
       }
     } catch (_error) {
       setError('Failed to check path. The path will be added anyway.');
-
-      // Add the path anyway with a best guess
       const isDirectory = trimmedPath.endsWith('/');
       onAddPath({
         path: trimmedPath,
@@ -146,9 +182,6 @@ export default function PathSelector({
     }
   };
 
-  // File selection removed - using only drag-drop and manual path input
-  // This avoids browser security warnings about "uploading" files
-
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -161,6 +194,7 @@ export default function PathSelector({
     setIsDragging(false);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -168,12 +202,10 @@ export default function PathSelector({
       setIsDragging(false);
 
       const items = Array.from(e.dataTransfer.items);
-
       items.forEach((item) => {
         if (item.kind === 'file') {
           const entry = item.webkitGetAsEntry();
           if (entry) {
-            // Handle both files and directories
             if (entry.isDirectory) {
               handleAddPath(entry.fullPath + '/');
             } else {
@@ -186,552 +218,293 @@ export default function PathSelector({
     [paths],
   );
 
-  const tabIcon = (icon: React.ReactElement, isEnterprise = false): React.ReactElement => {
-    if (isEnterprise) {
-      return (
-        <Badge
-          badgeContent={
-            <Tooltip title="Enterprise Feature">
-              <LockIcon sx={{ fontSize: 12 }} />
-            </Tooltip>
-          }
-          sx={{
-            '& .MuiBadge-badge': {
-              right: -4,
-              top: 4,
-              backgroundColor: 'transparent',
-              color: 'text.disabled',
-            },
-          }}
-        >
-          {icon}
-        </Badge>
-      );
-    }
-    return icon;
-  };
-
-  const getFileTypeChip = (filename: string) => {
-    const ext = filename.toLowerCase().match(/\.[^.]+$/)?.[0] || '';
-
-    for (const [type, extensions] of Object.entries(SUPPORTED_FILE_TYPES)) {
-      if (extensions.includes(ext)) {
-        return (
-          <Chip
-            label={type}
-            size="small"
-            sx={{
-              ml: 1,
-              backgroundColor:
-                theme.palette.mode === 'dark' ? theme.palette.grey[800] : theme.palette.grey[200],
-            }}
-          />
-        );
-      }
-    }
-    return null;
-  };
+  const recentPaths = useMemo(() => {
+    return recentScans
+      .flatMap((scan) => scan.paths.map((path) => ({ ...path, scanId: scan.id })))
+      .filter((path, index, self) => index === self.findIndex((p) => p.path === path.path))
+      .slice(0, 8);
+  }, [recentScans]);
 
   return (
-    <Box>
-      <Tabs
-        value={activeTab}
-        onChange={(_, newValue) => setActiveTab(newValue)}
-        variant="fullWidth"
-        sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}
-      >
-        <Tab label="Local Files" icon={tabIcon(<ComputerIcon />)} iconPosition="start" />
-        <Tooltip title="Cloud storage integration is available in Promptfoo Enterprise">
-          <span>
-            <Tab
-              label="Cloud Storage"
-              icon={tabIcon(<CloudIcon />, true)}
-              iconPosition="start"
-              disabled
-              sx={{ opacity: 0.6 }}
-            />
-          </span>
-        </Tooltip>
-        <Tooltip title="GitHub integration is available in Promptfoo Enterprise">
-          <span>
-            <Tab
-              label="GitHub"
-              icon={tabIcon(<GitHubIcon />, true)}
-              iconPosition="start"
-              disabled
-              sx={{ opacity: 0.6 }}
-            />
-          </span>
-        </Tooltip>
-        <Tooltip title="Model registry integration is available in Promptfoo Enterprise">
-          <span>
-            <Tab
-              label="Model Registries"
-              icon={tabIcon(<StorageIcon />, true)}
-              iconPosition="start"
-              disabled
-              sx={{ opacity: 0.6 }}
-            />
-          </span>
-        </Tooltip>
-      </Tabs>
+    <div className="space-y-6">
+      <Tabs defaultValue="local" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="local" className="flex items-center gap-2">
+            <ComputerIcon className="size-4" />
+            <span className="hidden sm:inline">Local Files</span>
+          </TabsTrigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TabsTrigger value="cloud" disabled className="flex items-center gap-2 opacity-60">
+                <div className="relative">
+                  <CloudIcon className="size-4" />
+                  <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                </div>
+                <span className="hidden sm:inline">Cloud</span>
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Cloud storage is available in Enterprise</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TabsTrigger value="github" disabled className="flex items-center gap-2 opacity-60">
+                <div className="relative">
+                  <GitHubIcon className="size-4" />
+                  <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                </div>
+                <span className="hidden sm:inline">GitHub</span>
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent>GitHub integration is available in Enterprise</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TabsTrigger value="registry" disabled className="flex items-center gap-2 opacity-60">
+                <div className="relative">
+                  <StorageIcon className="size-4" />
+                  <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                </div>
+                <span className="hidden sm:inline">Registry</span>
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Model registries are available in Enterprise</TooltipContent>
+          </Tooltip>
+        </TabsList>
 
-      {/* Local Files Tab */}
-      {activeTab === 0 && (
-        <Box>
+        <TabsContent value="local" className="mt-6 space-y-6">
+          {/* Current Working Directory Info */}
           {currentWorkingDir && (
-            <Alert severity="info" sx={{ mb: 3 }}>
-              <Typography variant="body2">
-                <strong>Current directory:</strong> {currentWorkingDir}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Relative paths will be resolved from this directory
-              </Typography>
+            <Alert variant="info">
+              <AlertContent>
+                <AlertDescription>
+                  <strong>Current directory:</strong> {currentWorkingDir}
+                  <span className="block text-xs text-muted-foreground mt-1">
+                    Relative paths will be resolved from this directory
+                  </span>
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
 
           {/* Drag and Drop Zone */}
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-            Add model path
-          </Typography>
-          <Paper
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            sx={{
-              p: 3,
-              mb: 2.5,
-              border: '2px dashed',
-              borderColor: isDragging ? 'primary.main' : 'divider',
-              borderRadius: 2,
-              backgroundColor: isDragging
-                ? theme.palette.action.hover
-                : theme.palette.mode === 'dark'
-                  ? 'rgba(255, 255, 255, 0.02)'
-                  : 'rgba(0, 0, 0, 0.02)',
-              textAlign: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              transform: isDragging ? 'scale(1.02)' : 'scale(1)',
-              '&:hover': {
-                borderColor: 'primary.main',
-                backgroundColor: theme.palette.action.hover,
-              },
-            }}
-          >
-            <UploadIcon
-              sx={{
-                fontSize: 40,
-                color: isDragging ? 'primary.main' : 'text.secondary',
-                mb: 1.5,
-              }}
-            />
-            <Typography variant="body1" gutterBottom sx={{ fontWeight: 500 }}>
-              Drop files or folders here to add their paths
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              or type the path manually below
-            </Typography>
+          <div>
+            <Label htmlFor="model-path-input" className="text-muted-foreground block">
+              Add model path
+            </Label>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={cn(
+                'border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer',
+                isDragging
+                  ? 'border-primary bg-primary/5 scale-[1.02]'
+                  : 'border-border hover:border-primary hover:bg-muted/50',
+              )}
+            >
+              <UploadIcon
+                className={cn(
+                  'size-10 mx-auto mb-3',
+                  isDragging ? 'text-primary' : 'text-muted-foreground',
+                )}
+              />
+              <p className="font-medium mb-1">Drop files or folders here to add their paths</p>
+              <p className="text-sm text-muted-foreground mb-4">or type the path manually below</p>
 
-            {/* Supported file types */}
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="caption" color="text.secondary">
-                Supported formats:
-              </Typography>
-              <Stack
-                direction="row"
-                spacing={1}
-                flexWrap="wrap"
-                justifyContent="center"
-                sx={{ mt: 1 }}
-              >
+              {/* Supported file types */}
+              <div className="flex flex-wrap gap-2 justify-center">
                 {Object.entries(SUPPORTED_FILE_TYPES).map(([type, exts]) => (
-                  <Chip
-                    key={type}
-                    label={`${type} (${exts.join(', ')})`}
-                    size="small"
-                    variant="outlined"
-                    sx={{ m: 0.5 }}
-                  />
+                  <Badge key={type} variant="outline" className="text-xs">
+                    {type} ({exts.join(', ')})
+                  </Badge>
                 ))}
-              </Stack>
-            </Box>
-          </Paper>
+              </div>
+            </div>
+          </div>
 
-          {/* Manual Input Section */}
-          <Box sx={{ mb: 3 }}>
-            <Stack direction="row" spacing={2} alignItems="flex-start">
-              <TextField
-                fullWidth
-                label="Add model path"
-                placeholder="Type a path or drag & drop above"
+          {/* Manual Input */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <FolderOpenIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+              <Input
+                id="model-path-input"
                 value={pathInput}
                 onChange={(e) => setPathInput(e.target.value)}
-                onKeyPress={(e) => {
+                onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     handleAddPath(pathInput);
                   }
                 }}
-                error={!!error}
-                helperText={error || 'Enter a file or directory path'}
+                placeholder="Type a path or drag & drop above"
                 disabled={isChecking}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <FolderOpenIcon sx={{ color: 'text.secondary' }} />
-                    </InputAdornment>
-                  ),
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <Button
-                        onClick={() => handleAddPath(pathInput)}
-                        disabled={!pathInput.trim() || isChecking}
-                        variant="text"
-                        sx={{ mr: 1 }}
-                      >
-                        {isChecking ? 'Checking...' : 'Add'}
-                      </Button>
-                    </InputAdornment>
-                  ),
-                }}
+                className={cn('pl-10', error && 'border-destructive')}
               />
-            </Stack>
-          </Box>
+            </div>
+            <Button
+              onClick={() => handleAddPath(pathInput)}
+              disabled={!pathInput.trim() || isChecking}
+            >
+              {isChecking ? 'Checking...' : 'Add'}
+            </Button>
+          </div>
+          {error && (
+            <HelperText error className="-mt-4">
+              {error}
+            </HelperText>
+          )}
 
-          {/* Recent Scans Section */}
-          {recentScans.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Stack
-                direction="row"
-                justifyContent="space-between"
-                alignItems="center"
-                sx={{ mb: 2 }}
-              >
-                <Typography variant="subtitle2" color="text.secondary">
-                  Recent Paths
-                </Typography>
+          {/* Recent Paths */}
+          {recentPaths.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-muted-foreground">Recent Paths</h4>
                 <Button
-                  size="small"
-                  startIcon={<ClearIcon />}
+                  variant="ghost"
+                  size="sm"
                   onClick={clearRecentScans}
-                  sx={{ color: 'text.secondary' }}
+                  className="text-muted-foreground"
                 >
+                  <ClearIcon className="size-4 mr-1" />
                   Clear All
                 </Button>
-              </Stack>
-
-              <Paper
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  backgroundColor:
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(255, 255, 255, 0.02)'
-                      : 'rgba(0, 0, 0, 0.02)',
-                }}
-              >
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  {recentScans
-                    .flatMap((scan) => scan.paths.map((path) => ({ ...path, scanId: scan.id })))
-                    .filter(
-                      (path, index, self) => index === self.findIndex((p) => p.path === path.path),
-                    )
-                    .slice(0, 8)
-                    .map((path, index) => (
-                      <Chip
-                        key={`${path.path}-${index}`}
-                        label={path.name || path.path}
-                        size="medium"
-                        onMouseEnter={() => setHoveredChipIndex(index)}
-                        onMouseLeave={() => setHoveredChipIndex(null)}
-                        onClick={() => {
-                          if (!paths.some((p) => p.path === path.path)) {
-                            handleAddPath(path.path);
-                          }
-                        }}
-                        onDelete={
-                          hoveredChipIndex === index
-                            ? () => {
-                                removeRecentPath(path.scanId, path.path);
-                              }
-                            : undefined
-                        }
-                        deleteIcon={<ClearIcon fontSize="small" />}
-                        icon={path.type === 'directory' ? <FolderIcon /> : <FileIcon />}
-                        variant="outlined"
-                        sx={{
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          '& .MuiChip-deleteIcon': {
-                            display: hoveredChipIndex === index ? 'flex' : 'none',
-                            fontSize: '16px',
-                            color: theme.palette.text.secondary,
-                            '&:hover': {
-                              color: theme.palette.error.main,
-                            },
-                          },
-                          '&:hover': {
-                            backgroundColor: theme.palette.action.hover,
-                            transform: 'translateY(-1px)',
-                          },
-                        }}
-                      />
-                    ))}
-                </Stack>
-              </Paper>
-            </Box>
-          )}
-        </Box>
-      )}
-
-      {/* Cloud Storage Tab */}
-      {activeTab === 1 && (
-        <Box sx={{ p: 4 }}>
-          <Box sx={{ textAlign: 'center', mb: 4 }}>
-            <CloudIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" color="text.disabled" gutterBottom>
-              Cloud Storage Integration
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              Scan models directly from cloud storage providers with automatic authentication and
-              secure access.
-            </Typography>
-          </Box>
-
-          <Grid container spacing={3}>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Paper
-                sx={{
-                  p: 3,
-                  textAlign: 'center',
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? theme.palette.grey[800]
-                      : theme.palette.grey[50],
-                }}
-              >
-                <CloudUploadIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="subtitle1" gutterBottom>
-                  AWS S3
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  IAM roles, credentials management
-                </Typography>
-                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                  <code>s3://bucket/models/</code>
-                </Typography>
-              </Paper>
-            </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Paper
-                sx={{
-                  p: 3,
-                  textAlign: 'center',
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? theme.palette.grey[800]
-                      : theme.palette.grey[50],
-                }}
-              >
-                <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="subtitle1" gutterBottom>
-                  Azure Blob
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Managed identity, SAS tokens
-                </Typography>
-                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                  <code>az://container/path/</code>
-                </Typography>
-              </Paper>
-            </Grid>
-            <Grid size={{ xs: 12, md: 4 }}>
-              <Paper
-                sx={{
-                  p: 3,
-                  textAlign: 'center',
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? theme.palette.grey[800]
-                      : theme.palette.grey[50],
-                }}
-              >
-                <CloudIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-                <Typography variant="subtitle1" gutterBottom>
-                  Google Cloud
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Service accounts, workload identity
-                </Typography>
-                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                  <code>gs://bucket/models/</code>
-                </Typography>
-              </Paper>
-            </Grid>
-          </Grid>
-
-          <Box sx={{ textAlign: 'center', mt: 4 }}>
-            <Button
-              variant="outlined"
-              href="https://promptfoo.dev/docs/guides/enterprise"
-              target="_blank"
-              startIcon={<LockIcon />}
-            >
-              Available in Enterprise
-            </Button>
-          </Box>
-        </Box>
-      )}
-
-      {/* Git Repositories Tab */}
-      {activeTab === 2 && (
-        <Box sx={{ p: 4, textAlign: 'center' }}>
-          <GitHubIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-          <Typography variant="h6" color="text.disabled" gutterBottom>
-            Git Repository Integration
-          </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
-            Scan models directly from GitHub, GitLab, or Bitbucket repositories with OAuth
-            integration.
-          </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
-            Configure paths like: <code>github:org/repo/path/to/model.pkl</code>
-          </Typography>
-          <Button
-            variant="outlined"
-            href="https://promptfoo.dev/docs/guides/enterprise"
-            target="_blank"
-            startIcon={<LockIcon />}
-          >
-            Available in Enterprise
-          </Button>
-        </Box>
-      )}
-
-      {/* Model Registries Tab */}
-      {activeTab === 3 && (
-        <Box sx={{ p: 4, textAlign: 'center' }}>
-          <StorageIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-          <Typography variant="h6" color="text.disabled" gutterBottom>
-            Model Registry Integration
-          </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
-            Connect to MLflow, Weights & Biases, Neptune, and other model registries.
-          </Typography>
-          <Typography variant="body2" color="text.secondary" paragraph>
-            Scan models by registry URI: <code>mlflow://model-name/version</code>
-          </Typography>
-          <Button
-            variant="outlined"
-            href="https://promptfoo.dev/docs/guides/enterprise"
-            target="_blank"
-            startIcon={<LockIcon />}
-          >
-            Available in Enterprise
-          </Button>
-        </Box>
-      )}
-
-      {/* Selected Paths Section */}
-      {paths.length > 0 && (
-        <Box sx={{ mt: 4 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-            <Typography variant="h6" sx={{ fontSize: '1.1rem', fontWeight: 600 }}>
-              Selected Paths
-              <Chip label={paths.length} size="small" color="primary" sx={{ ml: 1, height: 20 }} />
-            </Typography>
-          </Stack>
-
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              backgroundColor:
-                theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)',
-            }}
-          >
-            <Stack spacing={1.5}>
-              {paths.map((path, index) => (
-                <Paper
-                  key={index}
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    backgroundColor: theme.palette.background.paper,
-                    border: `1px solid ${theme.palette.divider}`,
-                    borderRadius: 2,
-                    transition: 'all 0.2s',
-                    '&:hover': {
-                      borderColor: theme.palette.primary.main,
-                      transform: 'translateX(4px)',
-                      '& .delete-button': {
-                        opacity: 1,
-                      },
-                    },
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                    {path.type === 'directory' ? (
-                      <FolderIcon
-                        sx={{
-                          mr: 2,
-                          color: theme.palette.primary.main,
-                          fontSize: 28,
-                        }}
-                      />
-                    ) : (
-                      <FileIcon
-                        sx={{
-                          mr: 2,
-                          color: theme.palette.text.secondary,
-                          fontSize: 28,
-                        }}
-                      />
+              </div>
+              <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-border/50 bg-muted/30">
+                {recentPaths.map((path, index) => (
+                  <button
+                    key={`${path.path}-${index}`}
+                    type="button"
+                    onClick={() => {
+                      if (!paths.some((p) => p.path === path.path)) {
+                        handleAddPath(path.path);
+                      }
+                    }}
+                    onMouseEnter={() => setHoveredChipIndex(index)}
+                    onMouseLeave={() => setHoveredChipIndex(null)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-sm',
+                      'transition-all hover:bg-accent hover:-translate-y-0.5',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     )}
-
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {path.name || extractNameFromPath(path.path)}
-                      </Typography>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Typography variant="caption" color="text.secondary">
-                          {path.path}
-                        </Typography>
-                        {path.type === 'file' && getFileTypeChip(path.path)}
-                      </Stack>
-                    </Box>
-                  </Box>
-
-                  <IconButton
-                    className="delete-button"
-                    edge="end"
-                    aria-label={`Remove ${path.name || path.path}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemovePath(index);
-                    }}
-                    size="small"
-                    sx={{
-                      ml: 2,
-                      opacity: 0.7,
-                      transition: 'opacity 0.2s',
-                      color: theme.palette.error.main,
-                      '&:hover': {
-                        backgroundColor: theme.palette.error.light + '20',
-                      },
-                    }}
                   >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </Paper>
-              ))}
-            </Stack>
-          </Paper>
-        </Box>
+                    {path.type === 'directory' ? (
+                      <FolderIcon className="size-4 text-primary" />
+                    ) : (
+                      <FileIcon className="size-4 text-muted-foreground" />
+                    )}
+                    <span>{path.name || path.path}</span>
+                    {hoveredChipIndex === index && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeRecentPath(path.scanId, path.path);
+                        }}
+                        className="ml-1 hover:text-destructive"
+                      >
+                        <ClearIcon className="size-3.5" />
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="cloud">
+          <EnterpriseTabContent
+            icon={CloudIcon}
+            title="Cloud Storage Integration"
+            description="Scan models directly from cloud storage providers with automatic authentication and secure access."
+            examples={[
+              {
+                provider: 'AWS S3',
+                desc: 'IAM roles, credentials',
+                example: 's3://bucket/models/',
+              },
+              {
+                provider: 'Azure Blob',
+                desc: 'Managed identity, SAS',
+                example: 'az://container/path/',
+              },
+              {
+                provider: 'Google Cloud',
+                desc: 'Service accounts',
+                example: 'gs://bucket/models/',
+              },
+            ]}
+          />
+        </TabsContent>
+
+        <TabsContent value="github">
+          <EnterpriseTabContent
+            icon={GitHubIcon}
+            title="Git Repository Integration"
+            description="Scan models directly from GitHub, GitLab, or Bitbucket repositories with OAuth integration. Configure paths like: github:org/repo/path/to/model.pkl"
+          />
+        </TabsContent>
+
+        <TabsContent value="registry">
+          <EnterpriseTabContent
+            icon={StorageIcon}
+            title="Model Registry Integration"
+            description="Connect to MLflow, Weights & Biases, Neptune, and other model registries. Scan models by registry URI: mlflow://model-name/version"
+          />
+        </TabsContent>
+      </Tabs>
+
+      {/* Selected Paths */}
+      {paths.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-lg font-semibold">Selected Paths</h3>
+            <Badge variant="default" className="text-xs">
+              {paths.length}
+            </Badge>
+          </div>
+          <div className="space-y-2 p-3 rounded-lg border border-border/50 bg-muted/30">
+            {paths.map((path, index) => (
+              <div
+                key={index}
+                className={cn(
+                  'flex items-center gap-3 p-3 rounded-lg border border-border/50 bg-card',
+                  'transition-all hover:border-primary/50 hover:translate-x-1',
+                  'group',
+                )}
+              >
+                {path.type === 'directory' ? (
+                  <FolderIcon className="size-6 text-primary shrink-0" />
+                ) : (
+                  <FileIcon className="size-6 text-muted-foreground shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium truncate">
+                    {path.name || extractNameFromPath(path.path)}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground font-mono truncate">
+                      {path.path}
+                    </span>
+                    {path.type === 'file' && getFileTypeBadge(path.path)}
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemovePath(index);
+                  }}
+                  className="opacity-70 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  aria-label={`Remove ${path.name}`}
+                >
+                  <DeleteIcon className="size-4" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

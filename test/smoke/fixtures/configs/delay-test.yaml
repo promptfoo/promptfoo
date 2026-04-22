@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Simple config for testing --delay flag
+description: 'Smoke test - delay between tests'
+
+providers:
+  - echo
+
+prompts:
+  - 'Test {{num}}'
+
+tests:
+  - vars:
+      num: '1'
+  - vars:
+      num: '2'
+  - vars:
+      num: '3'

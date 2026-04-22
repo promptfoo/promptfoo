@@ -489,6 +489,172 @@ describe('createTransformResponse', () => {
   });
 });
 
+describe('BrowserProvider - Multi-turn Session Persistence', () => {
+  beforeEach(() => {
+    mockPage = {
+      goto: vi.fn(),
+      click: vi.fn(),
+      fill: vi.fn(),
+      waitForSelector: vi.fn().mockResolvedValue({} as never),
+      waitForTimeout: vi.fn(),
+      waitForFunction: vi.fn(),
+      screenshot: vi.fn(),
+      $eval: vi.fn(),
+      $$eval: vi.fn(),
+      content: vi.fn().mockResolvedValue('<html></html>'),
+      press: vi.fn(),
+      close: vi.fn(),
+      isClosed: vi.fn().mockReturnValue(false),
+      evaluate: vi.fn(),
+    } as unknown as Mocked<Page>;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should reuse page when persistSession is enabled', async () => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        persistSession: true,
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+          {
+            action: 'type',
+            args: { selector: '#input', text: '{{prompt}}' },
+          },
+        ],
+      },
+    });
+
+    // First call - should navigate
+    await provider.callApi('first prompt');
+    expect(mockPage.goto).toHaveBeenCalledWith('https://example.com');
+    expect(mockPage.fill).toHaveBeenCalledWith('#input', 'first prompt');
+
+    // Reset mocks to track second call
+    vi.clearAllMocks();
+
+    // Second call - should reuse page (navigate still called since runOnce not set)
+    await provider.callApi('second prompt');
+    expect(mockPage.goto).toHaveBeenCalledWith('https://example.com');
+    expect(mockPage.fill).toHaveBeenCalledWith('#input', 'second prompt');
+  });
+
+  it('should skip runOnce steps on subsequent calls', async () => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        persistSession: true,
+        steps: [
+          {
+            action: 'navigate',
+            runOnce: true,
+            args: { url: 'https://example.com' },
+          },
+          {
+            action: 'wait',
+            runOnce: true,
+            args: { ms: 1000 },
+          },
+          {
+            action: 'type',
+            args: { selector: '#input', text: '{{prompt}}' },
+          },
+        ],
+      },
+    });
+
+    // First call - should run all steps including runOnce
+    await provider.callApi('first prompt');
+    expect(mockPage.goto).toHaveBeenCalledTimes(1);
+    expect(mockPage.waitForTimeout).toHaveBeenCalledTimes(1);
+    expect(mockPage.fill).toHaveBeenCalledWith('#input', 'first prompt');
+
+    // Reset mocks
+    vi.clearAllMocks();
+
+    // Second call - should skip runOnce steps
+    await provider.callApi('second prompt');
+    expect(mockPage.goto).not.toHaveBeenCalled(); // runOnce - skipped
+    expect(mockPage.waitForTimeout).not.toHaveBeenCalled(); // runOnce - skipped
+    expect(mockPage.fill).toHaveBeenCalledWith('#input', 'second prompt'); // always run
+  });
+
+  it('should execute extract action with custom script', async () => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        steps: [
+          {
+            action: 'extract',
+            args: { script: 'return document.body.innerText' },
+            name: 'bodyText',
+          },
+        ],
+        transformResponse: 'extracted.bodyText',
+      },
+    });
+
+    mockPage.evaluate.mockResolvedValue('Hello World');
+    const result = await provider.callApi('test');
+
+    expect(mockPage.evaluate).toHaveBeenCalledWith(
+      expect.any(Function),
+      'return document.body.innerText',
+    );
+    expect(result.output).toBe('Hello World');
+  });
+
+  it('should throw error if extract action missing both selector and script', async () => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        steps: [
+          {
+            action: 'extract',
+            args: {},
+            name: 'result',
+          },
+        ],
+      },
+    });
+
+    const result = await provider.callApi('test');
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain("'selector' or 'script'");
+  });
+
+  it('should create new page if persisted page is closed', async () => {
+    const provider = new BrowserProvider('test', {
+      config: {
+        persistSession: true,
+        steps: [
+          {
+            action: 'navigate',
+            args: { url: 'https://example.com' },
+          },
+        ],
+      },
+    });
+
+    // First call
+    await provider.callApi('first');
+    expect(mockPage.goto).toHaveBeenCalledTimes(1);
+
+    // Simulate page being closed
+    mockPage.isClosed.mockReturnValue(true);
+
+    // Reset and make second call
+    vi.clearAllMocks();
+    await provider.callApi('second');
+
+    // Should create new page and navigate again
+    expect(mockPage.goto).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('BrowserProvider - Connect to Existing Session', () => {
   let mockFetch: ReturnType<typeof vi.spyOn>;
 

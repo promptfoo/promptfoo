@@ -4,7 +4,7 @@ prompts:
   - file://realtime-input.json
 
 providers:
-  - id: openai:realtime:gpt-4o-realtime-preview-2024-12-17
+  - id: openai:realtime:gpt-realtime-1.5
     config:
       modalities: ['text', 'audio']
       voice: 'alloy'

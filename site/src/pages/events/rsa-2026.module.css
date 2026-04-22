@@ -1,0 +1,487 @@
+/* RSA 2026 - Clean Banner Design */
+/* Color Palette: RSA blue (#0066CC), cyber cyan (#06B6D4), professional navy (#1e3a5f) */
+
+.rsaPage {
+  background: #0a0f1a;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* Hero Banner */
+.heroBanner {
+  position: relative;
+  height: 400px;
+  overflow: hidden;
+}
+
+.bannerImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.bannerOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(10, 15, 26, 0.4) 0%, rgba(10, 15, 26, 0.7) 100%);
+}
+
+.bannerContent {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 3rem;
+  background: linear-gradient(0deg, rgba(10, 15, 26, 0.95) 0%, transparent 100%);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(6, 182, 212, 0.2);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  color: #67e8f9;
+  border-radius: 100px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+}
+
+.badgeIcon {
+  font-size: 1rem;
+}
+
+.heroTitle {
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  color: #f1f5f9;
+  margin: 0;
+}
+
+.highlight {
+  background: linear-gradient(135deg, #06b6d4 0%, #0066cc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hero Content Section */
+.heroContent {
+  padding: 3rem 0;
+  text-align: center;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.1);
+}
+
+.heroSubtitle {
+  font-size: 1.25rem;
+  color: #94a3b8;
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  line-height: 1.7;
+}
+
+/* Countdown Timer */
+.countdown {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+}
+
+.countdownItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  min-width: 80px;
+}
+
+.countdownNumber {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #67e8f9;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.countdownLabel {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
+
+.countdownSeparator {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #06b6d4;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.eventDetails {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.95rem;
+}
+
+.icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  stroke-width: 2;
+  color: #06b6d4;
+}
+
+.heroCtas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ctaBlurb {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+}
+
+.primaryCta {
+  padding: 0.875rem 2rem;
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+  color: white;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.primaryCta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(6, 182, 212, 0.4);
+  color: white;
+}
+
+.secondaryCta {
+  padding: 0.875rem 2rem;
+  background: transparent;
+  color: #93c5fd;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  border: 1px solid rgba(0, 102, 204, 0.4);
+  transition: all 0.3s ease;
+}
+
+.secondaryCta:hover {
+  background: rgba(0, 102, 204, 0.1);
+  color: white;
+}
+
+/* Sections */
+.highlightsSection,
+.showcaseSection,
+.ctaSection {
+  padding: 4rem 0;
+}
+
+.highlightsSection {
+  background: rgba(6, 182, 212, 0.02);
+}
+
+.sectionHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.sectionTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.sectionSubtitle {
+  font-size: 1.1rem;
+  color: #94a3b8;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+/* Highlights Grid */
+.highlightsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+}
+
+.highlightCard {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.highlightCard:hover {
+  border-color: rgba(6, 182, 212, 0.3);
+  transform: translateY(-2px);
+}
+
+.highlightIcon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.highlightCard h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.5rem;
+}
+
+.highlightCard p {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Showcase Grid */
+.showcaseGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 2rem;
+}
+
+.showcaseItem {
+  padding: 1.5rem 0;
+  border-left: 2px solid rgba(6, 182, 212, 0.3);
+  padding-left: 1.5rem;
+}
+
+.showcaseNumber {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #06b6d4 0%, #0066cc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 0.75rem;
+  line-height: 1;
+}
+
+.showcaseItem h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.5rem;
+}
+
+.showcaseItem p {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* CTA Section */
+.ctaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.ctaCard {
+  text-align: center;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(0, 102, 204, 0.08) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 16px;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ctaCardTitle {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0 0 0.75rem 0;
+}
+
+.ctaCardText {
+  font-size: 0.95rem;
+  color: #94a3b8;
+  margin-bottom: 1.5rem;
+  line-height: 1.6;
+  flex-grow: 1;
+}
+
+.ctaPrimary {
+  padding: 0.875rem 2rem;
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+  color: white;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.ctaPrimary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(6, 182, 212, 0.4);
+  color: white;
+}
+
+.ctaSecondary {
+  padding: 0.875rem 2rem;
+  background: transparent;
+  color: #93c5fd;
+  font-weight: 600;
+  border-radius: 8px;
+  text-decoration: none;
+  border: 1px solid rgba(0, 102, 204, 0.4);
+  transition: all 0.3s ease;
+}
+
+.ctaSecondary:hover {
+  background: rgba(0, 102, 204, 0.1);
+  color: white;
+}
+
+/* Footer Navigation */
+.footerNav {
+  padding: 2rem 0 3rem;
+  border-top: 1px solid rgba(6, 182, 212, 0.1);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #94a3b8;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.backLink:hover {
+  color: #06b6d4;
+}
+
+.backIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .countdownSeparator {
+    animation: none;
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .heroBanner {
+    height: 300px;
+  }
+
+  .bannerContent {
+    padding: 2rem 1.5rem;
+  }
+
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .heroSubtitle {
+    font-size: 1.1rem;
+  }
+
+  .countdown {
+    gap: 0.25rem;
+  }
+
+  .countdownItem {
+    min-width: 60px;
+    padding: 0.75rem;
+  }
+
+  .countdownNumber {
+    font-size: 1.5rem;
+  }
+
+  .countdownSeparator {
+    font-size: 1.5rem;
+  }
+
+  .eventDetails {
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .heroCtas {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .primaryCta,
+  .secondaryCta,
+  .ctaPrimary,
+  .ctaSecondary {
+    width: 100%;
+    max-width: 280px;
+    text-align: center;
+  }
+
+  .ctaGrid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .ctaCard {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .highlightsSection,
+  .ctaSection {
+    padding: 3rem 0;
+  }
+}

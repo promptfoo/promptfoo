@@ -6,7 +6,7 @@ export const useTelemetry = () => {
   const { posthog, isInitialized } = usePostHog();
 
   const recordEvent = useCallback(
-    (eventName: string, properties: Record<string, any> = {}) => {
+    (eventName: string, properties: Record<string, unknown> = {}) => {
       if (!isInitialized || !posthog) {
         return;
       }
@@ -16,7 +16,7 @@ export const useTelemetry = () => {
   );
 
   const identifyUser = useCallback(
-    (userId: string, userProperties: Record<string, any> = {}) => {
+    (userId: string, userProperties: Record<string, unknown> = {}) => {
       if (!isInitialized || !posthog) {
         return;
       }

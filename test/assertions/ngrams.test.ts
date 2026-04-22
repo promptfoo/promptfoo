@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { getNGrams } from '../../src/assertions/ngrams';
 
 describe('getNGrams', () => {

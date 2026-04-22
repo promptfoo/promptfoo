@@ -1,4 +1,5 @@
 import React from 'react';
+
 import styles from './A2AArchitectureVisualizer.module.css';
 
 const communicationSteps = [

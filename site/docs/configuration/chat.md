@@ -223,39 +223,37 @@ The prompt inserts the previous conversation into the test case, creating a full
 
 ![multiple turn conversation eval](https://github.com/promptfoo/promptfoo/assets/310310/70048ae5-34ce-46f0-bd28-42d3aa96f03e)
 
-Try it yourself by using the [full example config](https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-turn-conversation).
+Try it yourself by using the [full example config](https://github.com/promptfoo/promptfoo/tree/main/examples/config-multi-turn).
 
 :::info
-When the `_conversation` variable is present, the eval will run single-threaded (concurrency of 1).
+When a prompt references `_conversation` as a Nunjucks variable, the eval will run single-threaded (concurrency of 1).
 :::
 
 ## Separating Chat Conversations
 
-When running multiple test files or test sequences, you may want to maintain conversation history between tests. This can be achieved by adding a `conversationId` to the test metadata:
+Each unique `conversationId` maintains its own separate conversation history. Scenarios automatically isolate conversations by default.
 
-```yaml title="test1.yaml"
-- vars:
-    question: 'Who founded Facebook?'
-  metadata:
-    conversationId: 'conversation1'
-- vars:
-    question: 'Where does he live?'
-  metadata:
-    conversationId: 'conversation1'
+You can explicitly control conversation grouping by adding a `conversationId` to the test metadata:
+
+```yaml
+tests:
+  - vars:
+      question: 'Who founded Facebook?'
+    metadata:
+      conversationId: 'conversation1'
+  - vars:
+      question: 'Where does he live?'
+    metadata:
+      conversationId: 'conversation1'
+  - vars:
+      question: 'Where is Yosemite National Park?'
+    metadata:
+      conversationId: 'conversation2'
+  - vars:
+      question: 'What are good hikes there?'
+    metadata:
+      conversationId: 'conversation2'
 ```
-
-```yaml title="test2.yaml"
-- vars:
-    question: 'Where is Yosemite National Park?'
-  metadata:
-    conversationId: 'conversation2'
-- vars:
-    question: 'What are good hikes there?'
-  metadata:
-    conversationId: 'conversation2'
-```
-
-Each unique `conversationId` maintains its own separate conversation history. If no `conversationId` is specified, all tests using the same provider and prompt will share a conversation history.
 
 ### Including JSON in prompt content
 
@@ -363,4 +361,4 @@ Transforms can be Javascript snippets or they can be entire separate Python or J
 - [Test Configuration](/docs/configuration/guide) - Complete guide to setting up test configurations
 - [Transformer Functions](/docs/configuration/guide/#transforming-outputs) - How to transform outputs between test cases
 - [Nunjucks Templates](https://mozilla.github.io/nunjucks/templating.html) - Documentation for the template language used in prompt files
-- [Multi-turn Conversation Example](https://github.com/promptfoo/promptfoo/tree/main/examples/multiple-turn-conversation) - Complete example of multi-turn conversations
+- [Multi-turn Conversation Example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-multi-turn) - Complete example of multi-turn conversations

@@ -1,8 +1,8 @@
 import dedent from 'dedent';
-
-import type { ApiProvider, AtomicTestCase, GradingResult } from '../../types/index';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase } from './base';
+
+import type { ApiProvider, AtomicTestCase, GradingResult } from '../../types/index';
 
 export class WordplayGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:wordplay';

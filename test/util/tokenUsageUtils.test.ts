@@ -3,6 +3,7 @@ import {
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
+  normalizeTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 
 import type { TokenUsage } from '../../src/types/shared';
@@ -22,6 +23,8 @@ describe('tokenUsageUtils', () => {
           reasoning: 0,
           acceptedPrediction: 0,
           rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
         },
         assertions: {
           total: 0,
@@ -33,6 +36,8 @@ describe('tokenUsageUtils', () => {
             reasoning: 0,
             acceptedPrediction: 0,
             rejectedPrediction: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
           },
         },
       });
@@ -120,7 +125,7 @@ describe('tokenUsageUtils', () => {
         },
       });
 
-      expect(target.completionDetails).toEqual({
+      expect(target.completionDetails).toMatchObject({
         reasoning: 5,
         acceptedPrediction: 3,
         rejectedPrediction: 2,
@@ -132,7 +137,7 @@ describe('tokenUsageUtils', () => {
         },
       });
 
-      expect(target.completionDetails).toEqual({
+      expect(target.completionDetails).toMatchObject({
         reasoning: 15,
         acceptedPrediction: 3,
         rejectedPrediction: 2,
@@ -246,6 +251,153 @@ describe('tokenUsageUtils', () => {
       expect(target.prompt).toBe(50);
       expect(target.completion).toBe(30);
       expect(target.numRequests).toBe(2);
+    });
+
+    it('should not increment numRequests when countAsRequest is false', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(
+        target,
+        {
+          tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+        },
+        { countAsRequest: false },
+      );
+
+      expect(target.total).toBe(50);
+      expect(target.prompt).toBe(30);
+      expect(target.completion).toBe(20);
+      expect(target.numRequests).toBe(0);
+    });
+
+    it('should not increment numRequests from response-only entries when countAsRequest is false', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateResponseTokenUsage(target, {}, { countAsRequest: false });
+
+      expect(target.total).toBe(0);
+      expect(target.numRequests).toBe(0);
+    });
+  });
+
+  describe('normalizeTokenUsage', () => {
+    it('should return fully populated TokenUsage with defaults for undefined input', () => {
+      const result = normalizeTokenUsage(undefined);
+
+      expect(result).toEqual({
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: 0,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+        },
+        assertions: {
+          total: 0,
+          prompt: 0,
+          completion: 0,
+          cached: 0,
+          numRequests: 0,
+          completionDetails: {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+          },
+        },
+      });
+    });
+
+    it('should preserve provided values', () => {
+      const result = normalizeTokenUsage({
+        total: 100,
+        prompt: 60,
+        completion: 40,
+      });
+
+      expect(result.total).toBe(100);
+      expect(result.prompt).toBe(60);
+      expect(result.completion).toBe(40);
+    });
+
+    it('should fill in missing fields with defaults', () => {
+      const result = normalizeTokenUsage({
+        total: 50,
+      });
+
+      expect(result.total).toBe(50);
+      expect(result.prompt).toBe(0);
+      expect(result.completion).toBe(0);
+      expect(result.cached).toBe(0);
+      expect(result.numRequests).toBe(0);
+    });
+
+    it('should preserve completionDetails if provided', () => {
+      const result = normalizeTokenUsage({
+        completionDetails: {
+          reasoning: 10,
+          acceptedPrediction: 5,
+          rejectedPrediction: 2,
+        },
+      });
+
+      expect(result.completionDetails).toEqual({
+        reasoning: 10,
+        acceptedPrediction: 5,
+        rejectedPrediction: 2,
+      });
+    });
+
+    it('should preserve assertions if provided', () => {
+      const result = normalizeTokenUsage({
+        assertions: {
+          total: 20,
+          prompt: 10,
+          completion: 10,
+        },
+      });
+
+      expect(result.assertions.total).toBe(20);
+      expect(result.assertions.prompt).toBe(10);
+      expect(result.assertions.completion).toBe(10);
+    });
+
+    it('should handle empty object', () => {
+      const result = normalizeTokenUsage({});
+
+      expect(result.total).toBe(0);
+      expect(result.prompt).toBe(0);
+      expect(result.completion).toBe(0);
+    });
+
+    it('should handle partial completionDetails', () => {
+      const result = normalizeTokenUsage({
+        completionDetails: {
+          reasoning: 5,
+        },
+      });
+
+      expect(result.completionDetails.reasoning).toBe(5);
+      // Other fields may be undefined or 0 depending on source
+    });
+
+    it('should return Required<TokenUsage> type', () => {
+      const result = normalizeTokenUsage({ total: 10 });
+
+      // TypeScript compile-time check: all fields should be non-optional
+      expect(result.total).toBeDefined();
+      expect(result.prompt).toBeDefined();
+      expect(result.completion).toBeDefined();
+      expect(result.cached).toBeDefined();
+      expect(result.numRequests).toBeDefined();
+      expect(result.completionDetails).toBeDefined();
+      expect(result.assertions).toBeDefined();
     });
   });
 });

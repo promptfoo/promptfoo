@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { handleFinishReason } from '../../src/assertions/finishReason';
 
 import type { AssertionParams } from '../../src/types/index';
@@ -113,6 +114,42 @@ describe('finishReason assertion', () => {
     const params: Partial<AssertionParams> = {
       assertion: { type: 'finish-reason', value: 'LENGTH' },
       providerResponse: { finishReason: 'length' },
+    };
+
+    const result = handleFinishReason(params as AssertionParams);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('should invert result when inverse is true (not-finish-reason)', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'not-finish-reason' as any, value: 'stop' },
+      inverse: true,
+      providerResponse: { finishReason: 'stop' },
+    };
+
+    const result = handleFinishReason(params as AssertionParams);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('should pass when inverse is true and finish reason does not match', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'not-finish-reason' as any, value: 'stop' },
+      inverse: true,
+      providerResponse: { finishReason: 'length' },
+    };
+
+    const result = handleFinishReason(params as AssertionParams);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('should pass when inverse is true and provider has no finish reason', () => {
+    const params: Partial<AssertionParams> = {
+      assertion: { type: 'not-finish-reason' as any, value: 'stop' },
+      inverse: true,
+      providerResponse: {},
     };
 
     const result = handleFinishReason(params as AssertionParams);

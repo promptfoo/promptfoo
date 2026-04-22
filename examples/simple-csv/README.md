@@ -4,17 +4,10 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example simple-csv
+cd simple-csv
 ```
 
 This example demonstrates how to use CSV and Excel files for test cases in promptfoo, including working with JSON fields for language translation tasks.
-
-## Getting Started
-
-You can initialize this example in your project by running:
-
-```bash
-promptfoo init --example simple-csv
-```
 
 ## Features Demonstrated
 
@@ -36,10 +29,10 @@ promptfoo init --example simple-csv
 
 To use Excel files instead of CSV:
 
-1. Install the xlsx package (optional peer dependency):
+1. Install the read-excel-file package (optional peer dependency):
 
    ```bash
-   npm install xlsx
+   npm install read-excel-file
    ```
 
 2. Update `promptfooconfig.yaml` to use the Excel file:

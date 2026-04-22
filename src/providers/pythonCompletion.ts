@@ -2,14 +2,16 @@ import fs from 'fs';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
+import cliState from '../cliState';
 import logger from '../logger';
-import { getEnvInt } from '../python/pythonUtils';
+import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
-import { parsePathOrGlob } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
+import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
+import { sanitizeScriptContext } from './scriptContext';
 
 import type {
   ApiProvider,
@@ -25,6 +27,150 @@ interface PythonProviderConfig {
   workers?: number;
   timeout?: number;
   [key: string]: any; // Allow arbitrary config properties for user scripts
+}
+
+type PythonApiType = 'call_api' | 'call_embedding_api' | 'call_classification_api';
+
+function buildPythonScriptArgs(
+  apiType: PythonApiType,
+  prompt: string,
+  optionsWithProcessedConfig: ProviderOptions,
+  sanitizedContext: CallApiContextParams | undefined,
+) {
+  return apiType === 'call_api'
+    ? [prompt, optionsWithProcessedConfig, sanitizedContext]
+    : [prompt, optionsWithProcessedConfig];
+}
+
+function hasPythonResultProperty(
+  result: any,
+  propertyName: 'output' | 'error' | 'embedding' | 'classification',
+): boolean {
+  return (
+    Boolean(result) &&
+    typeof result === 'object' &&
+    Object.prototype.hasOwnProperty.call(result, propertyName)
+  );
+}
+
+function applyCachedCallApiMetadata(apiType: PythonApiType, parsedResult: any) {
+  if (apiType !== 'call_api' || typeof parsedResult !== 'object' || parsedResult === null) {
+    return parsedResult;
+  }
+
+  logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
+  parsedResult.cached = true;
+
+  // Update token usage format for cached results
+  if (parsedResult.tokenUsage) {
+    const total = parsedResult.tokenUsage.total || 0;
+    parsedResult.tokenUsage = {
+      cached: total,
+      total,
+      numRequests: parsedResult.tokenUsage.numRequests ?? 1,
+    };
+    logger.debug(
+      `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
+    );
+  }
+
+  return parsedResult;
+}
+
+function applyFreshCallApiMetadata(apiType: PythonApiType, result: any) {
+  if (apiType !== 'call_api' || typeof result !== 'object' || result === null) {
+    return result;
+  }
+
+  logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
+  result.cached = false;
+
+  // Ensure tokenUsage includes numRequests for fresh results
+  if (result.tokenUsage && !result.tokenUsage.numRequests) {
+    result.tokenUsage.numRequests = 1;
+    logger.debug(
+      `Added numRequests to fresh result token usage: ${JSON.stringify(result.tokenUsage)}`,
+    );
+  }
+
+  return result;
+}
+
+function hasPythonResultError(result: any): boolean {
+  // Must stay consistent with validateCallApiResult's own-property check:
+  // loosening this to `'error' in result` without also loosening validation
+  // would let a script return an error on the prototype chain, pass validation
+  // via an own `output`, and then be cached as a successful result — a
+  // cache-poisoning vector.
+  return (
+    hasPythonResultProperty(result, 'error') &&
+    result.error !== null &&
+    result.error !== undefined &&
+    result.error !== ''
+  );
+}
+
+function validateCallApiResult(functionName: string, result: any): void {
+  // Log result structure for debugging
+  const resultType = result === null ? 'null' : typeof result;
+  const resultKeys = result && typeof result === 'object' ? Object.keys(result).join(',') : 'none';
+  logger.debug(`Python provider result structure: ${resultType}, keys: ${resultKeys}`);
+  if (hasPythonResultProperty(result, 'output')) {
+    logger.debug(
+      `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
+    );
+  }
+
+  if (!hasPythonResultProperty(result, 'output') && !hasPythonResultProperty(result, 'error')) {
+    throw new Error(
+      `The Python script \`${functionName}\` function must return a dict with an own \`output\` string/object or \`error\` string (inherited prototype properties are rejected), instead got: ${JSON.stringify(
+        result,
+      )}`,
+    );
+  }
+}
+
+function validateEmbeddingResult(functionName: string, result: any): void {
+  if (!hasPythonResultProperty(result, 'embedding') && !hasPythonResultProperty(result, 'error')) {
+    throw new Error(
+      `The Python script \`${functionName}\` function must return a dict with an own \`embedding\` array or \`error\` string (inherited prototype properties are rejected), instead got ${JSON.stringify(
+        result,
+      )}`,
+    );
+  }
+}
+
+function validateClassificationResult(functionName: string, result: any): void {
+  if (
+    !hasPythonResultProperty(result, 'classification') &&
+    !hasPythonResultProperty(result, 'error')
+  ) {
+    throw new Error(
+      `The Python script \`${functionName}\` function must return a dict with an own \`classification\` object or \`error\` string (inherited prototype properties are rejected), instead of ${JSON.stringify(
+        result,
+      )}`,
+    );
+  }
+}
+
+function validatePythonScriptResult(
+  apiType: PythonApiType,
+  functionName: string,
+  result: any,
+): void {
+  switch (apiType) {
+    case 'call_api':
+      validateCallApiResult(functionName, result);
+      return;
+    case 'call_embedding_api':
+      validateEmbeddingResult(functionName, result);
+      return;
+    case 'call_classification_api':
+      validateClassificationResult(functionName, result);
+      return;
+    default:
+      throw new Error(`Unsupported apiType: ${apiType}`);
+  }
 }
 
 export class PythonProvider implements ApiProvider {
@@ -68,7 +214,7 @@ export class PythonProvider implements ApiProvider {
     }
 
     // If initialization is in progress, return the existing promise
-    if (this.initializationPromise) {
+    if (this.initializationPromise != null) {
       return this.initializationPromise;
     }
 
@@ -90,7 +236,7 @@ export class PythonProvider implements ApiProvider {
           absPath,
           this.functionName || 'call_api',
           workerCount,
-          this.config.pythonExecutable,
+          getConfiguredPythonPath(this.config.pythonExecutable),
           this.config.timeout,
         );
 
@@ -113,33 +259,51 @@ export class PythonProvider implements ApiProvider {
 
   /**
    * Determine worker count based on config and environment
-   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > default 1
+   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > cliState.maxConcurrency (-j flag) > default 1
+   *
+   * Explicit Python-specific settings (config.workers, env var) take precedence over
+   * general concurrency hints (-j flag) because users may limit Python workers due to
+   * memory constraints or non-thread-safe scripts.
    */
   private getWorkerCount(): number {
-    let count: number;
-
-    // 1. Explicit config.workers
+    // 1. Explicit config.workers (highest priority - user knows their script's requirements)
     if (this.config.workers !== undefined) {
-      count = this.config.workers;
-    }
-    // 2. Environment variable
-    else {
-      const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
-      if (envWorkers !== undefined) {
-        count = envWorkers;
-      } else {
-        // 3. Default: 1 worker (memory-efficient)
-        count = 1;
+      if (this.config.workers < 1) {
+        logger.warn(`Invalid worker count ${this.config.workers} in config, using minimum of 1`);
+        return 1;
       }
+      logger.debug(`Python provider using ${this.config.workers} workers (from config.workers)`);
+      return this.config.workers;
     }
 
-    // Validate: must be at least 1
-    if (count < 1) {
-      logger.warn(`Invalid worker count ${count}, using minimum of 1`);
-      return 1;
+    // 2. Environment variable (explicit Python-specific setting)
+    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
+    if (envWorkers !== undefined) {
+      if (envWorkers < 1) {
+        logger.warn(
+          `Invalid worker count ${envWorkers} in PROMPTFOO_PYTHON_WORKERS, using minimum of 1`,
+        );
+        return 1;
+      }
+      logger.debug(`Python provider using ${envWorkers} workers (from PROMPTFOO_PYTHON_WORKERS)`);
+      return envWorkers;
     }
 
-    return count;
+    // 3. CLI -j flag via cliState (general concurrency hint, only when explicitly set)
+    if (cliState.maxConcurrency !== undefined) {
+      if (cliState.maxConcurrency < 1) {
+        logger.warn(
+          `Invalid worker count ${cliState.maxConcurrency} from -j flag, using minimum of 1`,
+        );
+        return 1;
+      }
+      logger.debug(`Python provider using ${cliState.maxConcurrency} workers (from -j flag)`);
+      return cliState.maxConcurrency;
+    }
+
+    // 4. Default: 1 worker (memory-efficient, backward compatible)
+    logger.debug('Python provider using 1 worker (default)');
+    return 1;
   }
 
   /**
@@ -154,7 +318,7 @@ export class PythonProvider implements ApiProvider {
   private async executePythonScript(
     prompt: string,
     context: CallApiContextParams | undefined,
-    apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
+    apiType: PythonApiType,
   ): Promise<any> {
     if (!this.isInitialized || !this.pool) {
       await this.initialize();
@@ -189,30 +353,9 @@ export class PythonProvider implements ApiProvider {
       );
 
       // IMPORTANT: Set cached flag to true so evaluator recognizes this as cached
-      if (apiType === 'call_api' && typeof parsedResult === 'object' && parsedResult !== null) {
-        logger.debug(`PythonProvider setting cached=true for cached ${apiType} result`);
-        parsedResult.cached = true;
-
-        // Update token usage format for cached results
-        if (parsedResult.tokenUsage) {
-          const total = parsedResult.tokenUsage.total || 0;
-          parsedResult.tokenUsage = {
-            cached: total,
-            total,
-            numRequests: parsedResult.tokenUsage.numRequests ?? 1,
-          };
-          logger.debug(
-            `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
-          );
-        }
-      }
-      return parsedResult;
+      return applyCachedCallApiMetadata(apiType, parsedResult);
     } else {
-      if (context) {
-        // Remove properties not useful in Python
-        delete context.getCache;
-        delete context.logger;
-      }
+      const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
 
       // Create a new options object with processed file references included in the config
       // This ensures any file:// references are replaced with their actual content
@@ -224,83 +367,25 @@ export class PythonProvider implements ApiProvider {
         },
       };
 
-      // Prepare arguments for the Python script based on API type
-      const args =
-        apiType === 'call_api'
-          ? [prompt, optionsWithProcessedConfig, context]
-          : [prompt, optionsWithProcessedConfig];
+      const args = buildPythonScriptArgs(
+        apiType,
+        prompt,
+        optionsWithProcessedConfig,
+        sanitizedContext,
+      );
 
       logger.debug(
         `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
       );
 
       const functionName = this.functionName || apiType;
-      let result;
-
       // Use worker pool instead of runPython
-      result = await this.pool!.execute(functionName, args);
+      const result = await this.pool!.execute(functionName, args);
 
-      // Validation logic based on API type
-      switch (apiType) {
-        case 'call_api':
-          // Log result structure for debugging
-          logger.debug(
-            `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
-          );
-          if (result && 'output' in result) {
-            logger.debug(
-              `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
-            );
-          }
-
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('output' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        case 'call_embedding_api':
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('embedding' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        case 'call_classification_api':
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('classification' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        default:
-          throw new Error(`Unsupported apiType: ${apiType}`);
-      }
+      validatePythonScriptResult(apiType, functionName, result);
 
       // Store result in cache if enabled and no errors
-      const hasError =
-        'error' in result &&
-        result.error !== null &&
-        result.error !== undefined &&
-        result.error !== '';
+      const hasError = hasPythonResultError(result);
 
       if (isCacheEnabled() && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
@@ -312,20 +397,7 @@ export class PythonProvider implements ApiProvider {
       }
 
       // Set cached=false on fresh results and ensure numRequests is set
-      if (typeof result === 'object' && result !== null && apiType === 'call_api') {
-        logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
-        result.cached = false;
-
-        // Ensure tokenUsage includes numRequests for fresh results
-        if (result.tokenUsage && !result.tokenUsage.numRequests) {
-          result.tokenUsage.numRequests = 1;
-          logger.debug(
-            `Added numRequests to fresh result token usage: ${JSON.stringify(result.tokenUsage)}`,
-          );
-        }
-      }
-
-      return result;
+      return applyFreshCallApiMetadata(apiType, result);
     }
   }
 
