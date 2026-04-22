@@ -159,8 +159,22 @@
     {
       "idx": 22,
       "version": "6",
-      "when": 1765673147920,
-      "tag": "0022_square_multiple_man",
+      "when": 1765906817572,
+      "tag": "0022_sleepy_ultimo",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1767985150681,
+      "tag": "0023_wooden_mandrill",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1776898824367,
+      "tag": "0024_bouncy_nightmare",
       "breakpoints": true
     }
   ]

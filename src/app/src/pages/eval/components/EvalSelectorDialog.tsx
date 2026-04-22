@@ -1,73 +1,45 @@
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Typography from '@mui/material/Typography';
-import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import EvalsTable from '../../evals/components/EvalsTable';
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onEvalSelected: (evalId: string) => void;
-  title?: string;
-  description?: string;
   focusedEvalId?: string;
   filterByDatasetId?: boolean;
-  onOpenFocusSearch?: boolean;
+  description?: string;
 };
 
 const EvalSelectorDialog = ({
   open,
   onClose,
   onEvalSelected,
-  title,
-  description,
   focusedEvalId,
   filterByDatasetId,
-  onOpenFocusSearch = false,
+  description = 'Choose an evaluation to view',
 }: Props) => {
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="lg"
-      fullWidth
-      PaperProps={{
-        sx: {
-          height: '80vh',
-          maxHeight: '800px',
-          display: 'flex',
-          flexDirection: 'column',
-        },
-      }}
-    >
-      {title ? (
-        <DialogTitle sx={{ flexShrink: 0 }}>
-          {title}
-          {description ? (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {description}
-            </Typography>
-          ) : null}
-        </DialogTitle>
-      ) : null}
-      <DialogContent sx={{ pt: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <Box sx={{ width: '100%', flex: 1, minHeight: 0 }}>
-          <EvalsDataGrid
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-5xl h-[80vh] p-0 gap-0 flex flex-col overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-2">
+          <DialogTitle>Select Evaluation</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden px-4 pb-2">
+          <EvalsTable
             onEvalSelected={onEvalSelected}
             focusedEvalId={focusedEvalId}
             filterByDatasetId={filterByDatasetId}
-            focusQuickFilterOnMount={onOpenFocusSearch}
+            showUtilityButtons
           />
-        </Box>
+        </div>
       </DialogContent>
-      <DialogActions sx={{ flexShrink: 0 }}>
-        <Button variant="outlined" onClick={onClose}>
-          Cancel
-        </Button>
-      </DialogActions>
     </Dialog>
   );
 };

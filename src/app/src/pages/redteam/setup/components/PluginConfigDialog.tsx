@@ -1,22 +1,21 @@
 import { useEffect, useState } from 'react';
 
-import AddIcon from '@mui/icons-material/Add';
-import RemoveIcon from '@mui/icons-material/Remove';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
+import { Textarea } from '@app/components/ui/textarea';
+import { Minus, Plus } from 'lucide-react';
+import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
-import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import type { LocalPluginConfig } from '../types';
 
 interface PluginConfigDialogProps {
@@ -39,6 +38,7 @@ export default function PluginConfigDialog({
   const [localConfig, setLocalConfig] = useState<LocalPluginConfig[string]>(config);
 
   // Update localConfig when config prop changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (open && plugin && (!localConfig || Object.keys(localConfig).length === 0)) {
       setLocalConfig(config || {});
@@ -101,128 +101,105 @@ export default function PluginConfigDialog({
       case 'policy':
         // Show read-only list of all configured policies
         const policyPlugins = redTeamConfig.plugins.filter(
-          (p): p is { id: string; config: any } =>
+          (p): p is { id: string; config: PluginConfig } =>
             typeof p === 'object' && 'id' in p && p.id === 'policy',
         );
 
         if (policyPlugins.length === 0) {
           specificConfig = (
-            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+            <p className="py-4 text-sm text-muted-foreground">
               No custom policies configured. Add policies in the Custom Policies section.
-            </Typography>
+            </p>
           );
         } else {
           specificConfig = (
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 2 }}>
+            <div>
+              <p className="mb-3 text-sm font-medium">
                 Configured Custom Policies ({policyPlugins.length})
-              </Typography>
+              </p>
               {policyPlugins.map((policyPlugin, index) => (
-                <Paper
-                  key={index}
-                  variant="outlined"
-                  sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
-                >
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ mb: 1, display: 'block' }}
-                  >
-                    Policy {index + 1}
-                  </Typography>
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                <div key={index} className="mb-3 rounded-md border border-border bg-muted/30 p-3">
+                  <p className="mb-1 text-xs text-muted-foreground">Policy {index + 1}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
                     {typeof policyPlugin.config.policy === 'string'
                       ? policyPlugin.config.policy
                       : policyPlugin.config.policy?.text || 'No policy text'}
-                  </Typography>
-                </Paper>
+                  </p>
+                </div>
               ))}
-              <Typography variant="caption" color="text.secondary">
+              <p className="text-xs text-muted-foreground">
                 To edit or add policies, use the Custom Policies section in Available Plugins.
-              </Typography>
-            </Box>
+              </p>
+            </div>
           );
         }
         break;
       case 'intent':
         // Show read-only list of all configured custom intents
         const intentPlugin = redTeamConfig.plugins.find(
-          (p): p is { id: string; config: any } =>
+          (p): p is { id: string; config: PluginConfig } =>
             typeof p === 'object' && 'id' in p && p.id === 'intent',
         );
 
         if (!intentPlugin?.config?.intent) {
           specificConfig = (
-            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+            <p className="py-4 text-sm text-muted-foreground">
               No custom intents configured. Add intents in the Custom Prompts section.
-            </Typography>
+            </p>
           );
           break;
         }
 
         const intents = intentPlugin.config.intent;
-        const flatIntents = intents
-          .flat()
-          .filter((intent: any) => typeof intent === 'string' && intent.trim());
+        const flatIntents = (Array.isArray(intents) ? intents.flat() : [intents]).filter(
+          (intent: unknown) => typeof intent === 'string' && intent.trim(),
+        );
 
         if (flatIntents.length === 0) {
           specificConfig = (
-            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+            <p className="py-4 text-sm text-muted-foreground">
               No custom intents configured. Add intents in the Custom Prompts section.
-            </Typography>
+            </p>
           );
           break;
         }
 
         specificConfig = (
-          <Box>
-            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+          <div>
+            <p className="mb-3 text-sm font-medium">
               Configured Custom Intents ({flatIntents.length})
-            </Typography>
+            </p>
             {flatIntents.map((intent: string, index: number) => (
-              <Paper
-                key={index}
-                variant="outlined"
-                sx={{ p: 2, mb: 2, backgroundColor: 'grey.50' }}
-              >
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ mb: 1, display: 'block' }}
-                >
-                  Intent {index + 1}
-                </Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                  {intent}
-                </Typography>
-              </Paper>
+              <div key={index} className="mb-3 rounded-md border border-border bg-muted/30 p-3">
+                <p className="mb-1 text-xs text-muted-foreground">Intent {index + 1}</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed">{intent}</p>
+              </div>
             ))}
-            <Typography variant="caption" color="text.secondary">
+            <p className="text-xs text-muted-foreground">
               To edit or add intents, use the Custom Prompts section in Available Plugins.
-            </Typography>
-          </Box>
+            </p>
+          </div>
         );
         break;
       case 'prompt-extraction':
         const key = 'systemPrompt';
         specificConfig = (
-          <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
               The Prompt Extraction plugin tests whether an attacker can extract your system prompt
               through various techniques. Provide your actual system prompt here so the plugin can
               test if it can be extracted.
-            </Typography>
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              label="System Prompt"
-              variant="outlined"
-              margin="normal"
-              value={localConfig[key] || ''}
-              onChange={(e) => setLocalConfig({ ...localConfig, [key]: e.target.value })}
-            />
-          </Box>
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="system-prompt">System Prompt</Label>
+              <Textarea
+                id="system-prompt"
+                className="min-h-[100px]"
+                value={(localConfig[key] as string) || ''}
+                onChange={(e) => setLocalConfig({ ...localConfig, [key]: e.target.value })}
+              />
+            </div>
+          </div>
         );
         break;
       case 'bfla':
@@ -251,65 +228,63 @@ export default function PluginConfigDialog({
         // Ensure we always have at least one item
         const currentArray = (localConfig[arrayKey] as string[]) || [''];
         specificConfig = (
-          <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {getExplanation()}
-            </Typography>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{getExplanation()}</p>
             {currentArray.map((item: string, index: number) => (
-              <Box key={index} sx={{ display: 'flex', alignItems: 'center', my: 1 }}>
-                <TextField
-                  fullWidth
-                  label={`${arrayKeyToLabel(arrayKey)} ${index + 1}`}
-                  variant="outlined"
+              <div key={index} className="flex items-center gap-2">
+                <Input
                   value={item}
                   onChange={(e) => handleArrayInputChange(arrayKey, index, e.target.value)}
-                  sx={{ mr: 1 }}
+                  placeholder={`${arrayKeyToLabel(arrayKey)} ${index + 1}`}
                 />
                 {/* Only show remove button if there's more than one item */}
                 {currentArray.length > 1 && (
-                  <IconButton onClick={() => removeArrayItem(arrayKey, index)} size="small">
-                    <RemoveIcon />
-                  </IconButton>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeArrayItem(arrayKey, index)}
+                  >
+                    <Minus className="size-4" />
+                  </Button>
                 )}
-              </Box>
+              </div>
             ))}
             <Button
-              startIcon={<AddIcon />}
+              variant="outline"
+              size="sm"
               onClick={() => addArrayItem(arrayKey)}
-              variant="outlined"
-              size="small"
-              sx={{ mt: 1 }}
               disabled={hasEmptyArrayItems(currentArray)}
             >
+              <Plus className="mr-1 size-4" />
               Add
             </Button>
-          </Box>
+          </div>
         );
         break;
       case 'indirect-prompt-injection':
         specificConfig = (
-          <Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
               Indirect Prompt Injection tests whether untrusted content can influence your AI
               system's behavior. This happens when user-generated content or external data (like
               from RAG systems) contains malicious instructions. Specify the variable name in your
               prompt that contains untrusted data (e.g., 'name', 'userContent', 'document').
-            </Typography>
-            <TextField
-              fullWidth
-              label="Indirect Injection Variable"
-              variant="outlined"
-              margin="normal"
-              value={localConfig.indirectInjectionVar || ''}
-              onChange={(e) =>
-                setLocalConfig({ ...localConfig, indirectInjectionVar: e.target.value })
-              }
-              placeholder="e.g., name, userContent, document"
-            />
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="indirect-injection-var">Indirect Injection Variable</Label>
+              <Input
+                id="indirect-injection-var"
+                value={(localConfig.indirectInjectionVar as string) || ''}
+                onChange={(e) =>
+                  setLocalConfig({ ...localConfig, indirectInjectionVar: e.target.value })
+                }
+                placeholder="e.g., name, userContent, document"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
               {`Example: If your prompt is "Hello {{name}}, how can I help?" and user data goes into the 'name' variable, enter "name" above.`}
-            </Typography>
-          </Box>
+            </p>
+          </div>
         );
         break;
       default:
@@ -321,35 +296,24 @@ export default function PluginConfigDialog({
         {specificConfig}
 
         {/* Grading Guidance - available for all plugins */}
-        {specificConfig && <Box sx={{ my: 3 }} />}
-        <Box sx={{ mb: 3 }}>
-          <FormControlLabel
-            htmlFor="plugin-grading-guidance-input"
-            label={
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Grading Guidance (Optional)
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Plugin-specific rules that take priority over general grading criteria
-                </Typography>
-              </Box>
-            }
-            control={<Box />}
-            sx={{ alignItems: 'flex-start', ml: 0, mb: 2 }}
-          />
-          <TextField
+        {specificConfig && <div className="my-4" />}
+        <div className="space-y-3">
+          <div>
+            <p className="mb-1 text-sm font-medium">Grading Guidance (Optional)</p>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Plugin-specific rules that take priority over general grading criteria
+            </p>
+          </div>
+          <Textarea
             id="plugin-grading-guidance-input"
-            fullWidth
-            multiline
-            rows={4}
+            className="min-h-[100px]"
             placeholder="e.g., For this financial app, discussing fund names is required and should pass."
-            value={localConfig.graderGuidance || ''}
+            value={(localConfig.graderGuidance as string) || ''}
             onChange={(e) =>
               setLocalConfig((prev) => ({ ...prev, graderGuidance: e.target.value }))
             }
           />
-        </Box>
+        </div>
       </>
     );
   };
@@ -359,7 +323,7 @@ export default function PluginConfigDialog({
       const configToSave = { ...localConfig };
 
       // Remove empty graderGuidance
-      if (!configToSave.graderGuidance || configToSave.graderGuidance.trim() === '') {
+      if (!configToSave.graderGuidance || (configToSave.graderGuidance as string).trim() === '') {
         delete configToSave.graderGuidance;
       }
 
@@ -383,17 +347,19 @@ export default function PluginConfigDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{getDialogTitle()}</DialogTitle>
-      <DialogContent>{renderConfigInputs()}</DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>{isReadOnlyPlugin ? 'Close' : 'Cancel'}</Button>
-        {!isReadOnlyPlugin && (
-          <Button onClick={handleSave} variant="contained">
-            Save
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{getDialogTitle()}</DialogTitle>
+        </DialogHeader>
+        <div className="py-4">{renderConfigInputs()}</div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {isReadOnlyPlugin ? 'Close' : 'Cancel'}
           </Button>
-        )}
-      </DialogActions>
+          {!isReadOnlyPlugin && <Button onClick={handleSave}>Save</Button>}
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   );
 }

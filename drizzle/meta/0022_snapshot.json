@@ -1,9 +1,179 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "dbc42eb7-36e1-40ba-9a82-040ff7880047",
+  "id": "698631f8-ce83-473e-a73d-80a83dc35af4",
   "prevId": "d860ff01-a86a-4e60-8ff0-02a642629e58",
   "tables": {
+    "blob_assets": {
+      "name": "blob_assets",
+      "columns": {
+        "hash": {
+          "name": "hash",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "size_bytes": {
+          "name": "size_bytes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "blob_assets_provider_idx": {
+          "name": "blob_assets_provider_idx",
+          "columns": [
+            "provider"
+          ],
+          "isUnique": false
+        },
+        "blob_assets_created_at_idx": {
+          "name": "blob_assets_created_at_idx",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "blob_references": {
+      "name": "blob_references",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "blob_hash": {
+          "name": "blob_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "eval_id": {
+          "name": "eval_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "test_idx": {
+          "name": "test_idx",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "prompt_idx": {
+          "name": "prompt_idx",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "CURRENT_TIMESTAMP"
+        }
+      },
+      "indexes": {
+        "blob_references_blob_idx": {
+          "name": "blob_references_blob_idx",
+          "columns": [
+            "blob_hash"
+          ],
+          "isUnique": false
+        },
+        "blob_references_eval_idx": {
+          "name": "blob_references_eval_idx",
+          "columns": [
+            "eval_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "blob_references_blob_hash_blob_assets_hash_fk": {
+          "name": "blob_references_blob_hash_blob_assets_hash_fk",
+          "tableFrom": "blob_references",
+          "tableTo": "blob_assets",
+          "columnsFrom": [
+            "blob_hash"
+          ],
+          "columnsTo": [
+            "hash"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "blob_references_eval_id_evals_id_fk": {
+          "name": "blob_references_eval_id_evals_id_fk",
+          "tableFrom": "blob_references",
+          "tableTo": "evals",
+          "columnsFrom": [
+            "eval_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "configs": {
       "name": "configs",
       "columns": {
@@ -478,14 +648,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
-        },
-        "is_favorite": {
-          "name": "is_favorite",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
         }
       },
       "indexes": {
@@ -507,13 +669,6 @@
           "name": "evals_is_redteam_idx",
           "columns": [
             "is_redteam"
-          ],
-          "isUnique": false
-        },
-        "evals_is_favorite_idx": {
-          "name": "evals_is_favorite_idx",
-          "columns": [
-            "is_favorite"
           ],
           "isUnique": false
         }

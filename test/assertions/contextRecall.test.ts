@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as contextUtils from '../../src/assertions/contextUtils';
-import * as matchers from '../../src/matchers';
+import * as matchers from '../../src/matchers/rag';
+import { createMockProvider } from '../factories/provider';
 
-import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types/index';
+import type { AssertionParams, ProviderResponse } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextRecall', () => {
@@ -33,10 +34,7 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall', threshold: 0.8 },
@@ -89,10 +87,7 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall', threshold: 0.7 },
@@ -137,10 +132,7 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall' },
@@ -182,10 +174,7 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test prompt');
 
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall' },
@@ -235,10 +224,7 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('ctx');
 
-    const mockProvider: ApiProvider = {
-      id: () => 'p',
-      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-    };
+    const mockProvider = createMockProvider({ id: 'p', response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall', contextTransform: 'expr' },
@@ -277,10 +263,7 @@ describe('handleContextRecall', () => {
   });
 
   it('should throw error when renderedValue is not a string', async () => {
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall' },
@@ -309,10 +292,7 @@ describe('handleContextRecall', () => {
   });
 
   it('should throw error when prompt is missing', async () => {
-    const mockProvider: ApiProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-    };
+    const mockProvider = createMockProvider({ response: {} });
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall' },

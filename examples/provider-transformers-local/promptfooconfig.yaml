@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Fully local LLM evaluation with Transformers.js
+
+prompts:
+  - 'Explain {{concept}} to a beginner in 2-3 sentences.'
+
+providers:
+  # Local text generation with Qwen3-0.6B (latest Qwen3 with thinking capabilities)
+  # First run downloads ~600MB model, then cached for subsequent runs
+  - id: transformers:text-generation:onnx-community/Qwen3-0.6B-ONNX
+    config:
+      maxNewTokens: 100
+      temperature: 0.6
+      topP: 0.95
+      doSample: true
+
+defaultTest:
+  options:
+    provider:
+      # Local embeddings for similarity assertions
+      embedding:
+        id: transformers:feature-extraction:Xenova/all-MiniLM-L6-v2
+        config:
+          pooling: mean
+          normalize: true
+
+tests:
+  - vars:
+      concept: machine learning
+    assert:
+      - type: similar
+        value: 'Machine learning is a type of AI where computers learn patterns from data to make predictions'
+        threshold: 0.5
+      - type: javascript
+        value: output.length > 50
+
+  - vars:
+      concept: photosynthesis
+    assert:
+      - type: similar
+        value: 'Photosynthesis is how plants convert sunlight into energy using chlorophyll'
+        threshold: 0.5
+      - type: javascript
+        value: output.length > 50
+
+  - vars:
+      concept: gravity
+    assert:
+      - type: similar
+        value: 'Gravity is the force that attracts objects with mass toward each other'
+        threshold: 0.4
+      - type: javascript
+        value: output.length > 50

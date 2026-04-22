@@ -52,6 +52,11 @@ type EnvVars = {
   PROMPTFOO_ENABLE_DATABASE_LOGS?: boolean;
   PROMPTFOO_EVAL_TIMEOUT_MS?: number;
   PROMPTFOO_EXPERIMENTAL?: boolean;
+  /**
+   * Enable interactive UI (opt-in). Set to true to enable Ink-based terminal UI.
+   * Requires stdout to be a TTY.
+   */
+  PROMPTFOO_ENABLE_INTERACTIVE_UI?: boolean;
   PROMPTFOO_MAX_EVAL_TIME_MS?: number;
   PROMPTFOO_NO_TESTCASE_ASSERT_WARNING?: boolean;
   PROMPTFOO_PYTHON_DEBUG_ENABLED?: boolean;
@@ -69,6 +74,34 @@ type EnvVars = {
   PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
+  // OpenTelemetry tracing configuration
+  //=========================================================================
+  /**
+   * Enable OpenTelemetry tracing for all LLM provider calls.
+   */
+  PROMPTFOO_OTEL_ENABLED?: boolean;
+  /**
+   * Service name to use in OTEL traces. Defaults to 'promptfoo'.
+   */
+  PROMPTFOO_OTEL_SERVICE_NAME?: string;
+  /**
+   * OTLP endpoint URL for exporting traces to external backends.
+   */
+  PROMPTFOO_OTEL_ENDPOINT?: string;
+  /**
+   * Whether to export traces to the local TraceStore (SQLite). Defaults to true.
+   */
+  PROMPTFOO_OTEL_LOCAL_EXPORT?: boolean;
+  /**
+   * Enable OTEL debug logging.
+   */
+  PROMPTFOO_OTEL_DEBUG?: boolean;
+  /**
+   * Standard OTEL environment variable for OTLP endpoint.
+   */
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+
+  //=========================================================================
   // promptfoo configuration options
   //=========================================================================
   PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY?: number;
@@ -84,9 +117,11 @@ type EnvVars = {
   PROMPTFOO_CSV_STRICT?: boolean;
   PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_FAILED_TEST_EXIT_CODE?: number;
+  PROMPTFOO_INLINE_MEDIA?: boolean;
   PROMPTFOO_INSECURE_SSL?: boolean | string;
   PROMPTFOO_JAILBREAK_TEMPERATURE?: string;
   PROMPTFOO_LOG_DIR?: string;
+  PROMPTFOO_MEDIA_PATH?: string;
   PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST?: number;
   PROMPTFOO_NUM_JAILBREAK_ITERATIONS?: string;
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
@@ -100,6 +135,7 @@ type EnvVars = {
   PROMPTFOO_REQUIRE_JSON_PROMPTS?: boolean;
   PROMPTFOO_SHARING_APP_BASE_URL?: string;
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
+  PROMPTFOO_SHARE_INLINE_BLOBS?: boolean;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
   PROMPTFOO_PFX_CERT_PATH?: string;
@@ -107,6 +143,16 @@ type EnvVars = {
   PROMPTFOO_JKS_CERT_PATH?: string;
   PROMPTFOO_JKS_PASSWORD?: string;
   PROMPTFOO_JKS_ALIAS?: string;
+
+  //=========================================================================
+  // Server security
+  //=========================================================================
+  /**
+   * Comma-separated list of trusted origins allowed to make cross-site
+   * mutating requests to the promptfoo server.
+   * Example: "https://app.example.com,https://admin.example.com"
+   */
+  PROMPTFOO_CSRF_ALLOWED_ORIGINS?: string;
 
   //=========================================================================
   // HTTP proxy settings
@@ -161,18 +207,8 @@ type EnvVars = {
   //=========================================================================
   // UI configuration
   //=========================================================================
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_APP_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_BASE_URL?: string;
-  /**
-   * @deprecated Use PROMPTFOO_REMOTE_API_BASE_URL instead
-   */
-  NEXT_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
   VITE_PUBLIC_BASENAME?: string;
-  VITE_PUBLIC_PROMPTFOO_APP_SHARE_URL?: string;
   VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL?: string;
-  VITE_PUBLIC_PROMPTFOO_SHARE_API_URL?: string;
 
   //=========================================================================
   // Continuous Integration
@@ -194,6 +230,10 @@ type EnvVars = {
   //=========================================================================
   // Provider-specific settings
   //=========================================================================
+  // Abliteration
+  ABLIT_API_BASE_URL?: string;
+  ABLIT_KEY?: string;
+
   // AI21
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
@@ -325,6 +365,18 @@ type EnvVars = {
   // OpenAI Codex SDK
   CODEX_API_KEY?: string;
 
+  // ClawdBot legacy OpenClaw compatibility
+  CLAWDBOT_GATEWAY_PASSWORD?: string;
+  CLAWDBOT_GATEWAY_TOKEN?: string;
+  CLAWDBOT_GATEWAY_URL?: string;
+
+  // OpenClaw
+  OPENCLAW_CONFIG_PATH?: string;
+  OPENCLAW_GATEWAY_PASSWORD?: string;
+  OPENCLAW_GATEWAY_PORT?: number | string;
+  OPENCLAW_GATEWAY_TOKEN?: string;
+  OPENCLAW_GATEWAY_URL?: string;
+
   // OpenRouter
   OPENROUTER_API_KEY?: string;
 
@@ -380,6 +432,9 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  // QuiverAI
+  QUIVERAI_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed
@@ -437,15 +492,13 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
 export function getEnvInt(key: EnvVarKey): number | undefined;
 export function getEnvInt(key: EnvVarKey, defaultValue: number): number;
 export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvString(key) || defaultValue;
-  if (typeof value === 'number') {
-    return Math.floor(value);
+  const str = getEnvString(key);
+  if (str === undefined || str === '') {
+    return defaultValue;
   }
-  if (typeof value === 'string') {
-    const parsedValue = Number.parseInt(value, 10);
-    if (!Number.isNaN(parsedValue)) {
-      return parsedValue;
-    }
+  const parsedValue = Number.parseInt(str, 10);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
   }
   return defaultValue;
 }
@@ -459,15 +512,13 @@ export function getEnvInt(key: EnvVarKey, defaultValue?: number): number | undef
 export function getEnvFloat(key: EnvVarKey): number | undefined;
 export function getEnvFloat(key: EnvVarKey, defaultValue: number): number;
 export function getEnvFloat(key: EnvVarKey, defaultValue?: number): number | undefined {
-  const value = getEnvString(key) || defaultValue;
-  if (typeof value === 'number') {
-    return value;
+  const str = getEnvString(key);
+  if (str === undefined || str === '') {
+    return defaultValue;
   }
-  if (typeof value === 'string') {
-    const parsedValue = Number.parseFloat(value);
-    if (!Number.isNaN(parsedValue)) {
-      return parsedValue;
-    }
+  const parsedValue = Number.parseFloat(str);
+  if (!Number.isNaN(parsedValue)) {
+    return parsedValue;
   }
   return defaultValue;
 }

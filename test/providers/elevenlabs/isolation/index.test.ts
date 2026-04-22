@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsIsolationProvider } from '../../../../src/providers/elevenlabs/isolation';
+import { mockProcessEnv } from '../../../util/utils';
+
 import type { CallApiContextParams } from '../../../../src/types/providers';
 
 // Mock dependencies
@@ -27,11 +29,13 @@ vi.mock('../../../../src/providers/elevenlabs/tts/audio', () => ({
 describe('ElevenLabsIsolationProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ELEVENLABS_API_KEY = 'test-api-key';
+    mockReadFile.mockReset();
+    mockEncodeAudio.mockReset();
+    mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
-    delete process.env.ELEVENLABS_API_KEY;
+    mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -43,7 +47,7 @@ describe('ElevenLabsIsolationProvider', () => {
     });
 
     it('should throw error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsIsolationProvider('elevenlabs:isolation')).toThrow(
         'ELEVENLABS_API_KEY environment variable is not set',
@@ -104,7 +108,7 @@ describe('ElevenLabsIsolationProvider', () => {
     });
 
     it('should support custom API key environment variable', () => {
-      process.env.CUSTOM_ELEVENLABS_KEY = 'custom-key';
+      mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: 'custom-key' });
 
       const provider = new ElevenLabsIsolationProvider('elevenlabs:isolation', {
         config: { apiKeyEnvar: 'CUSTOM_ELEVENLABS_KEY' },
@@ -112,7 +116,7 @@ describe('ElevenLabsIsolationProvider', () => {
 
       expect(provider).toBeDefined();
 
-      delete process.env.CUSTOM_ELEVENLABS_KEY;
+      mockProcessEnv({ CUSTOM_ELEVENLABS_KEY: undefined });
     });
   });
 
@@ -206,7 +210,7 @@ describe('ElevenLabsIsolationProvider', () => {
 
   describe('error handling', () => {
     it('should throw meaningful error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsIsolationProvider('elevenlabs:isolation')).toThrow(
         /ELEVENLABS_API_KEY/i,

@@ -1,137 +1,90 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Request, Response } from 'express';
-import Eval from '../../../src/models/eval';
+import request from 'supertest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock Eval model
 vi.mock('../../../src/models/eval');
 
-describe('evalRouter - PATCH /:id/favorite', () => {
-  let mockReq: Partial<Request>;
-  let mockRes: Partial<Response>;
-  let jsonMock: Mock;
-  let statusMock: Mock;
+import Eval from '../../../src/models/eval';
+import { createApp } from '../../../src/server/server';
 
-  const mockEval = {
-    id: 'test-eval-123',
-    isFavorite: false,
-    save: vi.fn(),
-  };
+const mockedEval = vi.mocked(Eval);
+
+describe('evalRouter - PATCH /:id/favorite', () => {
+  let app: ReturnType<typeof createApp>;
+  let mockFindById: ReturnType<typeof vi.fn>;
+  let mockSave: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jsonMock = vi.fn();
-    statusMock = vi.fn().mockReturnThis();
+    mockFindById = vi.fn();
+    mockSave = vi.fn().mockResolvedValue(undefined);
+    mockedEval.findById = mockFindById as any;
 
-    mockRes = {
-      json: jsonMock,
-      status: statusMock,
-    } as Partial<Response>;
+    app = createApp();
+  });
 
-    mockReq = {
-      params: { id: 'test-eval-123' },
-      body: { isFavorite: true },
+  it('updates favorite status successfully', async () => {
+    const mockEval = {
+      id: 'test-eval-123',
+      isFavorite: false,
+      save: mockSave,
     };
+    mockFindById.mockResolvedValue(mockEval);
 
-    // Mock Eval.findById to return our mock eval
-    vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
-  });
+    const response = await request(app).patch('/api/eval/test-eval-123/favorite').send({
+      isFavorite: true,
+    });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('should update favorite status successfully', async () => {
-    // Simulate the route handler logic
-    const { id } = mockReq.params!;
-    const { isFavorite } = mockReq.body!;
-
-    const eval_ = await Eval.findById(id!);
-    if (!eval_) {
-      mockRes.status!(404).json({ error: 'Eval not found' });
-      return;
-    }
-
-    eval_.isFavorite = isFavorite;
-    await eval_.save();
-
-    mockRes.json!({ message: 'Favorite status updated successfully', isFavorite });
-
-    expect(Eval.findById).toHaveBeenCalledWith('test-eval-123');
-    expect(eval_.isFavorite).toBe(true);
-    expect(eval_.save).toHaveBeenCalled();
-    expect(jsonMock).toHaveBeenCalledWith({
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
       message: 'Favorite status updated successfully',
       isFavorite: true,
     });
+    expect(mockFindById).toHaveBeenCalledWith('test-eval-123');
+    expect(mockEval.isFavorite).toBe(true);
+    expect(mockSave).toHaveBeenCalled();
   });
 
-  it('should return 404 when eval not found', async () => {
-    vi.mocked(Eval.findById).mockResolvedValue(undefined);
+  it('returns 404 when eval does not exist', async () => {
+    mockFindById.mockResolvedValue(undefined);
 
-    const { id } = mockReq.params!;
-    const eval_ = await Eval.findById(id!);
+    const response = await request(app).patch('/api/eval/test-eval-123/favorite').send({
+      isFavorite: true,
+    });
 
-    if (!eval_) {
-      mockRes.status!(404).json({ error: 'Eval not found' });
-    }
-
-    expect(Eval.findById).toHaveBeenCalledWith('test-eval-123');
-    expect(statusMock).toHaveBeenCalledWith(404);
-    expect(jsonMock).toHaveBeenCalledWith({ error: 'Eval not found' });
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Eval not found' });
+    expect(mockFindById).toHaveBeenCalledWith('test-eval-123');
   });
 
-  it('should return 400 when isFavorite is not a boolean', async () => {
-    mockReq.body = { isFavorite: 'not-a-boolean' };
+  it('returns 400 when isFavorite is not boolean', async () => {
+    const response = await request(app).patch('/api/eval/test-eval-123/favorite').send({
+      isFavorite: 'true',
+    });
 
-    const { isFavorite } = mockReq.body!;
-
-    if (typeof isFavorite !== 'boolean') {
-      mockRes.status!(400).json({ error: 'isFavorite must be a boolean' });
-      return;
-    }
-
-    expect(statusMock).toHaveBeenCalledWith(400);
-    expect(jsonMock).toHaveBeenCalledWith({ error: 'isFavorite must be a boolean' });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('isFavorite');
+    expect(mockFindById).not.toHaveBeenCalled();
   });
 
-  it('should return 400 when id is missing', async () => {
-    mockReq.params = {};
+  it('unfavorites an eval', async () => {
+    const mockEval = {
+      id: 'test-eval-123',
+      isFavorite: true,
+      save: mockSave,
+    };
+    mockFindById.mockResolvedValue(mockEval);
 
-    const { id } = mockReq.params!;
+    const response = await request(app).patch('/api/eval/test-eval-123/favorite').send({
+      isFavorite: false,
+    });
 
-    if (!id) {
-      mockRes.status!(400).json({ error: 'Missing id' });
-      return;
-    }
-
-    expect(statusMock).toHaveBeenCalledWith(400);
-    expect(jsonMock).toHaveBeenCalledWith({ error: 'Missing id' });
-  });
-
-  it('should unfavorite an eval', async () => {
-    mockReq.body = { isFavorite: false };
-    mockEval.isFavorite = true;
-
-    const { id } = mockReq.params!;
-    const { isFavorite } = mockReq.body!;
-
-    const eval_ = await Eval.findById(id!);
-    if (!eval_) {
-      mockRes.status!(404).json({ error: 'Eval not found' });
-      return;
-    }
-
-    eval_.isFavorite = isFavorite;
-    await eval_.save();
-
-    mockRes.json!({ message: 'Favorite status updated successfully', isFavorite });
-
-    expect(eval_.isFavorite).toBe(false);
-    expect(eval_.save).toHaveBeenCalled();
-    expect(jsonMock).toHaveBeenCalledWith({
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
       message: 'Favorite status updated successfully',
       isFavorite: false,
     });
+    expect(mockEval.isFavorite).toBe(false);
+    expect(mockSave).toHaveBeenCalled();
   });
 });

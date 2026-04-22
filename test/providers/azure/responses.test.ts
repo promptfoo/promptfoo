@@ -1,37 +1,55 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { fetchWithCache } from '../../../src/cache';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
-import fs from 'fs';
-
-import type { Mocked, MockedFunction } from 'vitest';
+import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
+import { maybeLoadResponseFormatFromExternalFile } from '../../../src/util/file';
+import { mockProcessEnv } from '../../util/utils';
+import type { MockedFunction } from 'vitest';
 
 // Mock external dependencies
 vi.mock('../../../src/cache');
 vi.mock('../../../src/util/file');
-vi.mock('fs');
 
 const mockFetchWithCache = fetchWithCache as MockedFunction<typeof fetchWithCache>;
-const mockMaybeLoadFromExternalFile = maybeLoadFromExternalFile as MockedFunction<
-  typeof maybeLoadFromExternalFile
->;
-const _mockFs = fs as Mocked<typeof fs>;
+const mockMaybeLoadResponseFormatFromExternalFile =
+  maybeLoadResponseFormatFromExternalFile as MockedFunction<
+    typeof maybeLoadResponseFormatFromExternalFile
+  >;
 let authHeadersValue: Record<string, string>;
+const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
+const originalOpenAiMaxTokens = process.env.OPENAI_MAX_TOKENS;
+const originalOpenAiMaxCompletionTokens = process.env.OPENAI_MAX_COMPLETION_TOKENS;
 
 describe('AzureResponsesProvider', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
+    mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
 
     // Mock environment variables
-    process.env.AZURE_API_KEY = 'test-key';
-    process.env.AZURE_API_HOST = 'test.openai.azure.com';
+    mockProcessEnv({ AZURE_API_KEY: 'test-key' });
+    mockProcessEnv({ AZURE_API_HOST: 'test.openai.azure.com' });
     authHeadersValue = { 'api-key': 'test-key' };
   });
 
   afterEach(() => {
-    delete process.env.AZURE_API_KEY;
-    delete process.env.AZURE_API_HOST;
+    mockProcessEnv({ AZURE_API_KEY: undefined });
+    mockProcessEnv({ AZURE_API_HOST: undefined });
+    if (originalOpenAiTemperature === undefined) {
+      mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_TEMPERATURE: originalOpenAiTemperature });
+    }
+    if (originalOpenAiMaxTokens === undefined) {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: originalOpenAiMaxTokens });
+    }
+    if (originalOpenAiMaxCompletionTokens === undefined) {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: undefined });
+    } else {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: originalOpenAiMaxCompletionTokens });
+    }
     delete (AzureResponsesProvider.prototype as any).authHeaders;
   });
 
@@ -121,7 +139,7 @@ describe('AzureResponsesProvider', () => {
         },
       };
 
-      mockMaybeLoadFromExternalFile.mockReturnValue(mockSchema);
+      mockMaybeLoadResponseFormatFromExternalFile.mockReturnValue(mockSchema);
 
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: {
@@ -131,8 +149,11 @@ describe('AzureResponsesProvider', () => {
 
       const body = await provider.getAzureResponsesBody('Hello world');
 
-      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledWith('file://test-schema.json');
-      expect(mockMaybeLoadFromExternalFile).toHaveBeenCalledTimes(1); // Should only be called once (fix for double-loading)
+      expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalledWith(
+        'file://test-schema.json',
+        undefined,
+      );
+      expect(mockMaybeLoadResponseFormatFromExternalFile).toHaveBeenCalledTimes(1); // Should only be called once (fix for double-loading)
       expect(body.text.format).toMatchObject({
         type: 'json_schema',
         name: 'test_schema',
@@ -142,8 +163,8 @@ describe('AzureResponsesProvider', () => {
     });
 
     it('should handle inline response_format', async () => {
-      // For inline schemas, maybeLoadFromExternalFile should return the object unchanged
-      mockMaybeLoadFromExternalFile.mockImplementation(function (input: any) {
+      // For inline schemas, maybeLoadResponseFormatFromExternalFile should return the object unchanged
+      mockMaybeLoadResponseFormatFromExternalFile.mockImplementation(function (input: any) {
         return input;
       });
 
@@ -196,6 +217,120 @@ describe('AzureResponsesProvider', () => {
       const body = await provider.getAzureResponsesBody('Hello world');
 
       expect(body.temperature).toBe(0.7);
+    });
+
+    it('should correctly send temperature: 0 in the request body', async () => {
+      // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { temperature: 0 },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      // temperature: 0 should be present in the request body
+      expect(body.temperature).toBe(0);
+      expect('temperature' in body).toBe(true);
+    });
+
+    it('should omit default temperature and max_output_tokens when omitDefaults is true', async () => {
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { omitDefaults: true },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.temperature).toBeUndefined();
+      expect('temperature' in body).toBe(false);
+      expect(body.max_output_tokens).toBeUndefined();
+      expect('max_output_tokens' in body).toBe(false);
+    });
+
+    it('should use env defaults with omitDefaults when OPENAI env vars are set', async () => {
+      mockProcessEnv({ OPENAI_TEMPERATURE: '0.5' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { omitDefaults: true },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.temperature).toBe(0.5);
+      expect('temperature' in body).toBe(true);
+      expect(body.max_output_tokens).toBe(2048);
+      expect('max_output_tokens' in body).toBe(true);
+    });
+
+    it('should prefer OPENAI_MAX_COMPLETION_TOKENS over OPENAI_MAX_TOKENS for reasoning models', async () => {
+      mockProcessEnv({ OPENAI_MAX_COMPLETION_TOKENS: '4096' });
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+
+      const provider = new AzureResponsesProvider('o1-preview', {
+        config: { omitDefaults: true },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.max_output_tokens).toBe(4096);
+      expect('max_output_tokens' in body).toBe(true);
+    });
+
+    it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+
+      const provider = new AzureResponsesProvider('o1-preview', {
+        config: { omitDefaults: true },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.max_output_tokens).toBe(2048);
+      expect('max_output_tokens' in body).toBe(true);
+    });
+
+    it('should use OPENAI_MAX_TOKENS for reasoning models when omitDefaults is false and OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
+      mockProcessEnv({ OPENAI_MAX_TOKENS: '2048' });
+
+      const provider = new AzureResponsesProvider('o1-preview');
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.max_output_tokens).toBe(2048);
+      expect('max_output_tokens' in body).toBe(true);
+    });
+
+    it('should not apply a hardcoded max_output_tokens default for reasoning models when omitDefaults is false', async () => {
+      const provider = new AzureResponsesProvider('o1-preview');
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.max_output_tokens).toBeUndefined();
+      expect('max_output_tokens' in body).toBe(false);
+    });
+
+    it('should omit default max_output_tokens when omitDefaults is true for reasoning models', async () => {
+      const provider = new AzureResponsesProvider('o1-preview', {
+        config: { omitDefaults: true },
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      expect(body.max_output_tokens).toBeUndefined();
+      expect('max_output_tokens' in body).toBe(false);
+    });
+
+    it('should correctly send max_output_tokens: 0 in the request body when explicitly set', async () => {
+      // Test that max_output_tokens: 0 is correctly sent (not filtered out by falsy check)
+      // Note: While max_output_tokens: 0 is impractical, it should still be sent if explicitly configured
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { max_output_tokens: 0 } as any,
+      });
+
+      const body = await provider.getAzureResponsesBody('Hello world');
+
+      // max_output_tokens: 0 should be present in the request body
+      expect(body.max_output_tokens).toBe(0);
+      expect('max_output_tokens' in body).toBe(true);
     });
 
     it('should include verbosity for reasoning models when configured', async () => {
@@ -276,12 +411,58 @@ describe('AzureResponsesProvider', () => {
       );
     });
 
+    it('should accept Entra ID authentication with Authorization header', async () => {
+      const mockResponse = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              {
+                type: 'output_text',
+                text: 'Hello from Entra ID auth!',
+              },
+            ],
+          },
+        ],
+        usage: {
+          input_tokens: 10,
+          output_tokens: 8,
+        },
+      };
+
+      mockFetchWithCache.mockResolvedValue({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new AzureResponsesProvider('gpt-4.1-test');
+
+      // Mock ensureInitialized to set authHeaders with Authorization (Entra ID)
+      vi.spyOn(provider, 'ensureInitialized').mockImplementation(async function () {
+        (provider as any).authHeaders = { Authorization: 'Bearer test-entra-token' };
+      });
+
+      const result = await provider.callApi('Hello');
+
+      // Verify the call succeeded (no error about missing authentication)
+      expect(result).toMatchObject({
+        output: 'Hello from Entra ID auth!',
+        cached: false,
+      });
+
+      // Verify the API was called (auth check passed)
+      expect(mockFetchWithCache).toHaveBeenCalled();
+    });
+
     it('should validate external response_format files', async () => {
       const provider = new AzureResponsesProvider('gpt-4.1-test', {
         config: { response_format: 'file://missing.json' as any },
       });
 
-      mockMaybeLoadFromExternalFile.mockImplementation(function () {
+      mockMaybeLoadResponseFormatFromExternalFile.mockImplementation(function () {
         throw new Error('File does not exist');
       });
 

@@ -62,6 +62,141 @@ tests:
       difficulty: easy
 ```
 
+### Filtering Tests by Provider
+
+Control which providers run specific tests using the `providers` field. This allows you to run different test suites against different models in a single evaluation:
+
+```yaml
+providers:
+  - id: openai:gpt-3.5-turbo
+    label: fast-model
+  - id: openai:gpt-4
+    label: smart-model
+
+tests:
+  # Only run on fast-model
+  - vars:
+      question: 'What is 2 + 2?'
+    providers:
+      - fast-model
+    assert:
+      - type: equals
+        value: '4'
+
+  # Only run on smart-model
+  - vars:
+      question: 'Explain quantum entanglement'
+    providers:
+      - smart-model
+    assert:
+      - type: llm-rubric
+        value: 'Provides accurate physics explanation'
+```
+
+**Matching syntax:**
+
+| Pattern        | Matches                                                              |
+| -------------- | -------------------------------------------------------------------- |
+| `fast-model`   | Exact label match                                                    |
+| `openai:gpt-4` | Exact provider ID match                                              |
+| `openai:*`     | Wildcard - any provider starting with `openai:`                      |
+| `openai`       | Legacy prefix - matches `openai:gpt-4`, `openai:gpt-3.5-turbo`, etc. |
+
+**Apply to all tests using `defaultTest`:**
+
+```yaml
+defaultTest:
+  providers:
+    - openai:* # All tests default to OpenAI providers only
+
+tests:
+  - vars:
+      question: 'Simple question'
+  - vars:
+      question: 'Complex question'
+    providers:
+      - smart-model # Override default for this test
+```
+
+**Edge cases:**
+
+- **No filter**: Without the `providers` field, the test runs against all providers (cross-product behavior)
+- **Empty array**: `providers: []` means the test runs on no providers and is effectively skipped
+- **Stacking with providerPromptMap**: When both `providers` and `providerPromptMap` are set, they filter together—a provider must match both to run
+- **CLI `--filter-providers`**: If you use `--filter-providers` to filter providers at the CLI level, validation only sees the filtered providers. Tests referencing providers excluded by `--filter-providers` will fail validation
+
+### Filtering Tests by Prompt
+
+By default, each test runs against all prompts (a cartesian product). You can use the `prompts` field to restrict a test to specific prompts:
+
+```yaml
+prompts:
+  - id: prompt-factual
+    label: Factual Assistant
+    raw: 'You are a factual assistant. Answer: {{question}}'
+  - id: prompt-creative
+    label: Creative Writer
+    raw: 'You are a creative writer. Answer: {{question}}'
+
+providers:
+  - openai:gpt-4o-mini
+
+tests:
+  # This test only runs with the Factual Assistant prompt
+  - vars:
+      question: 'What is the capital of France?'
+    prompts:
+      - Factual Assistant
+    assert:
+      - type: contains
+        value: 'Paris'
+
+  # This test only runs with the Creative Writer prompt
+  - vars:
+      question: 'Write a poem about Paris'
+    prompts:
+      - prompt-creative # You can reference by ID or label
+    assert:
+      - type: llm-rubric
+        value: 'Contains poetic language'
+
+  # This test runs with all prompts (default behavior)
+  - vars:
+      question: 'Hello'
+```
+
+The `prompts` field accepts:
+
+- **Exact labels**: `prompts: ['Factual Assistant']`
+- **Exact IDs**: `prompts: ['prompt-factual']`
+- **Wildcard patterns**: `prompts: ['Math:*']` matches `Math:Basic`, `Math:Advanced`, etc.
+- **Prefix patterns**: `prompts: ['Math']` matches `Math:Basic`, `Math:Advanced` (legacy syntax)
+
+:::note
+
+Invalid prompt references will cause an error at config load time. This strict validation catches typos early.
+
+:::
+
+You can also set a default prompt filter in `defaultTest`:
+
+```yaml
+defaultTest:
+  prompts:
+    - Factual Assistant
+
+tests:
+  # Inherits prompts: ['Factual Assistant'] from defaultTest
+  - vars:
+      question: 'What is 2+2?'
+
+  # Override to use a different prompt
+  - vars:
+      question: 'Write a story'
+    prompts:
+      - Creative Writer
+```
+
 ## External Test Files
 
 For larger test suites, store tests in separate files:
@@ -106,19 +241,11 @@ Variables are automatically mapped from column headers.
 
 Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
 
-1. Install the `xlsx` package as a peer dependency:
+1. Install the `read-excel-file` package as a peer dependency:
 
    ```bash
-   # Install latest version from npm (recommended)
-   npm install xlsx
-
-   # OR install specific version from SheetJS CDN
-   npm install https://cdn.sheetjs.com/xlsx-0.18.5/xlsx-0.18.5.tgz
+   npm install read-excel-file
    ```
-
-   **Why two options?**
-   - **npm install xlsx**: Gets version 0.18.5 from npm registry (recommended for most users)
-   - **CDN URL**: Installs the same version from SheetJS CDN for environments that prefer CDN sources
 
 2. Use Excel files just like CSV files:
    ```yaml title="promptfooconfig.yaml"
@@ -166,6 +293,15 @@ input,__expected
 "What's the weather?","llm-rubric: Provides weather information"
 ```
 
+Values without a type prefix default to `equals`:
+
+| `__expected` value                | Assertion type               |
+| --------------------------------- | ---------------------------- |
+| `Paris`                           | `equals`                     |
+| `contains:Paris`                  | `contains`                   |
+| `factuality:The capital is Paris` | `factuality`                 |
+| `similar(0.8):Hello there`        | `similar` with 0.8 threshold |
+
 Multiple assertions:
 
 ```csv title="test_cases.csv"
@@ -186,17 +322,17 @@ If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a 
 
 ### Special CSV Columns
 
-| Column                                                      | Purpose                                          | Example                                                           |
-| ----------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------- |
-| `__expected`                                                | Single assertion                                 | `contains: Paris`                                                 |
-| `__expected1`, `__expected2`, ...                           | Multiple assertions                              | `equals: 42`                                                      |
-| `__description`                                             | Test description                                 | `Basic math test`                                                 |
-| `__prefix`                                                  | Prepend to prompt                                | `You must answer: `                                               |
-| `__suffix`                                                  | Append to prompt                                 | ` (be concise)`                                                   |
-| `__metric`                                                  | Metric name for assertions                       | `accuracy`                                                        |
-| `__threshold`                                               | Pass threshold (applies to all asserts)          | `0.8`                                                             |
-| `__metadata:*`                                              | Filterable metadata                              | See below                                                         |
-| `__config:__expected:<key>` or `__config:__expectedN:<key>` | Set configuration for all or specific assertions | `__config:__expected:threshold`, `__config:__expected2:threshold` |
+| Column                                                      | Purpose                                                  | Example                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------- |
+| `__expected`                                                | Single assertion                                         | `contains: Paris`                                                 |
+| `__expected1`, `__expected2`, ...                           | Multiple assertions                                      | `equals: 42`                                                      |
+| `__description`                                             | Test description                                         | `Basic math test`                                                 |
+| `__prefix`                                                  | Prepend to prompt                                        | `You must answer: `                                               |
+| `__suffix`                                                  | Append to prompt                                         | ` (be concise)`                                                   |
+| `__metric`                                                  | Display name in reports (does not change assertion type) | `accuracy`                                                        |
+| `__threshold`                                               | Pass threshold (applies to all asserts)                  | `0.8`                                                             |
+| `__metadata:*`                                              | Filterable metadata                                      | See below                                                         |
+| `__config:__expected:<key>` or `__config:__expectedN:<key>` | Set configuration for all or specific assertions         | `__config:__expected:threshold`, `__config:__expected2:threshold` |
 
 Using `__metadata` without a key is not supported. Specify the metadata field like `__metadata:category`.
 If a CSV file includes a `__metadata` column without a key, Promptfoo logs a warning and ignores the column.
@@ -225,6 +361,9 @@ Filter tests:
 promptfoo eval --filter-metadata category=math
 promptfoo eval --filter-metadata difficulty=easy
 promptfoo eval --filter-metadata tags=ai
+
+# Multiple filters use AND logic (tests must match ALL conditions)
+promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
 ```
 
 ### JSON in CSV
@@ -242,6 +381,29 @@ Access in prompts:
 prompts:
   - 'Query: {{query}}, Location: {{(context | load).location}}'
 ```
+
+### CSV with defaultTest
+
+Apply the same assertions to all tests loaded from a CSV file using [`defaultTest`](/docs/configuration/guide#default-test-cases):
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  assert:
+    - type: factuality
+      value: '{{reference_answer}}'
+  options:
+    provider: openai:gpt-5.2
+
+tests: file://tests.csv
+```
+
+```csv title="tests.csv"
+question,reference_answer
+"What does GPT stand for?","Generative Pre-trained Transformer"
+"What is the capital of France?","Paris is the capital of France"
+```
+
+Use regular column names (like `reference_answer`) instead of `__expected` when referencing values in `defaultTest` assertions. The `__expected` column automatically creates assertions per row.
 
 ## Dynamic Test Generation
 
@@ -381,6 +543,25 @@ tests:
       data: file://data/config.yaml
 ```
 
+### Path Resolution
+
+`file://` paths are resolved relative to your **config file's directory**, not the current working directory. This ensures consistent behavior regardless of where you run `promptfoo` from:
+
+```yaml title="src/tests/promptfooconfig.yaml"
+tests:
+  - vars:
+      # Resolved as src/tests/data/input.json
+      data: file://./data/input.json
+
+      # Also works - resolved as src/tests/data/input.json
+      data2: file://data/input.json
+
+      # Parent directory - resolved as src/shared/context.json
+      shared: file://../shared/context.json
+```
+
+Without the `file://` prefix, values are passed as plain strings to your provider.
+
 ### Supported File Types
 
 | Type                    | Handling            | Usage             |
@@ -507,6 +688,24 @@ tests:
     assert:
       - type: latency
         threshold: 1000 # milliseconds
+```
+
+### Passing Arrays to Assertions
+
+By default, array variables expand into multiple test cases. To pass an array directly to assertions like `contains-any`, disable variable expansion:
+
+```yaml
+defaultTest:
+  options:
+    disableVarExpansion: true
+  assert:
+    - type: contains-any
+      value: '{{expected_values}}'
+
+tests:
+  - description: 'Check for any valid response'
+    vars:
+      expected_values: ['option1', 'option2', 'option3']
 ```
 
 ## External Data Sources
