@@ -397,6 +397,43 @@ html:not(.docs-wrapper) .DocSearch {
   margin: 0 auto;
 }
 
+.redteamPolicyScreenshotLink {
+  display: block;
+  margin: 1rem 0 1.5rem;
+}
+
+.redteamPolicyScreenshotLink:hover {
+  text-decoration: none;
+}
+
+.redteamPolicyScreenshot {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+}
+
+[data-theme='dark'] .redteamPolicyScreenshot {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+}
+
+@media (max-width: 768px) {
+  .redteamPolicyScreenshotLink {
+    margin: 0.75rem 0 1.25rem;
+  }
+
+  .redteamPolicyScreenshot {
+    border-radius: 6px;
+  }
+}
+
 /* Remove pill background from active breadcrumb item */
 .breadcrumbs__item--active .breadcrumbs__link {
   background: none;
