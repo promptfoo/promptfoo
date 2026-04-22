@@ -13,7 +13,7 @@ import {
   tagsTable,
 } from '../database/tables';
 import { getEnvBool } from '../envars';
-import { getUserEmail } from '../globalConfig/accounts';
+import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
@@ -39,6 +39,7 @@ import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
+import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -69,6 +70,27 @@ interface TestIndexRow {
 /** Result from queries selecting distinct metadata or variable keys */
 interface MetadataKeyResult {
   key: string;
+}
+
+function isSchedulerMetrics(raw: unknown): raw is SchedulerMetrics {
+  if (!raw || typeof raw !== 'object') {
+    return false;
+  }
+
+  const metrics = raw as Record<string, unknown>;
+  return (
+    typeof metrics.minConcurrency === 'number' &&
+    Number.isFinite(metrics.minConcurrency) &&
+    typeof metrics.maxConcurrency === 'number' &&
+    Number.isFinite(metrics.maxConcurrency) &&
+    typeof metrics.finalConcurrency === 'number' &&
+    Number.isFinite(metrics.finalConcurrency) &&
+    typeof metrics.rateLimitHits === 'number' &&
+    Number.isFinite(metrics.rateLimitHits) &&
+    typeof metrics.retriedRequests === 'number' &&
+    Number.isFinite(metrics.retriedRequests) &&
+    typeof metrics.concurrencyReduced === 'boolean'
+  );
 }
 
 /**
@@ -318,7 +340,7 @@ export class EvalQueries {
 export default class Eval {
   id: string;
   createdAt: number;
-  author?: string;
+  author: string | null;
   description?: string;
   config: Partial<UnifiedConfig>;
   // If these are empty, you need to call loadResults(). We don't load them by default to save memory.
@@ -331,8 +353,16 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
+   *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
+  /** Time spent generating adversarial test cases (redteam only). */
+  generationDurationMs?: number;
+  /** Time spent running the evaluation phase. */
+  evaluationDurationMs?: number;
+  /** Actual concurrency used after runtime overrides for serial-only features. */
   concurrencyUsed?: number;
+  /** Adaptive scheduler metrics captured at the end of an evaluation. */
   schedulerMetrics?: SchedulerMetrics;
 
   /**
@@ -379,34 +409,37 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
-    // Extract durationMs and concurrencyUsed from results column (for V4 evals)
-    // Validate that values are finite positive numbers to guard against corrupted data
+    // Extract duration fields from results column (for V4 evals)
+    // Validate that values are finite non-negative numbers to guard against corrupted data
     const resultsObj = eval_.results as Record<string, unknown> | undefined;
-    const rawDurationMs =
-      resultsObj && 'durationMs' in resultsObj ? resultsObj.durationMs : undefined;
-    const durationMs =
-      typeof rawDurationMs === 'number' && Number.isFinite(rawDurationMs) && rawDurationMs >= 0
-        ? rawDurationMs
-        : undefined;
 
-    const rawConcurrencyUsed =
-      resultsObj && 'concurrencyUsed' in resultsObj ? resultsObj.concurrencyUsed : undefined;
+    const validateDuration = (raw: unknown): number | undefined =>
+      typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined;
+
+    const rawDurationMs = validateDuration(resultsObj?.['durationMs']);
+    const generationDurationMs = validateDuration(resultsObj?.['generationDurationMs']);
+    const evaluationDurationMs = validateDuration(resultsObj?.['evaluationDurationMs']);
+    const rawConcurrencyUsed = resultsObj?.['concurrencyUsed'];
     const concurrencyUsed =
       typeof rawConcurrencyUsed === 'number' &&
       Number.isFinite(rawConcurrencyUsed) &&
       rawConcurrencyUsed > 0
         ? rawConcurrencyUsed
         : undefined;
-
-    const schedulerMetrics =
-      resultsObj && 'schedulerMetrics' in resultsObj
-        ? (resultsObj.schedulerMetrics as SchedulerMetrics | undefined)
-        : undefined;
+    const schedulerMetrics = isSchedulerMetrics(resultsObj?.['schedulerMetrics'])
+      ? resultsObj.schedulerMetrics
+      : undefined;
+    // Recompute total if only split fields exist (defensive against partial writes)
+    const durationMs =
+      rawDurationMs ??
+      (generationDurationMs != null || evaluationDurationMs != null
+        ? (generationDurationMs ?? 0) + (evaluationDurationMs ?? 0)
+        : undefined);
 
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
-      author: eval_.author || undefined,
+      author: eval_.author,
       description: eval_.description || undefined,
       prompts: eval_.prompts || [],
       datasetId,
@@ -414,6 +447,8 @@ export default class Eval {
       vars: eval_.vars || [],
       runtimeOptions: eval_.runtimeOptions ?? undefined,
       durationMs,
+      generationDurationMs,
+      evaluationDurationMs,
       concurrencyUsed,
     });
     if (eval_.results && 'table' in eval_.results) {
@@ -446,7 +481,7 @@ export default class Eval {
         new Eval(e.config, {
           id: e.id,
           createdAt: new Date(e.createdAt),
-          author: e.author || undefined,
+          author: e.author,
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
@@ -476,7 +511,7 @@ export default class Eval {
         new Eval(e.config, {
           id: e.id,
           createdAt: new Date(e.createdAt),
-          author: e.author || undefined,
+          author: e.author,
           description: e.description || undefined,
           prompts: e.prompts || [],
           persisted: true,
@@ -499,7 +534,7 @@ export default class Eval {
     opts?: {
       id?: string;
       createdAt?: Date;
-      author?: string;
+      author?: string | null;
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
@@ -509,7 +544,10 @@ export default class Eval {
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
     const evalId = opts?.id || createEvalId(createdAt);
-    const author = opts?.author || getUserEmail();
+    // Callers that resolve the author themselves (CLI/programmatic eval, import)
+    // pass it explicitly — honor that value. Only fall back to the global
+    // resolution chain when the caller did not provide one at all.
+    const author = opts && 'author' in opts ? (opts.author ?? null) : getAuthor();
     const db = getDb();
 
     const datasetId = sha256(JSON.stringify(config.tests || []));
@@ -526,6 +564,7 @@ export default class Eval {
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
           prompts: opts?.completedPrompts || [],
+          isRedteam: Boolean(config.redteam),
         })
         .run();
 
@@ -606,7 +645,7 @@ export default class Eval {
 
     return new Eval(config, {
       id: evalId,
-      author: opts?.author,
+      author,
       createdAt,
       persisted: true,
       runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -618,7 +657,7 @@ export default class Eval {
     opts?: {
       id?: string;
       createdAt?: Date;
-      author?: string;
+      author?: string | null;
       description?: string;
       prompts?: CompletedPrompt[];
       datasetId?: string;
@@ -626,13 +665,15 @@ export default class Eval {
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
       durationMs?: number;
+      generationDurationMs?: number;
+      evaluationDurationMs?: number;
       concurrencyUsed?: number;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
     this.createdAt = createdAt.getTime();
     this.id = opts?.id || createEvalId(createdAt);
-    this.author = opts?.author;
+    this.author = opts?.author ?? null;
     this.config = config;
     this.results = [];
     this.prompts = opts?.prompts || [];
@@ -642,6 +683,8 @@ export default class Eval {
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
     this.durationMs = opts?.durationMs;
+    this.generationDurationMs = opts?.generationDurationMs;
+    this.evaluationDurationMs = opts?.evaluationDurationMs;
     this.concurrencyUsed = opts?.concurrencyUsed;
   }
 
@@ -680,15 +723,31 @@ export default class Eval {
       updateObj.results = this.oldResults;
     } else if (
       this.durationMs !== undefined ||
+      this.generationDurationMs !== undefined ||
+      this.evaluationDurationMs !== undefined ||
       this.concurrencyUsed !== undefined ||
-      this.schedulerMetrics
+      this.schedulerMetrics !== undefined
     ) {
-      // For V4 evals, store durationMs, concurrencyUsed, and schedulerMetrics in the results column
-      updateObj.results = {
-        ...(this.durationMs !== undefined && { durationMs: this.durationMs }),
-        ...(this.concurrencyUsed !== undefined && { concurrencyUsed: this.concurrencyUsed }),
-        ...(this.schedulerMetrics && { schedulerMetrics: this.schedulerMetrics }),
-      };
+      // For V4 evals, atomically merge stats into the results column
+      // using json_set so concurrent save() calls don't clobber each other's keys.
+      // Guard against malformed or non-object JSON (arrays, strings, null) in legacy rows.
+      let expr: SQL = sql`CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}) = 'object' THEN ${evalsTable.results} ELSE '{}' END`;
+      if (this.durationMs !== undefined) {
+        expr = sql`json_set(${expr}, '$.durationMs', ${this.durationMs})`;
+      }
+      if (this.generationDurationMs !== undefined) {
+        expr = sql`json_set(${expr}, '$.generationDurationMs', ${this.generationDurationMs})`;
+      }
+      if (this.evaluationDurationMs !== undefined) {
+        expr = sql`json_set(${expr}, '$.evaluationDurationMs', ${this.evaluationDurationMs})`;
+      }
+      if (this.concurrencyUsed !== undefined) {
+        expr = sql`json_set(${expr}, '$.concurrencyUsed', ${this.concurrencyUsed})`;
+      }
+      if (this.schedulerMetrics !== undefined) {
+        expr = sql`json_set(${expr}, '$.schedulerMetrics', json(${JSON.stringify(this.schedulerMetrics)}))`;
+      }
+      updateObj.results = expr;
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
@@ -702,13 +761,26 @@ export default class Eval {
     this.vars.push(varName);
   }
 
+  /** Sets the evaluation phase duration and recomputes the total. Called by the evaluator. */
   setDurationMs(durationMs: number) {
-    this.durationMs = durationMs;
+    if (!Number.isFinite(durationMs) || durationMs < 0) {
+      return;
+    }
+    this.evaluationDurationMs = durationMs;
+    this.durationMs = (this.generationDurationMs ?? 0) + durationMs;
+  }
+
+  /** Sets the generation phase duration and recomputes the total. Called by doRedteamRun. */
+  setGenerationDurationMs(durationMs: number) {
+    if (!Number.isFinite(durationMs) || durationMs < 0) {
+      return;
+    }
+    this.generationDurationMs = durationMs;
+    this.durationMs = durationMs + (this.evaluationDurationMs ?? 0);
   }
 
   setConcurrencyUsed(concurrency: number) {
-    // Only store valid positive finite numbers (defense-in-depth)
-    if (typeof concurrency === 'number' && Number.isFinite(concurrency) && concurrency > 0) {
+    if (Number.isFinite(concurrency) && concurrency > 0) {
       this.concurrencyUsed = concurrency;
     }
   }
@@ -765,6 +837,61 @@ export default class Eval {
    */
   async getTotalResultRowCount(): Promise<number> {
     return getTotalResultRowCount(this.id);
+  }
+
+  /**
+   * Find a non-transient HTTP error status from evaluation results.
+   * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
+   *
+   * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
+   * For non-persisted evals: Falls back to scanning in-memory results.
+   */
+  async findTargetErrorStatus(): Promise<number | undefined> {
+    // Helper to scan in-memory results
+    const scanInMemory = (): number | undefined => {
+      for (const result of this.results) {
+        const status = result.response?.metadata?.http?.status;
+        if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
+          return status;
+        }
+      }
+      return undefined;
+    };
+
+    // For non-persisted evals, scan in-memory results
+    if (!this.persisted) {
+      return scanInMemory();
+    }
+
+    // For persisted evals, use efficient database query
+    try {
+      const db = getDb();
+
+      // Query for any result with a non-transient HTTP status
+      // Uses json_extract to access nested metadata.http.status field
+      const result = db
+        .select({
+          httpStatus: sql<number>`CAST(json_extract(${evalResultsTable.response}, '$.metadata.http.status') AS INTEGER)`,
+        })
+        .from(evalResultsTable)
+        .where(
+          and(
+            eq(evalResultsTable.evalId, this.id),
+            sql`json_extract(${evalResultsTable.response}, '$.metadata.http.status') IN (${sql.join(
+              NON_TRANSIENT_HTTP_STATUSES.map((s) => sql`${s}`),
+              sql`, `,
+            )})`,
+          ),
+        )
+        .limit(1)
+        .get();
+
+      return result?.httpStatus ?? undefined;
+    } catch {
+      // Fall back to in-memory scan if database query fails
+      // This handles edge cases like mocked databases in tests
+      return scanInMemory();
+    }
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -1135,10 +1262,16 @@ export default class Eval {
     // Fetch all results for these test indices in a single query
     const allResults = await EvalResult.findManyByEvalIdAndTestIndices(this.id, testIndices);
 
-    // Check if any result has metadata.sessionId and add to vars header if not present
-    const hasSessionIdInMetadata = allResults.some(
-      (result) => result.metadata?.sessionId && !result.testCase?.vars?.sessionId,
-    );
+    // Check if any result has metadata.sessionId or metadata.sessionIds and add to vars header if not present
+    // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
+    // Single-turn strategies store a single sessionId in metadata.sessionId
+    const hasSessionIdInMetadata = allResults.some((result) => {
+      const hasSessionIds =
+        Array.isArray(result.metadata?.sessionIds) && result.metadata.sessionIds.length > 0;
+      const hasSessionId = Boolean(result.metadata?.sessionId);
+      const notInVars = !result.testCase?.vars?.sessionId;
+      return (hasSessionIds || hasSessionId) && notInVars;
+    });
     if (hasSessionIdInMetadata && !vars.includes('sessionId')) {
       vars.push('sessionId');
       vars.sort();
@@ -1172,6 +1305,9 @@ export default class Eval {
     if (this.persisted) {
       const db = getDb();
       db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      // Notify the view server after prompt metadata changes so cached /api/prompts
+      // responses and socket listeners can pick up prompts added after eval creation.
+      updateSignalFile(this.id);
     }
   }
 
@@ -1205,7 +1341,6 @@ export default class Eval {
   }
 
   getStats(): EvaluateStats {
-    // Extract and validate maxConcurrency (configured value) from runtimeOptions
     const rawMaxConcurrency = this.runtimeOptions?.maxConcurrency;
     const maxConcurrency =
       typeof rawMaxConcurrency === 'number' &&
@@ -1220,6 +1355,8 @@ export default class Eval {
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
       durationMs: this.durationMs,
+      generationDurationMs: this.generationDurationMs,
+      evaluationDurationMs: this.evaluationDurationMs,
       maxConcurrency,
       concurrencyUsed: this.concurrencyUsed,
       schedulerMetrics: this.schedulerMetrics,
@@ -1368,7 +1505,7 @@ export default class Eval {
 
     const newPrompts = structuredClone(this.prompts);
     const newVars = this.vars ? structuredClone(this.vars) : [];
-    const author = getUserEmail();
+    const author = getAuthor();
 
     const db = getDb();
 

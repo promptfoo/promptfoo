@@ -1,4 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '../../src/util/time';
+import { mockProcessEnv } from '../util/utils';
 
 import type { EvaluateTestSuite } from '../../src/types/index';
 
@@ -11,6 +13,11 @@ vi.mock('../../src/tracing/store', () => ({
     getTrace: vi.fn().mockResolvedValue(null),
   })),
   TraceStore: vi.fn(),
+}));
+
+vi.mock('../../src/util/time', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/time')>()),
+  sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Define the mock provider class
@@ -73,6 +80,7 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -180,27 +188,26 @@ describe('OpenTelemetry Tracing Integration', () => {
   });
 
   it('should respect environment variable for enabling tracing', async () => {
-    // Set environment variable
-    process.env.PROMPTFOO_TRACING_ENABLED = 'true';
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_TRACING_ENABLED: 'true' });
+    try {
+      const config: Partial<EvaluateTestSuite> = {
+        providers: ['mock-traced-provider'],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { topic: 'testing' } }],
+        // No tracing config in YAML
+      };
 
-    const config: Partial<EvaluateTestSuite> = {
-      providers: ['mock-traced-provider'],
-      prompts: ['Test prompt'],
-      tests: [{ vars: { topic: 'testing' } }],
-      // No tracing config in YAML
-    };
+      // Run evaluation
+      const results = await evaluate(config as EvaluateTestSuite, {
+        cache: false,
+        maxConcurrency: 1,
+      });
 
-    // Run evaluation
-    const results = await evaluate(config as EvaluateTestSuite, {
-      cache: false,
-      maxConcurrency: 1,
-    });
-
-    // Should have trace context from environment variable
-    expect(results.results[0].response).toBeDefined();
-    expect(results.results[0].response?.metadata?.traceparent).toBeDefined();
-
-    // Clean up
-    delete process.env.PROMPTFOO_TRACING_ENABLED;
+      // Should have trace context from environment variable
+      expect(results.results[0].response).toBeDefined();
+      expect(results.results[0].response?.metadata?.traceparent).toBeDefined();
+    } finally {
+      restoreEnv();
+    }
   });
 });

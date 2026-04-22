@@ -26,7 +26,7 @@ Here is the main structure of the promptfoo configuration file:
 | ------------------------------- | ------------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | description                     | string                                                                                           | No       | Optional description of what your LLM is trying to do                                                                                                                                                                           |
 | tags                            | Record\<string, string\>                                                                         | No       | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                                       |
-| providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                                                  |
+| providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use. Can also be specified as `targets`                                                                                                                                              |
 | prompts                         | string \| string[]                                                                               | Yes      | One or more [prompts](/docs/configuration/prompts) to load                                                                                                                                                                      |
 | tests                           | string \| [Test Case](#test-case)[]                                                              | Yes      | Path to a [test file](/docs/configuration/test-cases), OR list of LLM prompt variations (aka "test case")                                                                                                                       |
 | defaultTest                     | string \| Partial [Test Case](#test-case)                                                        | No       | Sets the [default properties](/docs/configuration/guide#default-test-cases) for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                      |
@@ -62,6 +62,7 @@ A test case represents a single example input that is fed into all prompts and p
 | options.prefix                | string                                                          | No       | Text to prepend to the prompt                                                                                                                                                                                                          |
 | options.suffix                | string                                                          | No       | Text to append to the prompt                                                                                                                                                                                                           |
 | options.provider              | string                                                          | No       | The API provider to use for [model-graded](/docs/configuration/expected-outputs/model-graded) assertion grading                                                                                                                        |
+| options.disableDefaultAsserts | boolean                                                         | No       | If true, this test case does not inherit assertions from `defaultTest.assert`; other `defaultTest` properties still apply                                                                                                              |
 | options.runSerially           | boolean                                                         | No       | If true, run this test case without concurrency regardless of global settings                                                                                                                                                          |
 | options.storeOutputAs         | string                                                          | No       | The output of this test will be stored as a variable, which can be used in subsequent tests. See [multi-turn conversations](/docs/configuration/chat#using-storeoutputas).                                                             |
 | options.rubricPrompt          | string \| string[]                                              | No       | Custom prompt for [model-graded](/docs/configuration/expected-outputs/model-graded) assertions                                                                                                                                         |
@@ -296,7 +297,7 @@ export async function extensionHook(hookName, context) {
 }
 ```
 
-See the working [stateful-session-management example](https://github.com/promptfoo/promptfoo/tree/main/examples/stateful-session-management) for a complete implementation.
+See the working [stateful-session-management example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-stateful-session-management) for a complete implementation.
 
 #### Test-Time Session Definition
 
@@ -487,7 +488,9 @@ module.exports = extensionHook;
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
-The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
+The `beforeAll`, `beforeEach`, and `afterEach` hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
+
+All merges are **shallow**: returned properties replace existing values at the top level. Nested objects (e.g., `metadata: { nested: { a: 1 } }`) are replaced entirely, not deep-merged.
 
 #### beforeAll
 
@@ -507,6 +510,20 @@ The beforeAll and beforeEach hooks may mutate specific properties of their respe
 | Property       | Type                     | Description                    |
 | -------------- | ------------------------ | ------------------------------ |
 | `context.test` | [`TestCase`](#test-case) | The test case to be evaluated. |
+
+#### afterEach
+
+| Property                           | Type                     | Description                                             |
+| ---------------------------------- | ------------------------ | ------------------------------------------------------- |
+| `context.result.namedScores`       | `Record<string, number>` | Custom numeric metrics (e.g., `num_turns`, `cost_usd`). |
+| `context.result.metadata`          | `Record<string, any>`    | Structured data (e.g., tool call details, URLs).        |
+| `context.result.response.metadata` | `Record<string, any>`    | Response-level metadata (e.g., session viewer URLs).    |
+
+Fields like `success`, `score`, and `response.output` are **not** overridable from `afterEach`.
+
+#### afterAll
+
+The `afterAll` hook is intended for side effects (sending to monitoring, cleanup, etc.) and its return value is not persisted. Use it for read-only operations on the completed evaluation.
 
 ## Provider-related types
 
@@ -617,6 +634,11 @@ type ProviderFunction = (
 ### ProviderOptions
 
 ProviderOptions is an object that includes the `id` of the provider and an optional `config` object that can be used to pass provider-specific configurations.
+
+For providers with built-in cost estimation, `config` can also include pricing overrides such
+as `cost`, `inputCost`, and `outputCost`. When supported, `inputCost` and `outputCost` take
+precedence over the legacy shared `cost` value. OpenAI audio-capable models also support
+`audioCost`, `audioInputCost`, and `audioOutputCost`.
 
 ```typescript
 interface ProviderOptions {
@@ -860,20 +882,35 @@ interface EvaluateStats {
   errors: number;
   tokenUsage: Required<TokenUsage>;
   durationMs?: number;
+  generationDurationMs?: number;
+  evaluationDurationMs?: number;
   maxConcurrency?: number;
   concurrencyUsed?: number;
+  schedulerMetrics?: SchedulerMetrics;
+}
+
+interface SchedulerMetrics {
+  minConcurrency: number;
+  maxConcurrency: number;
+  finalConcurrency: number;
+  rateLimitHits: number;
+  retriedRequests: number;
+  concurrencyReduced: boolean;
 }
 ```
 
-| Property          | Type                   | Description                                                                                                                     |
-| ----------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `successes`       | number                 | Number of test cases that passed                                                                                                |
-| `failures`        | number                 | Number of test cases that failed assertions                                                                                     |
-| `errors`          | number                 | Number of test cases that resulted in errors                                                                                    |
-| `tokenUsage`      | Required\<TokenUsage\> | Aggregated token usage across all test cases                                                                                    |
-| `durationMs`      | number \| undefined    | Total wall-clock time for the evaluation in milliseconds                                                                        |
-| `maxConcurrency`  | number \| undefined    | The configured concurrency from CLI (`-j`), config, or environment (before runtime overrides)                                   |
-| `concurrencyUsed` | number \| undefined    | The actual concurrency used during evaluation (may be reduced due to `_conversation` variable usage or `storeOutputAs` options) |
+| Property               | Type                          | Description                                                                                                                     |
+| ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `successes`            | number                        | Number of test cases that passed                                                                                                |
+| `failures`             | number                        | Number of test cases that failed assertions                                                                                     |
+| `errors`               | number                        | Number of test cases that resulted in errors                                                                                    |
+| `tokenUsage`           | Required\<TokenUsage\>        | Aggregated token usage across all test cases                                                                                    |
+| `durationMs`           | number \| undefined           | Total wall-clock time for the evaluation in milliseconds                                                                        |
+| `generationDurationMs` | number \| undefined           | Time spent generating adversarial test cases for red team runs                                                                  |
+| `evaluationDurationMs` | number \| undefined           | Time spent running the evaluation phase                                                                                         |
+| `maxConcurrency`       | number \| undefined           | The configured concurrency from CLI (`-j`), config, or environment before runtime overrides                                     |
+| `concurrencyUsed`      | number \| undefined           | The actual concurrency used during evaluation (may be reduced due to `_conversation` variable usage or `storeOutputAs` options) |
+| `schedulerMetrics`     | SchedulerMetrics \| undefined | Adaptive scheduler metrics, including rate-limit hits, retry attempts, and whether concurrency was reduced                      |
 
 The `maxConcurrency` and `concurrencyUsed` fields help diagnose performance issues. When `concurrencyUsed` is less than `maxConcurrency`, it indicates that the evaluation was forced to run with lower parallelism due to sequential dependencies (e.g., multi-turn conversations or tests that store outputs for later use).
 
@@ -905,7 +942,10 @@ interface GradingResult {
   pass: boolean;                        # did test pass?
   score: number;                        # score between 0 and 1
   reason: string;                       # plaintext reason for outcome
+  namedScores?: Record<string, number>; # labeled metrics attached to this result
+  namedScoreWeights?: Record<string, number>; # weighted denominator for namedScores
   tokensUsed?: TokenUsage;              # tokens consumed by the test
+  metadata?: Record<string, any>;       # additional matcher/provider metadata
   componentResults?: GradingResult[];   # if this is a composite score, it can have nested results
   assertion: Assertion | null;          # source of assertion
   latencyMs?: number;                   # latency of LLM call
@@ -936,6 +976,7 @@ interface CompletedPrompt {
     tokenUsage: TokenUsage;
     namedScores: Record<string, number>;
     namedScoresCount: Record<string, number>;
+    namedScoreWeights?: Record<string, number>;
     redteam?: {
       pluginPassCount: Record<string, number>;
       pluginFailCount: Record<string, number>;

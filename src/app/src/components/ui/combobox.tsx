@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, FocusEvent, KeyboardEvent, MouseEvent } from 'react';
 
@@ -11,16 +12,20 @@ export interface ComboboxOption {
   description?: string;
 }
 
-interface ComboboxProps {
+interface ComboboxProps extends Omit<React.ComponentProps<'input'>, 'onChange' | 'value' | 'type'> {
   options: ComboboxOption[];
   value?: string;
   onChange: (value: string) => void;
-  placeholder?: string;
   emptyMessage?: string;
-  disabled?: boolean;
   clearable?: boolean;
   label?: string;
-  className?: string;
+  /** Where to render the label: "above" (default) renders externally, "inline" renders stacked inside the trigger like SelectTrigger */
+  labelPosition?: 'above' | 'inline';
+  renderOption?: (
+    option: ComboboxOption,
+    isSelected: boolean,
+    isHighlighted: boolean,
+  ) => React.ReactNode;
 }
 
 function Combobox({
@@ -32,7 +37,10 @@ function Combobox({
   disabled = false,
   clearable = true,
   label,
+  labelPosition = 'above',
+  renderOption,
   className,
+  ...props
 }: ComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
@@ -113,13 +121,27 @@ function Combobox({
     setOpen(true);
   }, []);
 
+  const handleChevronClick = useCallback(
+    (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (disabled) {
+        return;
+      }
+      setOpen((prev) => !prev);
+      inputRef.current?.focus();
+    },
+    [disabled],
+  );
+
   const handleInputBlur = useCallback(
     (e: FocusEvent) => {
-      // Don't close if clicking on the popover content or clear button
+      // Don't close if clicking on the popover content, clear button, or chevron
       const relatedTarget = e.relatedTarget as HTMLElement;
       if (
         relatedTarget?.closest('[data-combobox-content]') ||
-        relatedTarget?.closest('[data-combobox-clear]')
+        relatedTarget?.closest('[data-combobox-clear]') ||
+        relatedTarget?.closest('[data-combobox-chevron]')
       ) {
         return;
       }
@@ -195,18 +217,34 @@ function Combobox({
   const showDropdown = open && options.length > 0;
   const showClearButton = clearable && !!value && !disabled;
   const inputId = `${listboxId}-input`;
+  const isInlineLabel = label && labelPosition === 'inline';
 
   return (
     <div className="flex flex-col">
-      {label && (
+      {label && labelPosition === 'above' && (
         <label htmlFor={inputId} className="mb-1.5 text-xs font-medium text-muted-foreground">
           {label}
         </label>
       )}
       <Popover open={showDropdown}>
         <PopoverAnchor asChild>
-          <div className="relative">
+          <div
+            className={cn(
+              'relative',
+              isInlineLabel &&
+                'flex flex-col rounded-md border border-input bg-white dark:bg-zinc-900 ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
+            )}
+          >
+            {isInlineLabel && (
+              <label
+                htmlFor={inputId}
+                className="px-3 pt-1.5 text-[10px] text-muted-foreground uppercase tracking-wide cursor-pointer"
+              >
+                {label}
+              </label>
+            )}
             <input
+              {...props}
               id={inputId}
               ref={inputRef}
               type="text"
@@ -227,9 +265,18 @@ function Combobox({
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               className={cn(
-                'flex h-10 w-full rounded-md border border-input bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-foreground ring-offset-background',
-                'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-                'disabled:cursor-not-allowed disabled:opacity-50',
+                'overflow-hidden text-ellipsis',
+                isInlineLabel
+                  ? cn(
+                      'flex w-full bg-transparent px-3 pb-1.5 text-sm text-foreground',
+                      'placeholder:text-muted-foreground focus-visible:outline-none',
+                      'disabled:cursor-not-allowed disabled:opacity-50',
+                    )
+                  : cn(
+                      'flex h-10 w-full rounded-md border border-input bg-white dark:bg-zinc-900 px-3 py-2 text-sm text-foreground ring-offset-background',
+                      'placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                      'disabled:cursor-not-allowed disabled:opacity-50',
+                    ),
                 showClearButton ? 'pr-16' : 'pr-8',
                 className,
               )}
@@ -247,10 +294,23 @@ function Combobox({
                   <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                 </button>
               )}
-              <ChevronDown
+              <button
+                type="button"
+                data-combobox-chevron
                 data-testid="combobox-chevron"
-                className="h-4 w-4 opacity-50 pointer-events-none"
-              />
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={handleChevronClick}
+                className="p-1 rounded hover:bg-muted transition-colors"
+                aria-label={open ? 'Close dropdown' : 'Open dropdown'}
+                tabIndex={-1}
+              >
+                <ChevronDown
+                  className={cn(
+                    'h-4 w-4 opacity-50 transition-transform duration-200',
+                    open && 'rotate-180',
+                  )}
+                />
+              </button>
             </div>
           </div>
         </PopoverAnchor>
@@ -261,11 +321,12 @@ function Combobox({
           sideOffset={4}
           onOpenAutoFocus={(e) => e.preventDefault()}
           onInteractOutside={(e) => {
-            // Don't close if clicking the input or clear button
+            // Don't close if clicking the input, clear button, or chevron
             const target = e.target as Node;
             if (
               inputRef.current?.contains(target) ||
-              (target as HTMLElement)?.closest?.('[data-combobox-clear]')
+              (target as HTMLElement)?.closest?.('[data-combobox-clear]') ||
+              (target as HTMLElement)?.closest?.('[data-combobox-chevron]')
             ) {
               e.preventDefault();
             }
@@ -296,11 +357,17 @@ function Combobox({
                   <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
                     {option.value === value && <Check className="h-4 w-4" />}
                   </span>
-                  <span className="truncate">{option.label}</span>
-                  {option.description && (
-                    <span className="ml-2 text-muted-foreground truncate">
-                      · {option.description}
-                    </span>
+                  {renderOption ? (
+                    renderOption(option, option.value === value, index === highlightedIndex)
+                  ) : (
+                    <>
+                      <span className="truncate">{option.label}</span>
+                      {option.description && (
+                        <span className="ml-2 text-muted-foreground truncate">
+                          · {option.description}
+                        </span>
+                      )}
+                    </>
                   )}
                 </button>
               ))

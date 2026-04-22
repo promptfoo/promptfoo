@@ -6,6 +6,7 @@ import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings';
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
+import { mockProcessEnv } from '../util/utils';
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
@@ -126,8 +127,14 @@ describe('Azure Provider Tests', () => {
 
   describe('AzureOpenAiGenericProvider', () => {
     describe('getApiBaseUrl', () => {
+      let restoreEnv: () => void;
+
       beforeEach(() => {
-        delete process.env.AZURE_OPENAI_API_HOST;
+        restoreEnv = mockProcessEnv({ AZURE_OPENAI_API_HOST: undefined });
+      });
+
+      afterEach(() => {
+        restoreEnv();
       });
 
       it('should return apiBaseUrl if set', () => {
@@ -715,7 +722,7 @@ describe('Azure Provider Tests', () => {
       });
 
       it('should auto-detect gpt-5 models by deployment name', () => {
-        const provider = new AzureChatCompletionProvider('gpt-5-mini', {
+        const provider = new AzureChatCompletionProvider('gpt-5.4', {
           config: {},
         });
         expect((provider as any).isReasoningModel()).toBe(true);
@@ -729,7 +736,7 @@ describe('Azure Provider Tests', () => {
       });
 
       it('should auto-detect reasoning models with mixed case', () => {
-        const provider = new AzureChatCompletionProvider('GPT-5-Mini', {
+        const provider = new AzureChatCompletionProvider('GPT-5.4', {
           config: {},
         });
         expect((provider as any).isReasoningModel()).toBe(true);
@@ -743,7 +750,7 @@ describe('Azure Provider Tests', () => {
       });
 
       it('should auto-detect prefixed gpt-5 deployment names', () => {
-        const provider = new AzureChatCompletionProvider('staging-gpt-5-mini', {
+        const provider = new AzureChatCompletionProvider('staging-gpt-5.4', {
           config: {},
         });
         expect((provider as any).isReasoningModel()).toBe(true);
