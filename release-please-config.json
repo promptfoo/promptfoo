@@ -3,6 +3,7 @@
   "include-component-in-tag": false,
   "include-v-in-tag": false,
   "include-v-in-release-name": false,
+  "separate-pull-requests": true,
   "packages": {
     ".": {
       "release-type": "node",

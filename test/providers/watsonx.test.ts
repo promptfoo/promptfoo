@@ -379,10 +379,292 @@ describe('WatsonXProvider', () => {
         logProbs: undefined,
       });
 
-      expect(cache.set).toHaveBeenCalledWith(
-        `watsonx:${modelName}:${generateConfigHash(config)}:${prompt}`,
-        JSON.stringify(response),
+      const cacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
+      expect(cacheKey).toMatch(
+        new RegExp(
+          `^watsonx:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+        ),
       );
+      expect(cacheKey).not.toContain(prompt);
+      expect(cacheKey).not.toContain(config.apiKey);
+      expect(cache.get).toHaveBeenCalledWith(cacheKey);
+      expect(cache.set).toHaveBeenCalledWith(cacheKey, JSON.stringify(response));
+    });
+
+    it('should include configured auth mode in cache keys without exposing secrets', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Credential-separated response',
+                generated_token_count: 1,
+                input_token_count: 1,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const apiKey = 'watsonx-config-secret-api-key';
+      const bearerToken = 'watsonx-config-secret-bearer-token';
+      await new WatsonXProvider(modelName, {
+        config: { ...config, apiKey },
+      }).callApi(prompt);
+      await new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: undefined, apiBearerToken: bearerToken },
+        env: { WATSONX_AI_AUTH_TYPE: 'bearertoken' },
+      }).callApi(prompt);
+
+      const firstCacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
+      const secondCacheKey = vi.mocked(cache.set).mock.calls[1][0] as string;
+      expect(firstCacheKey).not.toEqual(secondCacheKey);
+      expect(firstCacheKey).not.toContain(apiKey);
+      expect(secondCacheKey).not.toContain(bearerToken);
+    });
+
+    it('should include env-sourced auth mode in cache keys without exposing secrets', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Env credential-separated response',
+                generated_token_count: 1,
+                input_token_count: 1,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const apiKey = 'watsonx-env-secret-api-key';
+      const bearerToken = 'watsonx-env-secret-bearer-token';
+      const envConfig = { ...config, apiKey: undefined };
+      await new WatsonXProvider(modelName, {
+        config: envConfig,
+        env: { WATSONX_AI_APIKEY: apiKey },
+      }).callApi(prompt);
+      await new WatsonXProvider(modelName, {
+        config: envConfig,
+        env: {
+          WATSONX_AI_BEARER_TOKEN: bearerToken,
+          WATSONX_AI_AUTH_TYPE: 'bearertoken',
+        },
+      }).callApi(prompt);
+
+      const firstCacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
+      const secondCacheKey = vi.mocked(cache.set).mock.calls[1][0] as string;
+      expect(firstCacheKey).not.toEqual(secondCacheKey);
+      expect(firstCacheKey).not.toContain(apiKey);
+      expect(secondCacheKey).not.toContain(bearerToken);
+    });
+
+    it('should separate cache keys for different same-mode credentials without exposing secrets', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Same-mode credential-separated response',
+                generated_token_count: 1,
+                input_token_count: 1,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const apiKeyA = 'watsonx-config-secret-api-key-a';
+      const apiKeyB = 'watsonx-config-secret-api-key-b';
+      const bearerTokenA = 'watsonx-config-secret-bearer-token-a';
+      const bearerTokenB = 'watsonx-config-secret-bearer-token-b';
+
+      await new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: apiKeyA },
+      }).callApi(prompt);
+      await new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: apiKeyB },
+      }).callApi(prompt);
+      await new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: undefined, apiBearerToken: bearerTokenA },
+      }).callApi(prompt);
+      await new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: undefined, apiBearerToken: bearerTokenB },
+      }).callApi(prompt);
+
+      const iamKeyA = vi.mocked(cache.set).mock.calls[0][0] as string;
+      const iamKeyB = vi.mocked(cache.set).mock.calls[1][0] as string;
+      const bearerKeyA = vi.mocked(cache.set).mock.calls[2][0] as string;
+      const bearerKeyB = vi.mocked(cache.set).mock.calls[3][0] as string;
+
+      expect(iamKeyA).not.toEqual(iamKeyB);
+      expect(bearerKeyA).not.toEqual(bearerKeyB);
+      expect(iamKeyA).not.toContain(apiKeyA);
+      expect(iamKeyB).not.toContain(apiKeyB);
+      expect(bearerKeyA).not.toContain(bearerTokenA);
+      expect(bearerKeyB).not.toContain(bearerTokenB);
+    });
+
+    it('should keep cache keys stable across provider instances with the same credentials', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Stable credential response',
+                generated_token_count: 1,
+                input_token_count: 1,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const sharedApiKey = 'watsonx-shared-stable-api-key';
+      await new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: sharedApiKey },
+      }).callApi(prompt);
+      await new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: sharedApiKey },
+      }).callApi(prompt);
+
+      const firstCacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
+      const secondCacheKey = vi.mocked(cache.set).mock.calls[1][0] as string;
+      expect(firstCacheKey).toEqual(secondCacheKey);
+      expect(firstCacheKey).not.toContain(sharedApiKey);
+    });
+
+    it('should keep the cache auth hash tied to the memoized client credentials', async () => {
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn().mockResolvedValue({
+          result: {
+            model_id: 'ibm/test-model',
+            model_version: '1.0.0',
+            created_at: '2023-10-10T00:00:00Z',
+            results: [
+              {
+                generated_text: 'Memoized credential response',
+                generated_token_count: 1,
+                input_token_count: 1,
+                stop_reason: 'max_tokens',
+              },
+            ],
+          },
+        }),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
+      const cache: Partial<any> = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const originalApiKey = 'watsonx-original-env-api-key';
+      const rotatedApiKey = 'watsonx-rotated-env-api-key';
+      const provider = new WatsonXProvider(modelName, {
+        config: { ...config, apiKey: undefined },
+        env: { WATSONX_AI_APIKEY: originalApiKey },
+      });
+
+      await provider.callApi(prompt);
+      provider.env = { WATSONX_AI_APIKEY: rotatedApiKey };
+      await provider.callApi(prompt);
+
+      const firstCacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
+      const secondCacheKey = vi.mocked(cache.set).mock.calls[1][0] as string;
+
+      expect(firstCacheKey).toEqual(secondCacheKey);
+      expect(firstCacheKey).not.toContain(originalApiKey);
+      expect(secondCacheKey).not.toContain(rotatedApiKey);
+      expect(WatsonXAI.newInstance).toHaveBeenCalledTimes(1);
+      expect(IamAuthenticator).toHaveBeenCalledWith({ apikey: originalApiKey });
+      expect(IamAuthenticator).not.toHaveBeenCalledWith({ apikey: rotatedApiKey });
     });
 
     it('should preserve an explicit maxNewTokens value of 0', async () => {
@@ -447,7 +729,6 @@ describe('WatsonXProvider', () => {
         cached: true,
       };
 
-      const cacheKey = `watsonx:${modelName}:${generateConfigHash(config)}:${prompt}`;
       const cache: Partial<any> = {
         get: vi.fn().mockResolvedValue(JSON.stringify(storedCachedData)),
         set: vi.fn(),
@@ -475,6 +756,17 @@ describe('WatsonXProvider', () => {
       const provider = new WatsonXProvider(modelName, { config });
       const generateTextSpy = vi.spyOn(await provider.getClient(), 'generateText');
       const response = await provider.callApi(prompt);
+      const cacheKey = vi.mocked(cache.get).mock.calls[0][0] as string;
+      const debugLogs = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+      expect(cacheKey).toMatch(
+        new RegExp(
+          `^watsonx:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+        ),
+      );
+      expect(cacheKey).not.toContain(prompt);
+      expect(cacheKey).not.toContain(config.apiKey);
+      expect(debugLogs).not.toContain(prompt);
+      expect(debugLogs).not.toContain(storedCachedData.output);
       expect(cache.get).toHaveBeenCalledWith(cacheKey);
       expect(response).toEqual(expectedResponse);
       expect(generateTextSpy).not.toHaveBeenCalled();
@@ -1103,14 +1395,83 @@ describe('WatsonXChatProvider', () => {
       return true;
     });
 
+    const chatPrompt = 'PFQA_WATSONX_CHAT_PROMPT_SENTINEL';
     const provider = new WatsonXChatProvider(modelName, { config });
-    await provider.callApi(prompt);
+    await provider.callApi(chatPrompt);
 
     expect(mockedWatsonXAIClient.textChat).toHaveBeenCalledWith(
       expect.objectContaining({
-        messages: [{ role: 'user', content: prompt }],
+        messages: [{ role: 'user', content: chatPrompt }],
       }),
     );
+    const cacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
+    expect(cacheKey).toMatch(
+      new RegExp(
+        `^watsonx:chat:${modelName}:${generateConfigHash(config)}:[a-f0-9]{64}:[a-f0-9]{64}$`,
+      ),
+    );
+    expect(cacheKey).not.toContain(chatPrompt);
+    expect(cacheKey).not.toContain(config.apiKey);
+  });
+
+  it('should keep chat cache auth hash tied to the memoized client credentials', async () => {
+    const mockedWatsonXAIClient: Partial<any> = {
+      generateText: vi.fn(),
+      textChat: vi.fn().mockResolvedValue({
+        result: {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: 'Memoized chat credential response',
+              },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: {
+            prompt_tokens: 5,
+            completion_tokens: 4,
+            total_tokens: 9,
+          },
+        },
+      }),
+    };
+    vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+      return mockedWatsonXAIClient as any;
+    });
+
+    const cache: Partial<any> = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+    };
+
+    vi.mocked(getCache).mockImplementation(function () {
+      return cache as any;
+    });
+    vi.mocked(isCacheEnabled).mockImplementation(function () {
+      return true;
+    });
+
+    const originalApiKey = 'watsonx-original-chat-env-api-key';
+    const rotatedApiKey = 'watsonx-rotated-chat-env-api-key';
+    const provider = new WatsonXChatProvider(modelName, {
+      config: { ...config, apiKey: undefined },
+      env: { WATSONX_AI_APIKEY: originalApiKey },
+    });
+
+    await provider.callApi(prompt);
+    provider.env = { WATSONX_AI_APIKEY: rotatedApiKey };
+    await provider.callApi(prompt);
+
+    const firstCacheKey = vi.mocked(cache.set).mock.calls[0][0] as string;
+    const secondCacheKey = vi.mocked(cache.set).mock.calls[1][0] as string;
+
+    expect(firstCacheKey).toEqual(secondCacheKey);
+    expect(firstCacheKey).not.toContain(originalApiKey);
+    expect(secondCacheKey).not.toContain(rotatedApiKey);
+    expect(WatsonXAI.newInstance).toHaveBeenCalledTimes(1);
+    expect(IamAuthenticator).toHaveBeenCalledWith({ apikey: originalApiKey });
+    expect(IamAuthenticator).not.toHaveBeenCalledWith({ apikey: rotatedApiKey });
   });
 
   it('should handle API errors gracefully', async () => {
