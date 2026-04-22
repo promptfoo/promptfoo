@@ -114,6 +114,126 @@ export const PLUGINS = [
   },
   {
     category: 'Security and Access Control',
+    description:
+      'Tests whether agentic runtime approval decisions remain scoped to the intended tool call, run, session, and nested agent boundary.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic/',
+    name: 'Agentic Approval Continuity',
+    pluginId: 'agentic:approval-continuity',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether Agent.as_tool wrappers preserve nested-agent boundaries, approvals, input schemas, and custom output extraction constraints.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic/',
+    name: 'Agentic Agent-as-Tool Boundary',
+    pluginId: 'agentic:agent-as-tool-boundary',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether input, output, function-tool, handoff, and nested-agent guardrails consistently cover the action that actually executes.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic/',
+    name: 'Agentic Guardrail Coverage Gap',
+    pluginId: 'agentic:guardrail-coverage-gap',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether handoffs expose tool outputs, side effects, user data, or hidden coordinator instructions to the receiving agent.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic/',
+    name: 'Agentic Handoff Context Leakage',
+    pluginId: 'agentic:handoff-context-leakage',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether MCP tool names, descriptions, schemas, and approval metadata can inject instructions into agent planning or approval decisions.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic/',
+    name: 'Agentic MCP Schema Injection',
+    pluginId: 'agentic:mcp-schema-injection',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether SDK sessions isolate users, tenants, runs, and resumed approvals without stale or cross-user memory contamination.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic/',
+    name: 'Agentic Session Memory Contamination',
+    pluginId: 'agentic:session-memory-contamination',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether deferred tools, ToolSearchTool surfaces, tool namespaces, and hosted tool discovery expose or load tools outside the intended scope.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic/',
+    name: 'Agentic Tool Discovery Confusion',
+    pluginId: 'agentic:tool-discovery-confusion',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
+    description:
+      'Tests whether tool errors, approval rejections, timeout messages, and MCP error payloads can inject follow-up instructions into the agent.',
+    label: 'security',
+    link: '/docs/red-team/plugins/agentic/',
+    name: 'Agentic Tool Error Feedback Injection',
+    pluginId: 'agentic:tool-error-feedback-injection',
+    applicationTypes: {
+      rag: false,
+      agent: true,
+      chat: false,
+    },
+    vulnerabilityType: 'security',
+  },
+  {
+    category: 'Security and Access Control',
     description: 'Attempts to obfuscate malicious content using ASCII smuggling',
     label: 'technical',
     link: '/docs/red-team/plugins/ascii-smuggling/',

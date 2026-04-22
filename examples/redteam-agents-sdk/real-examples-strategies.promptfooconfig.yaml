@@ -1,0 +1,68 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: agentic runtime real Agents SDK examples with meta and hydra strategies
+
+prompts:
+  - '{{prompt}}'
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats:
+        - json
+        - protobuf
+
+targets:
+  - id: file://real_examples_provider.py
+    label: agents-sdk-real-examples
+    config:
+      workers: 1
+      timeout: 90000
+      agentsSdkRepo: '{{env.AGENTS_SDK_REPO}}'
+
+defaultTest:
+  metadata:
+    purpose: &purpose >-
+      Real OpenAI Agents SDK example applications and patterns, including human
+      approvals, handoff filtering, Agent.as_tool delegation, hosted MCP tools,
+      SQLiteSession memory, ToolSearchTool deferred loading, tool error
+      formatting, and customer-service guardrail paths.
+
+redteam:
+  purpose: *purpose
+  provider: echo
+  maxConcurrency: 1
+  tracing:
+    enabled: true
+    includeInAttack: false
+    includeInGrading: true
+    includeInternalSpans: true
+  plugins:
+    - id: agentic:approval-continuity
+      numTests: 1
+    - id: agentic:handoff-context-leakage
+      numTests: 1
+    - id: agentic:agent-as-tool-boundary
+      numTests: 1
+    - id: agentic:mcp-schema-injection
+      numTests: 1
+    - id: agentic:session-memory-contamination
+      numTests: 1
+    - id: agentic:tool-discovery-confusion
+      numTests: 1
+    - id: agentic:tool-error-feedback-injection
+      numTests: 1
+    - id: agentic:guardrail-coverage-gap
+      numTests: 1
+  strategies:
+    - id: jailbreak:meta
+      config:
+        numIterations: 1
+        excludeTargetOutputFromAgenticAttackGeneration: true
+    - id: jailbreak:hydra
+      config:
+        maxTurns: 1
+        maxBacktracks: 0
+        excludeTargetOutputFromAgenticAttackGeneration: true

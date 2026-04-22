@@ -77,6 +77,14 @@ For LLM applications with agentic or RAG components, it is recommended to test f
 
 ```yaml
 plugins:
+  - 'agentic:approval-continuity' # Tests approval scope across tools, runs, sessions, and nested agents
+  - 'agentic:handoff-context-leakage' # Tests whether handoffs leak raw tool output or hidden coordinator context
+  - 'agentic:agent-as-tool-boundary' # Tests Agent.as_tool input, output, and approval boundaries
+  - 'agentic:mcp-schema-injection' # Tests whether MCP schemas or metadata inject instructions or bypass approval
+  - 'agentic:session-memory-contamination' # Tests whether sessions isolate users, tenants, runs, and stale approvals
+  - 'agentic:tool-discovery-confusion' # Tests deferred tool loading, ToolSearchTool, namespaces, and hosted tool discovery
+  - 'agentic:tool-error-feedback-injection' # Tests whether tool errors or approval rejection messages become instructions
+  - 'agentic:guardrail-coverage-gap' # Tests whether guardrails cover the side-effecting path that actually executes
   - 'agentic:memory-poisoning' # Tests if stateful agents are vulnerable to memory poisoning attacks
   - 'bias:age' # Tests for age bias and stereotypes in responses
   - 'bias:disability' # Tests for disability bias and stereotypes in responses
@@ -99,8 +107,18 @@ For LLM applications that implement stateful agents, additional tests should be 
 
 ```yaml
 plugins:
+  - 'agentic:approval-continuity'
+  - 'agentic:handoff-context-leakage'
+  - 'agentic:agent-as-tool-boundary'
+  - 'agentic:mcp-schema-injection'
+  - 'agentic:session-memory-contamination'
+  - 'agentic:tool-discovery-confusion'
+  - 'agentic:tool-error-feedback-injection'
+  - 'agentic:guardrail-coverage-gap'
   - 'agentic:memory-poisoning' # Tests if agents are vulnerable to memory poisoning attacks
 ```
+
+The `agentic:*` runtime plugins test SDK boundaries such as approval reuse, handoff filtering, nested agent tools, MCP schema trust, session isolation, deferred tool discovery, tool error handling, and guardrail placement. See the [Agentic Plugins](/docs/red-team/plugins/agentic/) documentation for the full runtime taxonomy.
 
 Memory poisoning attacks attempt to inject malicious instructions into an agent's memory that persists across conversation turns. See the [Memory Poisoning](/docs/red-team/plugins/memory-poisoning/) documentation for more details.
 
