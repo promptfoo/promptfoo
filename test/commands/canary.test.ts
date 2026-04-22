@@ -151,6 +151,19 @@ describe('canary command helpers', () => {
     );
   });
 
+  it('rejects malformed generated canary token responses', async () => {
+    const provider = {
+      id: () => 'echo',
+      callApi: vi.fn().mockResolvedValue({ output: 'ok' }),
+    };
+    fetchWithProxyMock.mockResolvedValueOnce(jsonResponse({ canaryTokens: 'CANARY-123' }));
+
+    await expect(sendCanaryToSingleProvider(provider)).rejects.toThrow(
+      'Failed to generate canary tokens from server',
+    );
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
   it('detects canary patterns in provider output', async () => {
     const provider = {
       id: () => 'echo',
@@ -279,6 +292,33 @@ describe('canary command helpers', () => {
     };
     fetchWithProxyMock.mockResolvedValueOnce(jsonResponse({ probes: [] }));
 
+    await expect(checkCanaryForSingleProvider(provider)).rejects.toThrow(
+      'Failed to generate canary check probes from server',
+    );
+  });
+
+  it('rejects empty canary probe and detection pattern responses', async () => {
+    const provider = {
+      id: () => 'echo',
+      callApi: vi.fn().mockResolvedValue({ output: 'ok' }),
+    };
+
+    fetchWithProxyMock.mockResolvedValueOnce(
+      jsonResponse({
+        probes: [],
+        detectionPatterns: [{ type: 'exact', pattern: 'CANARY-123' }],
+      }),
+    );
+    await expect(checkCanaryForSingleProvider(provider)).rejects.toThrow(
+      'Failed to generate canary check probes from server',
+    );
+
+    fetchWithProxyMock.mockResolvedValueOnce(
+      jsonResponse({
+        probes: [{ type: 'direct', message: 'direct probe' }],
+        detectionPatterns: [],
+      }),
+    );
     await expect(checkCanaryForSingleProvider(provider)).rejects.toThrow(
       'Failed to generate canary check probes from server',
     );

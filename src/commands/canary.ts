@@ -247,7 +247,7 @@ export async function sendCanaryToSingleProvider(
       hash: providerHash,
     });
 
-    if (!response.canaryTokens || response.canaryTokens.length === 0) {
+    if (!Array.isArray(response.canaryTokens) || response.canaryTokens.length === 0) {
       throw new Error('Failed to generate canary tokens from server');
     }
 
@@ -333,7 +333,13 @@ export async function checkCanaryForSingleProvider(
     hash: providerHash,
   });
 
-  if (!response || !response.probes || !response.detectionPatterns) {
+  if (
+    !response ||
+    !Array.isArray(response.probes) ||
+    response.probes.length === 0 ||
+    !Array.isArray(response.detectionPatterns) ||
+    response.detectionPatterns.length === 0
+  ) {
     throw new Error(`Failed to generate canary check probes from server`);
   }
 
