@@ -729,7 +729,9 @@ function tryParseJson(value: string): unknown {
   try {
     return JSON.parse(value);
   } catch (err) {
-    logger.debug(`Rendered prompt is not valid JSON, using as raw string: ${String(err)}`);
+    logger.debug('Rendered prompt is not valid JSON, using as raw string', {
+      error: String(err),
+    });
     return undefined;
   }
 }

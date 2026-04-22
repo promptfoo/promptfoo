@@ -72,7 +72,7 @@ export function tryParse(content: string) {
   try {
     return JSON.parse(content);
   } catch (err) {
-    logger.debug(`Failed to parse content as JSON: ${String(err)}`);
+    logger.debug('Failed to parse content as JSON', { error: String(err) });
   }
   return content;
 }

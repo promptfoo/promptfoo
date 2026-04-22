@@ -381,12 +381,18 @@ export class MCPClient {
     const existingClient = this.clients.get(serverKey);
     if (existingTransport) {
       await existingTransport.close().catch((err) => {
-        logger.debug(`Failed to close existing MCP transport during OAuth refresh: ${String(err)}`);
+        logger.debug('Failed to close existing MCP transport during OAuth refresh', {
+          error: String(err),
+          serverKey,
+        });
       });
     }
     if (existingClient) {
       await existingClient.close().catch((err) => {
-        logger.debug(`Failed to close existing MCP client during OAuth refresh: ${String(err)}`);
+        logger.debug('Failed to close existing MCP client during OAuth refresh', {
+          error: String(err),
+          serverKey,
+        });
       });
     }
 

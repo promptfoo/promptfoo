@@ -75,7 +75,9 @@ export class ChatKitBrowserPool {
       if (ChatKitBrowserPool.instance) {
         // Synchronous cleanup - close browser immediately
         ChatKitBrowserPool.instance.shutdown().catch((err) => {
-          logger.debug(`Failed to shutdown ChatKit browser pool during cleanup: ${String(err)}`);
+          logger.debug('Failed to shutdown ChatKit browser pool during cleanup', {
+            error: String(err),
+          });
         });
         ChatKitBrowserPool.instance = null;
       }
@@ -86,7 +88,9 @@ export class ChatKitBrowserPool {
     process.on('beforeExit', () => {
       if (ChatKitBrowserPool.instance) {
         ChatKitBrowserPool.instance.shutdown().catch((err) => {
-          logger.debug(`Failed to shutdown ChatKit browser pool on beforeExit: ${String(err)}`);
+          logger.debug('Failed to shutdown ChatKit browser pool on beforeExit', {
+            error: String(err),
+          });
         });
         ChatKitBrowserPool.instance = null;
       }
