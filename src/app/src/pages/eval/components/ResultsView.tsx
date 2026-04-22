@@ -24,7 +24,18 @@ import { callApi } from '@app/utils/api';
 import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
-import { BarChart, CheckSquare, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
+import {
+  BarChart,
+  CheckSquare,
+  Copy,
+  Edit,
+  Eye,
+  Play,
+  Settings,
+  Share,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebouncedCallback } from 'use-debounce';
 import { BulkRatingDialog } from './BulkRatingDialog';

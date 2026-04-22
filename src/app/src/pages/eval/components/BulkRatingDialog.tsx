@@ -85,8 +85,7 @@ export function BulkRatingDialog({
       const freshCount = await fetchPreviewCount(filterMode, filters, searchQuery);
       setPreviewFetchedAt(Date.now());
 
-      const requiresFreshConfirmation =
-        freshCount >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD;
+      const requiresFreshConfirmation = freshCount >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD;
 
       const response = await bulkRate({
         pass,

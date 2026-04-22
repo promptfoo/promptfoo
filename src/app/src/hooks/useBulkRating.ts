@@ -10,11 +10,11 @@ import type {
 } from '@promptfoo/services/bulkGrade/types';
 import type { EvalResultsFilterMode } from '@promptfoo/types';
 
-// Re-export types for convenience
-export type { BulkRatingPreviewResponse, BulkRatingRequest, BulkRatingResponse };
-
 // Re-export the constants so consumers don't need to import from two places
 export { BULK_RATING_CONSTANTS } from '@promptfoo/services/bulkGrade/types';
+
+// Re-export types for convenience
+export type { BulkRatingPreviewResponse, BulkRatingRequest, BulkRatingResponse };
 
 /**
  * Custom hook for bulk rating operations on eval results.

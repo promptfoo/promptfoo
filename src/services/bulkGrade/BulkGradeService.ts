@@ -94,7 +94,10 @@ export class BulkGradeService {
       }
 
       // Check confirmation threshold against the actual result rows that will be updated.
-      if (allResults.length >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD && !request.confirmBulk) {
+      if (
+        allResults.length >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD &&
+        !request.confirmBulk
+      ) {
         return {
           success: false,
           matched: allResults.length,
