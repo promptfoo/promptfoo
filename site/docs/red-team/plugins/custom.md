@@ -84,6 +84,7 @@ The `generator` template receives:
 - `{{ n }}`: number of prompts requested for the current generation batch.
 - `{{ purpose }}`: the red team purpose from your config.
 - `{{ outputFormat }}`: the parser instruction Promptfoo expects for generated prompts.
+- `{{ hasCustomOutputFormat }}`: boolean that is true when the plugin config defines multi-input fields.
 - `{{ examples }}`: optional examples from the plugin's config.
 
 The `grader` template receives `{{ purpose }}`. Promptfoo renders it into an `llm-rubric` assertion and applies it to each generated test case.
