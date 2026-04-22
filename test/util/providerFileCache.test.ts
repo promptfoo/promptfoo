@@ -81,6 +81,20 @@ describe('providerFileCache', () => {
     expect(getProviderFileFromCloud).not.toHaveBeenCalled();
   });
 
+  it('ignores cached provider files whose content no longer matches the checksum', async () => {
+    const file = providerFile(
+      'def call_api(prompt, options, context):\n    return {"output": prompt}\n',
+    );
+    const { content: _content, ...metadata } = file;
+    const cachedPath = cacheProviderFile('tampered content', file.checksumSha256, 'py');
+
+    vi.mocked(getProviderFileFromCloud).mockResolvedValue(file);
+
+    await expect(getOrDownloadProviderFile('provider-123', metadata)).resolves.toBe(cachedPath);
+    expect(getProviderFileFromCloud).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync(cachedPath, 'utf-8')).toBe(file.content);
+  });
+
   it('writes a temporary provider file when the cache is disabled', async () => {
     const file = providerFile('module.exports = class CustomProvider {};', 'javascript');
     const { content: _content, ...metadata } = file;

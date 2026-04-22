@@ -55,7 +55,7 @@ function validateChecksum(checksum: string): string {
   if (!checksum || !SHA256_HEX_PATTERN.test(checksum)) {
     throw new Error(`Invalid checksum format: expected SHA256 hex string`);
   }
-  return checksum;
+  return checksum.toLowerCase();
 }
 
 function validateExtension(extension: string): string {
@@ -83,8 +83,16 @@ function getCachedFilePath(checksum: string, extension: string): string {
  * @returns The cached file path if it exists, null otherwise
  */
 export function getCachedProviderFile(checksum: string, extension: string): string | null {
+  const safeChecksum = validateChecksum(checksum);
   const cachedPath = getCachedFilePath(checksum, extension);
   if (fs.existsSync(cachedPath)) {
+    const actualChecksum = createHash('sha256').update(fs.readFileSync(cachedPath)).digest('hex');
+    if (actualChecksum !== safeChecksum) {
+      logger.warn(
+        `[ProviderFileCache] Ignoring cached file ${cachedPath}: expected checksum ${safeChecksum}, got ${actualChecksum}`,
+      );
+      return null;
+    }
     logger.debug(`[ProviderFileCache] Cache hit for ${checksum}.${extension}`);
     return cachedPath;
   }
