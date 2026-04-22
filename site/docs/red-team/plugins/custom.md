@@ -77,14 +77,14 @@ The custom plugin file is strict: extra fields fail schema validation. Supported
 | `grader`    | Yes      | Nunjucks template used as an `llm-rubric` assertion for every generated test case.               |
 | `threshold` | No       | Minimum score required for the rubric assertion to pass.                                         |
 | `metric`    | No       | Metric name shown in results. Defaults to `custom`.                                              |
-| `id`        | No       | Optional internal identifier for the custom plugin definition.                                   |
+| `id`        | No       | Optional stable identifier for the custom plugin definition.                                     |
 
 The `generator` template receives:
 
 - `{{ n }}`: number of prompts requested for the current generation batch.
 - `{{ purpose }}`: the red team purpose from your config.
 - `{{ outputFormat }}`: the parser instruction Promptfoo expects for generated prompts.
-- `{{ hasCustomOutputFormat }}`: boolean that is true when the plugin config defines multi-input fields.
+- `{{ hasCustomOutputFormat }}`: boolean that is true when multi-input fields are active.
 - `{{ examples }}`: optional examples from the plugin's config.
 
 The `grader` template receives `{{ purpose }}`. Promptfoo renders it into an `llm-rubric` assertion and applies it to each generated test case.
@@ -95,7 +95,7 @@ Generated configs and result metadata keep the configured plugin path, such as `
 
 For single-input targets, make the generator output one prompt per line with `Prompt:`. The safest approach is to include `{{ outputFormat }}` at the end of the generator, as shown above, so Promptfoo tells the generator the exact parseable format.
 
-For multi-input targets, configure `inputs` on the plugin. Promptfoo then expects generated test cases as JSON objects wrapped in `<Prompt>` tags.
+For multi-input targets, declare `inputs` on the target. Promptfoo passes those input fields into custom plugins and expects generated test cases as JSON objects wrapped in `<Prompt>` tags. If your target cannot declare `inputs`, put the same `inputs` map under the plugin's `config`.
 
 ```yaml title="promptfooconfig.yaml"
 targets:
@@ -115,10 +115,6 @@ redteam:
   plugins:
     - id: file://./retrieval-boundary-plugin.yaml
       numTests: 5
-      config:
-        inputs:
-          user_message: 'The attacker-controlled user request'
-          retrieved_context: 'The retrieved document or tool output'
 ```
 
 With that config, your generator should include `{{ outputFormat }}` and produce entries like:
@@ -131,15 +127,21 @@ See [multi-input red teaming](/docs/red-team/multi-input/) for the target-side s
 
 ## Customizing Generation
 
-Custom plugins support shared generation options such as examples, modifiers, language, and message length limits:
+Custom plugins support the same shared generation controls used by built-in plugins:
 
 ```yaml
 redteam:
+  language: German
+  maxCharsPerMessage: 500
+  testGenerationInstructions: Prefer edge-case probes that look like realistic support chats.
   plugins:
     - id: file://./refund-exception-plugin.yaml
       numTests: 10
       severity: high
       config:
+        language:
+          - Spanish
+          - French
         examples:
           - |
             <Example>
@@ -148,14 +150,25 @@ redteam:
         modifiers:
           tone: urgent customer support escalation
           style: realistic ecommerce chat
-        maxCharsPerMessage: 500
 ```
 
-`examples` are available to the generator template as `{{ examples }}`. `modifiers`, `language`, and `maxCharsPerMessage` are appended by Promptfoo during generation.
+| Option                       | Where                              | Effect                                                                                                            |
+| ---------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `examples`                   | plugin `config`                    | Available to the generator template as `{{ examples }}`.                                                          |
+| `modifiers`                  | plugin `config`                    | Appended to the generation prompt and preserved in test metadata.                                                 |
+| `language`                   | `redteam` or plugin `config`       | Appended as a modifier. Arrays generate one batch per language; plugin-level values override the top-level value. |
+| `inputs`                     | target `inputs` or plugin `config` | Enables multi-input output parsing and sets `{{ hasCustomOutputFormat }}` to `true`.                              |
+| `maxCharsPerMessage`         | `redteam` or plugin `config`       | Appended as a generation constraint and used to drop generated test cases that exceed the limit.                  |
+| `testGenerationInstructions` | `redteam`                          | Appended to the generation prompt as an additional modifier.                                                      |
+| `severity`                   | plugin entry                       | Stored in generated test metadata and shown in results.                                                           |
+
+Custom plugin file fields and plugin config fields are separate. Keep `generator`, `grader`, `metric`, `threshold`, and `id` in the plugin file. Put runtime controls such as `examples`, `language`, `modifiers`, and `inputs` under the plugin's `config` in `promptfooconfig.yaml`.
 
 ## How Grading Works
 
 Each generated prompt becomes a test case with an `llm-rubric` assertion. The rendered `grader` text is the rubric, `metric` controls the result label, and `threshold` controls the minimum passing score if you set one.
+
+Custom plugin graders are plain `llm-rubric` assertions. Put plugin-specific grading guidance, examples, and pass/fail rules directly in the `grader` template.
 
 Keep graders specific and outcome-oriented:
 
