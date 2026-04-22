@@ -645,7 +645,32 @@ describe('JSON Schema validation (AJV)', () => {
 
     walk(schema, []);
 
-    expect(refAlternativePaths).toEqual(['definitions.__schema18.items']);
+    expect(refAlternativePaths).toHaveLength(1);
+
+    const assertionArrayItems = refAlternativePaths[0]
+      .split('.')
+      .reduce<unknown>(
+        (node, key) =>
+          node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined,
+        schema,
+      );
+    const anyOf = (assertionArrayItems as { anyOf?: unknown[] }).anyOf;
+    const acceptsAssertion = anyOf?.some(
+      (option) =>
+        option &&
+        typeof option === 'object' &&
+        typeof (option as { $ref?: unknown }).$ref === 'string',
+    );
+    const acceptsAssertionSet = anyOf?.some(
+      (option) =>
+        option &&
+        typeof option === 'object' &&
+        Array.isArray((option as { required?: unknown }).required) &&
+        ((option as { required: unknown[] }).required as unknown[]).includes('assert'),
+    );
+
+    expect(acceptsAssertion).toBe(true);
+    expect(acceptsAssertionSet).toBe(true);
   });
 });
 
