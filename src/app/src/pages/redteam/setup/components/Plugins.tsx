@@ -263,14 +263,22 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     }
 
     // Check custom policies with actual content
-    const hasPolicies = config.plugins.some(
-      (p) =>
-        typeof p === 'object' &&
-        p.id === 'policy' &&
-        p.config?.policy &&
-        typeof p.config.policy === 'string' &&
-        p.config.policy.trim().length > 0,
-    );
+    const hasPolicies = config.plugins.some((p) => {
+      if (typeof p !== 'object' || p.id !== 'policy' || !p.config?.policy) {
+        return false;
+      }
+
+      const { policy } = p.config;
+      if (typeof policy === 'string') {
+        return policy.trim().length > 0;
+      }
+
+      if (typeof policy !== 'object' || policy === null || !('text' in policy)) {
+        return false;
+      }
+
+      return typeof policy.text === 'string' && policy.text.trim().length > 0;
+    });
 
     // Check custom intents with actual content
     const hasIntents = config.plugins.some(

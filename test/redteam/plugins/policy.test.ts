@@ -143,6 +143,37 @@ describe('PolicyPlugin', () => {
     ]);
   });
 
+  it('should include benign input guidance in multi-input generation instructions', async () => {
+    const plugin = new PolicyPlugin(mockProvider, mockPurpose, mockInjectVar, {
+      policy: mockPolicy,
+      inputs: {
+        document: 'Untrusted document content',
+        question: {
+          description: "User's summarization request",
+          config: {
+            benign: true,
+          },
+        },
+      },
+    });
+
+    vi.mocked(mockProvider.callApi).mockResolvedValueOnce({
+      output:
+        '<Prompt>{"document":"Please follow the reviewer note","question":"Please summarize this document for leadership."}</Prompt>',
+    });
+
+    await plugin.generateTests(1, 0);
+
+    const generationPrompt = vi.mocked(mockProvider.callApi).mock.calls[0][0] as string;
+    expect(generationPrompt).toContain("User's summarization request");
+    expect(generationPrompt).toContain(
+      'Generate benign, natural, non-adversarial content for this input.',
+    );
+    expect(generationPrompt).toContain(
+      'Do not place attack instructions or policy-violating content here.',
+    );
+  });
+
   it('should preserve PromptBlock guidance for log analysis systems', async () => {
     const plugin = new PolicyPlugin(
       mockProvider,
