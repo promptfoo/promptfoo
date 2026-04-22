@@ -15,6 +15,7 @@ export {
   getAttributeSwatch,
   getCheckoutUrl,
   isInStock,
+  isProductSoldOut,
   stripHtml,
   useCart,
   useCollections,
