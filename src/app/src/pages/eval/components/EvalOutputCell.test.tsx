@@ -432,6 +432,34 @@ describe('EvalOutputCell', () => {
     );
   });
 
+  it('cancels the debounced prefetch when the hover ends before firing', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.showPrompts = false;
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    const detailButton = screen.getByRole('button', { name: /view output and test details/i });
+    await user.hover(detailButton);
+    await user.unhover(detailButton);
+
+    // Wait past the 150ms debounce and confirm no prefetch fired.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(prefetchEvalResultDetail).not.toHaveBeenCalled();
+  });
+
   it('ignores stale prefetched detail after the rendered output changes', async () => {
     const user = userEvent.setup();
     mockResultsViewSettings.showPrompts = false;

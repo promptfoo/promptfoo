@@ -1044,6 +1044,7 @@ function renderOutputActions({
   handleCommentOpen,
   handlePromptOpen,
   prefetchCellDetail,
+  cancelPrefetch,
   handlePromptClose,
   setActionsHovered,
 }: {
@@ -1076,6 +1077,7 @@ function renderOutputActions({
   handleCommentOpen: () => void;
   handlePromptOpen: () => void;
   prefetchCellDetail: () => void;
+  cancelPrefetch: () => void;
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
@@ -1206,7 +1208,9 @@ function renderOutputActions({
                 className={`action p-1 rounded hover:bg-muted transition-colors ${detailError ? 'text-red-600 dark:text-red-400' : ''}`}
                 onClick={handlePromptOpen}
                 onFocus={prefetchCellDetail}
+                onBlur={cancelPrefetch}
                 onMouseEnter={prefetchCellDetail}
+                onMouseLeave={cancelPrefetch}
                 aria-label="View output and test details"
                 aria-busy={detailLoading}
               >
@@ -1318,6 +1322,7 @@ function EvalOutputCell({
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
   const detailRequestRef = React.useRef<AbortController | null>(null);
+  const prefetchTimerRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const isMountedRef = React.useRef(true);
 
   const detailEvalId = output.evalId || evaluationId || '';
@@ -1333,6 +1338,10 @@ function EvalOutputCell({
   React.useEffect(() => {
     detailRequestRef.current?.abort();
     detailRequestRef.current = null;
+    if (prefetchTimerRef.current !== null) {
+      globalThis.clearTimeout(prefetchTimerRef.current);
+      prefetchTimerRef.current = null;
+    }
     setCellDetail(null);
     setDetailLoading(false);
     setDetailError(null);
@@ -1341,6 +1350,10 @@ function EvalOutputCell({
   React.useEffect(() => {
     return () => {
       detailRequestRef.current?.abort();
+      if (prefetchTimerRef.current !== null) {
+        globalThis.clearTimeout(prefetchTimerRef.current);
+        prefetchTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -1375,28 +1388,49 @@ function EvalOutputCell({
     }
   }, [cellDetail, detailAvailable, detailEvalId, output.id]);
 
+  // Debounce so sweeping the mouse across many cells does not fire a request per cell.
+  const PREFETCH_DEBOUNCE_MS = 150;
+
+  const cancelPrefetch = useCallback(() => {
+    if (prefetchTimerRef.current !== null) {
+      globalThis.clearTimeout(prefetchTimerRef.current);
+      prefetchTimerRef.current = null;
+    }
+  }, []);
+
   const prefetchCellDetail = useCallback(() => {
     if (!detailAvailable || cellDetail || detailLoading || detailError) {
       return;
     }
 
+    if (prefetchTimerRef.current !== null) {
+      return;
+    }
+
     const requestedEvalId = detailEvalId;
     const requestedResultId = output.id;
-    void Promise.resolve(prefetchEvalResultDetail(requestedEvalId, requestedResultId)).then(
-      (detail) => {
-        if (
-          detail &&
-          isMountedRef.current &&
-          detail.evalId === requestedEvalId &&
-          detail.resultId === requestedResultId
-        ) {
-          setCellDetail((currentDetail) => currentDetail ?? detail);
-        }
-      },
-    );
+    prefetchTimerRef.current = globalThis.setTimeout(() => {
+      prefetchTimerRef.current = null;
+      if (!isMountedRef.current) {
+        return;
+      }
+      void Promise.resolve(prefetchEvalResultDetail(requestedEvalId, requestedResultId)).then(
+        (detail) => {
+          if (
+            detail &&
+            isMountedRef.current &&
+            detail.evalId === requestedEvalId &&
+            detail.resultId === requestedResultId
+          ) {
+            setCellDetail((currentDetail) => currentDetail ?? detail);
+          }
+        },
+      );
+    }, PREFETCH_DEBOUNCE_MS);
   }, [cellDetail, detailAvailable, detailError, detailEvalId, detailLoading, output.id]);
 
   const handlePromptOpen = () => {
+    cancelPrefetch();
     setOpen(true);
     if (!cellDetail && !detailLoading) {
       void loadCellDetail();
@@ -1722,6 +1756,7 @@ function EvalOutputCell({
         handleCommentOpen,
         handlePromptOpen,
         prefetchCellDetail,
+        cancelPrefetch,
         handlePromptClose,
         setActionsHovered,
       })}
