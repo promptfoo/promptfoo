@@ -318,6 +318,11 @@ describe('DataTable', () => {
           scrollContainer.scrollTop = 20_000;
           scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
         });
+        // TanStack Virtual debounces scroll-end notification after scroll events.
+        // Let it settle before jsdom teardown so React does not receive a late update.
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        });
       }
 
       const renderedRows = container.querySelectorAll('tbody tr[data-rowindex]');
