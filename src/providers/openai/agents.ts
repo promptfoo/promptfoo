@@ -2,14 +2,22 @@ import {
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
+  protocol,
   run,
   startTraceExportLoop,
 } from '@openai/agents';
 import logger from '../../logger';
-import { loadAgentDefinition } from './agents-loader';
+import {
+  loadAgentDefinition,
+  loadHandoffs,
+  loadInputGuardrails,
+  loadOutputGuardrails,
+  loadTools,
+} from './agents-loader';
+import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent } from '@openai/agents';
+import type { Agent, AgentInputItem } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -96,10 +104,31 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     try {
       // Load agent definition (includes tools and handoffs if specified in agent file)
       const agent = await loadAgentDefinition(this.agentConfig.agent);
+      const [tools, handoffs, inputGuardrails, outputGuardrails] = await Promise.all([
+        loadTools(this.agentConfig.tools),
+        loadHandoffs(this.agentConfig.handoffs),
+        loadInputGuardrails(this.agentConfig.inputGuardrails),
+        loadOutputGuardrails(this.agentConfig.outputGuardrails),
+      ]);
 
-      logger.debug('[AgentsProvider] Agent initialized successfully', { name: agent.name });
+      const configuredAgent = agent.clone({
+        tools: mergeArrays(agent.tools, tools),
+        handoffs: mergeArrays(agent.handoffs, handoffs),
+        inputGuardrails: mergeArrays(agent.inputGuardrails, inputGuardrails),
+        outputGuardrails: mergeArrays(agent.outputGuardrails, outputGuardrails),
+      });
 
-      return agent;
+      const mockAwareAgent = this.wrapToolsIfNeeded(configuredAgent);
+
+      logger.debug('[AgentsProvider] Agent initialized successfully', {
+        name: mockAwareAgent.name,
+        toolCount: mockAwareAgent.tools.length,
+        handoffCount: mockAwareAgent.handoffs.length,
+        inputGuardrailCount: mockAwareAgent.inputGuardrails.length,
+        outputGuardrailCount: mockAwareAgent.outputGuardrails.length,
+      });
+
+      return mockAwareAgent;
     } catch (error) {
       logger.error('[AgentsProvider] Failed to initialize agent', { error });
       throw new Error(`Failed to initialize agent: ${error}`);
@@ -176,13 +205,13 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     try {
       logger.debug('[AgentsProvider] Running agent', {
         agentName: this.agent?.name,
-        maxTurns: this.agentConfig.maxTurns || 10,
+        maxTurns: this.agentConfig.maxTurns ?? 10,
       });
 
       // Build run options
       const runOptions: any = {
         context: context?.vars,
-        maxTurns: this.agentConfig.maxTurns || 10,
+        maxTurns: this.agentConfig.maxTurns ?? 10,
         signal: callApiOptions?.abortSignal,
       };
 
@@ -193,12 +222,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       // Override model settings if specified
       if (this.agentConfig.modelSettings) {
-        runOptions.modelSettings = this.agentConfig.modelSettings;
+        runOptions.modelSettings = resolveModelSettings(this.agentConfig.modelSettings);
       }
 
       // Run the agent within a trace context to ensure proper trace ID generation
       const result = await getOrCreateTrace(async () => {
-        return await run(this.agent!, prompt, runOptions);
+        return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
       });
 
       logger.debug('[AgentsProvider] Agent run result', {
@@ -232,9 +261,9 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     const usage = result.usage;
 
     return {
-      total: usage.totalTokens || undefined,
-      prompt: usage.promptTokens || undefined,
-      completion: usage.completionTokens || undefined,
+      total: usage.totalTokens ?? undefined,
+      prompt: usage.promptTokens ?? undefined,
+      completion: usage.completionTokens ?? undefined,
     };
   }
 
@@ -246,4 +275,72 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
     // For now, return undefined as we don't have pricing info
     return undefined;
   }
+
+  private wrapToolsIfNeeded(agent: Agent<any, any>): Agent<any, any> {
+    if (this.agentConfig.executeTools !== false && this.agentConfig.executeTools !== 'mock') {
+      return agent;
+    }
+
+    const toolMocks = this.agentConfig.toolMocks ?? {};
+    const tools = agent.tools.map((tool) => {
+      if (tool.type !== 'function') {
+        return tool;
+      }
+
+      const mockValue = toolMocks[tool.name];
+      return {
+        ...tool,
+        invoke: async () => mockValue ?? { mocked: true, tool: tool.name },
+      };
+    });
+
+    return agent.clone({ tools });
+  }
+
+  private parsePromptInput(prompt: string): string | AgentInputItem[] {
+    try {
+      const parsedPrompt: unknown = JSON.parse(prompt);
+      const parsedInput = parseAgentInputItems(parsedPrompt);
+      if (parsedInput) {
+        return parsedInput;
+      }
+    } catch {
+      // Fall back to plain text input.
+    }
+
+    return prompt;
+  }
+}
+
+function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
+  if (!existing?.length && !additions?.length) {
+    return undefined;
+  }
+
+  return [...(existing ?? []), ...(additions ?? [])];
+}
+
+function parseAgentInputItems(value: unknown): AgentInputItem[] | undefined {
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return undefined;
+    }
+
+    const parsedItems: AgentInputItem[] = [];
+    for (const item of value) {
+      const parsedItem = protocol.ModelItem.safeParse(item);
+      if (!parsedItem.success) {
+        return undefined;
+      }
+      parsedItems.push(parsedItem.data);
+    }
+    return parsedItems;
+  }
+
+  const parsedItem = protocol.ModelItem.safeParse(value);
+  if (!parsedItem.success) {
+    return undefined;
+  }
+
+  return [parsedItem.data];
 }

@@ -19,6 +19,7 @@ import {
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
+  normalizeSafetySettings,
   normalizeTools,
   parseStringObject,
   resolveProjectId,
@@ -48,6 +49,25 @@ const googleAuthMock = vi.hoisted(() => {
     mockAuthInstance, // Export for test access
   };
 });
+
+function resetGoogleAuthMock() {
+  const { GoogleAuth, mockAuthInstance } = googleAuthMock;
+
+  mockAuthInstance.getClient.mockReset();
+  mockAuthInstance.fromJSON.mockReset();
+  mockAuthInstance.getProjectId.mockReset();
+  GoogleAuth.mockReset();
+
+  mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
+  mockAuthInstance.fromJSON.mockImplementation((credentials: any) => {
+    return Promise.resolve({ name: 'mockCredentialClient', credentials });
+  });
+  mockAuthInstance.getProjectId.mockResolvedValue('google-auth-project');
+  GoogleAuth.mockImplementation(function (this: any) {
+    Object.assign(this, mockAuthInstance);
+    return this;
+  });
+}
 
 // Mock both the module and dynamic imports
 vi.mock('google-auth-library', () => googleAuthMock);
@@ -105,16 +125,8 @@ vi.mock('fs', async (importOriginal) => {
 
 describe('util', () => {
   beforeEach(() => {
-    // Clear all mocks
     vi.clearAllMocks();
-
-    // Reset the Google Auth mock to default state
-    const { mockAuthInstance } = googleAuthMock;
-    mockAuthInstance.getClient.mockResolvedValue({ name: 'mockClient' });
-    mockAuthInstance.fromJSON.mockImplementation((credentials: any) => {
-      return Promise.resolve({ name: 'mockCredentialClient', credentials });
-    });
-    mockAuthInstance.getProjectId.mockResolvedValue('google-auth-project');
+    resetGoogleAuthMock();
   });
 
   describe('parseStringObject', () => {
@@ -2171,13 +2183,7 @@ describe('util', () => {
       expect(result).toBe('env-project');
     });
 
-    // NOTE: This test is skipped due to unreliable mock isolation of Google Auth Library.
-    // The hoisted mock doesn't consistently prevent real gcloud credentials from being loaded,
-    // especially on systems with gcloud configured. The clearCachedAuth() helper works for
-    // most tests, but this specific test requires mocking the GoogleAuth instance itself,
-    // which has proven unreliable with Vitest's current mocking system.
-    // See: https://github.com/promptfoo/promptfoo/pull/6924
-    it.skip('should fall back to Google Auth Library when no config or env vars', async () => {
+    it('should fall back to Google Auth Library when no config or env vars', async () => {
       clearCachedAuth();
       const { mockAuthInstance } = googleAuthMock;
 
@@ -2593,6 +2599,18 @@ describe('util', () => {
       expect(cost).toBeCloseTo(0.00155, 10);
     });
 
+    it('should apply tiered pricing for gemini-3.1-pro-preview when above threshold', () => {
+      // gemini-3.1-pro-preview: base input=2.0/1M, output=12.0/1M
+      // tiered (>200k): input=4.0/1M, output=18.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-3.1-pro-preview', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-3.1-pro-preview', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
     it('should apply tiered pricing for gemini-2.5-pro when above threshold', () => {
       // gemini-2.5-pro: base input=1.25/1M, output=10.0/1M
       // tiered (>200k): input=2.5/1M, output=15.0/1M
@@ -2641,6 +2659,31 @@ describe('util', () => {
       expect(costAboveThreshold).toBeCloseTo(0.02625, 10);
     });
 
+    it('should calculate cost for gemini-embedding-001', () => {
+      // gemini-embedding-001: input=0.15/1M, output=0
+      const cost = calculateGoogleCost('gemini-embedding-001', {}, 10000, 0);
+      // Expected: (10000 * 0.15 + 0 * 0) / 1M = 0.0015
+      expect(cost).toBeCloseTo(0.0015, 10);
+    });
+
+    it('should calculate cost for gemini-robotics-er-1.5-preview', () => {
+      // gemini-robotics-er-1.5-preview: input=0.3/1M, output=2.5/1M
+      const cost = calculateGoogleCost('gemini-robotics-er-1.5-preview', {}, 1000, 500);
+      expect(cost).toBeCloseTo(0.00155, 10);
+    });
+
+    it('should apply tiered pricing for gemini-3-pro-preview when above threshold', () => {
+      // gemini-3-pro-preview: base input=2.0/1M, output=12.0/1M
+      // tiered (>200k): input=4.0/1M, output=18.0/1M
+      const costBelowThreshold = calculateGoogleCost('gemini-3-pro-preview', {}, 100000, 50000);
+      // Expected (below 200k): (100000 * 2.0 + 50000 * 12.0) / 1M = 0.8
+      expect(costBelowThreshold).toBeCloseTo(0.8, 10);
+
+      const costAboveThreshold = calculateGoogleCost('gemini-3-pro-preview', {}, 250000, 50000);
+      // Expected (above 200k): (250000 * 4.0 + 50000 * 18.0) / 1M = 1.9
+      expect(costAboveThreshold).toBeCloseTo(1.9, 10);
+    });
+
     it('should return undefined for models without pricing data', () => {
       // Legacy PaLM models don't have pricing
       expect(calculateGoogleCost('chat-bison', {}, 100, 50)).toBeUndefined();
@@ -2653,6 +2696,96 @@ describe('util', () => {
       const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
       // Expected: (1000 + 500) * 0.001 = 1.5
       expect(cost).toBeCloseTo(1.5, 10);
+    });
+
+    it('should respect separate custom input and output cost overrides in config', () => {
+      const config = { inputCost: 0.001, outputCost: 0.003 };
+      const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
+      expect(cost).toBeCloseTo(2.5, 10);
+    });
+
+    it('should prefer separate custom costs over custom cost', () => {
+      const config = { cost: 0.02, inputCost: 0.001, outputCost: 0.003 };
+      const cost = calculateGoogleCost('gemini-pro', config, 1000, 500);
+      expect(cost).toBeCloseTo(2.5, 10);
+    });
+
+    it('should respect separate custom costs for tiered pricing', () => {
+      const config = { inputCost: 0.001, outputCost: 0.003 };
+      const cost = calculateGoogleCost('gemini-2.5-pro', config, 250000, 50000);
+      expect(cost).toBeCloseTo(400, 10);
+    });
+
+    it('should use Vertex-specific pricing for gemini-2.0-flash in Vertex mode', () => {
+      // AI Studio: input=0.1/1M, output=0.4/1M
+      // Vertex AI: input=0.15/1M, output=0.6/1M
+      const aiStudioCost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000);
+      const vertexCost = calculateGoogleCost('gemini-2.0-flash', {}, 10000, 5000, true);
+      // AI Studio: (10000 * 0.1 + 5000 * 0.4) / 1M = 0.003
+      expect(aiStudioCost).toBeCloseTo(0.003, 10);
+      // Vertex: (10000 * 0.15 + 5000 * 0.6) / 1M = 0.0045
+      expect(vertexCost).toBeCloseTo(0.0045, 10);
+    });
+
+    it('should respect separate custom costs for Vertex-specific pricing', () => {
+      const config = { inputCost: 0.001, outputCost: 0.003 };
+      const cost = calculateGoogleCost('gemini-2.0-flash', config, 10000, 5000, true);
+      expect(cost).toBeCloseTo(25, 10);
+    });
+
+    it('should use standard pricing for models without Vertex-specific pricing in Vertex mode', () => {
+      // gemini-2.5-flash has no vertexCost, so Vertex mode uses the same price
+      const aiStudioCost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500);
+      const vertexCost = calculateGoogleCost('gemini-2.5-flash', {}, 1000, 500, true);
+      expect(vertexCost).toBeCloseTo(aiStudioCost!, 10);
+    });
+  });
+
+  describe('normalizeSafetySettings', () => {
+    it('should return undefined when given undefined', () => {
+      expect(normalizeSafetySettings(undefined)).toBeUndefined();
+    });
+
+    it('should pass through threshold field as-is', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+    });
+
+    it('should map legacy probability field to threshold', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+    });
+
+    it('should prefer threshold over probability when both are set', () => {
+      const result = normalizeSafetySettings([
+        {
+          category: 'HARM_CATEGORY_HARASSMENT',
+          threshold: 'BLOCK_ONLY_HIGH',
+          probability: 'BLOCK_MEDIUM_AND_ABOVE',
+        },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      ]);
+    });
+
+    it('should handle multiple safety settings', () => {
+      const result = normalizeSafetySettings([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', probability: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
+      expect(result).toEqual([
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      ]);
     });
   });
 });

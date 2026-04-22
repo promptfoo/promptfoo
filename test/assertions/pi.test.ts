@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handlePiScorer } from '../../src/assertions/pi';
-import { matchesClosedQa, matchesPiScore } from '../../src/matchers';
+import { matchesClosedQa, matchesPiScore } from '../../src/matchers/llmGrading';
 import { getNunjucksEngine } from '../../src/util/templates';
 import type nunjucks from 'nunjucks';
 
 import type { AssertionParams } from '../../src/types/index';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/llmGrading');
 vi.mock('../../src/util/templates');
 
 describe('handlePiScorer', () => {
