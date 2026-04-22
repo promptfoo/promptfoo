@@ -166,6 +166,13 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return true;
   }
 
+  if (
+    assertion.type.startsWith('promptfoo:redteam:agentic:') &&
+    assertion.type !== 'promptfoo:redteam:agentic:memory-poisoning'
+  ) {
+    return true;
+  }
+
   return typeof assertion.value === 'string'
     ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
     : false;

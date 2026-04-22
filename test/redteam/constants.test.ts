@@ -152,7 +152,8 @@ describe('constants', () => {
 
   it('AGENTIC_PLUGINS should contain expected plugins', () => {
     expect(AGENTIC_PLUGINS).toContain('agentic:memory-poisoning');
-    expect(AGENTIC_PLUGINS.length).toBe(1);
+    expect(AGENTIC_PLUGINS).toContain('agentic:approval-continuity');
+    expect(AGENTIC_PLUGINS).toContain('agentic:guardrail-coverage-gap');
   });
 
   it('DEFAULT_PLUGINS should contain expected plugins', () => {

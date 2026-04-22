@@ -1,5 +1,7 @@
+import { AGENTIC_PLUGINS, AGENTIC_RUNTIME_PLUGINS } from './agentic';
 import { CODING_AGENT_COLLECTIONS, CODING_AGENT_PLUGINS } from './codingAgents';
 
+import type { AgenticPlugin } from './agentic';
 import type { CodingAgentPlugin } from './codingAgents';
 
 export const DEFAULT_NUM_TESTS_PER_PLUGIN = 5;
@@ -154,9 +156,6 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
 ] as const;
 
 export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
-
-export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
-export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
 
 // Plugins that require HuggingFace API keys for their datasets
 export const HUGGINGFACE_GATED_PLUGINS = ['beavertails', 'unsafebench', 'aegis'] as const;
@@ -337,6 +336,7 @@ export type BasePlugin = (typeof BASE_PLUGINS)[number];
 
 export const ADDITIONAL_PLUGINS = [
   'aegis',
+  ...AGENTIC_RUNTIME_PLUGINS,
   'ascii-smuggling',
   'beavertails',
   'bfla',
@@ -549,6 +549,7 @@ export const PLUGIN_CATEGORIES = {
   telecom: TELECOM_PLUGINS,
   'teen-safety': TEEN_SAFETY_PLUGINS,
   realestate: REALESTATE_PLUGINS,
+  agentic: AGENTIC_PLUGINS,
 } as const;
 
 // Plugins registered via createRemotePlugin() in plugins/index.ts

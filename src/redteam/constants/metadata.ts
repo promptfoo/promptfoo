@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import {
+  AGENTIC_RUNTIME_PLUGIN_ALIASES,
+  AGENTIC_RUNTIME_PLUGIN_DESCRIPTIONS,
+  AGENTIC_RUNTIME_PLUGIN_DISPLAY_NAMES,
+  AGENTIC_RUNTIME_PLUGINS,
+} from './agentic';
+import {
   CODING_AGENT_COLLECTIONS,
   CODING_AGENT_PLUGIN_ALIASES,
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
@@ -7,6 +13,7 @@ import {
   CODING_AGENT_PLUGINS,
 } from './codingAgents';
 
+import type { AgenticRuntimePlugin } from './agentic';
 import type { CodingAgentCollection, CodingAgentPlugin } from './codingAgents';
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
@@ -260,6 +267,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for discriminatory targeting and language in housing advertisements',
   'realestate:source-of-income':
     'Tests for Section 8 and housing voucher discrimination (state-specific protections)',
+  ...AGENTIC_RUNTIME_PLUGIN_DESCRIPTIONS,
   ...CODING_AGENT_PLUGIN_DESCRIPTIONS,
 };
 
@@ -267,6 +275,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
 export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   ['agentic:memory-poisoning']: 'Agentic Memory Poisoning',
   aegis: 'Aegis Dataset',
+  ...AGENTIC_RUNTIME_PLUGIN_DISPLAY_NAMES,
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
@@ -497,6 +506,10 @@ const codingAgentRiskCategorySeverityMap: Record<
   ),
 } as Record<CodingAgentCollection | CodingAgentPlugin, Severity>;
 
+const agenticRiskCategorySeverityMap: Record<AgenticRuntimePlugin, Severity> = Object.fromEntries(
+  AGENTIC_RUNTIME_PLUGINS.map((pluginId) => [pluginId, Severity.High]),
+) as Record<AgenticRuntimePlugin, Severity>;
+
 /*
  * Default severity values for each plugin.
  * Use getRiskCategorySeverityMap() whenever possible to respect the user's severity settings.
@@ -658,6 +671,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   vlsu: Severity.Medium,
   wordplay: Severity.Low,
   xstest: Severity.Low,
+  ...agenticRiskCategorySeverityMap,
   ...codingAgentRiskCategorySeverityMap,
 };
 
@@ -828,6 +842,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     'xstest',
   ],
 
+  'Agentic Security': [...AGENTIC_RUNTIME_PLUGINS],
   'Coding Agent Security': [...CODING_AGENT_PLUGINS],
 };
 
@@ -838,6 +853,8 @@ export const categoryDescriptions = {
   Brand: 'Output reliability, accuracy, and brand reputation risks.',
   Datasets: 'Pre-defined test cases from research datasets.',
   'Domain-Specific Risks': 'Specialized risks and failure modes.',
+  'Agentic Security':
+    'Approval, handoff, tool discovery, MCP, session memory, error feedback, and guardrail coverage risks for agentic applications.',
   'Coding Agent Security':
     'Repository prompt injection, terminal output injection, launcher environment disclosure, sandbox read escape, and verifier sabotage risks for coding agents.',
 };
@@ -860,6 +877,7 @@ export const categoryLabels = Object.keys(categoryMapReverse);
 export const categoryAliases: Record<Plugin, string> = {
   ['agentic:memory-poisoning']: 'AgenticMemoryPoisoning',
   aegis: 'Aegis',
+  ...AGENTIC_RUNTIME_PLUGIN_ALIASES,
   'ascii-smuggling': 'AsciiSmuggling',
   beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
@@ -1265,6 +1283,7 @@ export const pluginDescriptions: Record<Plugin, string> = {
   xstest:
     'Tests how models handle ambiguous terms related to potentially harmful topics like violence and drugs',
   'guardrails-eval': 'Evaluate guardrail effectiveness against common risks',
+  ...AGENTIC_RUNTIME_PLUGIN_DESCRIPTIONS,
   ...CODING_AGENT_PLUGIN_DESCRIPTIONS,
 };
 

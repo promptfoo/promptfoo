@@ -16,6 +16,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { AGENTIC_RUNTIME_PLUGINS } from '../constants/agentic';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -34,6 +35,7 @@ import {
 } from '../shared/promptLength';
 import { extractInputVarsFromPrompt, getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
+import { AgenticRuntimePlugin } from './agentic';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -508,6 +510,21 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 >;
 
 const pluginFactories: PluginFactory[] = [
+  ...AGENTIC_RUNTIME_PLUGINS.map((pluginId) =>
+    createPluginFactory(
+      class extends AgenticRuntimePlugin {
+        constructor(
+          provider: ApiProvider,
+          purpose: string,
+          injectVar: string,
+          config: PluginConfig,
+        ) {
+          super(provider, purpose, injectVar, config, pluginId);
+        }
+      },
+      pluginId,
+    ),
+  ),
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
