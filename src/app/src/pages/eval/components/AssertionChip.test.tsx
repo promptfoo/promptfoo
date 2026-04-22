@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssertionChip, getThresholdLabel } from './AssertionChip';
@@ -95,6 +95,20 @@ describe('AssertionChip', () => {
     render(<AssertionChip metric="test-metric" score={1} passed={true} onClick={handleClick} />);
 
     await userEvent.click(screen.getByText('test-metric'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClick handler when Enter is pressed on a standalone chip', () => {
+    const handleClick = vi.fn();
+    render(
+      <AssertionChip metric="keyboard-metric" score={1} passed={true} onClick={handleClick} />,
+    );
+
+    const chip = screen.getByRole('button', { name: /keyboard-metric/i });
+    fireEvent.keyDown(chip, { key: 'Escape' });
+    expect(handleClick).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(chip, { key: 'Enter' });
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
@@ -298,6 +312,37 @@ describe('AssertionChip', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
+  it('calls onClick handler when Enter is pressed on an assert-set chip body', () => {
+    const handleClick = vi.fn();
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals', metric: 'child' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="keyboard-set"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        childResults={childResults}
+        onClick={handleClick}
+      />,
+    );
+
+    const chipBody = screen.getByText('keyboard-set').closest('[role="button"]') as HTMLElement;
+    expect(chipBody).toBeInTheDocument();
+    fireEvent.keyDown(chipBody, { key: 'Tab' });
+    expect(handleClick).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(chipBody, { key: 'Enter' });
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
   it('uses assertion type as fallback for child metric name', async () => {
     const childResults: GradingResult[] = [
       {
@@ -323,5 +368,83 @@ describe('AssertionChip', () => {
     await userEvent.click(chevronButton);
 
     expect(screen.getByText('equals')).toBeInTheDocument();
+  });
+
+  it('uses generated fallback child names when assertion metadata is missing', async () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="parent"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        childResults={childResults}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show parent details'));
+
+    expect(screen.getByText('assertion-0')).toBeInTheDocument();
+  });
+
+  it('renders failed assert-set details with failed child status', async () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: { type: 'equals', metric: 'failed-child' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="failed-set"
+        score={0}
+        passed={false}
+        isAssertSet={true}
+        childResults={childResults}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show failed-set details'));
+
+    expect(screen.getByText('ALL must pass')).toBeInTheDocument();
+    expect(screen.getByTestId('child-assertion-failed-child')).toBeInTheDocument();
+  });
+
+  it('wraps assert-set chips with tooltip content when provided', async () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals', metric: 'child' },
+      },
+    ];
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <AssertionChip
+          metric="tooltip-set"
+          score={1}
+          passed={true}
+          isAssertSet={true}
+          childResults={childResults}
+          tooltipContent={<div>Assert-set tooltip content</div>}
+        />
+      </TooltipProvider>,
+    );
+
+    await userEvent.hover(screen.getByText('tooltip-set'));
+
+    expect(screen.getAllByText('Assert-set tooltip content').length).toBeGreaterThan(0);
   });
 });
