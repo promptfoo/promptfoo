@@ -17,12 +17,12 @@ import type {
   TestResultContext,
 } from './types';
 
-export * from './types';
 export { DefaultReporter } from './DefaultReporter';
+export { OutputController } from './OutputController';
 export { ProgressBarReporter } from './ProgressBarReporter';
 export { SilentReporter } from './SilentReporter';
 export { SummaryReporter } from './SummaryReporter';
-export { OutputController } from './OutputController';
+export * from './types';
 
 /**
  * Built-in reporter registry

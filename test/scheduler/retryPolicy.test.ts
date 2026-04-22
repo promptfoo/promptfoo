@@ -91,4 +91,22 @@ describe('shouldRetry', () => {
     const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
     expect(result).toBe(true);
   });
+
+  it('should retry on bad record mac error', () => {
+    const error = new Error('bad record mac');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
+
+  it('should retry on EPROTO error', () => {
+    const error = new Error('write EPROTO 00000000:error:0A000126');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(true);
+  });
+
+  it('should not retry on permanent certificate errors', () => {
+    const error = new Error('self signed certificate');
+    const result = shouldRetry(0, error, false, DEFAULT_RETRY_POLICY);
+    expect(result).toBe(false);
+  });
 });

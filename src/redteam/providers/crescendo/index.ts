@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { renderPrompt } from '../../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
@@ -13,6 +14,10 @@ import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  buildPromptInputDescriptions,
+  materializeInputVariablesWithMetadata,
+} from '../../inputVariables';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import {
   applyRuntimeTransforms,
@@ -30,10 +35,15 @@ import {
 } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
+  buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
+  formatRedteamHistoryAsTranscript,
+  getGraderAssertionValue,
   getLastMessageContent,
   getTargetResponse,
+  isConversationEndedResponse,
   isValidChatMessageArray,
+  type RoundBacktrackingStopReason,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
@@ -52,6 +62,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -59,13 +70,12 @@ import type {
   TokenUsage,
   VarValue,
 } from '../../../types/index';
+import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
 import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
-
-type StopReason = 'Grader failed' | 'Max rounds reached' | 'Max backtracks reached';
 
 /**
  * Represents metadata for the Crescendo conversation process.
@@ -75,7 +85,7 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
   crescendoConfidence: number | null;
-  stopReason: StopReason;
+  stopReason: RoundBacktrackingStopReason;
   successfulAttacks?: Array<{
     turn: number;
     prompt: string;
@@ -111,9 +121,10 @@ interface CrescendoConfig {
   _perTurnLayers?: LayerConfig[];
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
+   * Keys are variable names, values are Inputs definitions: plain descriptions
+   * or structured typed configs with fields like description, type, and config.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   [key: string]: unknown;
 }
 
@@ -164,8 +175,13 @@ export class CrescendoProvider implements ApiProvider {
     // Create a copy of config to avoid mutating the original
     this.config = { ...config };
     // Support backwards compatibility: use maxRounds if maxTurns is not provided
-    this.maxTurns = config.maxTurns || config.maxRounds || DEFAULT_MAX_TURNS;
-    this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+    this.maxTurns = config.maxTurns ?? config.maxRounds ?? DEFAULT_MAX_TURNS;
+    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
     this.targetConversationId = crypto.randomUUID();
@@ -288,7 +304,7 @@ export class CrescendoProvider implements ApiProvider {
     let objectiveScore: { value: number; rationale: string } | undefined;
     let storedGraderResult: any = undefined;
 
-    let exitReason: StopReason = 'Max rounds reached';
+    let exitReason: RoundBacktrackingStopReason = 'Max rounds reached';
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
@@ -332,7 +348,7 @@ export class CrescendoProvider implements ApiProvider {
         )
           .map(([key, value]) => `${key}: ${value}`)
           .join('\n') || undefined,
-      inputs: this.config.inputs,
+      inputs: buildPromptInputDescriptions(this.config.inputs),
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -373,7 +389,7 @@ export class CrescendoProvider implements ApiProvider {
             )
               .map(([key, value]) => `${key}: ${value}`)
               .join('\n') || undefined,
-          inputs: this.config.inputs,
+          inputs: buildPromptInputDescriptions(this.config.inputs),
         });
 
         const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
@@ -445,6 +461,15 @@ export class CrescendoProvider implements ApiProvider {
           context.vars['sessionId'] = lastResponse.sessionId;
         }
 
+        if (isConversationEndedResponse(lastResponse)) {
+          logger.info('[Crescendo] Target ended conversation', {
+            round: roundNum,
+            reason: lastResponse.conversationEndReason,
+          });
+          exitReason = 'Target ended conversation';
+          break;
+        }
+
         // Check if the target is asking a blocking question that needs an answer to proceed
         const unblockingResult = await tryUnblocking({
           messages: this.memory.getConversation(this.targetConversationId),
@@ -478,6 +503,15 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (isConversationEndedResponse(lastResponse)) {
+            logger.info('[Crescendo] Target ended conversation during unblocking', {
+              round: roundNum,
+              reason: lastResponse.conversationEndReason,
+            });
+            exitReason = 'Target ended conversation';
+            break;
+          }
+
           if (lastResponse.sessionId && this.stateful) {
             vars['sessionId'] = lastResponse.sessionId;
             if (context) {
@@ -536,33 +570,10 @@ export class CrescendoProvider implements ApiProvider {
               : undefined;
 
             // Build grading context with tracing and exfil tracking data
-            let gradingContext:
-              | {
-                  traceContext?: TraceContextData | null;
-                  traceSummary?: string;
-                  wasExfiltrated?: boolean;
-                  exfilCount?: number;
-                  exfilRecords?: Array<{
-                    timestamp: string;
-                    ip: string;
-                    userAgent: string;
-                    queryParams: Record<string, string>;
-                  }>;
-                }
-              | undefined;
+            let gradingContext: RedteamGradingContext | undefined;
 
             // First try to get exfil data from provider response metadata (Playwright provider)
-            if (lastResponse.metadata?.wasExfiltrated !== undefined) {
-              logger.debug('[Crescendo] Using exfil data from provider response metadata');
-              gradingContext = {
-                ...(tracingOptions.includeInGrading
-                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
-                  : {}),
-                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
-                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
-                exfilRecords: [],
-              };
-            } else {
+            if (lastResponse.metadata?.wasExfiltrated === undefined) {
               // Try to fetch exfil tracking from server API via webPageUuid
               const webPageUuid = test.metadata?.webPageUuid as string | undefined;
               if (webPageUuid) {
@@ -584,6 +595,16 @@ export class CrescendoProvider implements ApiProvider {
                   };
                 }
               }
+            } else {
+              logger.debug('[Crescendo] Using exfil data from provider response metadata');
+              gradingContext = {
+                ...(tracingOptions.includeInGrading
+                  ? { traceContext: response.traceContext, traceSummary: gradingTraceSummary }
+                  : {}),
+                wasExfiltrated: Boolean(lastResponse.metadata.wasExfiltrated),
+                exfilCount: Number(lastResponse.metadata.exfilCount) || 0,
+                exfilRecords: [],
+              };
             }
 
             // Fallback to just tracing context if no exfil data found
@@ -594,12 +615,28 @@ export class CrescendoProvider implements ApiProvider {
               };
             }
 
+            // Provide prior turns separately from the latest assistant output
+            // under test. Context-aware graders can use this to reason over
+            // provenance without duplicating the current turn in `llmOutput`.
+            const conversationHistoryForGrading = redteamHistory.map((turn) => ({
+              prompt: turn.prompt,
+              output: turn.output,
+            }));
+            gradingContext = {
+              ...(gradingContext ?? {}),
+              redteamHistory: [...redteamHistory],
+              conversationHistory: conversationHistoryForGrading,
+              conversationTranscript: formatRedteamHistoryAsTranscript(
+                conversationHistoryForGrading,
+              ),
+            };
+
             const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,
               provider,
-              assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+              getGraderAssertionValue(assertToUse),
               additionalRubric,
               undefined,
               gradingContext,
@@ -608,11 +645,7 @@ export class CrescendoProvider implements ApiProvider {
             graderPassed = grade.pass;
             storedGraderResult = {
               ...grade,
-              assertion: grade.assertion
-                ? { ...grade.assertion, value: rubric }
-                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                  ? { ...assertToUse, value: rubric }
-                  : undefined,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
             };
           }
         }
@@ -899,12 +932,22 @@ export class CrescendoProvider implements ApiProvider {
 
     // Extract input vars from the processed prompt for multi-input mode
     const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
+    const materializedInputVars =
+      currentInputVars && this.config.inputs
+        ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+            materializationIndex: _roundNum,
+            pluginId: 'crescendo',
+            provider: await this.getRedTeamProvider(),
+            purpose: context?.test?.metadata?.purpose as string | undefined,
+          })
+        : undefined;
+    const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
     // Build updated vars - handle multi-input mode
     const updatedVars: Record<string, VarValue> = {
       ...vars,
       [this.config.injectVar]: processedPrompt,
-      ...(currentInputVars || {}),
+      ...(currentRenderInputVars || {}),
     };
 
     const renderedPrompt = await renderPrompt(
@@ -1048,7 +1091,22 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const iterationStart = Date.now();
-    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    const targetContext = context
+      ? {
+          ...context,
+          vars: {
+            ...vars,
+            ...(currentRenderInputVars || {}),
+            [this.config.injectVar]: finalTargetPrompt,
+          },
+        }
+      : context;
+    let targetResponse = await getTargetResponse(
+      provider,
+      finalTargetPrompt,
+      targetContext,
+      options,
+    );
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
       evalId: context?.evaluationId,
       testIdx: context?.testIdx,
@@ -1100,7 +1158,7 @@ export class CrescendoProvider implements ApiProvider {
     return {
       response: targetResponse,
       transformResult: lastTransformResult,
-      inputVars: currentInputVars,
+      inputVars: currentRenderInputVars,
     };
   }
 

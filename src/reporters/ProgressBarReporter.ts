@@ -1,10 +1,9 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-
 import { isCI } from '../envars';
 import { ResultFailureReason } from '../types/index';
-
 import type { SingleBar } from 'cli-progress';
+
 import type { EvalSummaryContext, Reporter, RunStartContext, TestResultContext } from './types';
 
 /**

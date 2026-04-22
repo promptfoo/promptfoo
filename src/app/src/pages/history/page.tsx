@@ -23,7 +23,7 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await callApi(`/history`);
+        const response = await callApi('/history');
         const data = await response.json();
 
         if (data?.data) {

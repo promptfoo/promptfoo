@@ -9,7 +9,6 @@ import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
 import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
-import { addLogToTestContext } from './util/testLogContext';
 
 const MAX_LOG_FILES = 50;
 
@@ -50,6 +49,7 @@ export interface SanitizedLogContext {
 
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
+let sourceMapSupportInitializationPromise: Promise<void> | null = null;
 
 // Shutdown state tracking - prevents writes once logger closure begins
 let isLoggerShuttingDown = false;
@@ -65,15 +65,23 @@ export function getLoggerShuttingDown(): boolean {
 }
 
 export async function initializeSourceMapSupport(): Promise<void> {
-  if (!sourceMapSupportInitialized) {
+  if (sourceMapSupportInitialized) {
+    return;
+  }
+
+  sourceMapSupportInitializationPromise ??= (async () => {
     try {
       const sourceMapSupport = await import('source-map-support');
       sourceMapSupport.install();
       sourceMapSupportInitialized = true;
     } catch {
       // Ignore errors. This happens in the production build, because source-map-support is a dev dependency.
+    } finally {
+      sourceMapSupportInitializationPromise = null;
     }
-  }
+  })();
+
+  await sourceMapSupportInitializationPromise;
 }
 
 /**
@@ -379,18 +387,6 @@ function createLogMethodWithContext(
       return;
     }
 
-    // Capture to test context if active
-    // Without --verbose: only capture 'error' level
-    // With --verbose: capture all levels
-    const shouldCapture = level === 'error' || isDebugEnabled();
-    if (shouldCapture) {
-      const fullMessage = context
-        ? `${message}\n${safeJsonStringify(sanitizeContext(context), true)}`
-        : message;
-      addLogToTestContext(level, fullMessage);
-    }
-
-    // Continue with normal logging (file transports still get everything)
     if (!context) {
       internalLogger[level](message);
       return;

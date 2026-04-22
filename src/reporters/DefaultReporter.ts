@@ -22,6 +22,8 @@ interface InProgressTest {
   startTime: number;
 }
 
+type CapturedLog = NonNullable<TestResultContext['result']['logs']>[number];
+
 /**
  * Options for the DefaultReporter
  */
@@ -164,15 +166,27 @@ export class DefaultReporter implements Reporter {
   onTestResult(context: TestResultContext): void {
     const { result, evalStep } = context;
 
-    // Clear progress bar line before printing test result
     this.clearStatus();
-
-    // Remove tracking for this completed test
     this.iterationProgress.delete(context.index);
     this.testsInProgress.delete(context.index);
 
-    // Update stats
     const isError = result.failureReason === ResultFailureReason.ERROR;
+    this.updateResultStats(result, isError);
+
+    const icon = this.getResultIcon(result, isError);
+    const description = this.getResultDescription(context);
+    const provider = evalStep.provider.label || evalStep.provider.id();
+    const latency = result.latencyMs ? chalk.gray(`(${result.latencyMs}ms)`) : '';
+    const testCount = chalk.dim(`[${context.completed}/${context.total}]`);
+
+    this.write(`${icon} ${testCount} ${description} ${chalk.dim(`[${provider}]`)} ${latency}\n`);
+    this.writeInlineError(result, isError);
+    this.writeCapturedLogs(result.logs);
+    this.writeBufferedOutput();
+    this.reprintStatus();
+  }
+
+  private updateResultStats(result: TestResultContext['result'], isError: boolean): void {
     if (result.success) {
       this.passCount++;
     } else if (isError) {
@@ -180,95 +194,95 @@ export class DefaultReporter implements Reporter {
     } else {
       this.failCount++;
     }
+  }
 
-    // Print test result line
-    const icon = result.success ? chalk.green('✓') : isError ? chalk.yellow('✗') : chalk.red('✗');
+  private getResultIcon(result: TestResultContext['result'], isError: boolean): string {
+    if (result.success) {
+      return chalk.green('✓');
+    }
+    return isError ? chalk.yellow('✗') : chalk.red('✗');
+  }
 
-    // For redteam tests, show plugin/strategy info; otherwise show description or vars
-    let description: string;
-    if (this.isRedteam) {
-      // Check multiple locations for pluginId/strategyId
-      const pluginId = (evalStep.test.metadata?.pluginId ||
-        result.testCase?.metadata?.pluginId ||
-        result.metadata?.pluginId) as string | undefined;
-      const strategyId = (evalStep.test.metadata?.strategyId ||
-        result.testCase?.metadata?.strategyId ||
-        result.metadata?.strategyId) as string | undefined;
-      const pluginName = pluginId ? this.getDisplayName(pluginId) : undefined;
-      const strategyName = strategyId ? this.getDisplayName(strategyId) : undefined;
-
-      if (pluginName && strategyName) {
-        description = `Plugin: ${pluginName} (Strategy: ${strategyName})`;
-      } else if (pluginName) {
-        description = `Plugin: ${pluginName}`;
-      } else if (strategyName) {
-        description = `Strategy: ${strategyName}`;
-      } else {
-        description = result.testCase.description || `Test ${context.index + 1}`;
-      }
-    } else {
-      description =
-        result.testCase.description ||
-        this.formatVars(evalStep.test.vars) ||
-        `Test ${context.index + 1}`;
+  private getResultDescription({ evalStep, result, index }: TestResultContext): string {
+    if (!this.isRedteam) {
+      return (
+        result.testCase.description || this.formatVars(evalStep.test.vars) || `Test ${index + 1}`
+      );
     }
 
-    const provider = evalStep.provider.label || evalStep.provider.id();
-    const latency = result.latencyMs ? chalk.gray(`(${result.latencyMs}ms)`) : '';
-    const testCount = chalk.dim(`[${context.completed}/${context.total}]`);
+    const pluginId = (evalStep.test.metadata?.pluginId ||
+      result.testCase?.metadata?.pluginId ||
+      result.metadata?.pluginId) as string | undefined;
+    const strategyId = (evalStep.test.metadata?.strategyId ||
+      result.testCase?.metadata?.strategyId ||
+      result.metadata?.strategyId) as string | undefined;
+    const pluginName = pluginId ? this.getDisplayName(pluginId) : undefined;
+    const strategyName = strategyId ? this.getDisplayName(strategyId) : undefined;
 
-    this.write(`${icon} ${testCount} ${description} ${chalk.dim(`[${provider}]`)} ${latency}\n`);
+    if (pluginName && strategyName) {
+      return `Plugin: ${pluginName} (Strategy: ${strategyName})`;
+    }
+    if (pluginName) {
+      return `Plugin: ${pluginName}`;
+    }
+    if (strategyName) {
+      return `Strategy: ${strategyName}`;
+    }
+    return result.testCase.description || `Test ${index + 1}`;
+  }
 
-    // Show failure/error reason inline if configured
-    if (!result.success && this.options.showErrors && result.error) {
-      const label = isError ? 'Error:' : 'Failure:';
-      const errorLines = result.error.split('\n').slice(0, 3); // Limit error lines
-      this.write(chalk.red(`    ${label} ${errorLines[0]}\n`));
-      for (const line of errorLines.slice(1)) {
-        this.write(chalk.red(`    ${line}\n`));
-      }
+  private writeInlineError(result: TestResultContext['result'], isError: boolean): void {
+    if (result.success || !this.options.showErrors || !result.error) {
+      return;
     }
 
-    // Show captured logs for all tests
-    if (result.logs && result.logs.length > 0) {
-      this.write(chalk.dim('    Logs:\n'));
-      // Show last 10 entries to keep output manageable
-      for (const log of result.logs.slice(-10)) {
-        // Indent all lines of the message
-        const lines = log.message.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (log.level === 'error') {
-            // Errors are bright red, not dimmed
-            if (i === 0) {
-              this.write(`      ${chalk.red.bold(`[${log.level}]`)} ${chalk.red(line)}\n`);
-            } else {
-              this.write(`      ${chalk.red('         ' + line)}\n`);
-            }
-          } else if (log.level === 'warn') {
-            if (i === 0) {
-              this.write(`      ${chalk.yellow(`[${log.level}]`)} ${chalk.dim(line)}\n`);
-            } else {
-              this.write(chalk.dim(`               ${line}\n`));
-            }
-          } else {
-            if (i === 0) {
-              this.write(chalk.dim(`      [${log.level}] ${line}\n`));
-            } else {
-              this.write(chalk.dim(`              ${line}\n`));
-            }
-          }
-        }
-      }
-      // Add blank line after logs for visual separation from progress bar
-      this.write('\n');
+    const label = isError ? 'Error:' : 'Failure:';
+    const [firstLine, ...remainingLines] = result.error.split('\n').slice(0, 3);
+    this.write(chalk.red(`    ${label} ${firstLine}\n`));
+    for (const line of remainingLines) {
+      this.write(chalk.red(`    ${line}\n`));
+    }
+  }
+
+  private writeCapturedLogs(logs: TestResultContext['result']['logs']): void {
+    if (!logs?.length) {
+      return;
     }
 
-    // Show any buffered logger output that occurred during this test
+    this.write(chalk.dim('    Logs:\n'));
+    for (const log of logs.slice(-10)) {
+      this.writeCapturedLog(log);
+    }
+    this.write('\n');
+  }
+
+  private writeCapturedLog(log: CapturedLog): void {
+    const lines = log.message.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      this.write(this.formatCapturedLogLine(log, lines[i], i === 0));
+    }
+  }
+
+  private formatCapturedLogLine(log: CapturedLog, line: string, firstLine: boolean): string {
+    if (log.level === 'error') {
+      return firstLine
+        ? `      ${chalk.red.bold(`[${log.level}]`)} ${chalk.red(line)}\n`
+        : `      ${chalk.red(`         ${line}`)}\n`;
+    }
+    if (log.level === 'warn') {
+      return firstLine
+        ? `      ${chalk.yellow(`[${log.level}]`)} ${chalk.dim(line)}\n`
+        : chalk.dim(`               ${line}\n`);
+    }
+    return firstLine
+      ? chalk.dim(`      [${log.level}] ${line}\n`)
+      : chalk.dim(`              ${line}\n`);
+  }
+
+  private writeBufferedOutput(): void {
     if (this.options.captureOutput && this.outputController.hasBufferedOutput()) {
       const bufferedOutput = this.outputController.getBufferedOutput();
       if (bufferedOutput) {
-        // Indent and dim the logger output to distinguish it from test results
         const indentedOutput = bufferedOutput
           .split('\n')
           .map((line) => chalk.dim(`    ${line}`))
@@ -276,9 +290,6 @@ export class DefaultReporter implements Reporter {
         this.write(`${indentedOutput}\n`);
       }
     }
-
-    // Reprint progress bar at bottom
-    this.reprintStatus();
   }
 
   onRunComplete(context: EvalSummaryContext): void {
