@@ -12,8 +12,20 @@ import type { EvaluateOptions, TestCase, TestSuite } from '../types/index';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;
+const DEFAULT_OTLP_ACCEPT_FORMATS = ['json', 'protobuf'] as const;
 const DEFAULT_OTLP_HTTP_HOST = '127.0.0.1';
 const DEFAULT_OTLP_HTTP_PORT = 4318;
+
+function normalizeOtlpAcceptFormats(
+  acceptFormats?: string[],
+): Array<(typeof DEFAULT_OTLP_ACCEPT_FORMATS)[number]> {
+  const normalized = (acceptFormats ?? []).filter(
+    (format): format is (typeof DEFAULT_OTLP_ACCEPT_FORMATS)[number] =>
+      format === 'json' || format === 'protobuf',
+  );
+
+  return normalized.length > 0 ? normalized : [...DEFAULT_OTLP_ACCEPT_FORMATS];
+}
 
 function getOtlpHttpReceiverConfig(testSuite?: TestSuite): { host: string; port: number } {
   return {
@@ -125,8 +137,11 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
       const { host, port } = getOtlpHttpReceiverConfig(testSuite);
+      const acceptFormats = normalizeOtlpAcceptFormats(
+        testSuite.tracing?.otlp?.http?.acceptFormats,
+      );
       logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
-      await startOTLPReceiver(port, host);
+      await startOTLPReceiver(port, host, acceptFormats);
       otlpReceiverStarted = true;
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
@@ -229,8 +244,6 @@ export async function generateTraceContextIfNeeded(
   }
   const testCaseId = test.metadata?.testCaseId || (test as any).id || `${testIdx}-${promptIdx}`;
 
-  // Create a real root span when the OTEL SDK is initialized.
-  // This ensures we have an actual parent span in storage/UI instead of a dangling parentSpanId.
   let traceId: string;
   let traceparent: string;
   let rootSpan: Span | undefined;
@@ -241,23 +254,20 @@ export async function generateTraceContextIfNeeded(
       kind: SpanKind.INTERNAL,
       attributes: {
         [PromptfooAttributes.EVAL_ID]: evaluationId,
-        // This attribute is used for deterministic correlation (OTLP receiver + UI filtering)
         [PromptfooAttributes.TEST_CASE_ID]: testCaseId,
         [PromptfooAttributes.TEST_INDEX]: testIdx,
         [PromptfooAttributes.PROMPT_INDEX]: promptIdx,
       },
     });
 
-    const ctx = rootSpan.spanContext();
-    traceId = ctx.traceId;
-    const traceFlags = ctx.traceFlags.toString(16).padStart(2, '0');
-    traceparent = `00-${ctx.traceId}-${ctx.spanId}-${traceFlags}`;
+    const spanContext = rootSpan.spanContext();
+    traceId = spanContext.traceId;
+    const traceFlags = spanContext.traceFlags.toString(16).padStart(2, '0');
+    traceparent = `00-${spanContext.traceId}-${spanContext.spanId}-${traceFlags}`;
     logger.debug(
-      `[EvaluatorTracing] Started root span for test case: traceId=${traceId}, spanId=${ctx.spanId}`,
+      `[EvaluatorTracing] Started root span for test case: traceId=${traceId}, spanId=${spanContext.spanId}`,
     );
   } else {
-    // Fallback for cases where tracing is enabled but the OTEL SDK isn't initialized.
-    // This preserves legacy behavior and still enables cross-process correlation.
     traceId = generateTraceId();
     const spanId = generateSpanId();
     traceparent = generateTraceparent(traceId, spanId);

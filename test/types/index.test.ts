@@ -20,6 +20,7 @@ import {
   VarsSchema,
 } from '../../src/types/index';
 import { PromptConfigSchema } from '../../src/validators/prompts';
+import { createMockProvider } from '../factories/provider';
 
 import type { TestSuite } from '../../src/types/index';
 
@@ -959,10 +960,10 @@ describe('TestSuiteConfigSchema', () => {
       );
 
       const result = extendedSchema.safeParse(config);
-      if (!result.success) {
-        console.error(`Validation failed for ${file}:`, result.error);
-      }
-      expect(result.success).toBe(true);
+      expect(
+        result.success,
+        `Validation failed for ${file}: ${result.success ? '' : result.error.message}`,
+      ).toBe(true);
     });
   }
 });
@@ -1032,19 +1033,14 @@ describe('UnifiedConfigSchema extensions handling', () => {
 
 describe('TestSuiteSchema', () => {
   const baseTestSuite: TestSuite = {
-    providers: [
-      {
-        id: () => 'mock-provider',
-        callApi: () => Promise.resolve({}),
-      },
-    ],
+    providers: [createMockProvider({ id: 'mock-provider', response: {} })],
     prompts: [{ raw: 'Hello, world!', label: 'mock-prompt' }],
   };
 
   describe('extensions field', () => {
     it('should allow null extensions', () => {
       const suite = {
-        providers: [{ id: () => 'provider1', callApi: () => Promise.resolve({}) }],
+        providers: [createMockProvider({ id: 'provider1', response: {} })],
         prompts: [{ raw: 'prompt1', label: 'test' }],
         extensions: null,
       };
@@ -1053,7 +1049,7 @@ describe('TestSuiteSchema', () => {
 
     it('should allow undefined extensions', () => {
       const suite = {
-        providers: [{ id: () => 'provider1', callApi: () => Promise.resolve({}) }],
+        providers: [createMockProvider({ id: 'provider1', response: {} })],
         prompts: [{ raw: 'prompt1', label: 'test' }],
       };
       expect(() => TestSuiteSchema.parse(suite)).not.toThrow();
@@ -1108,12 +1104,7 @@ describe('TestSuiteSchema', () => {
   describe('defaultTest validation', () => {
     it('should accept string defaultTest starting with file://', () => {
       const validConfig = {
-        providers: [
-          {
-            id: () => 'openai:gpt-4',
-            callApi: async () => ({ output: 'test' }),
-          },
-        ],
+        providers: [createMockProvider({ id: 'openai:gpt-4', response: { output: 'test' } })],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{ vars: { test: 'value' } }],
         defaultTest: 'file://path/to/defaultTest.yaml',
@@ -1126,12 +1117,7 @@ describe('TestSuiteSchema', () => {
 
     it('should reject string defaultTest not starting with file://', () => {
       const invalidConfig = {
-        providers: [
-          {
-            id: () => 'openai:gpt-4',
-            callApi: async () => ({ output: 'test' }),
-          },
-        ],
+        providers: [createMockProvider({ id: 'openai:gpt-4', response: { output: 'test' } })],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{ vars: { test: 'value' } }],
         defaultTest: 'invalid/path.yaml',
@@ -1146,12 +1132,7 @@ describe('TestSuiteSchema', () => {
 
     it('should accept object defaultTest', () => {
       const validConfig = {
-        providers: [
-          {
-            id: () => 'openai:gpt-4',
-            callApi: async () => ({ output: 'test' }),
-          },
-        ],
+        providers: [createMockProvider({ id: 'openai:gpt-4', response: { output: 'test' } })],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{ vars: { test: 'value' } }],
         defaultTest: {
@@ -1173,12 +1154,7 @@ describe('TestSuiteSchema', () => {
 
     it('should accept undefined defaultTest', () => {
       const validConfig = {
-        providers: [
-          {
-            id: () => 'openai:gpt-4',
-            callApi: async () => ({ output: 'test' }),
-          },
-        ],
+        providers: [createMockProvider({ id: 'openai:gpt-4', response: { output: 'test' } })],
         prompts: [{ raw: 'Test prompt', label: 'test' }],
         tests: [{ vars: { test: 'value' } }],
       };

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -14,6 +14,7 @@
       "**/*.tsx",
       "**/*.json",
       "**/*.jsonc",
+      "**/*.grit",
       "**/*.mjs",
       "**/*.cjs",
       "!!drizzle",
@@ -22,7 +23,7 @@
       "!!**/dist",
       "!!**/build",
       "!!**/public",
-      "!!examples/multiple-turn-conversation/prompt.json",
+      "!!examples/config-multi-turn/prompt.json",
       "!!examples/openai-chat-history/prompt.json",
       "!!test/fixtures/rubric-json-template/**/*.json",
       // Excluded due to stack overflow crash in biome - see https://github.com/biomejs/biome/issues/8783
@@ -40,6 +41,7 @@
   "assist": {
     "actions": {
       "source": {
+        "noDuplicateClasses": "on",
         "organizeImports": {
           "level": "on",
           "options": {
@@ -99,7 +101,13 @@
         "noUselessRename": "error",
         "noUselessTernary": "error",
         "noUselessFragments": "error",
-        "useOptionalChain": "off"
+        "useOptionalChain": "off",
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": {
+            "maxAllowedComplexity": 30
+          }
+        }
       },
       "correctness": {
         "noUnusedVariables": "error",
@@ -152,6 +160,15 @@
         "noArrayIndexKey": "off",
         "noCommentText": "off",
         "noConfusingVoidType": "error",
+        "noDuplicateCase": "error",
+        "noDuplicateClassMembers": "error",
+        "noDuplicateElseIf": "error",
+        "noDuplicateJsxProps": "error",
+        "noDuplicateObjectKeys": "error",
+        "noDuplicateParameters": "error",
+        "noDuplicateTestHooks": "error",
+        "noFocusedTests": "error",
+        "noSkippedTests": "error",
         "noRedundantUseStrict": "error",
         "noThenProperty": "error",
         "useErrorMessage": "warn",
@@ -169,7 +186,10 @@
       },
       "nursery": {
         "noFloatingPromises": "error",
-        "noMisusedPromises": "error"
+        "noMisusedPromises": "error",
+        "noUselessTypeConversion": "error",
+        "noIdenticalTestTitle": "error",
+        "useReduceTypeParameter": "warn"
       }
     }
   },
@@ -209,7 +229,7 @@
   "overrides": [
     {
       "includes": [
-        "examples/multiple-turn-conversation/prompt.json",
+        "examples/config-multi-turn/prompt.json",
         "examples/openai-chat-history/prompt.json"
       ],
       "linter": {
@@ -220,7 +240,7 @@
       }
     },
     {
-      "includes": ["examples/custom-provider/vercelAiSdkExample.js"],
+      "includes": ["examples/provider-custom/basic/vercelAiSdkExample.js"],
       "linter": {
         "enabled": false
       },
@@ -267,6 +287,23 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "*.js",
+        "*.jsx",
+        "*.ts",
+        "*.tsx",
+        "*.mjs",
+        "*.cjs",
+        "**/*.js",
+        "**/*.jsx",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mjs",
+        "**/*.cjs"
+      ],
+      "plugins": ["./tools/biome/no-direct-process-env-mutation.grit"]
     },
     {
       "includes": ["src/app/**/*"],
