@@ -3,14 +3,22 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-// Mock socket.io-client
-const mockSocket = {
-  on: vi.fn(),
-  disconnect: vi.fn(),
-};
+const { mockCallApi, mockSocket, mockSocketIo, mockUseApiConfig } = vi.hoisted(() => {
+  const mockSocket = {
+    on: vi.fn(),
+    disconnect: vi.fn(),
+  };
+
+  return {
+    mockCallApi: vi.fn(),
+    mockSocket,
+    mockSocketIo: vi.fn(() => mockSocket),
+    mockUseApiConfig: vi.fn(),
+  };
+});
 
 vi.mock('socket.io-client', () => ({
-  io: vi.fn(() => mockSocket),
+  io: mockSocketIo,
 }));
 
 // Mock the constants
@@ -20,11 +28,10 @@ vi.mock('@app/constants', () => ({
 
 // Mock the API config store
 vi.mock('@app/stores/apiConfig', () => ({
-  default: vi.fn(() => ({ apiBaseUrl: 'http://localhost:3000' })),
+  default: mockUseApiConfig,
 }));
 
 // Mock callApi
-const mockCallApi = vi.fn();
 vi.mock('@app/utils/api', () => ({
   callApi: (...args: unknown[]) => mockCallApi(...args),
 }));
@@ -66,8 +73,7 @@ function renderWithProviders() {
 describe('PromptsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSocket.on.mockClear();
-    mockSocket.disconnect.mockClear();
+    mockUseApiConfig.mockReturnValue({ apiBaseUrl: 'http://localhost:15500' });
     mockCallApi.mockResolvedValue({
       json: () => Promise.resolve({ data: [] }),
     });
@@ -95,6 +101,18 @@ describe('PromptsPage', () => {
     await waitFor(() => {
       expect(mockSocket.on).toHaveBeenCalledWith('update', expect.any(Function));
     });
+    expect(mockSocketIo).toHaveBeenCalledWith('http://localhost:15500', { path: '/socket.io' });
+  });
+
+  it('should derive Socket.io path from same-origin API path prefixes', async () => {
+    mockUseApiConfig.mockReturnValue({ apiBaseUrl: '/promptfoo' });
+
+    renderWithProviders();
+
+    await waitFor(() => {
+      expect(mockSocket.on).toHaveBeenCalledWith('update', expect.any(Function));
+    });
+    expect(mockSocketIo).toHaveBeenCalledWith('', { path: '/promptfoo/socket.io' });
   });
 
   it('should refetch prompts when Socket.io update event is received', async () => {

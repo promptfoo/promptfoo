@@ -9,6 +9,31 @@ import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
+function getSocketConfig(apiBaseUrl?: string) {
+  let socketPath = '/socket.io';
+  let socketUrl = '';
+
+  if (apiBaseUrl) {
+    try {
+      const url = new URL(apiBaseUrl, window.location.origin);
+      const isSameOrigin = url.origin === window.location.origin;
+      if (isSameOrigin && url.pathname !== '/') {
+        socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
+      }
+      socketUrl = isSameOrigin ? '' : apiBaseUrl;
+    } catch {
+      // Invalid API base URLs fall back to same-origin defaults.
+    }
+  } else {
+    const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+    if (basePath) {
+      socketPath = `${basePath}/socket.io`;
+    }
+  }
+
+  return { socketPath, socketUrl };
+}
+
 interface PromptsPageProps {
   showDatasetColumn?: boolean;
 }
@@ -34,7 +59,9 @@ function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
       setError('Failed to load prompts. Please try again.');
       console.error('Failed to fetch prompts:', error);
     } finally {
-      setIsLoading(false);
+      if (!isBackgroundUpdate) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -43,7 +70,8 @@ function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
 
     // Subscribe to real-time updates when running locally
     if (IS_RUNNING_LOCALLY) {
-      const socket = SocketIOClient(apiBaseUrl || '');
+      const { socketPath, socketUrl } = getSocketConfig(apiBaseUrl);
+      const socket = SocketIOClient(socketUrl, { path: socketPath });
 
       socket.on('update', () => {
         // Refetch prompts when any eval is updated
