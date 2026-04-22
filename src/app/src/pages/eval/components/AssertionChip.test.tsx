@@ -98,6 +98,21 @@ describe('AssertionChip', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
+  it('calls onClick handler from standalone keyboard activation', async () => {
+    const handleClick = vi.fn();
+    render(
+      <AssertionChip metric="keyboard-metric" score={1} passed={true} onClick={handleClick} />,
+    );
+
+    const chip = screen.getByRole('button', { name: /keyboard-metric/i });
+    chip.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(handleClick).not.toHaveBeenCalled();
+
+    await userEvent.keyboard('{Enter}');
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
   it('renders assert-set with chevron for expansion', () => {
     const childResults: GradingResult[] = [
       {
@@ -298,6 +313,95 @@ describe('AssertionChip', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
+  it('calls onClick handler from assert-set keyboard activation', async () => {
+    const handleClick = vi.fn();
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals', metric: 'child' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="keyboard-set"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+        onClick={handleClick}
+      />,
+    );
+
+    const chipBody = screen.getByText('keyboard-set').closest('[role="button"]');
+    expect(chipBody).toBeInTheDocument();
+    chipBody?.focus();
+    await userEvent.keyboard('{Escape}');
+    expect(handleClick).not.toHaveBeenCalled();
+
+    await userEvent.keyboard('{Enter}');
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders tooltip for assert-sets with children', async () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+        assertion: { type: 'equals', metric: 'child' },
+      },
+    ];
+
+    render(
+      <TooltipProvider delayDuration={0}>
+        <AssertionChip
+          metric="tooltip-set"
+          score={1}
+          passed={true}
+          isAssertSet={true}
+          threshold={1}
+          childResults={childResults}
+          tooltipContent={<div>Assert-set tooltip content</div>}
+        />
+      </TooltipProvider>,
+    );
+
+    await userEvent.hover(screen.getByText('tooltip-set'));
+
+    expect(screen.getByText('tooltip-set')).toBeInTheDocument();
+    expect(screen.getAllByText('Assert-set tooltip content').length).toBeGreaterThan(0);
+  });
+
+  it('shows failed child indicator when parent assert-set failed', async () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: false,
+        score: 0,
+        reason: 'Failed',
+        assertion: { type: 'equals', metric: 'failed-child' },
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="failed-set"
+        score={0}
+        passed={false}
+        isAssertSet={true}
+        childResults={childResults}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show failed-set details'));
+
+    expect(screen.getByText('failed-child')).toBeInTheDocument();
+    expect(screen.getAllByTestId(/child-assertion-/)[0]).toHaveTextContent('0.00');
+  });
+
   it('uses assertion type as fallback for child metric name', async () => {
     const childResults: GradingResult[] = [
       {
@@ -323,5 +427,30 @@ describe('AssertionChip', () => {
     await userEvent.click(chevronButton);
 
     expect(screen.getByText('equals')).toBeInTheDocument();
+  });
+
+  it('uses generated fallback when child has no assertion label', async () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Passed',
+      },
+    ];
+
+    render(
+      <AssertionChip
+        metric="anonymous-parent"
+        score={1}
+        passed={true}
+        isAssertSet={true}
+        threshold={1}
+        childResults={childResults}
+      />,
+    );
+
+    await userEvent.click(screen.getByLabelText('Show anonymous-parent details'));
+
+    expect(screen.getByText('assertion-0')).toBeInTheDocument();
   });
 });
