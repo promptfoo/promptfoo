@@ -183,4 +183,34 @@ describe('trimEvalTableForApi', () => {
   it('preserves null table cells from sparse tables', () => {
     expect(trimTableCellForApi(null)).toBeNull();
   });
+
+  it('reports media omission when oversized video data is stripped', () => {
+    const table = createEvaluateTable({
+      body: [
+        {
+          ...createEvaluateTable().body[0],
+          outputs: [
+            {
+              ...createEvaluateTable().body[0].outputs[0],
+              id: 'result-1',
+              video: { url: 'storageRef:video.mp4', thumbnail: huge },
+            },
+          ],
+        },
+      ],
+    });
+
+    const trimmed = trimEvalTableForApi(table, { maxStringLength: 32 });
+    const cell = trimmed.body[0].outputs[0];
+
+    expect(cell.detail?.omittedFields).toEqual([
+      'prompt',
+      'response',
+      'testCase',
+      'metadata',
+      'media',
+    ]);
+    expect(cell.video?.url).toBe('storageRef:video.mp4');
+    expect(cell.video?.thumbnail).toBe(`[content omitted: ${huge.length} characters]`);
+  });
 });

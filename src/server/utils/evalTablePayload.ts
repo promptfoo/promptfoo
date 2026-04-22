@@ -1,5 +1,9 @@
 import { ResultFailureReason } from '../../types';
-import { DEFAULT_OVERSIZED_STRING_LIMIT, stripOversizedStrings } from './safeJsonResponse';
+import {
+  DEFAULT_OVERSIZED_STRING_LIMIT,
+  type OversizedStringStats,
+  stripOversizedStrings,
+} from './safeJsonResponse';
 
 import type {
   AtomicTestCase,
@@ -89,9 +93,11 @@ function trimVideoForTable(
     return { value: undefined, omitted: false };
   }
 
+  const stats: OversizedStringStats = { oversizedStrings: 0, omittedCharacters: 0 };
+  const value = stripOversizedStrings(video, { maxStringLength, stats });
   return {
-    value: trimForTable(video, maxStringLength),
-    omitted: false,
+    value,
+    omitted: stats.oversizedStrings > 0,
   };
 }
 
