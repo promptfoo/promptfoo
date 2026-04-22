@@ -340,11 +340,13 @@ describe('AssertionChip', () => {
       .getByText('keyboard-set')
       .closest('[role="button"]') as HTMLElement | null;
     expect(chipBody).toBeInTheDocument();
-    chipBody?.focus();
+    const chipButton = chipBody as HTMLElement;
+
+    chipButton.focus();
     await userEvent.keyboard('{Escape}');
     expect(handleClick).not.toHaveBeenCalled();
 
-    chipBody?.focus();
+    chipButton.focus();
     await userEvent.keyboard('{Enter}');
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
