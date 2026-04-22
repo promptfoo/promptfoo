@@ -71,7 +71,7 @@ jobs:
 
     steps:
       - name: Validate release tag
-        if: env.RELEASE_TAG != ''
+        if: github.event_name == 'release' || env.RELEASE_TAG != ''
         run: |
           if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
             echo "::error::RELEASE_TAG '$RELEASE_TAG' is empty or invalid"
@@ -218,7 +218,7 @@ jobs:
       packages: write
     steps:
       - name: Validate release tag
-        if: env.RELEASE_TAG != ''
+        if: github.event_name == 'release' || env.RELEASE_TAG != ''
         run: |
           if [[ ! "$RELEASE_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
             echo "::error::RELEASE_TAG '$RELEASE_TAG' is empty or invalid"
