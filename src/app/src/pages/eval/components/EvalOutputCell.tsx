@@ -947,7 +947,7 @@ function renderStatusBlock({
   passFailText: React.ReactNode;
   scoreString: string;
   providerOverride: React.ReactNode;
-  failReasons: string[];
+  failReasons: FailReasonWithContext[];
   showPassReasons: boolean;
   passReasons: string[];
 }): React.ReactNode {
