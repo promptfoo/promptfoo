@@ -9,44 +9,51 @@ import { doEval } from '../commands/eval';
 import logger, { setLogCallback, setLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
+import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
+import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
-/**
- * Checks for generation errors and prompts user for confirmation
- */
+type GenerationMetricResults = Record<string, { requested: number; generated: number }>;
+
 async function checkGenerationErrorsAndConfirm(
-  pluginResults: Record<string, { requested: number; generated: number }>,
-  strategyResults: Record<string, { requested: number; generated: number }>,
-  forceYes: boolean = false,
+  pluginResults: GenerationMetricResults = {},
+  strategyResults: GenerationMetricResults = {},
+  forceYes = false,
 ): Promise<boolean> {
-  const hasErrors = [...Object.entries(pluginResults), ...Object.entries(strategyResults)].some(
-    ([_, { requested, generated }]) => generated === 0 || generated < requested,
+  const metricEntries = [...Object.entries(pluginResults), ...Object.entries(strategyResults)];
+  const hasErrors = metricEntries.some(
+    ([, { requested, generated }]) => requested > 0 && generated < requested,
   );
 
   if (!hasErrors) {
     return true;
   }
 
-  logger.warn(chalk.yellow('\nGeneration completed with errors:'));
+  const totalRequested = metricEntries.reduce((sum, [, result]) => sum + result.requested, 0);
+  const totalGenerated = metricEntries.reduce((sum, [, result]) => sum + result.generated, 0);
 
-  // Show failed plugins
+  logger.warn(
+    chalk.yellow(
+      `\nGeneration completed with errors (${totalGenerated}/${totalRequested} requested tests generated):`,
+    ),
+  );
+
   const failedPlugins = Object.entries(pluginResults).filter(
-    ([_, { generated }]) => generated === 0,
+    ([, { requested, generated }]) => requested > 0 && generated === 0,
   );
   if (failedPlugins.length > 0) {
     logger.warn(chalk.red('  Failed plugins (0 tests generated):'));
     failedPlugins.forEach(([id]) => logger.warn(chalk.red(`    - ${id}`)));
   }
 
-  // Show partial plugins
   const partialPlugins = Object.entries(pluginResults).filter(
-    ([_, { requested, generated }]) => generated > 0 && generated < requested,
+    ([, { requested, generated }]) => generated > 0 && generated < requested,
   );
   if (partialPlugins.length > 0) {
     logger.warn(chalk.yellow('  Partial plugins (fewer tests than requested):'));
@@ -55,18 +62,16 @@ async function checkGenerationErrorsAndConfirm(
     );
   }
 
-  // Show failed strategies
   const failedStrategies = Object.entries(strategyResults).filter(
-    ([_, { generated }]) => generated === 0,
+    ([, { requested, generated }]) => requested > 0 && generated === 0,
   );
   if (failedStrategies.length > 0) {
     logger.warn(chalk.red('  Failed strategies (0 tests generated):'));
     failedStrategies.forEach(([id]) => logger.warn(chalk.red(`    - ${id}`)));
   }
 
-  // Show partial strategies
   const partialStrategies = Object.entries(strategyResults).filter(
-    ([_, { requested, generated }]) => generated > 0 && generated < requested,
+    ([, { requested, generated }]) => generated > 0 && generated < requested,
   );
   if (partialStrategies.length > 0) {
     logger.warn(chalk.yellow('  Partial strategies (fewer tests than requested):'));
@@ -75,13 +80,11 @@ async function checkGenerationErrorsAndConfirm(
     );
   }
 
-  // Skip prompt if --yes flag is set
   if (forceYes) {
     logger.info(chalk.cyan('Continuing with scan (--yes flag provided)...'));
     return true;
   }
 
-  // Prompt for confirmation
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -161,33 +164,41 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   logger.info('Generating test cases...');
   const { maxConcurrency, ...passThroughOptions } = options;
 
-  const generateResult = await doGenerateRedteam({
-    ...passThroughOptions,
-    ...(options.liveRedteamConfig?.commandLineOptions || {}),
-    ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
-    config: configPath,
-    output: redteamPath,
-    force: options.force,
-    verbose: options.verbose,
-    delay: options.delay,
-    inRedteamRun: true,
-    abortSignal: options.abortSignal,
-    progressBar: options.progressBar,
-  });
-
-  // Check if generation succeeded
-  if (!generateResult || !generateResult.config) {
-    logger.info('No test cases generated. Skipping scan.');
-    if (verboseToggleCleanup) {
-      verboseToggleCleanup();
+  let generateResult;
+  const generationStartTime = Date.now();
+  try {
+    generateResult = await doGenerateRedteam({
+      ...passThroughOptions,
+      ...(options.liveRedteamConfig?.commandLineOptions || {}),
+      ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
+      config: configPath,
+      output: redteamPath,
+      force: options.force,
+      verbose: options.verbose,
+      delay: options.delay,
+      inRedteamRun: true,
+      abortSignal: options.abortSignal,
+      progressBar: options.progressBar,
+    });
+  } catch (error) {
+    if (error instanceof PartialGenerationError) {
+      // Log the detailed error message - this will be visible in CLI and UI (via logCallback)
+      logger.error(chalk.red('\n' + error.message));
+      setLogCallback(null);
+      if (verboseToggleCleanup) {
+        verboseToggleCleanup();
+      }
+      // Re-throw so CLI exits with non-zero code and callers can handle appropriately
+      throw error;
     }
-    return;
+    // Re-throw other errors
+    throw error;
   }
 
-  const { pluginResults, strategyResults } = generateResult;
+  const generationDurationMs = Date.now() - generationStartTime;
 
   // Check if redteam.yaml exists before running evaluation
-  if (!fs.existsSync(redteamPath)) {
+  if (!generateResult?.config || !fs.existsSync(redteamPath)) {
     logger.info('No test cases generated. Skipping scan.');
     if (verboseToggleCleanup) {
       verboseToggleCleanup();
@@ -195,17 +206,17 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     return;
   }
 
-  // Check for generation errors and prompt for confirmation
-  if (pluginResults && strategyResults) {
-    const shouldContinue = await checkGenerationErrorsAndConfirm(
-      pluginResults,
-      strategyResults,
-      options.yes,
-    );
-    if (!shouldContinue) {
-      logger.info('Scan cancelled by user.');
-      return;
+  const shouldContinue = await checkGenerationErrorsAndConfirm(
+    generateResult.pluginResults,
+    generateResult.strategyResults,
+    options.yes,
+  );
+  if (!shouldContinue) {
+    logger.info('Scan cancelled by user.');
+    if (verboseToggleCleanup) {
+      verboseToggleCleanup();
     }
+    return;
   }
 
   // Run evaluation
@@ -220,6 +231,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
       output: options.output ? [options.output] : undefined,
       cache: true,
       write: true,
+      filterPrompts: options.filterPrompts,
       filterProviders: options.filterProviders,
       filterTargets: options.filterTargets,
     },
@@ -232,7 +244,31 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     },
   );
 
-  logger.info(chalk.green('\nRed team scan complete!'));
+  // Set generation duration on the eval and save
+  if (evalResult && generationDurationMs >= 0) {
+    evalResult.setGenerationDurationMs(generationDurationMs);
+    if (evalResult.persisted) {
+      await evalResult.save();
+    }
+
+    const totalMs = evalResult.durationMs ?? 0;
+    const evalMs = evalResult.evaluationDurationMs ?? 0;
+    logger.info(
+      chalk.gray(
+        `Total scan time: ${formatDuration(totalMs / 1000)} (generation: ${formatDuration(generationDurationMs / 1000)}, evaluation: ${formatDuration(evalMs / 1000)})`,
+      ),
+    );
+  }
+
+  // Show appropriate completion message based on abort status
+  // Note: Detailed abort information is already shown in the summary, so we just show a brief message here
+  // Check if scan was aborted due to target error (efficient DB query, not loading all results)
+  const hasTargetError = evalResult ? (await evalResult.findTargetErrorStatus()) != null : false;
+  if (hasTargetError) {
+    // Abort details already shown in summary - no need to repeat
+  } else {
+    logger.info(chalk.green('\nRed team scan complete!'));
+  }
   if (!evalResult?.shared) {
     if (options.liveRedteamConfig) {
       logger.info(

@@ -13,6 +13,7 @@
  */
 
 import dedent from 'dedent';
+import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import { extractFirstJsonObject } from '../../../util/json';
@@ -238,12 +239,18 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
   constructor(config: VoiceCrescendoConfig) {
     this.config = { ...config };
-    this.maxTurns = config.maxTurns || DEFAULT_MAX_TURNS;
-    this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
+    this.maxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
+    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+
+    // Cap turns for unauthenticated users
+    if (!isLoggedIntoCloud()) {
+      this.maxTurns = Math.min(this.maxTurns, 10);
+    }
+
     this.nunjucks = getNunjucksEngine();
     this.memory = new VoiceMemorySystem();
     this.conversationId = crypto.randomUUID();
-    this.delayBetweenTurns = config.delayBetweenTurns || 500;
+    this.delayBetweenTurns = config.delayBetweenTurns ?? 500;
 
     logger.debug('[VoiceCrescendo] Provider initialized', { config });
   }
@@ -280,9 +287,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
           preferSmallModel: false,
         });
       } else {
-        this.scoringProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider,
-          preferSmallModel: false,
+        // Don't pass explicit provider - let getGradingProvider check CLI --grader first
+        this.scoringProvider = await redteamProviderManager.getGradingProvider({
           jsonOnly: true,
         });
       }
@@ -479,6 +485,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let finalConfidence = 0;
     let lastResponse = '';
     let lastPrompt = '';
+    let stopReason = 'Max turns reached';
     const audioHistory: VoiceCrescendoMetadata['audioHistory'] = [];
     const successfulTurns: VoiceCrescendoMetadata['successfulTurns'] = [];
 
@@ -494,7 +501,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
           escalationLevel,
           tokenUsage: redteamTokenUsage,
         } = await this.generateNextVoicePrompt(currentTurn);
-        accumulateResponseTokenUsage(totalTokenUsage, { tokenUsage: redteamTokenUsage });
+        // Redteam generation calls are internal and should not count as target probes.
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: redteamTokenUsage },
+          { countAsRequest: false },
+        );
         lastPrompt = voicePrompt;
 
         logger.debug(`[VoiceCrescendo] Generated prompt: ${voicePrompt.substring(0, 100)}...`);
@@ -519,6 +531,16 @@ export class VoiceCrescendoProvider implements ApiProvider {
           context,
         );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+
+        if (targetResponse.conversationEnded) {
+          logger.info('[VoiceCrescendo] Target ended conversation', {
+            turn: currentTurn,
+            reason: targetResponse.conversationEndReason,
+          });
+          lastResponse = targetResponse.output || '';
+          stopReason = 'Target ended conversation';
+          break;
+        }
 
         if (targetResponse.error) {
           logger.error(`[VoiceCrescendo] Target error: ${targetResponse.error}`);
@@ -571,7 +593,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
         // Evaluate if objective achieved
         const evaluation = await this.evaluateResponse(voicePrompt, responseText);
-        accumulateResponseTokenUsage(totalTokenUsage, { tokenUsage: evaluation.tokenUsage });
+        // Evaluation calls are internal and should not count as target probes.
+        accumulateResponseTokenUsage(
+          totalTokenUsage,
+          { tokenUsage: evaluation.tokenUsage },
+          { countAsRequest: false },
+        );
         logger.debug(`[VoiceCrescendo] Evaluation: ${JSON.stringify(evaluation)}`);
 
         if (evaluation.objectiveAchieved || evaluation.partialSuccess) {
@@ -585,6 +612,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
         if (evaluation.objectiveAchieved) {
           objectiveAchieved = true;
           finalConfidence = evaluation.confidence;
+          stopReason = 'Objective achieved';
           logger.debug(`[VoiceCrescendo] Objective achieved at turn ${currentTurn}!`);
         }
 
@@ -599,18 +627,18 @@ export class VoiceCrescendoProvider implements ApiProvider {
           currentTurn--;
           continue;
         }
+        stopReason = 'Error';
         break;
       }
     }
 
-    // Build final response
-    const stopReason = objectiveAchieved
-      ? 'Objective achieved'
-      : currentTurn >= this.maxTurns
-        ? 'Max turns reached'
-        : backtrackCount >= this.maxBacktracks
-          ? 'Max backtracks reached'
-          : 'Unknown';
+    if (
+      !objectiveAchieved &&
+      stopReason === 'Max turns reached' &&
+      backtrackCount >= this.maxBacktracks
+    ) {
+      stopReason = 'Max backtracks reached';
+    }
 
     const metadata: VoiceCrescendoMetadata = {
       redteamFinalPrompt: lastPrompt,
@@ -636,6 +664,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
     return {
       output: lastResponse,
+      prompt: lastPrompt,
       metadata,
       tokenUsage: totalTokenUsage,
     };

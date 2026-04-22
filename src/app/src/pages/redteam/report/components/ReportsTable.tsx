@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Badge } from '@app/components/ui/badge';
+import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -26,10 +27,10 @@ function getASRColorClass(percentage: number): string {
     return 'text-red-600 dark:text-red-400';
   }
   if (percentage >= 25) {
-    return 'text-orange-600 dark:text-orange-400';
+    return 'text-amber-600 dark:text-amber-400';
   }
   if (percentage >= 10) {
-    return 'text-amber-600 dark:text-amber-400';
+    return 'text-amber-500 dark:text-amber-300';
   }
   return 'text-emerald-600 dark:text-emerald-400';
 }
@@ -109,7 +110,7 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
           const description = getValue<string>() || 'Untitled Evaluation';
           return (
             <Link
-              to={`/reports?evalId=${row.original.evalId}`}
+              to={REDTEAM_ROUTES.REPORT_DETAIL(row.original.evalId)}
               onClick={(e) => {
                 e.preventDefault();
                 onReportSelected(row.original.evalId);
@@ -129,11 +130,7 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
           const target =
             providers.length > 0 ? (providers[0].label ?? providers[0].id) : 'No target';
           return (
-            <Badge
-              variant="secondary"
-              className="font-medium max-w-[200px] truncate"
-              title={target}
-            >
+            <Badge variant="secondary" truncate className="font-medium" title={target}>
               {target}
             </Badge>
           );
@@ -155,22 +152,22 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
           const rate = getValue<number>() ?? 0;
           const colorClass = getASRColorClass(rate);
           return (
-            <span className={cn('font-mono text-sm tabular-nums text-right block', colorClass)}>
+            <span className={cn('font-mono tabular-nums', colorClass)}>
               {formatASRForDisplay(rate)}%
             </span>
           );
         },
         size: 140,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'numTests',
         header: '# Tests',
         cell: ({ getValue }) => (
-          <span className="font-mono text-sm tabular-nums text-right block">
-            {getValue<number>()}
-          </span>
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
         ),
         size: 80,
+        meta: { align: 'right' },
       },
       {
         accessorKey: 'evalId',
@@ -179,7 +176,7 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
           const evalId = getValue<string>();
           return (
             <Link
-              to={`/eval/${evalId}`}
+              to={EVAL_ROUTES.DETAIL(evalId)}
               onClick={(e) => e.stopPropagation()}
               className="font-mono text-sm text-primary hover:underline"
             >
@@ -202,7 +199,6 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
       emptyMessage="No red team reports found. Run a red team evaluation to get started."
       onRowClick={(row) => onReportSelected(row.evalId)}
       initialSorting={[{ id: 'createdAt', desc: true }]}
-      initialPageSize={50}
       showToolbar
       showColumnToggle
       showExport

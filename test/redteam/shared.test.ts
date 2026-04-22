@@ -1,17 +1,26 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import path from 'path';
+import * as readline from 'readline';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import { doEval } from '../../src/commands/eval';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
+import { PartialGenerationError } from '../../src/redteam/types';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import { initVerboseToggle } from '../../src/util/verboseToggle';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
 
 vi.mock('../../src/redteam/commands/generate');
+vi.mock('readline', () => ({
+  createInterface: vi.fn(() => ({
+    close: vi.fn(),
+    question: vi.fn((_question: string, callback: (answer: string) => void) => callback('y')),
+  })),
+}));
 vi.mock('../../src/util/verboseToggle', () => ({
   initVerboseToggle: vi.fn(),
 }));
@@ -23,6 +32,12 @@ vi.mock('../../src/commands/eval', async (importOriginal) => {
       table: [],
       version: 3,
       createdAt: new Date().toISOString(),
+      durationMs: 1000,
+      evaluationDurationMs: 500,
+      persisted: false,
+      setGenerationDurationMs: vi.fn(),
+      save: vi.fn(),
+      findTargetErrorStatus: vi.fn().mockResolvedValue(null),
       results: {
         table: [],
         summary: {
@@ -113,6 +128,18 @@ describe('doRedteamRun', () => {
     vi.resetAllMocks();
 
     dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
+    vi.mocked(readline.createInterface).mockReturnValue({
+      close: vi.fn(),
+      question: vi.fn((_question: string, callback: (answer: string) => void) => callback('y')),
+    } as any);
+    vi.mocked(doEval).mockResolvedValue({
+      durationMs: 1000,
+      evaluationDurationMs: 500,
+      persisted: false,
+      setGenerationDurationMs: vi.fn(),
+      save: vi.fn(),
+      findTargetErrorStatus: vi.fn().mockResolvedValue(null),
+    } as any);
     vi.mocked(checkRemoteHealth).mockResolvedValue({ status: 'OK', message: 'Healthy' });
     vi.mocked(loadDefaultConfig).mockResolvedValue({
       defaultConfig: {},
@@ -183,6 +210,42 @@ describe('doRedteamRun', () => {
         output: path.normalize(`${dirPath}/redteam.yaml`),
       }),
     );
+  });
+
+  it('should continue without prompting when generation errors are acknowledged with yes', async () => {
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {
+        pii: { requested: 5, generated: 0 },
+      },
+      strategyResults: {
+        jailbreak: { requested: 5, generated: 2 },
+      },
+    });
+
+    await doRedteamRun({ yes: true });
+
+    expect(readline.createInterface).not.toHaveBeenCalled();
+    expect(doEval).toHaveBeenCalled();
+  });
+
+  it('should cancel before evaluation when generation errors are not confirmed', async () => {
+    vi.mocked(readline.createInterface).mockReturnValue({
+      close: vi.fn(),
+      question: vi.fn((_question: string, callback: (answer: string) => void) => callback('n')),
+    } as any);
+    vi.mocked(doGenerateRedteam).mockResolvedValue({
+      config: {},
+      pluginResults: {
+        pii: { requested: 5, generated: 0 },
+      },
+      strategyResults: {},
+    });
+
+    await doRedteamRun({});
+
+    expect(readline.createInterface).toHaveBeenCalled();
+    expect(doEval).not.toHaveBeenCalled();
   });
 
   describe('liveRedteamConfig temporary file handling', () => {
@@ -366,7 +429,11 @@ describe('doRedteamRun', () => {
     it('should call cleanup function when no test cases are generated', async () => {
       const mockCleanup = vi.fn();
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
-      vi.mocked(doGenerateRedteam).mockResolvedValue({ config: null });
+      vi.mocked(doGenerateRedteam).mockResolvedValue({
+        config: null,
+        pluginResults: {},
+        strategyResults: {},
+      });
 
       await doRedteamRun({});
 
@@ -387,6 +454,78 @@ describe('doRedteamRun', () => {
 
       // Just verifying no errors - cleanup should be handled gracefully
       expect(initVerboseToggle).toHaveBeenCalled();
+    });
+  });
+
+  describe('PartialGenerationError handling', () => {
+    it('should re-throw PartialGenerationError after logging when strict mode causes error', async () => {
+      const failedPlugins = [
+        { pluginId: 'pii', requested: 5 },
+        { pluginId: 'harmful:hate', requested: 3 },
+      ];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      // This happens when strict mode is enabled and doGenerateRedteam throws
+      await expect(doRedteamRun({ strict: true })).rejects.toThrow(PartialGenerationError);
+    });
+
+    it('should log error message before re-throwing PartialGenerationError', async () => {
+      const mockLogger = (await import('../../src/logger')).default;
+      const failedPlugins = [{ pluginId: 'pii', requested: 5 }];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      try {
+        await doRedteamRun({ strict: true });
+      } catch {
+        // Expected to throw
+      }
+
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('should call cleanup function when PartialGenerationError is thrown', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      const failedPlugins = [{ pluginId: 'pii', requested: 5 }];
+      const error = new PartialGenerationError(failedPlugins);
+      vi.mocked(doGenerateRedteam).mockRejectedValue(error);
+
+      try {
+        await doRedteamRun({ strict: true });
+      } catch {
+        // Expected to throw
+      }
+
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should re-throw other errors without special handling', async () => {
+      const genericError = new Error('Some other error');
+      vi.mocked(doGenerateRedteam).mockRejectedValue(genericError);
+
+      await expect(doRedteamRun({})).rejects.toThrow('Some other error');
+    });
+
+    it('should pass strict option through to doGenerateRedteam', async () => {
+      await doRedteamRun({ strict: true });
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.objectContaining({
+          strict: true,
+        }),
+      );
+    });
+
+    it('should not pass strict option when not specified', async () => {
+      await doRedteamRun({});
+
+      expect(doGenerateRedteam).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          strict: true,
+        }),
+      );
     });
   });
 });

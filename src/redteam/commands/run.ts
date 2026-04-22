@@ -46,6 +46,15 @@ export function redteamRunCommand(program: Command) {
     .option('--no-progress-bar', 'Do not show progress bar')
     .option('-y, --yes', 'Automatically answer yes to all prompts', false)
     .option(
+      '--strict',
+      'Fail if any plugins fail to generate test cases. By default, warnings are logged but generation continues.',
+      false,
+    )
+    .option(
+      '--filter-prompts <pattern>',
+      'Only run tests with prompts whose id or label matches the regex pattern',
+    )
+    .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
@@ -91,11 +100,14 @@ export function redteamRunCommand(program: Command) {
         if (opts.remote) {
           cliState.remote = true;
         }
+        if (opts.maxConcurrency !== undefined) {
+          cliState.maxConcurrency = opts.maxConcurrency;
+        }
         await doRedteamRun(opts);
       } catch (error) {
         if (error instanceof z.ZodError) {
           logger.error('Invalid options:');
-          error.errors.forEach((err: z.ZodIssue) => {
+          error.issues.forEach((err: z.ZodIssue) => {
             logger.error(`  ${err.path.join('.')}: ${err.message}`);
           });
         } else {
@@ -106,6 +118,10 @@ export function redteamRunCommand(program: Command) {
           );
         }
         process.exitCode = 1;
+      } finally {
+        // Reset cliState to prevent stale state leaking to later commands
+        cliState.remote = false;
+        cliState.maxConcurrency = undefined;
       }
     });
 

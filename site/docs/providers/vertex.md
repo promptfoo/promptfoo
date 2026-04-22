@@ -8,9 +8,17 @@ description: Use Google Vertex AI models including Gemini, Claude, Llama, and sp
 
 The `vertex` provider enables integration with Google's [Vertex AI](https://cloud.google.com/vertex-ai) platform, which provides access to foundation models including Gemini, Llama, Claude, and specialized models for text, code, and embeddings.
 
+:::info Provider Selection
+Use `vertex:` for all Vertex AI models (Gemini, Claude, Llama, etc.). Use `google:` for Google AI Studio (API key authentication).
+:::
+
 ## Available Models
 
 ### Gemini Models
+
+**Gemini 3.1 (Preview):**
+
+- `vertex:gemini-3.1-pro-preview` - Improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 
 **Gemini 3.0 (Preview):**
 
@@ -34,14 +42,18 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 - `vertex:gemini-2.0-flash-lite-preview-02-05` - Preview: Cost-effective for high throughput
 - `vertex:gemini-2.0-flash-lite-001` - Preview: Optimized for cost efficiency and low latency
 
-**Gemini 1.5 (Legacy):**
-
-- `vertex:gemini-1.5-pro` - Text/chat with long-context understanding
-- `vertex:gemini-1.5-flash` - Fast and efficient for high-volume applications
-
 ### Claude Models
 
 Anthropic's Claude models are available with the following versions:
+
+**Claude 4.7:**
+
+- `vertex:claude-opus-4-7` - Claude 4.7 Opus for agentic coding, long-running agents, and computer use. Use `config.region: global` for the global endpoint; US and EU multi-region endpoints are also supported where enabled on your project. See the [Google Cloud announcement](https://cloud.google.com/blog/products/ai-machine-learning/claude-opus-4-7-on-vertex-ai) for details.
+
+**Claude 4.6:**
+
+- `vertex:claude-sonnet-4-6` - Claude 4.6 Sonnet balancing performance with speed
+- `vertex:claude-opus-4-6` - Claude 4.6 Opus for agentic coding, agents, and computer use
 
 **Claude 4.5:**
 
@@ -51,7 +63,7 @@ Anthropic's Claude models are available with the following versions:
 
 **Claude 4:**
 
-- `vertex:claude-opus-4-1@20250805` - Claude 4.1 Opus for complex tasks and agentic search
+- `vertex:claude-opus-4-1@20250805` - Claude 4.1 Opus
 - `vertex:claude-opus-4@20250514` - Claude 4 Opus for coding and agent capabilities
 - `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet balancing performance with speed
 
@@ -127,20 +139,52 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 ### Embedding Models
 
-- `vertex:textembedding-gecko@001` - Text embeddings (3,072 tokens, 768d)
-- `vertex:textembedding-gecko@002` - Text embeddings (2,048 tokens, 768d)
-- `vertex:textembedding-gecko@003` - Text embeddings (2,048 tokens, 768d)
-- `vertex:text-embedding-004` - Text embeddings (2,048 tokens, ≤768d)
-- `vertex:text-embedding-005` - Text embeddings (2,048 tokens, ≤768d)
-- `vertex:textembedding-gecko-multilingual@001` - Multilingual embeddings (2,048 tokens, 768d)
-- `vertex:text-multilingual-embedding-002` - Multilingual embeddings (2,048 tokens, ≤768d)
-- `vertex:multimodalembedding` - Multimodal embeddings for text, image, and video
+Reference Vertex embedding models with the `vertex:embedding:` prefix:
+
+- `vertex:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+- `vertex:embedding:text-embedding-005` - English and code, up to 768 dimensions, 2,048 input-token limit
+- `vertex:embedding:text-multilingual-embedding-002` - Multilingual, up to 768 dimensions, 2,048 input-token limit
+
+Pass `autoTruncate: true` in `config` to let Vertex truncate oversize inputs on the server instead of returning an error:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      embedding:
+        id: vertex:embedding:gemini-embedding-001
+        config:
+          autoTruncate: true
+```
+
+Upgrading between embedding model families changes the vector space, so re-embed any previously indexed content. See Google's [supported embedding models](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings) reference for the current list.
 
 ### Image Generation Models
 
 :::note
 Imagen models are available through [Google AI Studio](/docs/providers/google#image-generation-models) using the `google:image:` prefix.
 :::
+
+### Video Generation Models
+
+Use the `vertex:video:` prefix for Veo on Vertex AI:
+
+- `vertex:video:veo-3.1-generate-preview`
+- `vertex:video:veo-3.1-fast-preview`
+- `vertex:video:veo-3-generate`
+- `vertex:video:veo-3-fast`
+- `vertex:video:veo-2-generate`
+
+```yaml
+providers:
+  - id: vertex:video:veo-3.1-generate-preview
+    config:
+      projectId: your-project-id
+      region: us-central1
+      aspectRatio: '16:9'
+      resolution: '1080p'
+      durationSeconds: 8
+```
 
 ## Model Capabilities
 
@@ -200,7 +244,7 @@ gcloud auth login
 gcloud auth application-default login
 
 # Set your project ID
-export VERTEX_PROJECT_ID="your-project-id"
+export GOOGLE_CLOUD_PROJECT="your-project-id"
 ```
 
 #### Option 2: Service Account (Production)
@@ -213,7 +257,7 @@ For production environments or CI/CD pipelines:
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="/path/to/credentials.json"
-export VERTEX_PROJECT_ID="your-project-id"
+export GOOGLE_CLOUD_PROJECT="your-project-id"
 ```
 
 #### Option 3: Service Account via Config (Alternative)
@@ -252,25 +296,21 @@ For quick testing, you can use a temporary access token:
 
 ```bash
 # Get a temporary access token
-export VERTEX_API_KEY=$(gcloud auth print-access-token)
-# or use GEMINI_API_KEY
-export GEMINI_API_KEY=$(gcloud auth print-access-token)
-export VERTEX_PROJECT_ID="your-project-id"
+export GOOGLE_API_KEY=$(gcloud auth print-access-token)
+export GOOGLE_CLOUD_PROJECT="your-project-id"
 ```
 
 **Note:** Access tokens expire after 1 hour. For long-running evaluations, use Application Default Credentials or Service Account authentication.
 
 #### Option 5: Express Mode API Key (Quick Start)
 
-Vertex AI Express Mode provides simplified authentication using an API key. **Express mode is automatic** when you have an API key and no explicit `projectId` or `credentials` configured.
+Vertex AI Express Mode provides simplified authentication using an API key. Just provide an API key and it works automatically.
 
 1. Create an API key in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials) or [Vertex AI Studio](https://console.cloud.google.com/vertex-ai)
 2. Set the environment variable:
 
 ```bash
-export VERTEX_API_KEY="your-express-mode-api-key"
-# or
-export GEMINI_API_KEY="your-express-mode-api-key"
+export GOOGLE_API_KEY="your-express-mode-api-key"
 ```
 
 ```yaml
@@ -278,7 +318,6 @@ providers:
   - id: vertex:gemini-3-flash-preview
     config:
       temperature: 0.7
-      # No expressMode needed - it's automatic with API key!
 ```
 
 Express mode benefits:
@@ -286,9 +325,10 @@ Express mode benefits:
 - No project ID or region required
 - Simpler setup for quick testing
 - Works with Gemini models
-- Automatic detection (no config flag needed)
 
-To force OAuth authentication when you have an API key set, use `expressMode: false`.
+:::tip
+Express mode is automatic when an API key is available. If you need OAuth/ADC features (VPC-SC, private endpoints), set `expressMode: false` to opt out.
+:::
 
 #### Environment Variables
 
@@ -296,15 +336,55 @@ Promptfoo automatically loads environment variables from your shell or a `.env` 
 
 ```bash
 # .env
-VERTEX_PROJECT_ID=your-project-id
-VERTEX_REGION=us-central1
-# Optional: For direct API key authentication
-VERTEX_API_KEY=your-access-token
-# or
-GEMINI_API_KEY=your-access-token
+GOOGLE_CLOUD_PROJECT=your-project-id
+GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_API_KEY=your-api-key  # For express mode
 ```
 
 Remember to add `.env` to your `.gitignore` file to prevent accidentally committing sensitive information.
+
+### Authentication Configuration Details
+
+:::note Mutual Exclusivity
+API key and OAuth configurations are mutually exclusive. Choose one authentication method:
+
+- **API key**: For express mode (simplified authentication)
+- **OAuth/ADC**: With `projectId`/`region` for full Vertex AI features
+
+By default, setting both will emit a warning. Set `strictMutualExclusivity: true` to enforce this as an error (matches Google SDK behavior).
+:::
+
+#### Advanced Auth Options
+
+For advanced authentication scenarios, you can pass options directly to the underlying `google-auth-library`:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash
+    config:
+      projectId: my-project
+      region: us-central1
+
+      # Path to service account key file (alternative to credentials)
+      keyFilename: /path/to/service-account.json
+
+      # Custom OAuth scopes
+      scopes:
+        - https://www.googleapis.com/auth/cloud-platform
+        - https://www.googleapis.com/auth/bigquery
+
+      # Advanced google-auth-library options
+      googleAuthOptions:
+        universeDomain: custom.domain.com # For private clouds
+        clientOptions:
+          proxy: http://proxy.example.com
+```
+
+| Option              | Description                                              |
+| ------------------- | -------------------------------------------------------- |
+| `keyFilename`       | Path to service account key file                         |
+| `scopes`            | Custom OAuth scopes (default: `cloud-platform`)          |
+| `googleAuthOptions` | Passthrough options for `google-auth-library` GoogleAuth |
 
 ## Configuration
 
@@ -312,18 +392,17 @@ Remember to add `.env` to your `.gitignore` file to prevent accidentally committ
 
 The following environment variables can be used to configure the Vertex AI provider:
 
-| Variable                         | Description                                              | Default        | Required |
-| -------------------------------- | -------------------------------------------------------- | -------------- | -------- |
-| `VERTEX_PROJECT_ID`              | Your Google Cloud project ID                             | None           | Yes      |
-| `VERTEX_REGION`                  | The region for Vertex AI resources                       | `us-central1`  | No       |
-| `VERTEX_API_KEY`                 | Direct API token (from `gcloud auth print-access-token`) | None           | No\*     |
-| `GEMINI_API_KEY`                 | Alternative to VERTEX_API_KEY for API authentication     | None           | No\*     |
-| `VERTEX_PUBLISHER`               | Model publisher                                          | `google`       | No       |
-| `VERTEX_API_HOST`                | Override API host (e.g., for proxy)                      | Auto-generated | No       |
-| `VERTEX_API_VERSION`             | API version                                              | `v1`           | No       |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials                      | None           | No\*     |
+| Variable                         | Description                         | Default        | Required |
+| -------------------------------- | ----------------------------------- | -------------- | -------- |
+| `GOOGLE_CLOUD_PROJECT`           | Google Cloud project ID             | None           | Yes\*    |
+| `GOOGLE_CLOUD_LOCATION`          | Region for Vertex AI                | `us-central1`  | No       |
+| `GOOGLE_API_KEY`                 | API key for express mode            | None           | No\*     |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to service account credentials | None           | No\*     |
+| `VERTEX_PUBLISHER`               | Model publisher                     | `google`       | No       |
+| `VERTEX_API_HOST`                | Override API host (e.g., for proxy) | Auto-generated | No       |
+| `VERTEX_API_VERSION`             | API version                         | `v1`           | No       |
 
-\*At least one authentication method is required (ADC, service account, or API key via VERTEX_API_KEY/GEMINI_API_KEY)
+\*At least one authentication method is required (ADC, service account, or API key)
 
 ### Region Selection
 
@@ -434,8 +513,8 @@ jobs:
         run: |
           npx promptfoo@latest eval
         env:
-          VERTEX_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          VERTEX_REGION: us-central1
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          GOOGLE_CLOUD_LOCATION: us-central1
 ```
 
 ### 4. Advanced Configuration Example
@@ -446,8 +525,8 @@ providers:
     config:
       # Authentication options
       credentials: 'file://service-account.json' # Optional: Use specific service account
-      projectId: ${VERTEX_PROJECT_ID}
-      region: ${VERTEX_REGION:-us-central1}
+      projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
+      region: '{{ env.GOOGLE_CLOUD_LOCATION | default("us-central1") }}'
 
       generationConfig:
         temperature: 0.2
@@ -489,11 +568,13 @@ providers:
               enabled: true
               llama_guard_settings: {}
 
-  # For Claude models
+  # For Claude models (require specific regions like us-east5)
   - id: vertex:claude-3-5-sonnet-v2@20241022
     config:
+      region: us-east5
       anthropic_version: 'vertex-2023-10-16'
       max_tokens: 1024
+      systemInstruction: 'You are a helpful assistant'
 ```
 
 ### Safety Settings
@@ -535,7 +616,8 @@ See [Google's SafetySetting API documentation](https://ai.google.dev/api/generat
 
 - Support for text, code, and analysis tasks
 - Tool use (function calling) capabilities
-- Available in multiple regions (us-east5, europe-west1, asia-southeast1)
+- Available in multiple regions (us-east5, europe-west1, asia-southeast1) plus the `global` endpoint for Opus 4.7
+- Claude Opus 4.7: adaptive thinking and `xhigh` effort level; promptfoo automatically omits `temperature` (deprecated for this model) and forwards the rest of the Anthropic Messages body to Vertex's `rawPredict` endpoint
 - Quota limits vary by model version (20-245 QPM)
 
 ## Advanced Usage
@@ -556,34 +638,37 @@ defaultTest:
     provider:
       # For llm-rubric and factuality assertions
       text: vertex:gemini-2.5-pro
-      # For similarity comparisons
-      embedding: vertex:embedding:text-embedding-004
+      # For similarity and answer-relevance assertions
+      embedding: vertex:embedding:gemini-embedding-001
 ```
 
 ### Configuration Reference
 
-| Option                             | Description                                            | Default                              |
-| ---------------------------------- | ------------------------------------------------------ | ------------------------------------ |
-| `apiKey`                           | GCloud API token                                       | None                                 |
-| `apiHost`                          | API host override                                      | `{region}-aiplatform.googleapis.com` |
-| `apiVersion`                       | API version                                            | `v1`                                 |
-| `credentials`                      | Service account credentials (JSON or file path)        | None                                 |
-| `projectId`                        | GCloud project ID                                      | `VERTEX_PROJECT_ID` env var          |
-| `region`                           | GCloud region                                          | `us-central1`                        |
-| `publisher`                        | Model publisher                                        | `google`                             |
-| `context`                          | Model context                                          | None                                 |
-| `examples`                         | Few-shot examples                                      | None                                 |
-| `safetySettings`                   | Content filtering                                      | None                                 |
-| `generationConfig.temperature`     | Randomness control                                     | None                                 |
-| `generationConfig.maxOutputTokens` | Max tokens to generate                                 | None                                 |
-| `generationConfig.topP`            | Nucleus sampling                                       | None                                 |
-| `generationConfig.topK`            | Sampling diversity                                     | None                                 |
-| `generationConfig.stopSequences`   | Generation stop triggers                               | `[]`                                 |
-| `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
-| `toolConfig`                       | Tool/function calling config                           | None                                 |
-| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
-| `expressMode`                      | Set to `false` to force OAuth when API key is present  | Auto-detected                        |
-| `streaming`                        | Use streaming API (`streamGenerateContent`)            | `false`                              |
+| Option                             | Description                                                        | Default                              |
+| ---------------------------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| `apiKey`                           | GCloud API token                                                   | None                                 |
+| `apiHost`                          | API host override                                                  | `{region}-aiplatform.googleapis.com` |
+| `apiVersion`                       | API version                                                        | `v1`                                 |
+| `credentials`                      | Service account credentials (JSON or file path)                    | None                                 |
+| `projectId`                        | GCloud project ID                                                  | `GOOGLE_CLOUD_PROJECT` env var       |
+| `region`                           | GCloud region                                                      | `us-central1`                        |
+| `publisher`                        | Model publisher                                                    | `google`                             |
+| `context`                          | Model context                                                      | None                                 |
+| `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |
+| `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                                 |
+| `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                                 |
+| `examples`                         | Few-shot examples                                                  | None                                 |
+| `safetySettings`                   | Content filtering                                                  | None                                 |
+| `generationConfig.temperature`     | Randomness control                                                 | None                                 |
+| `generationConfig.maxOutputTokens` | Max tokens to generate                                             | None                                 |
+| `generationConfig.topP`            | Nucleus sampling                                                   | None                                 |
+| `generationConfig.topK`            | Sampling diversity                                                 | None                                 |
+| `generationConfig.stopSequences`   | Generation stop triggers                                           | `[]`                                 |
+| `responseSchema`                   | JSON schema for structured output (supports `file://`)             | None                                 |
+| `toolConfig`                       | Tool/function calling config                                       | None                                 |
+| `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)                   | None                                 |
+| `expressMode`                      | Set to `false` to force OAuth/ADC even with API key                | auto (API key → `true`)              |
+| `streaming`                        | Use streaming API (`streamGenerateContent`)                        | `false`                              |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -626,14 +711,21 @@ You need to:
    - Search for "Claude"
    - Click "Enable" on the specific Claude models you want to use
 
-2. Use a supported region. Claude models are only available in:
-   - `us-east5`
-   - `europe-west1`
+2. Pick a supported region. Common choices:
+   - `us-east5` and `europe-west1` for Claude 3.x / 4.x models
+   - `global` for the global endpoint (Claude Opus 4.7 and other newer models with dynamic routing)
+   - US and EU multi-region endpoints where enabled
 
 Example configuration with correct region:
 
 ```yaml
 providers:
+  - id: vertex:claude-opus-4-7
+    config:
+      region: global
+      anthropic_version: 'vertex-2023-10-16'
+      max_tokens: 1024
+
   - id: vertex:claude-3-5-sonnet-v2@20241022
     config:
       region: us-east5 # or europe-west1
@@ -685,16 +777,28 @@ Configure system-level instructions for the model:
 
 ```yaml
 providers:
+  # Works with Gemini models
   - id: vertex:gemini-2.5-pro
     config:
-      # Direct text
       systemInstruction: 'You are a helpful assistant'
 
-      # Or load from file
+  # Also works with Claude models (require specific regions like us-east5)
+  - id: vertex:claude-sonnet-4-6
+    config:
+      region: us-east5
+      systemInstruction: 'You are a helpful assistant'
+```
+
+You can also load system instructions from a file:
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-pro
+    config:
       systemInstruction: file://system-instruction.txt
 ```
 
-System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability.
+System instructions support Nunjucks templating and can be loaded from external files for better organization and reusability. The `systemInstruction` config works across both Gemini and Claude models on Vertex AI.
 
 ### Generation Configuration
 
@@ -949,11 +1053,11 @@ Enable Model Armor by specifying template paths in your provider config:
 providers:
   - id: vertex:gemini-2.5-flash
     config:
-      projectId: ${VERTEX_PROJECT_ID}
+      projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
       region: us-central1
       modelArmor:
-        promptTemplate: projects/${VERTEX_PROJECT_ID}/locations/us-central1/templates/basic-safety
-        responseTemplate: projects/${VERTEX_PROJECT_ID}/locations/us-central1/templates/basic-safety
+        promptTemplate: 'projects/{{ env.GOOGLE_CLOUD_PROJECT }}/locations/us-central1/templates/basic-safety'
+        responseTemplate: 'projects/{{ env.GOOGLE_CLOUD_PROJECT }}/locations/us-central1/templates/basic-safety'
 ```
 
 | Option                        | Description                                 |
@@ -1011,6 +1115,27 @@ For more details, see:
 
 - [Testing Google Cloud Model Armor Guide](/docs/guides/google-cloud-model-armor/) - Complete guide on testing Model Armor with Promptfoo
 - [Model Armor Documentation](https://cloud.google.com/security-command-center/docs/model-armor-overview) - Official Google Cloud docs
+
+## Supported Features
+
+The Vertex AI provider supports core functionality for LLM evaluation:
+
+| Feature                  | Supported | Notes                                  |
+| ------------------------ | --------- | -------------------------------------- |
+| Chat completions         | ✅        | Full support for Gemini, Claude, Llama |
+| Embeddings               | ✅        | All embedding models                   |
+| Function calling / Tools | ✅        | Including MCP tools                    |
+| Search grounding         | ✅        | Google Search integration              |
+| Safety settings          | ✅        | Full configuration                     |
+| Structured output        | ✅        | JSON schema support                    |
+| Streaming                | ✅        | Optional via `streaming: true`         |
+| Files API                | ❌        | Upload/manage files not supported      |
+| Caching API              | ❌        | Context caching not supported          |
+| Live/Realtime API        | ❌        | WebSocket-based live API not supported |
+| Video generation         | ✅        | Use `vertex:video:` provider           |
+| Image generation         | ⚠️        | Use `google:image:` provider instead   |
+
+For image generation, use the [Google AI Studio provider](/docs/providers/google#image-generation-models) with the `google:image:` prefix.
 
 ## See Also
 

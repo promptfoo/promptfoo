@@ -4,7 +4,7 @@ For Python providers, prompts, assertions, and scripts.
 
 ## Requirements
 
-- Python 3.9 or later
+- Python 3.8 or later
 - Follow [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html)
 - Use type hints for readability and error catching
 

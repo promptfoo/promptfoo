@@ -6,9 +6,11 @@ import { useColorMode } from '@docusaurus/theme-common';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
+import CheckIcon from '@mui/icons-material/Check';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CodeIcon from '@mui/icons-material/Code';
 import CompareIcon from '@mui/icons-material/Compare';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import DescriptionIcon from '@mui/icons-material/Description';
 import FlightIcon from '@mui/icons-material/Flight';
@@ -23,7 +25,6 @@ import StorefrontIcon from '@mui/icons-material/Storefront';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import CountUp from 'react-countup';
-import NewsletterForm from '../components/NewsletterForm';
 import { SITE_CONSTANTS } from '../constants';
 import styles from './index.module.css';
 
@@ -76,7 +77,7 @@ function TrustBar() {
     <section className={styles.trustBar}>
       <div className="container">
         {/*<div className={styles.trustBarHeading}>
-          Trusted by 85 of the Fortune 500 to test AI before deployment
+          Trusted by {SITE_CONSTANTS.FORTUNE_500_COUNT} of the Fortune 500 to test AI before deployment
         </div>*/}
         <div
           className={styles.marquee}
@@ -102,11 +103,30 @@ function BridgeSection() {
     <section className={styles.bridgeSection}>
       <div className="container">
         <div className={styles.bridgeStatement}>
-          <strong>85 of the Fortune 500</strong> use Promptfoo in their AI development lifecycle.{' '}
-          Here's how:
+          <strong>{SITE_CONSTANTS.FORTUNE_500_COUNT} of the Fortune 500</strong> use Promptfoo in
+          their AI development lifecycle. Here's how:
         </div>
       </div>
     </section>
+  );
+}
+
+function CopyCodeBox({ command }: { command: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <pre className={styles.codeBox} onClick={handleCopy} style={{ cursor: 'pointer' }}>
+      <code>{command}</code>
+      <span className={styles.copyButton}>
+        {copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+      </span>
+    </pre>
   );
 }
 
@@ -146,15 +166,13 @@ function HomepageWalkthrough() {
       id: 1,
       caption: 'Red Teaming',
       mobileCaption: 'Red Team',
-      image: '/img/riskreport-1.png',
-      image2x: '/img/riskreport-1@2x.png',
+      image: '/img/redteam-vulnerability-report-hero.png',
+      image2x: '/img/redteam-vulnerability-report-hero@2x.png',
       description: (
         <>
           <p className={styles.walkthroughHeading}>Automated red teaming for agents & RAGs</p>
           <p>Promptfoo simulates real users to uncover application-specific vulnerabilities:</p>
-          <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest redteam setup</code>
-          </pre>
+          <CopyCodeBox command="npx promptfoo@latest redteam setup" />
           <p>Custom attacks generated for your target:</p>
           <ul>
             <li>Direct and indirect prompt injections</li>
@@ -176,6 +194,33 @@ function HomepageWalkthrough() {
       ),
       icon: <SecurityIcon />,
       destinationUrl: '/red-teaming',
+    },
+    {
+      id: 5,
+      caption: 'Evaluations',
+      mobileCaption: 'Evals',
+      image: '/img/claude-vs-gpt-example.png',
+      image2x: '/img/claude-vs-gpt-example@2x.png',
+      imageDark: '/img/claude-vs-gpt-example-dark.png',
+      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
+      description: (
+        <>
+          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
+          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
+          <CopyCodeBox command="npx promptfoo@latest init" />
+          <p>
+            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
+            dependencies, or logins.
+          </p>
+          <p>
+            <strong>
+              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
+            </strong>
+          </p>
+        </>
+      ),
+      icon: <CompareIcon />,
+      destinationUrl: '/docs/intro',
     },
     {
       id: 6,
@@ -243,35 +288,6 @@ function HomepageWalkthrough() {
       ),
       icon: <DescriptionIcon />,
       destinationUrl: '/model-security',
-    },
-    {
-      id: 5,
-      caption: 'Evaluations',
-      mobileCaption: 'Evals',
-      image: '/img/claude-vs-gpt-example.png',
-      image2x: '/img/claude-vs-gpt-example@2x.png',
-      imageDark: '/img/claude-vs-gpt-example-dark.png',
-      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
-      description: (
-        <>
-          <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
-          <p>Start testing the performance of your models, prompts, and tools in minutes:</p>
-          <pre className={styles.codeBox}>
-            <code>npx promptfoo@latest init</code>
-          </pre>
-          <p>
-            Promptfoo runs locally and integrates directly with your app - no SDKs, cloud
-            dependencies, or logins.
-          </p>
-          <p>
-            <strong>
-              <Link to="/docs/intro/">&raquo; Get Started with Evaluations</Link>
-            </strong>
-          </p>
-        </>
-      ),
-      icon: <CompareIcon />,
-      destinationUrl: '/docs/intro',
     },
     {
       id: 2,
@@ -448,7 +464,7 @@ function SolutionSection() {
             <h4>Test Everything</h4>
             <p>Create thousands of context-aware attacks tailored to your application.</p>
             <ul className={styles.solutionList}>
-              <li>Real-time threat intel from 200K+ user community</li>
+              <li>Real-time threat intel from {SITE_CONSTANTS.USER_COUNT_SHORT}+ user community</li>
               <li>Deep automation that scales beyond human-curated tests</li>
               <li>Customize attack flows to your business</li>
             </ul>
@@ -574,12 +590,12 @@ function CommunitySection() {
             <p>Developers securing AI applications with Promptfoo</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target="210" suffix="+" />
+            <AnimatedCounter target={String(SITE_CONSTANTS.CONTRIBUTOR_COUNT)} suffix="+" />
             <div className={styles.communityStatLabel}>Contributors</div>
             <p>From major foundation labs and tech companies</p>
           </div>
           <div className={styles.communityStatCard}>
-            <AnimatedCounter target="68000" suffix="+" />
+            <AnimatedCounter target={SITE_CONSTANTS.WEEKLY_DOWNLOADS_DISPLAY} suffix="+" />
             <div className={styles.communityStatLabel}>Weekly Downloads</div>
             <p>Active deployments in production workflows worldwide</p>
           </div>
@@ -612,7 +628,7 @@ function CommunitySection() {
                 <strong>Transparency</strong> - See exactly how security decisions are made
               </li>
             </ul>
-            <Link to="https://github.com/promptfoo/promptfoo" className="button button--secondary">
+            <Link to="https://github.com/promptfoo/promptfoo#readme" className="button button--secondary">
               Try Open Source
             </Link>
           </div>
@@ -724,7 +740,9 @@ function AsSeenOnSection() {
 }
 
 function PersonaSection() {
-  const [activePersona, setActivePersona] = React.useState('director');
+  const [activePersona, setActivePersona] = React.useState<'ciso' | 'director' | 'developer'>(
+    'director',
+  );
 
   const personas = {
     ciso: {
@@ -763,7 +781,7 @@ function PersonaSection() {
         'You need a solution that actually works at enterprise scale, integrates with your existing tools, and your team will adopt. Promptfoo delivers the depth you need without the complexity.',
       benefits: [
         {
-          title: 'Proven at global scale - 85 of the Fortune 500',
+          title: `Proven at global scale - ${SITE_CONSTANTS.FORTUNE_500_COUNT} of the Fortune 500`,
           description:
             'Leading healthcare, telecommunications, retail, and enterprise software companies trust us with their AI security.',
         },
@@ -779,8 +797,7 @@ function PersonaSection() {
         },
         {
           title: 'Real-time threat intelligence',
-          description:
-            'Community of 200K+ users provides early warning. New attack vectors deployed automatically.',
+          description: `Community of ${SITE_CONSTANTS.USER_COUNT_SHORT}+ users provides early warning. New attack vectors deployed automatically.`,
         },
       ],
       cta: { text: 'Schedule Demo', link: '/contact/' },
@@ -803,8 +820,7 @@ function PersonaSection() {
         },
         {
           title: 'Built on open source',
-          description:
-            '200,000+ developers in the community. 200+ contributors from companies like OpenAI, Google, Microsoft, Amazon.',
+          description: `${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers in the community. ${SITE_CONSTANTS.CONTRIBUTOR_COUNT}+ contributors from companies like OpenAI, Google, Microsoft, Amazon.`,
         },
         {
           title: 'Fast and unblocking',
@@ -918,8 +934,7 @@ function FAQSection() {
     },
     {
       question: 'How do you stay current with new threats?',
-      answer:
-        "Our open source community of 200,000+ users provides real-time threat intelligence. When new attack vectors emerge, they're rapidly integrated into the platform. Contributors from companies like OpenAI, Anthropic, Google, Microsoft, and Amazon help us stay ahead.",
+      answer: `Our open source community of ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ users provides real-time threat intelligence. When new attack vectors emerge, they're rapidly integrated into the platform. Contributors from companies like OpenAI, Anthropic, Google, Microsoft, and Amazon help us stay ahead.`,
     },
   ];
 
@@ -982,7 +997,7 @@ export default function Home(): React.ReactElement {
   return (
     <Layout
       title="Build Secure AI Applications"
-      description={`The AI Security Platform that catches vulnerabilities in development. Trusted by 85 of the Fortune 500 and ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide.`}
+      description={`The AI Security Platform that catches vulnerabilities in development. Trusted by ${SITE_CONSTANTS.FORTUNE_500_COUNT} of the Fortune 500 and ${SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers worldwide.`}
       wrapperClassName="homepage-wrapper"
     >
       <Head>

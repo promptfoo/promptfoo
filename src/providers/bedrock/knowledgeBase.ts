@@ -1,11 +1,11 @@
-import type { Agent } from 'http';
-
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt, getEnvString } from '../../envars';
+import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider } from './base';
+import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
@@ -106,45 +106,11 @@ export class AwsBedrockKnowledgeBaseProvider
 
   async getKnowledgeBaseClient() {
     if (!this.knowledgeBaseClient) {
-      let handler;
+      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
+      // need a custom handler for proxy or API key authentication.
       const apiKey = this.getApiKey();
-
-      // Create request handler for proxy or API key scenarios
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY') || apiKey) {
-        try {
-          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
-          const { ProxyAgent } = await import('proxy-agent');
-
-          // Create handler with proxy support if needed
-          const proxyAgent =
-            getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')
-              ? new ProxyAgent()
-              : undefined;
-
-          handler = new NodeHttpHandler({
-            ...(proxyAgent ? { httpsAgent: proxyAgent as unknown as Agent } : {}),
-            requestTimeout: 300000, // 5 minutes
-          });
-
-          // Add Bearer token middleware for API key authentication
-          if (apiKey) {
-            const originalHandle = handler.handle.bind(handler);
-            handler.handle = async (request: any, options?: any) => {
-              // Add Authorization header with Bearer token
-              request.headers = {
-                ...request.headers,
-                Authorization: `Bearer ${apiKey}`,
-              };
-              return originalHandle(request, options);
-            };
-          }
-        } catch {
-          const reason = apiKey
-            ? 'API key authentication requires the @smithy/node-http-handler package'
-            : 'Proxy configuration requires the @smithy/node-http-handler package';
-          throw new Error(`${reason}. Please install it in your project or globally.`);
-        }
-      }
+      const handler =
+        hasProxyEnv() || apiKey ? await createBedrockRequestHandler({ apiKey }) : undefined;
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
@@ -153,8 +119,8 @@ export class AwsBedrockKnowledgeBaseProvider
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
-          ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
+          ...(credentials ? { credentials } : {}),
         });
         this.knowledgeBaseClient = client;
       } catch (err) {
@@ -218,7 +184,12 @@ export class AwsBedrockKnowledgeBaseProvider
       },
     };
 
-    logger.debug('Calling Amazon Bedrock Knowledge Base API', { params });
+    logger.debug('Calling Amazon Bedrock Knowledge Base API', {
+      knowledgeBaseId: this.kbConfig.knowledgeBaseId,
+      modelArn: knowledgeBaseConfiguration.modelArn,
+      promptLength: prompt.length,
+      hasRetrievalConfiguration: Boolean(knowledgeBaseConfiguration.retrievalConfiguration),
+    });
 
     const cache = await getCache();
 
@@ -232,12 +203,17 @@ export class AwsBedrockKnowledgeBaseProvider
     };
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
-    const cacheKey = `bedrock-kb:${Buffer.from(configStr).toString('base64')}:${prompt}`;
+    const cacheKey = `bedrock-kb:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+      JSON.stringify({
+        configStr,
+        prompt,
+      }),
+    )}`;
 
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}`);
+        logger.debug('Returning cached Bedrock Knowledge Base response');
         const parsedResponse = JSON.parse(cachedResponse as string);
         return {
           output: parsedResponse.output,
@@ -254,7 +230,11 @@ export class AwsBedrockKnowledgeBaseProvider
 
       const response = await client.send(command);
 
-      logger.debug('Amazon Bedrock Knowledge Base API response', { response });
+      logger.debug('Amazon Bedrock Knowledge Base API response', {
+        hasOutput: typeof response?.output?.text === 'string',
+        outputLength: response?.output?.text?.length ?? 0,
+        citationCount: Array.isArray(response?.citations) ? response.citations.length : 0,
+      });
 
       let output = '';
       if (response && response.output && response.output.text) {
