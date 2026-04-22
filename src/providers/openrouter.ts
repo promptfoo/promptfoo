@@ -29,8 +29,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiBaseUrl: 'https://openrouter.ai/api/v1',
-        apiKeyEnvar: 'OPENROUTER_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://openrouter.ai/api/v1',
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'OPENROUTER_API_KEY',
         passthrough: {
           // Pass through OpenRouter-specific options
           // https://openrouter.ai/docs/requests
@@ -246,5 +246,13 @@ export function createOpenRouterProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  return new OpenRouterProvider(modelName, options.config || {});
+  const providerOptions: ProviderOptions = options.config ? { ...options.config } : {};
+  if (options.env && !providerOptions.env) {
+    providerOptions.env = options.env as ProviderOptions['env'];
+  }
+  if (options.id && !providerOptions.id) {
+    providerOptions.id = options.id;
+  }
+
+  return new OpenRouterProvider(modelName, providerOptions);
 }

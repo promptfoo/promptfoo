@@ -5,7 +5,12 @@ import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
-import { getDefaultNFanout, HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
+import {
+  getDefaultNFanout,
+  HARM_PLUGINS,
+  MULTI_INPUT_VAR,
+  PII_PLUGINS,
+} from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
@@ -19,7 +24,9 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-import { stripAnsi } from '../util/utils';
+import { mockProcessEnv, stripAnsi } from '../util/utils';
+
+import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
@@ -243,6 +250,75 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'goat',
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        maxCharsPerMessage: 12,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            maxCharsPerMessage: 12,
+            modifiers: expect.objectContaining({
+              maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+            }),
+          }),
+        }),
+      );
+      expect(mockStrategyAction).toHaveBeenCalledWith(
+        expect.any(Array),
+        'query',
+        expect.objectContaining({
+          maxCharsPerMessage: 12,
+        }),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              pluginId: 'test-plugin',
+              pluginConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+              modifiers: expect.objectContaining({
+                maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              strategyConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+            }),
+          }),
+        ]),
+      );
     });
 
     it('should warn about unregistered plugins', async () => {
@@ -572,6 +648,122 @@ describe('synthesize', () => {
           }),
         ]),
       );
+    });
+
+    it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
+      const inputs = {
+        document: {
+          config: {
+            injectionPlacements: ['comment'],
+            inputPurpose: 'Summarize an uploaded policy draft',
+          },
+          description: 'DOCX document to summarize',
+          type: 'docx',
+        },
+        question: {
+          config: {
+            benign: true,
+          },
+          description: 'Benign user question',
+          type: 'text',
+        },
+      } satisfies Inputs;
+      const stalePayload = 'stale pre-strategy payload';
+      const strategyPayload = 'strategy-mutated payload';
+      const strategyQuestion = 'Please summarize the uploaded document.';
+      const wrapperSummary = 'Fresh strategy wrapper summary';
+      const injectedInstruction = 'Fresh strategy injected instruction';
+      const baseMultiInputPrompt = JSON.stringify({
+        document: stalePayload,
+        question: 'base question',
+      });
+      const strategyMultiInputPrompt = JSON.stringify({
+        document: strategyPayload,
+        question: strategyQuestion,
+      });
+
+      mockProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          bodyText: 'Fresh strategy document body',
+          injectedInstruction,
+          injectionPlacement: 'comment',
+          wrapperSummary,
+        }),
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            inputMaterialization: {
+              document: {
+                injectedInstruction: 'stale injected instruction',
+                injectionPlacement: 'body',
+                inputPurpose: 'Summarize an uploaded policy draft',
+                wrapperSummary: 'stale wrapper summary',
+              },
+            },
+            pluginConfig: { inputs },
+            pluginId: 'prompt-extraction',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: baseMultiInputPrompt,
+            document: 'stale-document-data-uri',
+            question: 'base question',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'prompt-extraction',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases: any[]) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [MULTI_INPUT_VAR]: strategyMultiInputPrompt,
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'jailbreak:meta',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+        prompts: ['{{document}} {{question}}'],
+        provider: mockProvider,
+        purpose: 'Summarize uploaded documents',
+        strategies: [{ id: 'jailbreak:meta' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'jailbreak:meta',
+      );
+
+      expect(strategyTestCase).toBeDefined();
+      expect(mockProvider.callApi).toHaveBeenCalledWith(expect.stringContaining(strategyPayload));
+      expect(mockProvider.callApi).not.toHaveBeenCalledWith(expect.stringContaining(stalePayload));
+      expect(strategyTestCase?.vars?.document).toEqual(
+        expect.stringMatching(
+          /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,
+        ),
+      );
+      expect(strategyTestCase?.vars?.question).toBe(strategyQuestion);
+      expect(strategyTestCase?.metadata?.inputMaterialization).toMatchObject({
+        document: {
+          injectedInstruction,
+          injectionPlacement: 'comment',
+          inputPurpose: 'Summarize an uploaded policy draft',
+          wrapperSummary,
+        },
+      });
     });
 
     it('should find exact strategy ID for custom strategy', async () => {
@@ -987,21 +1179,21 @@ describe('synthesize', () => {
 
   describe('Logger', () => {
     it('debug log level hides progress bar', async () => {
-      const originalLogLevel = process.env.LOG_LEVEL;
-      process.env.LOG_LEVEL = 'debug';
+      const restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug' });
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
 
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-        targetIds: ['test-provider'],
-      });
-
-      expect(cliProgress.SingleBar).not.toHaveBeenCalled();
-
-      process.env.LOG_LEVEL = originalLogLevel;
+        expect(cliProgress.SingleBar).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -2022,14 +2214,11 @@ describe('Language configuration', () => {
       expect(result.testCases).toHaveLength(4);
 
       // Check that we have tests for both languages
-      const languageCounts = result.testCases.reduce(
-        (acc, tc) => {
-          const lang = tc.metadata?.language || 'en';
-          acc[lang] = (acc[lang] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
+      const languageCounts = result.testCases.reduce<Record<string, number>>((acc, tc) => {
+        const lang = tc.metadata?.language || 'en';
+        acc[lang] = (acc[lang] || 0) + 1;
+        return acc;
+      }, {});
 
       expect(languageCounts).toEqual({
         en: 2,
@@ -2485,7 +2674,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'policy', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'goat' }],
         targetIds: ['test-provider'],
       });
 
@@ -2523,7 +2712,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'other-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'jailbreak:hydra' }],
         targetIds: ['test-provider'],
       });
 
@@ -2584,7 +2773,7 @@ describe('Language configuration', () => {
           numTests: 1,
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
-          strategies: [],
+          strategies: [{ id: 'jailbreak:meta' }],
           targetIds: ['test-provider'],
         });
 

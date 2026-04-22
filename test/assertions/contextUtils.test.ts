@@ -1,15 +1,27 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveContext } from '../../src/assertions/contextUtils';
 import * as transformUtil from '../../src/util/transform';
 
 import type { Assertion, AtomicTestCase } from '../../src/types/index';
 
-vi.mock('../../src/util/transform');
+vi.mock('../../src/util/transform', async (importOriginal) => {
+  const actual = await importOriginal<typeof transformUtil>();
+  return {
+    ...actual,
+    transform: vi.fn(),
+  };
+});
 
 describe('resolveContext', () => {
   const mockTransform = vi.mocked(transformUtil.transform);
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    mockTransform.mockReset();
+  });
+
+  afterEach(() => {
+    mockTransform.mockReset();
     vi.clearAllMocks();
   });
 
@@ -142,7 +154,7 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        'contextTransform must return a string or array of strings. Got number. Check your transform expression: output.invalid',
+        `contextTransform must return a string or array of strings. Got number. Check your transform expression: ${transformUtil.INLINE_STRING_LABEL}: output.invalid`,
       );
     });
 
@@ -156,7 +168,7 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        'contextTransform must return a string or array of strings. Got object. Check your transform expression: output.invalid',
+        `contextTransform must return a string or array of strings. Got object. Check your transform expression: ${transformUtil.INLINE_STRING_LABEL}: output.invalid`,
       );
     });
 
@@ -170,7 +182,47 @@ describe('resolveContext', () => {
       const test: AtomicTestCase = { vars: {}, options: {} };
 
       await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
-        "Failed to transform context using expression 'output.invalid': Transform failed",
+        `Failed to transform context using expression '${transformUtil.INLINE_STRING_LABEL}: output.invalid': Transform failed`,
+      );
+    });
+
+    it('should support inline function as contextTransform', async () => {
+      const contextFn = (output: any) => output.context;
+      mockTransform.mockResolvedValue('extracted context' as any);
+
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: contextFn,
+      };
+      const test: AtomicTestCase = { vars: {}, options: {} };
+
+      const result = await resolveContext(
+        assertion,
+        test,
+        { context: 'extracted context', data: 'other' },
+        'prompt',
+      );
+
+      expect(result).toBe('extracted context');
+      expect(mockTransform).toHaveBeenCalledWith(
+        contextFn,
+        { context: 'extracted context', data: 'other' },
+        expect.any(Object),
+      );
+    });
+
+    it('should show [inline function] in error messages for function contextTransform', async () => {
+      const contextFn = (() => 42) as any;
+      mockTransform.mockRejectedValue(new Error('Transform failed'));
+
+      const assertion: Assertion = {
+        type: 'context-faithfulness',
+        contextTransform: contextFn,
+      };
+      const test: AtomicTestCase = { vars: {}, options: {} };
+
+      await expect(resolveContext(assertion, test, 'output', 'prompt')).rejects.toThrow(
+        /Failed to transform context using expression '\[inline function\].*': Transform failed/,
       );
     });
   });

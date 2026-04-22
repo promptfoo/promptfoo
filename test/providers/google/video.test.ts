@@ -8,9 +8,11 @@ import {
   validateDuration,
   validateResolution,
 } from '../../../src/providers/google/video';
+import { mockProcessEnv } from '../../util/utils';
 
 // Mock the Google client
 const mockRequest = vi.fn();
+const mockFetchWithTimeout = vi.fn();
 const mockGetGoogleClient = vi.fn().mockResolvedValue({
   client: { request: mockRequest },
   projectId: 'test-project',
@@ -24,10 +26,17 @@ vi.mock('../../../src/blobs', () => ({
 
 vi.mock('fs');
 const mockResolveProjectId = vi.fn().mockResolvedValue('test-project');
+const mockGetGoogleApiKey = vi.fn();
+const mockDetermineGoogleVertexMode = vi.fn();
 vi.mock('../../../src/providers/google/util', () => ({
   getGoogleClient: () => mockGetGoogleClient(),
   loadCredentials: vi.fn((creds) => creds),
   resolveProjectId: (...args: unknown[]) => mockResolveProjectId(...args),
+  getGoogleApiKey: (...args: unknown[]) => mockGetGoogleApiKey(...args),
+  determineGoogleVertexMode: (...args: unknown[]) => mockDetermineGoogleVertexMode(...args),
+}));
+vi.mock('../../../src/util/fetch/index', () => ({
+  fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
 vi.mock('../../../src/logger', () => ({
@@ -43,11 +52,39 @@ describe('GoogleVideoProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequest.mockReset();
+    mockFetchWithTimeout.mockReset();
     mockStoreBlob.mockReset();
     mockResolveProjectId.mockReset();
+    mockGetGoogleApiKey.mockReset();
+    mockDetermineGoogleVertexMode.mockReset();
     mockResolveProjectId.mockResolvedValue('test-project');
-    process.env.GOOGLE_PROJECT_ID = 'test-project';
-    delete process.env.VERTEX_PROJECT_ID;
+    mockGetGoogleApiKey.mockImplementation((config: any, env?: any) => ({
+      apiKey:
+        config?.apiKey ||
+        env?.GOOGLE_API_KEY ||
+        process.env.GOOGLE_API_KEY ||
+        env?.GEMINI_API_KEY ||
+        process.env.GEMINI_API_KEY,
+      source: 'GOOGLE_API_KEY',
+    }));
+    mockDetermineGoogleVertexMode.mockImplementation((config: any, env?: any) => {
+      if (config?.vertexai !== undefined) {
+        return config.vertexai;
+      }
+      return Boolean(
+        config?.projectId ||
+          config?.credentials ||
+          env?.GOOGLE_CLOUD_PROJECT ||
+          env?.GOOGLE_PROJECT_ID ||
+          process.env.GOOGLE_CLOUD_PROJECT ||
+          process.env.GOOGLE_PROJECT_ID,
+      );
+    });
+    mockProcessEnv({ GOOGLE_PROJECT_ID: 'test-project' });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
 
     // Default mock for blob storage
     mockStoreBlob.mockResolvedValue({
@@ -63,8 +100,11 @@ describe('GoogleVideoProvider', () => {
   });
 
   afterEach(() => {
-    delete process.env.GOOGLE_PROJECT_ID;
-    delete process.env.VERTEX_PROJECT_ID;
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
     // Reset fs mocks to prevent leakage between tests
     vi.mocked(fs.existsSync).mockReset();
     vi.mocked(fs.readFileSync).mockReset();
@@ -200,22 +240,37 @@ describe('GoogleVideoProvider', () => {
   });
 
   describe('callApi', () => {
-    it('should return error when project ID is missing and ADC fails', async () => {
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_PROJECT_ID;
-      // Mock ADC resolution to fail (simulating no credentials configured)
+    it('should return error when Google AI Studio API key is missing', async () => {
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
       mockResolveProjectId.mockRejectedValue(new Error('No project ID found'));
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toContain('Google Veo video generation requires Vertex AI');
+      expect(result.error).toContain('Google AI Studio');
+      expect(result.error).toContain('GOOGLE_API_KEY');
+    });
+
+    it('should return error when Vertex project ID is missing and ADC fails', async () => {
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+      mockResolveProjectId.mockRejectedValue(new Error('No project ID found'));
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: {
+          vertexai: true,
+        },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('Vertex AI');
       expect(result.error).toContain('GOOGLE_CLOUD_PROJECT');
     });
 
     it('should resolve project ID from ADC when not explicitly set', async () => {
-      delete process.env.GOOGLE_CLOUD_PROJECT;
-      delete process.env.GOOGLE_PROJECT_ID;
+      mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
       // ADC can resolve the project ID
       mockResolveProjectId.mockResolvedValue('adc-resolved-project');
 
@@ -340,6 +395,99 @@ describe('GoogleVideoProvider', () => {
       );
     });
 
+    it('should create and poll Veo jobs through Google AI Studio with an API key', async () => {
+      mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
+      mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
+
+      const operationName = 'models/veo-3.1-generate-preview/operations/test-op';
+      const videoUri = 'https://generativelanguage.googleapis.com/v1beta/files/test-video';
+      const videoBytes = Buffer.from('fake ai studio video data');
+
+      mockFetchWithTimeout
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ name: operationName, done: false }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              name: operationName,
+              done: true,
+              response: {
+                generateVideoResponse: {
+                  generatedSamples: [{ video: { uri: videoUri } }],
+                },
+              },
+            }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(videoBytes, {
+            status: 200,
+            headers: { 'Content-Type': 'video/mp4' },
+          }),
+        );
+
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: {
+          pollIntervalMs: 10,
+          maxPollTimeMs: 5000,
+        },
+      });
+
+      const result = await provider.callApi('A cinematic shot of a lighthouse in a storm');
+
+      expect(result.error).toBeUndefined();
+      expect(result.video?.model).toBe('veo-3.1-generate-preview');
+      expect(result.video?.blobRef?.uri).toContain('promptfoo://blob/');
+      expect(mockResolveProjectId).not.toHaveBeenCalled();
+      expect(mockFetchWithTimeout).toHaveBeenCalledTimes(3);
+      expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+        1,
+        'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview:predictLongRunning',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            'x-goog-api-key': 'test-api-key',
+          }),
+        }),
+        expect.any(Number),
+      );
+      expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain(
+        '"prompt":"A cinematic shot of a lighthouse in a storm"',
+      );
+      expect(mockFetchWithTimeout.mock.calls[0]?.[1]?.body).toContain('"durationSeconds":8');
+      expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+        2,
+        'https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-generate-preview/operations/test-op',
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'test-api-key',
+          }),
+        }),
+        expect.any(Number),
+      );
+      expect(mockFetchWithTimeout).toHaveBeenNthCalledWith(
+        3,
+        videoUri,
+        expect.objectContaining({
+          method: 'GET',
+          headers: expect.objectContaining({
+            'x-goog-api-key': 'test-api-key',
+          }),
+        }),
+        expect.any(Number),
+      );
+    });
+
     it('should handle API error on job creation', async () => {
       mockRequest.mockRejectedValueOnce({
         response: {
@@ -385,9 +533,17 @@ describe('GoogleVideoProvider', () => {
         },
       });
 
-      const result = await provider.callApi('Test prompt');
+      vi.useFakeTimers();
+      try {
+        const resultPromise = provider.callApi('Test prompt');
 
-      expect(result.error).toContain('timed out');
+        await vi.runAllTimersAsync();
+        const result = await resultPromise;
+
+        expect(result.error).toContain('timed out');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should handle video generation error', async () => {

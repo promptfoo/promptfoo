@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider setup text response smoke
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: https
+    label: provider-setup-text
+    config:
+      url: '{{env.PROVIDER_SETUP_TEXT_URL}}'
+      method: POST
+      stateful: false
+      headers:
+        Content-Type: text/plain
+        X-User-Id: '{{user_id}}'
+      body: '{{prompt}}'
+      transformResponse: text.replace(/^Assistant:\s*/, '')
+
+tests:
+  - description: endpoint returns parsable text
+    vars:
+      user_id: qa-text
+      message: Say exactly PONG.
+    assert:
+      - type: contains
+        value: PONG
+      - type: contains
+        value: qa-text
+      - type: not-contains
+        value: 'Assistant:'

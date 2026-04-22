@@ -1,5 +1,6 @@
 ---
 sidebar_position: 6
+sidebar_label: Deterministic metrics
 title: Deterministic Metrics for LLM Output Validation
 description: Learn how to validate LLM outputs using deterministic logical tests including exact matching, regex patterns, JSON/XML validation, and text similarity metrics
 keywords:
@@ -53,6 +54,11 @@ These metrics are created by logical tests that are run on LLM output.
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
+| [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
+| [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
+| [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
+| [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
+| [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
 | [is-xml](#is-xml)                                               | output is valid xml                                                |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
@@ -642,6 +648,149 @@ The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow
 | `[get_weather, book_flight]` | `[get_weather, book_flight, search]` | 0.667     | 1.0    | 0.8   |
 | `[get_weather]`              | `[book_flight]`                      | 0.0       | 0.0    | 0.0   |
 
+### skill-used {#skill-used}
+
+The `skill-used` assertion checks normalized provider skill metadata rather than the model's final output. It works well for agent evals where the important question is "did the agent route through the right skill?".
+
+Promptfoo currently populates `metadata.skillCalls` for:
+
+- Claude Agent SDK, by normalizing `Skill` tool calls.
+- OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+
+Example:
+
+```yaml
+assert:
+  - type: skill-used
+    value: code-review
+
+  - type: skill-used
+    value:
+      pattern: 'project-*:*'
+      min: 1
+
+  - type: not-skill-used
+    value: forbidden-skill
+```
+
+Use `skill-used` when provider-level routing evidence is enough. If you also need to verify what the skill actually did, combine it with trace assertions such as [`trajectory:tool-used`](#trajectorytool-used), [`trajectory:tool-args-match`](#trajectorytool-args-match), or [`trajectory:step-count`](#trajectorystep-count).
+
+### trajectory:tool-used {#trajectorytool-used}
+
+The `trajectory:tool-used` assertion checks traced tool steps rather than the model's final output. It works well for agent evals where the important question is "did the agent actually use the right tool?".
+
+:::note
+Trajectory assertions require trace data. Enable tracing for the eval and use a provider that emits tool-oriented spans or attributes.
+:::
+
+Promptfoo identifies tool names from attributes such as `tool.name`, `function.name`, and Vercel AI SDK telemetry's `ai.toolCall.name`.
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-used
+        value: search_orders
+
+      - type: trajectory:tool-used
+        value:
+          pattern: 'search*'
+          min: 2
+          max: 3
+```
+
+`value` may be:
+
+- A string, such as `search_orders`
+- An array of strings, such as `['search_orders', 'compose_reply']`
+- An object with `pattern`, `min`, and optional `max`
+
+### trajectory:tool-args-match {#trajectorytool-args-match}
+
+The `trajectory:tool-args-match` assertion checks traced tool-call arguments. Use it when the agent must not only invoke the right tool, but also pass the right parameters.
+
+Example:
+
+```yaml
+tests:
+  - vars:
+      order_id: '123'
+    assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          args:
+            order_id: '{{ order_id }}'
+
+      - type: trajectory:tool-args-match
+        value:
+          pattern: 'compose_*'
+          mode: exact
+          arguments:
+            tone: friendly
+            citations:
+              - doc_1
+              - doc_2
+```
+
+`value` must be an object with:
+
+- `name` or `pattern` to identify the traced tool call
+- `args` or `arguments` containing the expected payload
+- optional `mode`, either `partial` (default) or `exact`
+
+In `partial` mode, object properties are matched recursively as a subset. In `exact` mode, the entire argument payload must match exactly.
+
+Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
+
+### trajectory:tool-sequence {#trajectorytool-sequence}
+
+The `trajectory:tool-sequence` assertion checks the order of traced tool usage. This is useful when an agent must gather information before taking a follow-up action.
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-sequence
+        value:
+          steps:
+            - search_orders
+            - compose_reply
+
+      - type: trajectory:tool-sequence
+        value:
+          mode: exact
+          steps:
+            - search_orders
+            - compose_reply
+```
+
+`mode: in_order` is the default and allows extra tool steps in between the expected ones. `mode: exact` requires the traced tool sequence to match exactly.
+
+### trajectory:step-count {#trajectorystep-count}
+
+The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
+
+Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd` or `command`.
+
+Example:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:step-count
+        value:
+          type: command
+          max: 3
+
+      - type: trajectory:step-count
+        value:
+          pattern: 'reasoning*'
+          min: 1
+```
+
 ### Javascript
 
 See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
@@ -971,6 +1120,11 @@ assert:
   - type: rouge-n
     threshold: 0.6
     value: hello world
+
+  # Ensure Rouge-N score is below a threshold
+  - type: not-rouge-n
+    threshold: 0.75
+    value: hello world
 ```
 
 `value` can reference other variables using template syntax. For example:
@@ -1267,7 +1421,7 @@ The F-score will be calculated automatically after the eval completes. A score c
 
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/f-score) for a complete example.
+See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) for a complete example.
 
 ### Finish Reason
 

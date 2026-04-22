@@ -147,6 +147,48 @@ describe('Recent Bug Regression Tests', () => {
         expect(componentResult.reason).not.toContain('file://');
       });
     });
+
+    describe('#7861 - llm-rubric in defaultTest resolves test vars', () => {
+      it('renders defaultTest llm-rubric templates with each test case vars before grading', () => {
+        const configPath = path.join(FIXTURES_DIR, 'configs/defaulttest-llm-rubric-vars.yaml');
+        const outputPath = path.join(OUTPUT_DIR, 'defaulttest-llm-rubric-vars-output.json');
+
+        const { exitCode, stderr } = runCli([
+          'eval',
+          '-c',
+          configPath,
+          '-o',
+          outputPath,
+          '--no-cache',
+        ]);
+
+        expect(exitCode).toBe(0);
+        expect(stderr).not.toContain('Error');
+
+        const content = fs.readFileSync(outputPath, 'utf-8');
+        const parsed = JSON.parse(content);
+        const results = parsed.results.results;
+
+        expect(results).toHaveLength(2);
+        for (const [index, expectedVar] of ['hello world', 'goodbye moon'].entries()) {
+          const result = results[index];
+          const componentResult = result.gradingResult.componentResults[0];
+
+          expect(result.success).toBe(true);
+          expect(componentResult.pass).toBe(true);
+          expect(componentResult.assertion.value).toBe(
+            'Does the output correctly reference the input: {{myVar}}?',
+          );
+          expect(componentResult.metadata.renderedAssertionValue).toBe(
+            `Does the output correctly reference the input: ${expectedVar}?`,
+          );
+          expect(componentResult.metadata.renderedGradingPrompt).toContain(expectedVar);
+          expect(componentResult.metadata.renderedGradingPrompt).not.toContain('{{myVar}}');
+          expect(componentResult.reason).toContain(expectedVar);
+          expect(componentResult.reason).not.toContain('{{myVar}}');
+        }
+      });
+    });
   });
 
   describe('Provider Support', () => {
@@ -463,30 +505,37 @@ tests:
       });
 
       it('preserves id() method when using class-based providers in redteam', () => {
-        // This tests the actual redteam flow where the bug manifested.
-        // The redteam provider (attacker model) gets wrapped with rate limiting,
-        // and strategies call TokenUsageTracker.trackUsage(provider.id(), ...).
+        // This tests the redteam generate flow with a class-based provider whose
+        // id() method is on the prototype. Uses the contracts plugin (local generation)
+        // and base64 strategy (local transform) so no remote API calls are needed.
+        // The provider returns "Prompt:"-formatted output so the plugin can parse it.
+        //
+        // Note: The wrapProviderWithRateLimiting code path (where the original
+        // #7353 bug manifested) is covered by the unit test in
+        // test/scheduler/providerWrapper.test.ts.
         const configPath = path.join(FIXTURES_DIR, 'configs/redteam-class-provider-7353.yaml');
 
         const { exitCode, stderr, stdout } = runCli(
           ['redteam', 'generate', '-c', configPath, '--no-cache'],
-          { cwd: path.join(FIXTURES_DIR, 'configs'), timeout: 120000 },
+          {
+            cwd: path.join(FIXTURES_DIR, 'configs'),
+            env: { PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' },
+          },
         );
 
-        // The key assertion: should NOT fail with "id is not a function"
-        // This was the specific error from bug #7353
-        expect(stderr).not.toContain('is not a function');
-        expect(stdout + stderr).not.toContain('redteamProvider.id is not a function');
+        const output = stdout + stderr;
 
-        // The command may fail for other reasons (e.g., our simple provider
-        // doesn't generate proper attack prompts), but that's OK - we just
-        // need to verify the id() method is accessible.
+        // The key assertion: should NOT fail with "id is not a function"
+        expect(output).not.toContain('is not a function');
+        expect(output).not.toContain('redteamProvider.id is not a function');
+        expect(output).not.toContain('TypeError');
+
+        // The command should succeed (contracts plugin generates locally)
         if (exitCode !== 0) {
-          // If it failed, make sure it wasn't due to the id() bug
-          const output = stdout + stderr;
-          expect(output).not.toContain('TypeError');
-          expect(output).not.toContain('is not a function');
+          console.error('stdout:', stdout);
+          console.error('stderr:', stderr);
         }
+        expect(exitCode).toBe(0);
       });
     });
   });

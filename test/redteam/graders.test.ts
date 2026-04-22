@@ -4,6 +4,7 @@ import { AegisGrader } from '../../src/redteam/plugins/aegis';
 import { AsciiSmugglingGrader } from '../../src/redteam/plugins/asciiSmuggling';
 import { BeavertailsGrader } from '../../src/redteam/plugins/beavertails';
 import { BiasGrader } from '../../src/redteam/plugins/bias';
+import { CodingAgentGrader } from '../../src/redteam/plugins/codingAgent/graders';
 import { FinancialCalculationErrorPluginGrader } from '../../src/redteam/plugins/financial/financialCalculationError';
 import { FinancialComplianceViolationPluginGrader } from '../../src/redteam/plugins/financial/financialComplianceViolation';
 import { FinancialDataLeakagePluginGrader } from '../../src/redteam/plugins/financial/financialDataLeakage';
@@ -16,6 +17,15 @@ import {
 import { MCPPluginGrader } from '../../src/redteam/plugins/mcp';
 import { MedicalAnchoringBiasPluginGrader } from '../../src/redteam/plugins/medical/medicalAnchoringBias';
 import { MedicalHallucinationPluginGrader } from '../../src/redteam/plugins/medical/medicalHallucination';
+import { MentalHealthCrisisResponsePluginGrader } from '../../src/redteam/plugins/mental-health/crisisResponse';
+import { MentalHealthEatingDisorderPluginGrader } from '../../src/redteam/plugins/mental-health/eatingDisorder';
+import { MentalHealthHarmfulCopingPluginGrader } from '../../src/redteam/plugins/mental-health/harmfulCoping';
+import { MentalHealthManiaAmplificationPluginGrader } from '../../src/redteam/plugins/mental-health/maniaAmplification';
+import { MentalHealthPsychosisSafetyPluginGrader } from '../../src/redteam/plugins/mental-health/psychosisSafety';
+import { MentalHealthStigmatizingLanguagePluginGrader } from '../../src/redteam/plugins/mental-health/stigmatizingLanguage';
+import { MentalHealthSycophancyPluginGrader } from '../../src/redteam/plugins/mental-health/sycophancy';
+import { MentalHealthTherapeuticBoundariesPluginGrader } from '../../src/redteam/plugins/mental-health/therapeuticBoundaries';
+import { MentalHealthTraumaInformedPluginGrader } from '../../src/redteam/plugins/mental-health/traumaInformed';
 import { OffTopicPluginGrader } from '../../src/redteam/plugins/offTopic';
 import { PlinyGrader } from '../../src/redteam/plugins/pliny';
 import { ToolDiscoveryGrader } from '../../src/redteam/plugins/toolDiscovery';
@@ -73,6 +83,30 @@ describe('getGraderById', () => {
     const medicalHallucinationGrader = getGraderById('promptfoo:redteam:medical:hallucination');
     expect(medicalHallucinationGrader).toBeInstanceOf(MedicalHallucinationPluginGrader);
 
+    const mentalHealthGraders = [
+      ['promptfoo:redteam:mental-health:crisis-response', MentalHealthCrisisResponsePluginGrader],
+      ['promptfoo:redteam:mental-health:eating-disorder', MentalHealthEatingDisorderPluginGrader],
+      ['promptfoo:redteam:mental-health:harmful-coping', MentalHealthHarmfulCopingPluginGrader],
+      [
+        'promptfoo:redteam:mental-health:mania-amplification',
+        MentalHealthManiaAmplificationPluginGrader,
+      ],
+      ['promptfoo:redteam:mental-health:psychosis-safety', MentalHealthPsychosisSafetyPluginGrader],
+      [
+        'promptfoo:redteam:mental-health:stigmatizing-language',
+        MentalHealthStigmatizingLanguagePluginGrader,
+      ],
+      ['promptfoo:redteam:mental-health:sycophancy', MentalHealthSycophancyPluginGrader],
+      [
+        'promptfoo:redteam:mental-health:therapeutic-boundaries',
+        MentalHealthTherapeuticBoundariesPluginGrader,
+      ],
+      ['promptfoo:redteam:mental-health:trauma-informed', MentalHealthTraumaInformedPluginGrader],
+    ] as const;
+    for (const [id, Grader] of mentalHealthGraders) {
+      expect(getGraderById(id)).toBeInstanceOf(Grader);
+    }
+
     const offTopicGrader = getGraderById('promptfoo:redteam:off-topic');
     expect(offTopicGrader).toBeInstanceOf(OffTopicPluginGrader);
 
@@ -81,6 +115,9 @@ describe('getGraderById', () => {
 
     const biasGrader = getGraderById('promptfoo:redteam:bias');
     expect(biasGrader).toBeInstanceOf(BiasGrader);
+
+    const codingAgentGrader = getGraderById('promptfoo:redteam:coding-agent:secret-env-read');
+    expect(codingAgentGrader).toBeInstanceOf(CodingAgentGrader);
   });
 
   it('should return specific grader for misinformation-disinformation', () => {

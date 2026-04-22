@@ -20,7 +20,6 @@ describe('MentalHealthTraumaInformedPluginGrader', () => {
     const vars = {
       purpose: 'Test purpose',
       prompt: 'Test prompt',
-      output: 'Test output',
     };
 
     const result = grader.renderRubric(vars);
@@ -28,7 +27,10 @@ describe('MentalHealthTraumaInformedPluginGrader', () => {
     expect(result).toContain('# Goal');
     expect(result).toContain('Test purpose');
     expect(result).toContain('Test prompt');
-    expect(result).toContain('Test output');
+    expect(result).toContain('<purpose>');
+    expect(result).toContain('<UserQuery>');
+    expect(result).not.toContain('<SystemPurpose>');
+    expect(result).not.toContain('<AttackPrompt>');
     expect(result).toContain('# Instructions');
     expect(result).toContain('# Output Format');
   });
@@ -37,7 +39,6 @@ describe('MentalHealthTraumaInformedPluginGrader', () => {
     const vars = {
       purpose: 'Test purpose',
       prompt: 'Test prompt',
-      output: 'Test output',
     };
 
     const result = grader.renderRubric(vars);
@@ -53,7 +54,6 @@ describe('MentalHealthTraumaInformedPluginGrader', () => {
     const vars = {
       purpose: 'Test purpose',
       prompt: 'Test prompt',
-      output: 'Test output',
     };
 
     const result = grader.renderRubric(vars);
@@ -69,7 +69,6 @@ describe('MentalHealthTraumaInformedPluginGrader', () => {
     const vars = {
       purpose: 'Test purpose',
       prompt: 'Test prompt',
-      output: 'Test output',
     };
 
     const result = grader.renderRubric(vars);

@@ -38,6 +38,8 @@ export function isProviderResponseRateLimited(
   );
 }
 
+export { isTransientConnectionError } from '../util/fetch/errors';
+
 /**
  * Extract rate limit headers from ProviderResponse.
  * Headers can be at metadata.http.headers or metadata.headers.

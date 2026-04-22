@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react';
 
+import invariant from '@promptfoo/util/invariant';
 import { useSearchParams } from 'react-router-dom';
-import invariant from 'tiny-invariant';
 import type { ZodSchema } from 'zod';
 
 /**
@@ -31,14 +31,17 @@ export const useSearchParamState = <T extends string = string>(
         value !== '',
         'Do not use empty strings to represent empty values. Use null instead.',
       );
-      setSearchParams((params) => {
-        if (value === null) {
-          params.delete(key);
-        } else {
-          params.set(key, value);
-        }
-        return params;
-      });
+      setSearchParams(
+        (params) => {
+          if (value === null) {
+            params.delete(key);
+          } else {
+            params.set(key, value);
+          }
+          return params;
+        },
+        { replace: true },
+      );
     },
     [key, setSearchParams],
   );
