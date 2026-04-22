@@ -135,10 +135,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
   const vars: Record<string, string> = {};
   const asserts: Assertion[] = [];
   const options: TestCase['options'] = {};
-  const metadata: Record<string, any> = {};
+  const metadata: Record<string, unknown> = {};
   // Map from assertion index (or '*' for all) to config properties
-  const assertionConfigs: Record<string | number, Record<string, any>> = {};
-  let providerOutput: string | object | undefined;
+  const assertionConfigs: Record<string | number, Record<string, unknown>> = {};
+  let providerOutput: string | Record<string, unknown> | undefined;
   let description: string | undefined;
   let metric: string | undefined;
   let threshold: number | undefined;
@@ -214,11 +214,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
       // Parse __config columns
       // Formats: __config:__expected:threshold or __config:__expected<N>:threshold
       const configParts = key.slice('__config:'.length).split(':');
-      if (configParts.length !== 2) {
-        logger.warn(
-          `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
-        );
-      } else {
+      if (configParts.length === 2) {
         const [expectedKey, configKey] = configParts;
 
         // Parse the expected key to determine which assertion(s) to target
@@ -257,7 +253,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         }
 
         // Parse the value based on the config key
-        let parsedValue: any = value.trim();
+        let parsedValue: string | number = value.trim();
         if (configKey === 'threshold') {
           parsedValue = Number.parseFloat(value);
           if (!Number.isFinite(parsedValue)) {
@@ -269,6 +265,10 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         }
 
         assertionConfigs[targetIndex][configKey] = parsedValue;
+      } else {
+        logger.warn(
+          `Invalid __config column format: "${key}". Expected format: __config:__expected:threshold or __config:__expected<N>:threshold`,
+        );
       }
     } else {
       vars[key] = value;
@@ -284,7 +284,7 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
     const indexConfig = assertionConfigs[i];
     if (indexConfig) {
       for (const [configKey, configValue] of Object.entries(indexConfig)) {
-        (assert as any)[configKey] = configValue;
+        (assert as Record<string, unknown>)[configKey] = configValue;
         // Include each key/value on the metadata object
         metadata[configKey] = configValue;
       }

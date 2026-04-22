@@ -1,5 +1,4 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import ConfigurationTab from './ConfigurationTab';
@@ -11,8 +10,6 @@ vi.mock('./PathSelector', () => ({
 vi.mock('./InstallationGuide', () => ({
   default: () => <div data-testid="installation-guide" />,
 }));
-
-const theme = createTheme();
 
 describe('ConfigurationTab', () => {
   const defaultProps = {
@@ -35,9 +32,7 @@ describe('ConfigurationTab', () => {
     const initialError = 'An error occurred';
     const { rerender } = render(
       <TooltipProvider delayDuration={0}>
-        <ThemeProvider theme={theme}>
-          <ConfigurationTab {...defaultProps} error={initialError} />
-        </ThemeProvider>
+        <ConfigurationTab {...defaultProps} error={initialError} />
       </TooltipProvider>,
     );
 
@@ -46,9 +41,7 @@ describe('ConfigurationTab', () => {
     await act(() => {
       rerender(
         <TooltipProvider delayDuration={0}>
-          <ThemeProvider theme={theme}>
-            <ConfigurationTab {...defaultProps} error={null} />
-          </ThemeProvider>
+          <ConfigurationTab {...defaultProps} error={null} />
         </TooltipProvider>,
       );
     });
@@ -59,13 +52,11 @@ describe('ConfigurationTab', () => {
   it('should show error state but remain clickable when installationStatus.installed is false', () => {
     render(
       <TooltipProvider delayDuration={0}>
-        <ThemeProvider theme={theme}>
-          <ConfigurationTab
-            {...defaultProps}
-            installationStatus={{ checking: false, installed: false }}
-            paths={[{ path: '/test/path', type: 'file', name: 'test.pkl' }]}
-          />
-        </ThemeProvider>
+        <ConfigurationTab
+          {...defaultProps}
+          installationStatus={{ checking: false, installed: false }}
+          paths={[{ path: '/test/path', type: 'file', name: 'test.pkl' }]}
+        />
       </TooltipProvider>,
     );
 
@@ -80,9 +71,7 @@ describe('ConfigurationTab', () => {
   it('should render PathSelector', () => {
     render(
       <TooltipProvider delayDuration={0}>
-        <ThemeProvider theme={theme}>
-          <ConfigurationTab {...defaultProps} />
-        </ThemeProvider>
+        <ConfigurationTab {...defaultProps} />
       </TooltipProvider>,
     );
 

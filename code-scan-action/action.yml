@@ -32,6 +32,10 @@ inputs:
     description: 'GitHub token for authentication (default: github.token)'
     required: false
     default: ${{ github.token }}
+  enable-fork-prs:
+    description: 'Enable scanning PRs from forked repositories'
+    required: false
+    default: 'false'
 
 runs:
   using: 'node20'

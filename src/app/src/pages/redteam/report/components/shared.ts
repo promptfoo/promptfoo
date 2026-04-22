@@ -7,19 +7,22 @@ import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
-export function getStrategyIdFromTest(test: {
-  metadata?: Record<string, any>;
+/**
+ * Represents a test with metadata used in red team report components.
+ * This interface aligns with the structure expected by getStrategyIdFromTest and getPluginIdFromResult.
+ */
+export interface TestWithMetadata {
+  prompt: string;
+  output: string;
   gradingResult?: GradingResult;
-  result?: {
-    testCase?: {
-      metadata?: {
-        strategyId?: string;
-        [key: string]: any;
-      };
-    };
+  result?: EvaluateResult;
+  metadata?: {
+    strategyId?: string;
+    [key: string]: unknown;
   };
-  [key: string]: any;
-}): string {
+}
+
+export function getStrategyIdFromTest(test: TestWithMetadata): string {
   // Check metadata directly on test
   if (test.metadata?.strategyId) {
     return test.metadata.strategyId as string;
@@ -71,3 +74,28 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
 
   return null;
 }
+
+export const getPassRateStyles = (passRate: number): { bg: string; text: string } => {
+  if (passRate >= 0.9) {
+    return {
+      bg: 'bg-emerald-500',
+      text: 'text-emerald-600 dark:text-emerald-400',
+    };
+  }
+  if (passRate >= 0.7) {
+    return {
+      bg: 'bg-amber-500',
+      text: 'text-amber-600 dark:text-amber-400',
+    };
+  }
+  if (passRate >= 0.5) {
+    return {
+      bg: 'bg-orange-500',
+      text: 'text-orange-600 dark:text-orange-400',
+    };
+  }
+  return {
+    bg: 'bg-red-500',
+    text: 'text-red-600 dark:text-red-400',
+  };
+};

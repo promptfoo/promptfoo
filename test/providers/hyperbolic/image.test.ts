@@ -5,6 +5,7 @@ import {
   formatHyperbolicImageOutput,
   HyperbolicImageProvider,
 } from '../../../src/providers/hyperbolic/image';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/cache');
 
@@ -69,12 +70,15 @@ describe('HyperbolicImageProvider', () => {
 
   describe('callApi', () => {
     it('should throw error if no API key', async () => {
-      // Ensure no API key is set in environment
-      delete process.env.HYPERBOLIC_API_KEY;
-      const provider = new HyperbolicImageProvider('test');
-      await expect(provider.callApi('test prompt')).rejects.toThrow(
-        'Hyperbolic API key is not set',
-      );
+      const restoreEnv = mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
+      try {
+        const provider = new HyperbolicImageProvider('test');
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'Hyperbolic API key is not set',
+        );
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should handle successful API call', async () => {

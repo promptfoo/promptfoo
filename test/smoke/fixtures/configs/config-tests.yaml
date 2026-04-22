@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Complete config for testing config-based features
+description: 'Smoke test - config extension'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: ConfigMergeTest
+    assert:
+      - type: contains
+        value: ConfigMergeTest

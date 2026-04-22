@@ -5,6 +5,7 @@ import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
 import { REQUEST_TIMEOUT_MS } from './shared';
+import type OpenAI from 'openai';
 
 import type {
   ApiProvider,
@@ -28,8 +29,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiBaseUrl: 'https://openrouter.ai/api/v1',
-        apiKeyEnvar: 'OPENROUTER_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://openrouter.ai/api/v1',
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'OPENROUTER_API_KEY',
         passthrough: {
           // Pass through OpenRouter-specific options
           // https://openrouter.ai/docs/requests
@@ -118,26 +119,48 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     // Make the API call directly
     logger.debug(`Calling OpenRouter API: model=${this.modelName}`);
-    let data, status, statusText;
+
+    // OpenAI SDK has APIError class for exceptions, but not a type for error responses
+    // in the JSON body. This interface represents the structure when the API returns
+    // an error object in the response body (not as an exception).
+    interface OpenAIErrorResponse {
+      error: {
+        message: string;
+        type?: string;
+        code?: string;
+      };
+    }
+
+    type OpenRouterChatCompletionResponse = OpenAI.ChatCompletion & {
+      error?: {
+        code?: string;
+        message?: string;
+      };
+    };
+
+    let data: OpenRouterChatCompletionResponse;
+    let status: number;
+    let statusText: string;
     let cached = false;
 
     try {
-      ({ data, cached, status, statusText } = await fetchWithCache(
-        `${this.getApiUrl()}/chat/completions`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${this.getApiKey()}`,
-            ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
-            ...config.headers,
+      ({ data, cached, status, statusText } =
+        await fetchWithCache<OpenRouterChatCompletionResponse>(
+          `${this.getApiUrl()}/chat/completions`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${this.getApiKey()}`,
+              ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
+              ...config.headers,
+            },
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-        context?.bustCache ?? context?.debug,
-      ));
+          REQUEST_TIMEOUT_MS,
+          'json',
+          context?.bustCache ?? context?.debug,
+        ));
 
       if (status < 200 || status >= 300) {
         return {
@@ -153,21 +176,21 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     if (data.error) {
       return {
-        error: formatOpenAiError(data),
+        error: formatOpenAiError(data as OpenAIErrorResponse),
       };
     }
 
     // Process the response with special handling for Gemini
-    const message = data.choices[0].message;
+    const message: any = data.choices[0].message;
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
     // Prioritize tool calls over content and reasoning
-    let output = '';
+    let output: string | object = '';
     const hasFunctionCall = !!(message.function_call && message.function_call.name);
     const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
     if (hasFunctionCall || hasToolCalls) {
       // Tool calls always take priority and never include thinking
-      output = hasFunctionCall ? message.function_call : message.tool_calls;
+      output = hasFunctionCall ? message.function_call! : message.tool_calls!;
     } else if (message.content && message.content.trim()) {
       output = message.content;
       // Add reasoning as thinking content if present and showThinking is enabled
@@ -223,5 +246,13 @@ export function createOpenRouterProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  return new OpenRouterProvider(modelName, options.config || {});
+  const providerOptions: ProviderOptions = options.config ? { ...options.config } : {};
+  if (options.env && !providerOptions.env) {
+    providerOptions.env = options.env as ProviderOptions['env'];
+  }
+  if (options.id && !providerOptions.id) {
+    providerOptions.id = options.id;
+  }
+
+  return new OpenRouterProvider(modelName, providerOptions);
 }

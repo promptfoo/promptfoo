@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../../src/cache';
 import {
   type AzureModerationCategory,
+  AzureModerationProvider,
   getModerationCacheKey,
   handleApiError,
   parseAzureModerationResponse,
 } from '../../../src/providers/azure/moderation';
+
+vi.mock('../../../src/cache');
+vi.mock('../../../src/util/fetch/index');
 
 describe('Azure Moderation', () => {
   describe('parseAzureModerationResponse', () => {
@@ -169,23 +174,191 @@ describe('Azure Moderation', () => {
 
       const key = getModerationCacheKey(modelName, config, content);
 
-      expect(key).toBe('azure-moderation:test-model:"test content"');
+      expect(key).toMatch(/^azure-moderation:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(key).not.toContain(content);
+      expect(key).not.toContain('test-key');
     });
 
     it('should handle empty content', () => {
       const key = getModerationCacheKey('model', {}, '');
-      expect(key).toBe('azure-moderation:model:""');
+      expect(key).toMatch(/^azure-moderation:model:[a-f0-9]{64}:[a-f0-9]{64}$/);
     });
 
-    it('should handle complex config object', () => {
-      const config = {
-        apiKey: 'key',
-        endpoint: 'https://test.com',
-        headers: { 'X-Test': 'value' },
+    it('should differentiate content without leaking it', () => {
+      const firstKey = getModerationCacheKey('model', {}, 'sensitive prompt one');
+      const secondKey = getModerationCacheKey('model', {}, 'sensitive prompt two');
+
+      expect(firstKey).not.toBe(secondKey);
+      expect(firstKey).not.toContain('sensitive prompt one');
+      expect(secondKey).not.toContain('sensitive prompt two');
+    });
+
+    it('should include request-shaping config in the cache key', () => {
+      const defaultKey = getModerationCacheKey('model', {}, 'content');
+      const key = getModerationCacheKey(
+        'model',
+        {
+          blocklistNames: ['custom-list'],
+          haltOnBlocklistHit: true,
+          passthrough: { outputType: 'EightSeverityLevels' },
+        },
+        'content',
+      );
+
+      expect(key).toMatch(/^azure-moderation:model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(key).not.toBe(defaultKey);
+      expect(key).not.toContain('content');
+      expect(key).not.toContain('custom-list');
+      expect(key).not.toContain('EightSeverityLevels');
+    });
+
+    it('should include endpoint and apiVersion in the cache key', () => {
+      const firstKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://resource-a.cognitiveservices.azure.com/' },
+        'content',
+      );
+      const secondKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://resource-b.cognitiveservices.azure.com/' },
+        'content',
+      );
+
+      expect(firstKey).not.toBe(secondKey);
+      expect(firstKey).not.toContain('resource-a');
+      expect(secondKey).not.toContain('resource-b');
+
+      const versionKey1 = getModerationCacheKey('model', { apiVersion: '2024-09-01' }, 'content');
+      const versionKey2 = getModerationCacheKey(
+        'model',
+        { apiVersion: '2024-09-15-preview' },
+        'content',
+      );
+
+      expect(versionKey1).not.toBe(versionKey2);
+      expect(versionKey1).not.toContain('2024-09-01');
+      expect(versionKey2).not.toContain('2024-09-15-preview');
+    });
+
+    it('should ignore apiKey and apiKeyEnvar in the cache key', () => {
+      const firstKey = getModerationCacheKey(
+        'model',
+        { apiKey: 'key-1', apiKeyEnvar: 'MY_KEY_1', endpoint: 'https://test.com' },
+        'content',
+      );
+      const secondKey = getModerationCacheKey(
+        'model',
+        { apiKey: 'key-2', apiKeyEnvar: 'MY_KEY_2', endpoint: 'https://test.com' },
+        'content',
+      );
+
+      expect(firstKey).toBe(secondKey);
+    });
+
+    it('should differentiate by headers without leaking raw values', () => {
+      const firstKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://test.com', headers: { Authorization: 'Bearer secret-token-1' } },
+        'content',
+      );
+      const secondKey = getModerationCacheKey(
+        'model',
+        { endpoint: 'https://test.com', headers: { Authorization: 'Bearer secret-token-2' } },
+        'content',
+      );
+
+      expect(firstKey).not.toBe(secondKey);
+      expect(firstKey).not.toContain('secret-token-1');
+      expect(secondKey).not.toContain('secret-token-2');
+      expect(firstKey).not.toContain('https://test.com');
+    });
+
+    it('should treat empty headers the same as absent headers', () => {
+      const noHeaders = getModerationCacheKey('model', {}, 'content');
+      const emptyHeaders = getModerationCacheKey('model', { headers: {} }, 'content');
+      const undefinedHeaders = getModerationCacheKey('model', { headers: undefined }, 'content');
+
+      expect(noHeaders).toBe(emptyHeaders);
+      expect(noHeaders).toBe(undefinedHeaders);
+    });
+
+    it('should produce the same hash regardless of header key order', () => {
+      const key1 = getModerationCacheKey('model', { headers: { A: '1', B: '2' } }, 'content');
+      const key2 = getModerationCacheKey('model', { headers: { B: '2', A: '1' } }, 'content');
+
+      expect(key1).toBe(key2);
+    });
+  });
+
+  describe('AzureModerationProvider', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      vi.mocked(isCacheEnabled).mockReturnValue(false);
+    });
+
+    it('should set cached flag when returning cached response', async () => {
+      const mockCachedResponse = {
+        flags: [
+          {
+            code: 'hate',
+            description: 'Content flagged for Hate',
+            confidence: 0.8,
+          },
+        ],
       };
 
-      const key = getModerationCacheKey('model', config, 'content');
-      expect(key).toBe('azure-moderation:model:"content"');
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(mockCachedResponse),
+        set: vi.fn(),
+      } as any;
+
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache);
+
+      const provider = new AzureModerationProvider('text-content-safety', {
+        config: {
+          apiKey: 'test-key',
+          endpoint: 'https://test.cognitiveservices.azure.com/',
+        },
+      });
+
+      const result = await provider.callModerationApi('user prompt', 'assistant response');
+
+      expect(result.cached).toBe(true);
+      expect(result.flags).toEqual(mockCachedResponse.flags);
+      expect(mockCache.get).toHaveBeenCalled();
+    });
+
+    it('should use resolved endpoint and apiVersion in cache key', async () => {
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      } as any;
+
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache);
+
+      const { fetchWithProxy } = await import('../../../src/util/fetch/index');
+      vi.mocked(fetchWithProxy).mockResolvedValue({
+        ok: true,
+        json: async () => ({ categoriesAnalysis: [] }),
+      } as any);
+
+      const provider = new AzureModerationProvider('text-content-safety', {
+        config: {
+          apiKey: 'test-key',
+          endpoint: 'https://resolved-endpoint.cognitiveservices.azure.com/',
+          apiVersion: '2024-09-15-preview',
+        },
+      });
+
+      await provider.callModerationApi('user prompt', 'test content');
+
+      const cacheKey = mockCache.get.mock.calls[0][0] as string;
+      expect(cacheKey).toMatch(/^azure-moderation:text-content-safety:[a-f0-9]{64}:[a-f0-9]{64}$/);
+      expect(cacheKey).not.toContain('resolved-endpoint');
+      expect(cacheKey).not.toContain('2024-09-15-preview');
+      expect(cacheKey).not.toContain('test content');
     });
   });
 });

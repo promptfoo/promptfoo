@@ -1,7 +1,7 @@
 import invariant from '../util/invariant';
-import { transform } from '../util/transform';
+import { getTransformErrorMessage, getTransformLabel, transform } from '../util/transform';
 
-import type { Assertion, AtomicTestCase } from '../types/index';
+import type { Assertion, AtomicTestCase, ProviderResponse } from '../types/index';
 
 /**
  * Resolves the context value for context-based assertions.
@@ -23,7 +23,7 @@ export async function resolveContext(
   output: string | object,
   prompt?: string,
   fallbackContext?: string,
-  providerResponse?: any,
+  providerResponse?: ProviderResponse,
 ): Promise<string | string[]> {
   // Handle context from test variables - support both string and string array
   let contextValue: string | string[] | undefined;
@@ -48,6 +48,10 @@ export async function resolveContext(
   }
 
   if (assertion.contextTransform) {
+    // Defer the `getTransformLabel` call until an error path actually uses it:
+    // the label is only needed by the invariant thunk or the catch block, never
+    // on the happy path of a successful contextTransform.
+    const getLabel = () => getTransformLabel(assertion.contextTransform);
     try {
       // Use providerTransformedOutput if available
       // Otherwise fall back to output for backwards compatibility
@@ -63,16 +67,17 @@ export async function resolveContext(
       invariant(
         typeof transformed === 'string' ||
           (Array.isArray(transformed) && transformed.every((item) => typeof item === 'string')),
-        `contextTransform must return a string or array of strings. Got ${typeof transformed}. ` +
-          `Check your transform expression: ${assertion.contextTransform}`,
+        () =>
+          `contextTransform must return a string or array of strings. Got ${typeof transformed}. ` +
+          `Check your transform expression: ${getLabel()}`,
       );
 
       contextValue = transformed;
     } catch (error) {
+      // Unwrap `transform()`'s own `Transform failed (label): ...` prefix so
+      // the user-facing message doesn't stutter two labels.
       throw new Error(
-        `Failed to transform context using expression '${assertion.contextTransform}': ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Failed to transform context using expression '${getLabel()}': ${getTransformErrorMessage(error)}`,
       );
     }
   }

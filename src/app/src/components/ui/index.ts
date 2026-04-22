@@ -62,6 +62,7 @@ export {
   NavigationMenuViewport,
   navigationMenuTriggerStyle,
 } from './navigation-menu';
+export { NavigationSidebar } from './navigation-sidebar';
 export { NumberInput } from './number-input';
 export { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from './popover';
 export { Progress } from './progress';
@@ -102,6 +103,12 @@ export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tool
 
 export type { CheckboxProps } from './checkbox';
 export type { InputProps } from './input';
+export type {
+  NavigationItem,
+  NavigationItemStatus,
+  NavigationSidebarProps,
+} from './navigation-sidebar';
 export type { RadioGroupItemProps, RadioGroupProps } from './radio-group';
 export type { SelectTriggerProps } from './select';
+export type { TabsListProps, TabsListVariant, TabsProps, TabsTriggerProps } from './tabs';
 export type { TextareaProps } from './textarea';

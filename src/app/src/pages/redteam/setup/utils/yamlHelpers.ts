@@ -5,16 +5,19 @@ import type { RedteamFileConfig } from '@promptfoo/types';
 
 import type { Config } from '../types';
 
-const orderRedTeam = (redteam: any): any => {
-  const orderedRedTeam: any = {};
-  const redTeamOrder: (keyof RedteamFileConfig)[] = [
+const orderRedTeam = (redteam: Partial<RedteamFileConfig>): Record<string, unknown> => {
+  const orderedRedTeam: Record<string, unknown> = {};
+  const redTeamOrder = [
     'purpose',
+    'provider',
+    'frameworks',
     'entities',
     'plugins',
     'testGenerationInstructions',
     'strategies',
     'language',
     'numTests',
+    'maxCharsPerMessage',
     'maxConcurrency',
   ] as const;
 
@@ -24,17 +27,23 @@ const orderRedTeam = (redteam: any): any => {
     }
   });
 
+  Object.keys(redteam).forEach((key) => {
+    if (!redTeamOrder.includes(key as (typeof redTeamOrder)[number])) {
+      orderedRedTeam[key] = redteam[key as keyof typeof redteam];
+    }
+  });
+
   return orderedRedTeam;
 };
 
-const orderKeys = (obj: any): any => {
-  const orderedObj: any = {};
+const orderKeys = (obj: Record<string, unknown>): Record<string, unknown> => {
+  const orderedObj: Record<string, unknown> = {};
   const keyOrder = ['description', 'targets', 'prompts', 'extensions', 'redteam', 'defaultTest'];
 
   keyOrder.forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
       if (key === 'redteam') {
-        orderedObj[key] = orderRedTeam(obj[key]);
+        orderedObj[key] = orderRedTeam(obj[key] as Partial<RedteamFileConfig>);
       } else {
         orderedObj[key] = obj[key];
       }

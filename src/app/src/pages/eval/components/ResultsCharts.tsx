@@ -1,17 +1,15 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@app/components/ui/select';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
-import CloseIcon from '@mui/icons-material/Close';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
-import Paper from '@mui/material/Paper';
-import Select from '@mui/material/Select';
-import { useTheme } from '@mui/material/styles';
 import {
   BarController,
   BarElement,
@@ -32,7 +30,6 @@ import { useTableStore } from './store';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
-  handleHideCharts: () => void;
   scores: number[];
 }
 
@@ -172,6 +169,7 @@ function PassRateChart({ table }: ChartProps) {
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (!passRateCanvasRef.current) {
       return;
@@ -324,7 +322,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${xAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -339,7 +337,7 @@ function ScatterChart({ table }: ChartProps) {
               text: `Prompt ${yAxisPrompt + 1} Score`,
             },
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -355,27 +353,43 @@ function ScatterChart({ table }: ChartProps) {
 
   return (
     <>
-      <Dialog open={open} onClose={() => setOpen(false)}>
-        <DialogTitle>Compare prompt outputs</DialogTitle>
-        <DialogContent>
-          <FormControl sx={{ m: 1, minWidth: 120 }}>
-            <Select value={xAxisPrompt} onChange={(e) => setXAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((_prompt, idx) => (
-                <MenuItem key={idx} value={idx}>
-                  Prompt {idx + 1}
-                </MenuItem>
-              ))}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Compare prompt outputs</DialogTitle>
+          </DialogHeader>
+          <div className="flex gap-4 py-4">
+            <Select
+              value={String(xAxisPrompt)}
+              onValueChange={(val) => setXAxisPrompt(Number(val))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {table.head.prompts.map((_prompt, idx) => (
+                  <SelectItem key={idx} value={String(idx)}>
+                    Prompt {idx + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
-          <FormControl sx={{ m: 1, minWidth: 120 }}>
-            <Select value={yAxisPrompt} onChange={(e) => setYAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((_prompt, idx) => (
-                <MenuItem key={idx} value={idx}>
-                  Prompt {idx + 1}
-                </MenuItem>
-              ))}
+            <Select
+              value={String(yAxisPrompt)}
+              onValueChange={(val) => setYAxisPrompt(Number(val))}
+            >
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {table.head.prompts.map((_prompt, idx) => (
+                  <SelectItem key={idx} value={String(idx)}>
+                    Prompt {idx + 1}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
-          </FormControl>
+          </div>
         </DialogContent>
       </Dialog>
       <canvas
@@ -432,7 +446,7 @@ function MetricChart({ table }: ChartProps) {
           },
           y: {
             ticks: {
-              callback(value: string | number, index: number, values: any[]) {
+              callback(value: string | number, index: number, values: unknown[]) {
                 let ret = String(Math.round(Number(value) * 100));
                 if (index === values.length - 1) {
                   ret += '%';
@@ -511,7 +525,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
     }
 
     // Group evaluations by createdAt and assign evaluation numbers
-    const evaluationGroups = progressData.reduce(
+    const evaluationGroups = progressData.reduce<Record<string, ProgressData[]>>(
       (groups, eval_) => {
         const date = new Date(eval_.createdAt).toISOString();
         if (!groups[date]) {
@@ -520,7 +534,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
         groups[date].push(eval_);
         return groups;
       },
-      {} as Record<string, ProgressData[]>,
+      {},
     );
 
     const evaluations = Object.values(evaluationGroups).flatMap((group, groupIndex) =>
@@ -530,25 +544,24 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       })),
     );
 
-    const datasets = evaluations.reduce(
-      (acc, eval_) => {
-        const passRate =
-          (eval_.metrics.testPassCount /
-            (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
-          100;
+    const datasets = evaluations.reduce<
+      Record<number, { x: number; y: number; evalData: ProgressData }[]>
+    >((acc, eval_) => {
+      const passRate =
+        (eval_.metrics.testPassCount /
+          (eval_.metrics.testPassCount + eval_.metrics.testFailCount)) *
+        100;
 
-        if (!acc[eval_.evaluationNumber]) {
-          acc[eval_.evaluationNumber] = [];
-        }
-        acc[eval_.evaluationNumber].push({
-          x: eval_.evaluationNumber,
-          y: passRate,
-          evalData: eval_,
-        });
-        return acc;
-      },
-      {} as Record<number, { x: number; y: number; evalData: ProgressData }[]>,
-    );
+      if (!acc[eval_.evaluationNumber]) {
+        acc[eval_.evaluationNumber] = [];
+      }
+      acc[eval_.evaluationNumber].push({
+        x: eval_.evaluationNumber,
+        y: passRate,
+        evalData: eval_,
+      });
+      return acc;
+    }, {});
 
     const chartData = Object.values(datasets).flat();
 
@@ -581,11 +594,17 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       plugins: {
         tooltip: {
           callbacks: {
-            title: (context: any) => {
-              return context[0].raw.evalData.evalId;
+            title: (context: unknown) => {
+              const items = context as TooltipItem<'scatter'>[];
+              const raw = items[0].raw as { evalData: { evalId: string } };
+              return raw.evalData.evalId;
             },
-            label: (context: any) => {
-              const item = context.raw as { x: number; y: number; evalData: ProgressData };
+            label: (context: unknown) => {
+              const item = (context as TooltipItem<'scatter'>).raw as {
+                x: number;
+                y: number;
+                evalData: ProgressData;
+              };
               const { evalData } = item;
               const passRate =
                 (evalData.metrics.testPassCount /
@@ -601,9 +620,9 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
           },
         },
       },
-      onClick: (_event: any, elements: any) => {
-        if (elements.length > 0) {
-          const index = elements[0].index;
+      onClick: (_event: unknown, elements: unknown) => {
+        if (Array.isArray(elements) && elements.length > 0) {
+          const index = (elements[0] as { index: number }).index;
           window.open(EVAL_ROUTES.DETAIL(chartData[index].evalData.evalId), '_blank');
         }
       },
@@ -636,8 +655,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
-  const theme = useTheme();
+function ResultsCharts({ scores }: ResultsChartsProps) {
   const [
     showPerformanceOverTimeChart,
     //setShowPerformanceOverTimeChart
@@ -646,8 +664,9 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   // Update Chart.js defaults when theme changes
   // useLayoutEffect ensures defaults are set before charts render
   useLayoutEffect(() => {
-    Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
-  }, [theme.palette.mode]);
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    Chart.defaults.color = isDark ? '#aaa' : '#666';
+  }, []);
 
   // NOTE: Parent component is responsible for conditionally rendering the charts based on the table being
   // non-null.
@@ -692,14 +711,8 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
 
   return (
     <ErrorBoundary fallback={null}>
-      <Paper sx={{ position: 'relative', padding: 3, mt: 2 }}>
-        <IconButton
-          style={{ position: 'absolute', right: 0, top: 0 }}
-          onClick={() => handleHideCharts()}
-        >
-          <CloseIcon />
-        </IconButton>
-        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+      <div className="relative p-6 mt-2 bg-card rounded-lg border border-border shadow-sm">
+        <div className="flex justify-between w-full">
           <div style={{ width: chartWidth }}>
             <PassRateChart table={table!} />
           </div>
@@ -720,7 +733,7 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
             </div>
           )}
         </div>
-      </Paper>
+      </div>
     </ErrorBoundary>
   );
 }

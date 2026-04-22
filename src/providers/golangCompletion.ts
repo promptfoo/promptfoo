@@ -85,12 +85,15 @@ export class GolangProvider implements ApiProvider {
 
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
-      return JSON.parse(cachedResult);
+      return { ...JSON.parse(cachedResult), cached: true };
     } else {
       if (context) {
-        // These are not useful in Golang
+        // Remove properties not useful in Golang and non-serializable objects
+        // These can contain circular references (e.g., Timeout objects) that break JSON serialization
         delete context.getCache;
         delete context.logger;
+        delete context.filters; // NunjucksFilterMap contains functions
+        delete context.originalProvider; // ApiProvider object with methods
       }
 
       const args =

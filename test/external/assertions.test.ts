@@ -1,24 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleConversationRelevance } from '../../src/external/assertions/deepeval';
+import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 
-const createMockProvider = (output: string, reason?: string): ApiProvider => ({
-  id: () => 'mock',
-  callApi: async () => ({
-    output: JSON.stringify({
-      verdict: output,
-      ...(output === 'no' && {
-        reason: reason || 'Response is completely irrelevant to the message input',
+const createMockProvider = (output: string, reason?: string) =>
+  createFactoryProvider({
+    response: {
+      output: JSON.stringify({
+        verdict: output,
+        ...(output === 'no' && {
+          reason: reason || 'Response is completely irrelevant to the message input',
+        }),
       }),
-    }),
-    tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
-  }),
-});
+      tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
+    },
+  });
 
 // Mock getAndCheckProvider
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual('../../src/matchers');
+vi.mock('../../src/matchers/providers', async () => {
+  const actual = await vi.importActual('../../src/matchers/providers');
   return {
     ...actual,
     getAndCheckProvider: vi.fn().mockImplementation((_type, provider) => {
@@ -110,11 +111,11 @@ describe('handleConversationRelevance', () => {
     ];
 
     // Create a smart mock provider that only fails for the math/Paris response
-    const smartMockProvider: ApiProvider = {
-      id: () => 'mock',
-      callApi: async (prompt: string) => {
+    const smartMockProvider = createFactoryProvider({
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (prompt) => {
         // Check if the prompt contains the math question and Paris response
-        const hasIrrelevantResponse = prompt.includes('2+2') && prompt.includes('Paris');
+        const hasIrrelevantResponse =
+          (prompt as string).includes('2+2') && (prompt as string).includes('Paris');
         return {
           output: JSON.stringify({
             verdict: hasIrrelevantResponse ? 'no' : 'yes',
@@ -125,8 +126,8 @@ describe('handleConversationRelevance', () => {
           }),
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0 },
         };
-      },
-    };
+      }),
+    });
 
     const params: AssertionParams = {
       ...defaultParams,
