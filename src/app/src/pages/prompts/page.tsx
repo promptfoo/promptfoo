@@ -4,35 +4,11 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
+import { getSocketConfig } from '@app/utils/socket';
 import { io as SocketIOClient } from 'socket.io-client';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
-
-function getSocketConfig(apiBaseUrl?: string) {
-  let socketPath = '/socket.io';
-  let socketUrl = '';
-
-  if (apiBaseUrl) {
-    try {
-      const url = new URL(apiBaseUrl, window.location.origin);
-      const isSameOrigin = url.origin === window.location.origin;
-      if (isSameOrigin && url.pathname !== '/') {
-        socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
-      }
-      socketUrl = isSameOrigin ? '' : apiBaseUrl;
-    } catch {
-      // Invalid API base URLs fall back to same-origin defaults.
-    }
-  } else {
-    const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-    if (basePath) {
-      socketPath = `${basePath}/socket.io`;
-    }
-  }
-
-  return { socketPath, socketUrl };
-}
 
 interface PromptsPageProps {
   showDatasetColumn?: boolean;
