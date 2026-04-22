@@ -39,6 +39,14 @@ type EnvVars = {
    * Does NOT affect: Regular (non-redteam) SimulatedUser usage.
    */
   PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION?: boolean;
+  /**
+   * Force remote generation on, even when local credentials (e.g. OPENAI_API_KEY) are present.
+   * Useful in CI/CD pipelines that set OPENAI_API_KEY for non-redteam providers but still need
+   * remote-only strategies such as jailbreak:meta or jailbreak:composite.
+   * Has no effect when PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION
+   * are also set (explicit disables always win).
+   */
+  PROMPTFOO_ENABLE_REMOTE_GENERATION?: boolean;
   PROMPTFOO_DISABLE_REF_PARSER?: boolean;
   PROMPTFOO_DISABLE_SHARE_EMAIL_REQUEST?: boolean;
   PROMPTFOO_DISABLE_SHARE_WARNING?: boolean;

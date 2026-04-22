@@ -100,7 +100,8 @@ export function getRemoteVersionUrl(): string | null {
 export function getRemoteGenerationDisabledError(strategyName: string): string {
   return (
     `${strategyName} requires remote generation, which is currently disabled for this configuration. ` +
-    'To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ' +
+    'To enable it: run with --remote, set PROMPTFOO_ENABLE_REMOTE_GENERATION=1 (useful in CI/CD when OPENAI_API_KEY is set for other providers), ' +
+    'set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, ' +
     'or log into Promptfoo Cloud with `promptfoo auth login`.'
   );
 }
@@ -132,6 +133,13 @@ export function shouldGenerateRemote(options?: ShouldGenerateRemoteOptions): boo
   }
 
   if (getEnvString('PROMPTFOO_REMOTE_GENERATION_URL')) {
+    return true;
+  }
+
+  // If the user has explicitly opted in to remote generation via env var, honour it.
+  // This is useful in CI/CD pipelines that set OPENAI_API_KEY for other providers but
+  // still need remote-only strategies (e.g. jailbreak:meta, jailbreak:composite).
+  if (getEnvBool('PROMPTFOO_ENABLE_REMOTE_GENERATION')) {
     return true;
   }
 

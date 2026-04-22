@@ -205,6 +205,31 @@ describe('shouldGenerateRemote', () => {
     cliState.remote = true;
     expect(shouldGenerateRemote()).toBe(false);
   });
+
+  it('should return true when PROMPTFOO_ENABLE_REMOTE_GENERATION is set and OPENAI_API_KEY is present', () => {
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockImplementation((key: string) => {
+      return key === 'PROMPTFOO_ENABLE_REMOTE_GENERATION';
+    });
+    vi.mocked(getEnvString).mockImplementation((key: string) => {
+      return key === 'OPENAI_API_KEY' ? 'sk-123' : '';
+    });
+    expect(shouldGenerateRemote()).toBe(true);
+  });
+
+  it('should return false when PROMPTFOO_ENABLE_REMOTE_GENERATION is set but remote generation is explicitly disabled', () => {
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(false);
+    vi.mocked(getEnvBool).mockImplementation((key: string) => {
+      // Both PROMPTFOO_DISABLE_REMOTE_GENERATION and PROMPTFOO_ENABLE_REMOTE_GENERATION are set;
+      // the disable flag wins.
+      return (
+        key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION' ||
+        key === 'PROMPTFOO_ENABLE_REMOTE_GENERATION'
+      );
+    });
+    vi.mocked(getEnvString).mockReturnValue('');
+    expect(shouldGenerateRemote()).toBe(false);
+  });
 });
 
 describe('remote generation error helpers', () => {
@@ -212,9 +237,9 @@ describe('remote generation error helpers', () => {
     vi.resetAllMocks();
   });
 
-  it('should include the --remote recovery path when remote generation is implicitly disabled', () => {
+  it('should include the --remote and PROMPTFOO_ENABLE_REMOTE_GENERATION recovery paths when remote generation is implicitly disabled', () => {
     expect(getRemoteGenerationDisabledError('jailbreak:hydra strategy')).toBe(
-      'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+      'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it: run with --remote, set PROMPTFOO_ENABLE_REMOTE_GENERATION=1 (useful in CI/CD when OPENAI_API_KEY is set for other providers), set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
     );
   });
 
