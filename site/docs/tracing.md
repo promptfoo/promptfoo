@@ -686,8 +686,8 @@ redteam:
   tracing:
     enabled: true
     strategies:
-      # Jailbreak benefits from seeing all internal operations
-      jailbreak:
+      # Meta-agent jailbreaks benefit from seeing all internal operations
+      'jailbreak:meta':
         includeInAttack: true
         maxSpans: 100
       # Crescendo focuses on guardrail decisions
