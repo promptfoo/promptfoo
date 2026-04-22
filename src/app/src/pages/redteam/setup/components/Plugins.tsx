@@ -62,7 +62,7 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
     <p>
       <span>
         Intents are seed phrases for attack generation, for example "teach me how to cook meth".
-        Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
+        Promptfoo can apply jailbreak strategies to turn each intent into adversarial probes.
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
