@@ -49,11 +49,26 @@ interface AzureModerationConfig {
   passthrough?: Record<string, any>;
 }
 
+function hashCacheValue(value: unknown): string {
+  const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+  return crypto
+    .createHmac('sha256', 'promptfoo:azure:moderation-cache-key:v1')
+    .update(serialized ?? String(value))
+    .digest('hex');
+}
+
 export function parseAzureModerationResponse(
   data: AzureAnalyzeTextResult,
 ): ProviderModerationResponse {
   try {
-    logger.debug(`Azure Content Safety API response: ${JSON.stringify(data)}`);
+    logger.debug('Azure Content Safety API response', {
+      categoryCount: data?.categoriesAnalysis?.length ?? 0,
+      blocklistMatchCount:
+        data?.blocklistsMatch?.length ??
+        (data as any)?.blocklists_match?.length ??
+        (data as any)?.blocklistsMatch?.length ??
+        0,
+    });
 
     if (!data) {
       logger.error('Azure Content Safety API returned invalid response: null or undefined');
@@ -98,7 +113,11 @@ export function parseAzureModerationResponse(
 }
 
 export function handleApiError(err: any, data?: any): ProviderModerationResponse {
-  logger.error(`Azure moderation API error: ${err}${data ? `, ${data}` : ''}`);
+  logger.error('Azure moderation API error', {
+    error: err instanceof Error ? err.message : String(err),
+    hasData: data !== undefined,
+    dataLength: typeof data === 'string' ? data.length : undefined,
+  });
   return { error: err.message || 'Unknown error', flags: [] };
 }
 
@@ -112,24 +131,18 @@ export function getModerationCacheKey(
     apiVersion: config.apiVersion,
     headersHash:
       config.headers && Object.keys(config.headers).length > 0
-        ? crypto
-            .createHash('sha256')
-            .update(
-              JSON.stringify(
-                Object.keys(config.headers)
-                  .sort()
-                  .map((k) => [k, config.headers![k]]),
-              ),
-            )
-            .digest('hex')
-            .slice(0, 16)
+        ? hashCacheValue(
+            Object.keys(config.headers)
+              .sort()
+              .map((k) => [k, hashCacheValue(config.headers![k])]),
+          )
         : undefined,
     blocklistNames: config.blocklistNames || [],
     haltOnBlocklistHit: config.haltOnBlocklistHit ?? false,
     passthrough: config.passthrough || {},
   };
 
-  return `azure-moderation:${modelName}:${JSON.stringify(cacheConfig)}:${JSON.stringify(content)}`;
+  return `azure-moderation:${modelName}:${hashCacheValue(cacheConfig)}:${hashCacheValue(content)}`;
 }
 
 export class AzureModerationProvider extends AzureGenericProvider implements ApiModerationProvider {
@@ -272,7 +285,11 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       if (!response.ok) {
         const errorText = await response.text();
         logger.error(`Azure Content Safety API error: ${response.status} ${response.statusText}`);
-        logger.error(`Error details: ${errorText}`);
+        logger.error('Azure Content Safety API error details', {
+          status: response.status,
+          statusText: response.statusText,
+          bodyLength: errorText.length,
+        });
 
         let errorMessage = `Azure Content Safety API returned ${response.status}: ${response.statusText}`;
 
