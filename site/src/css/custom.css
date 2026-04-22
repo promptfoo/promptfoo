@@ -417,7 +417,6 @@ html:not(.docs-wrapper) .DocSearch {
   outline: 2px solid var(--ifm-color-primary);
   outline-offset: 3px;
 }
-
 .redteamPolicyScreenshot {
   display: block;
   width: 100%;
