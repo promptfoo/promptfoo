@@ -978,16 +978,21 @@ function renderPromptBlock({
     return null;
   }
 
+  let body: React.ReactNode = '';
+  if (loading) {
+    body = 'Loading...';
+  } else if (error) {
+    body = error;
+  } else if (typeof prompt === 'string') {
+    body = prompt;
+  } else if (prompt !== undefined) {
+    body = JSON.stringify(prompt, null, 2);
+  }
+
   return (
     <div className="prompt">
       <span className="pill">Prompt</span>
-      {loading
-        ? 'Loading...'
-        : error
-          ? error
-          : typeof prompt === 'string'
-            ? prompt
-            : JSON.stringify(prompt, null, 2)}
+      {body}
     </div>
   );
 }
