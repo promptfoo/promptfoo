@@ -17,6 +17,21 @@ import type { EvalResultDetailResponse } from '@promptfoo/types/api/eval';
 
 const DETAIL_EXPORT_CONCURRENCY = 8;
 
+// Server placeholder emitted by stripOversizedStrings when a string exceeds the
+// oversized-string limit. Used to detect cells that need full detail hydration
+// instead of falling back to the lean table value.
+const OVERSIZED_PLACEHOLDER_RE = /^\[content omitted: \d+ characters\]$/;
+
+function hasPlaceholder(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return OVERSIZED_PLACEHOLDER_RE.test(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some(hasPlaceholder);
+  }
+  return false;
+}
+
 type AdvancedExportName = 'failed-tests' | 'dpo' | 'human-eval' | 'burp';
 
 async function mapWithConcurrency<T, U>(
@@ -387,9 +402,16 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         table.body,
         DETAIL_EXPORT_CONCURRENCY,
         async (row) => {
+          // Only hit the detail endpoint for cells where the lean payload was
+          // trimmed (oversized text or var value) — otherwise the table data
+          // is already the full value.
+          const rowNeedsDetail = hasPlaceholder(row.vars);
           const details = await Promise.all(
             row.outputs.map(async (output) => {
               try {
+                if (!rowNeedsDetail && !hasPlaceholder(output?.text)) {
+                  return null;
+                }
                 return await getOutputDetail(output);
               } finally {
                 incrementExportProgress();
@@ -524,7 +546,11 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         DETAIL_EXPORT_CONCURRENCY,
         async (row) => {
           try {
-            const detail = await getOutputDetail(getFirstOutput(row));
+            // Burp only needs the injectVar value; fetch detail only when the
+            // lean row value is a placeholder (trimmed by the server).
+            const detail = hasPlaceholder(row.vars)
+              ? await getOutputDetail(getFirstOutput(row))
+              : null;
             const vars = getRowVars(row, detail);
             return String(vars?.[varName] || '');
           } finally {

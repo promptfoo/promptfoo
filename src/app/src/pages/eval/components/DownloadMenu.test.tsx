@@ -305,7 +305,13 @@ describe('DownloadMenu', () => {
           {
             test: { vars: { prompt: 'lean prompt from test' } },
             vars: ['lean prompt from vars'],
-            outputs: [{ id: 'output-1', pass: false, text: 'lean output' }],
+            outputs: [
+              {
+                id: 'output-1',
+                pass: false,
+                text: '[content omitted: 120000 characters]',
+              },
+            ],
           },
         ],
       },
@@ -326,7 +332,7 @@ describe('DownloadMenu', () => {
     expect(exported).toEqual([
       {
         chosen: [],
-        rejected: ['lean output'],
+        rejected: ['[content omitted: 120000 characters]'],
         vars: { prompt: 'lean prompt from test' },
         providers: ['provider1'],
         prompts: ['label1'],
@@ -340,6 +346,46 @@ describe('DownloadMenu', () => {
       'Export used table data for 1 result because full result details could not be loaded.',
       'warning',
     );
+  });
+
+  it('skips detail fetches during DPO export when lean table rows are intact', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: ['prompt'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: { vars: { prompt: 'lean prompt' } },
+            vars: ['lean prompt'],
+            outputs: [{ id: 'output-1', pass: false, text: 'full lean output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+
+    await waitFor(() => {
+      expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), `${mockEvalId}-dpo.json`);
+    });
+    expect(fetchEvalResultDetailMock).not.toHaveBeenCalled();
+
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    const exported = JSON.parse(await blob.text());
+    expect(exported).toEqual([
+      {
+        chosen: [],
+        rejected: ['full lean output'],
+        vars: { prompt: 'lean prompt' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+    ]);
   });
 
   it('downloads Human Eval Test YAML when clicking the button', async () => {
