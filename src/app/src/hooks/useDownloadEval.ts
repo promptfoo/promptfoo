@@ -18,10 +18,11 @@ interface UseDownloadOptions {
   onError?: (error: Error) => void;
 }
 
-export enum DownloadFormat {
-  CSV = 'csv',
-  JSON = 'json',
-}
+export const DownloadFormat = {
+  CSV: 'csv',
+  JSON: 'json',
+} as const;
+export type DownloadFormat = (typeof DownloadFormat)[keyof typeof DownloadFormat];
 
 /**
  * Generic hook for downloading evaluation results

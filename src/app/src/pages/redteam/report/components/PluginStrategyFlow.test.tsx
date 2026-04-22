@@ -1,10 +1,9 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeAll } from 'vitest';
-import '@testing-library/jest-dom';
 
-import PluginStrategyFlow from './PluginStrategyFlow';
 import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
+import { render, screen } from '@testing-library/react';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import PluginStrategyFlow from './PluginStrategyFlow';
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (
@@ -14,15 +13,17 @@ vi.mock('recharts', () => ({
     <div data-testid="sankey-chart">
       {props.data.nodes.map((node: any, index: number) => (
         <div key={index}>
-          {React.cloneElement(props.node, {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
-            index,
-            payload: node,
-            containerWidth: 500,
-          })}
+          <svg>
+            {React.cloneElement(props.node, {
+              x: 0,
+              y: 0,
+              width: 10,
+              height: 10,
+              index,
+              payload: node,
+              containerWidth: 500,
+            })}
+          </svg>
         </div>
       ))}
       {props.data.links.map((_link: any, index: number) => (
@@ -35,7 +36,12 @@ vi.mock('recharts', () => ({
     <div data-testid="tooltip">
       {props.content && typeof props.content === 'function'
         ? props.content({
-            payload: [{ source: { name: 'PluginA' }, target: { name: 'StrategyX' }, value: 1 }],
+            payload: [
+              {
+                value: 1,
+                payload: { source: { name: 'PluginA' }, target: { name: 'StrategyX' }, value: 1 },
+              },
+            ],
           })
         : 'Tooltip Content'}
     </div>
@@ -43,20 +49,6 @@ vi.mock('recharts', () => ({
   Layer: ({ children }: { children: React.ReactNode }) => <g>{children}</g>,
   Rectangle: (props: any) => <rect {...props} />,
 }));
-
-vi.mock('@mui/material/styles', async () => {
-  const actual = await vi.importActual('@mui/material/styles');
-  return {
-    ...actual,
-    useTheme: () => ({
-      palette: {
-        background: { paper: '#fff' },
-        divider: '#ccc',
-        text: { primary: '#000' },
-      },
-    }),
-  };
-});
 
 interface TestRecord {
   prompt: string;

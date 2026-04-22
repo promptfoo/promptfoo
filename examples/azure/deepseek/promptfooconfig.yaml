@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure DeepSeek reasoning
+
+prompts:
+  - 'Solve this step by step: {{problem}}'
+
+providers:
+  # DeepSeek-R1 is a reasoning model
+  - id: azure:chat:DeepSeek-R1
+    label: deepseek-r1
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      isReasoningModel: true
+      max_completion_tokens: 4096
+      reasoning_effort: medium
+
+  # DeepSeek-V3 is a standard chat model
+  - id: azure:chat:DeepSeek-V3
+    label: deepseek-v3
+    config:
+      apiHost: 'your-deployment.services.ai.azure.com'
+      apiVersion: '2025-04-01-preview'
+      max_tokens: 4096
+      temperature: 0.3
+
+tests:
+  - vars:
+      problem: |
+        A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.
+        Another train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.
+        If the stations are 280 miles apart, at what time will the trains meet?
+    assert:
+      - type: contains-any
+        value: ['11:34', '11:34 AM', '1 hour 34 minutes', '94 minutes']
+      - type: llm-rubric
+        value: Shows clear step-by-step reasoning
+
+  - vars:
+      problem: |
+        If 5 machines can produce 100 widgets in 4 hours,
+        how many widgets can 8 machines produce in 6 hours?
+    assert:
+      - type: contains
+        value: '240'
+      - type: llm-rubric
+        value: Demonstrates proportional reasoning
+
+  - vars:
+      problem: |
+        A rectangle has a perimeter of 36 cm.
+        If the length is twice the width, what is the area?
+    assert:
+      - type: contains
+        value: '72'
+      - type: llm-rubric
+        value: Shows algebraic problem-solving steps

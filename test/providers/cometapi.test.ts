@@ -1,7 +1,8 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
-  clearCometApiModelsCache,
   CometApiImageProvider,
+  clearCometApiModelsCache,
   createCometApiProvider,
   fetchCometApiModels,
 } from '../../src/providers/cometapi';
@@ -9,20 +10,29 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-jest.mock('../../src/providers/openai/chat', () => ({
-  OpenAiChatCompletionProvider: jest.fn(),
-}));
-jest.mock('../../src/providers/openai/completion', () => ({
-  OpenAiCompletionProvider: jest.fn(),
-}));
-jest.mock('../../src/providers/openai/embedding', () => ({
-  OpenAiEmbeddingProvider: jest.fn(),
-}));
-jest.mock('../../src/cache');
+vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiChatCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/completion', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/embedding', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiEmbeddingProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/cache');
 
 describe('createCometApiProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('creates chat completion provider when type is chat', () => {
@@ -73,12 +83,12 @@ describe('createCometApiProvider', () => {
 
 describe('fetchCometApiModels', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     clearCometApiModelsCache();
   });
 
   it('fetches all models from endpoint without filtering', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       data: {
         data: [
           { id: 'gpt-4o' },
@@ -113,7 +123,7 @@ describe('fetchCometApiModels', () => {
   });
 
   it('uses cache on subsequent calls', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       data: { data: [{ id: 'gpt-5-mini' }] },
       cached: false,
       status: 200,
@@ -121,7 +131,7 @@ describe('fetchCometApiModels', () => {
     } as any);
 
     const first = await fetchCometApiModels();
-    jest.mocked(fetchWithCache).mockClear();
+    vi.mocked(fetchWithCache).mockClear();
     const second = await fetchCometApiModels();
 
     expect(first).toEqual(second);

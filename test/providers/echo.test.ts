@@ -1,6 +1,12 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EchoProvider } from '../../src/providers/echo';
 
 describe('EchoProvider', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
   describe('constructor', () => {
     it('should initialize with default options', () => {
       const provider = new EchoProvider();
@@ -68,6 +74,7 @@ describe('EchoProvider', () => {
         total: 0,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       });
     });
 
@@ -110,11 +117,14 @@ describe('EchoProvider', () => {
       const input = 'Test input';
       const provider = new EchoProvider({ delay: 100 });
 
+      vi.useFakeTimers();
       const startTime = Date.now();
-      await provider.callApi(input);
-      const endTime = Date.now();
+      const responsePromise = provider.callApi(input);
 
-      expect(endTime - startTime).toBeGreaterThanOrEqual(90); // Allow for small timing variations
+      await vi.runAllTimersAsync();
+      await responsePromise;
+
+      expect(Date.now() - startTime).toBeGreaterThanOrEqual(100);
     });
 
     it('should handle empty input', async () => {

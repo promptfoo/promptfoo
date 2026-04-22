@@ -1,38 +1,47 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CloudStatusIndicator from './CloudStatusIndicator';
 
-// Mock the useCloudConfig hook
 vi.mock('@app/hooks/useCloudConfig', () => ({
   default: vi.fn(),
 }));
 
-// Mock the useTelemetry hook
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: vi.fn(),
 }));
 
-import useCloudConfig from '@app/hooks/useCloudConfig';
-import { useTelemetry } from '@app/hooks/useTelemetry';
+const mockRecordEvent = vi.fn();
+const mockRefetch = vi.fn();
+const mockWindowOpen = vi.fn();
+
+function renderCloudStatusIndicator() {
+  return render(
+    <TooltipProvider delayDuration={0}>
+      <CloudStatusIndicator />
+    </TooltipProvider>,
+  );
+}
 
 describe('CloudStatusIndicator', () => {
-  const mockRecordEvent = vi.fn();
-  const mockRefetch = vi.fn();
-
   beforeEach(() => {
-    vi.clearAllMocks();
-    // Reset window.open mock
-    global.window.open = vi.fn();
-
-    // Default mock for useTelemetry
     vi.mocked(useTelemetry).mockReturnValue({
       recordEvent: mockRecordEvent,
       identifyUser: vi.fn(),
       isInitialized: true,
     });
+    vi.spyOn(window, 'open').mockImplementation(mockWindowOpen);
   });
 
-  it('should show loading state', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.clearAllMocks();
+  });
+
+  it('shows loading state', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: null,
       isLoading: true,
@@ -40,13 +49,12 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('aria-label', expect.stringContaining('Checking cloud status'));
+    expect(screen.getByRole('button', { name: /checking cloud status/i })).toBeInTheDocument();
   });
 
-  it('should show authenticated state with cloud icon', () => {
+  it('shows authenticated cloud state', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: true,
@@ -58,17 +66,15 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    const button = screen.getByRole('button');
-    expect(button).toHaveAttribute(
-      'aria-label',
-      expect.stringContaining('Connected to Promptfoo Cloud'),
-    );
+    expect(
+      screen.getByRole('button', { name: /connected to promptfoo cloud/i }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
   });
 
-  it('should show authenticated state with enterprise', () => {
+  it('shows authenticated enterprise state', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: true,
@@ -80,17 +86,15 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    const button = screen.getByRole('button');
-    expect(button).toHaveAttribute(
-      'aria-label',
-      expect.stringContaining('Connected to Promptfoo Enterprise'),
-    );
+    expect(
+      screen.getByRole('button', { name: /connected to promptfoo enterprise/i }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId('CloudIcon')).toBeInTheDocument();
   });
 
-  it('should show unauthenticated state with cloud off icon', () => {
+  it('shows unauthenticated cloud state', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
@@ -102,17 +106,15 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    const button = screen.getByRole('button');
-    expect(button).toHaveAttribute(
-      'aria-label',
-      expect.stringContaining('Not connected to Promptfoo Cloud'),
-    );
+    expect(
+      screen.getByRole('button', { name: /not connected to promptfoo cloud/i }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
 
-  it('should show error state', () => {
+  it('shows error state', () => {
     vi.mocked(useCloudConfig).mockReturnValue({
       data: null,
       isLoading: false,
@@ -120,22 +122,20 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    const button = screen.getByRole('button');
-    expect(button).toHaveAttribute(
-      'aria-label',
-      expect.stringContaining('Unable to check cloud status'),
-    );
+    expect(
+      screen.getByRole('button', { name: /unable to check cloud status/i }),
+    ).toBeInTheDocument();
     expect(screen.getByTestId('CloudOffIcon')).toBeInTheDocument();
   });
 
-  it('should open cloud dashboard when authenticated and track telemetry', () => {
-    const mockAppUrl = 'https://app.promptfoo.app';
+  it('opens cloud dashboard when authenticated and tracks telemetry', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: true,
-        appUrl: mockAppUrl,
+        appUrl: 'https://app.promptfoo.app',
         isEnterprise: false,
       },
       isLoading: false,
@@ -143,19 +143,19 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
+    await user.click(screen.getByRole('button', { name: /connected to promptfoo cloud/i }));
 
-    expect(window.open).toHaveBeenCalledWith(mockAppUrl, '_blank');
+    expect(mockWindowOpen).toHaveBeenCalledWith('https://app.promptfoo.app', '_blank');
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
       authenticated: true,
     });
   });
 
-  it('should show dialog when unauthenticated and track telemetry', () => {
+  it('opens dialog when unauthenticated and tracks telemetry', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
@@ -167,22 +167,21 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
+    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
 
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
-    expect(screen.getByText(/Share evaluation results with your team/)).toBeInTheDocument();
-    expect(screen.getByText(/Centralized dashboard and reporting/)).toBeInTheDocument();
-    expect(screen.getByText('Learn More')).toBeInTheDocument();
+    expect(screen.getByText(/share evaluation results with your team/i)).toBeInTheDocument();
+    expect(screen.getByText(/open centralized dashboards and reports/i)).toBeInTheDocument();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
       feature: 'cloud_status_icon_click',
       authenticated: false,
     });
   });
 
-  it('should show enterprise dialog when unauthenticated and enterprise', () => {
+  it('opens enterprise dialog when unauthenticated and enterprise', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
@@ -194,18 +193,20 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
+    await user.click(
+      screen.getByRole('button', { name: /not connected to promptfoo enterprise/i }),
+    );
 
     expect(screen.getByText('Connect to Promptfoo Enterprise')).toBeInTheDocument();
-    expect(screen.getByText(/Share evaluation results with your organization/)).toBeInTheDocument();
-    expect(screen.getByText(/Centralized dashboard and reporting/)).toBeInTheDocument();
-    expect(screen.getByText('Learn More')).toBeInTheDocument();
+    expect(
+      screen.getByText(/share evaluation results with your organization/i),
+    ).toBeInTheDocument();
   });
 
-  it('should close dialog when close button is clicked', async () => {
+  it('closes dialog when close button is clicked', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
@@ -217,24 +218,20 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    // Open dialog
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
-
+    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
     expect(screen.getByText('Connect to Promptfoo Cloud')).toBeInTheDocument();
 
-    // Close dialog
-    const closeButton = screen.getByText('Close');
-    fireEvent.click(closeButton);
+    await user.click(screen.getAllByRole('button', { name: 'Close' })[0]);
 
     await waitFor(() => {
       expect(screen.queryByText('Connect to Promptfoo Cloud')).not.toBeInTheDocument();
     });
   });
 
-  it('should show error in dialog when there is an error', () => {
+  it('shows error in dialog when there is an error', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: null,
       isLoading: false,
@@ -242,11 +239,9 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    // Open dialog
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
+    await user.click(screen.getByRole('button', { name: /unable to check cloud status/i }));
 
     expect(
       screen.getByText(
@@ -255,7 +250,8 @@ describe('CloudStatusIndicator', () => {
     ).toBeInTheDocument();
   });
 
-  it('should track telemetry when promptfoo.app link is clicked', () => {
+  it('tracks telemetry when promptfoo.app link is clicked', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
@@ -267,15 +263,10 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    // Open dialog
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
-
-    // Click promptfoo.app link
-    const promptfooLink = screen.getByText('promptfoo.app');
-    fireEvent.click(promptfooLink);
+    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('link', { name: 'promptfoo.app' }));
 
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
       action: 'cloud_cta_signup_click',
@@ -283,7 +274,8 @@ describe('CloudStatusIndicator', () => {
     });
   });
 
-  it('should track telemetry when Learn More button is clicked', () => {
+  it('tracks telemetry when learn more button is clicked', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
@@ -295,17 +287,12 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    // Open dialog
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
+    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('button', { name: /learn more/i }));
 
-    // Click Learn More button
-    const learnMoreButton = screen.getByText('Learn More');
-    fireEvent.click(learnMoreButton);
-
-    expect(window.open).toHaveBeenCalledWith(
+    expect(mockWindowOpen).toHaveBeenCalledWith(
       'https://www.promptfoo.dev/docs/usage/sharing/',
       '_blank',
     );
@@ -315,7 +302,8 @@ describe('CloudStatusIndicator', () => {
     });
   });
 
-  it('should call refetch when Refresh Status button is clicked', () => {
+  it('calls refetch when refresh status button is clicked', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
@@ -327,15 +315,10 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    // Open dialog
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
-
-    // Click Refresh Status button
-    const refreshButton = screen.getByText('Refresh Status');
-    fireEvent.click(refreshButton);
+    await user.click(screen.getByRole('button', { name: /not connected to promptfoo cloud/i }));
+    await user.click(screen.getByRole('button', { name: 'Refresh Status' }));
 
     expect(mockRefetch).toHaveBeenCalled();
     expect(mockRecordEvent).toHaveBeenCalledWith('webui_action', {
@@ -344,7 +327,8 @@ describe('CloudStatusIndicator', () => {
     });
   });
 
-  it('should disable Refresh Status button while loading', () => {
+  it('disables refresh status button while loading', async () => {
+    const user = userEvent.setup();
     vi.mocked(useCloudConfig).mockReturnValue({
       data: {
         isEnabled: false,
@@ -356,14 +340,10 @@ describe('CloudStatusIndicator', () => {
       refetch: mockRefetch,
     });
 
-    render(<CloudStatusIndicator />);
+    renderCloudStatusIndicator();
 
-    // Open dialog - need to click first to trigger state change
-    const iconButton = screen.getByRole('button');
-    fireEvent.click(iconButton);
+    await user.click(screen.getByRole('button', { name: /checking cloud status/i }));
 
-    // Find the Checking... button (which replaces Refresh Status when loading)
-    const checkingButton = screen.getByText('Checking...');
-    expect(checkingButton).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Checking...' })).toBeDisabled();
   });
 });

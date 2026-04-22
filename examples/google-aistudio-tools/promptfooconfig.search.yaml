@@ -25,8 +25,8 @@ providers:
       tools:
         - googleSearch: {}
 
-  # Dynamic retrieval configuration for Gemini 1.5 models
-  - id: google:gemini-1.5-flash
+  # Dynamic retrieval configuration for Gemini 2.5 models
+  - id: google:gemini-2.5-flash-lite
     config:
       temperature: 0.2
       maxOutputTokens: 1024

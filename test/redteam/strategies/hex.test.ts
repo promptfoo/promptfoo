@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { addHexEncoding } from '../../../src/redteam/strategies/hex';
 
 import type { TestCase } from '../../../src/types/index';

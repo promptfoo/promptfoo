@@ -4,16 +4,12 @@
  * Generates YAML config file from action inputs
  */
 
+import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { randomUUID } from 'crypto';
-import {
-  type ScanConfig,
-  type CodeScanSeverity,
-  validateSeverity,
-  ScanConfigSchema,
-} from '../../src/types/codeScan';
+
+import { type ScanConfig, ScanConfigSchema, validateSeverity } from '../../src/types/codeScan';
 
 /**
  * Generate a temporary YAML config file from action inputs

@@ -33,7 +33,18 @@ export interface OpenAiSharedOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+  /** Custom per-token cost override for both input and output tokens. */
   cost?: number;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
+  /** Custom per-token audio cost override for both audio input and output tokens. */
+  audioCost?: number;
+  /** Custom per-token audio input cost override. Takes precedence over audioCost. */
+  audioInputCost?: number;
+  /** Custom per-token audio output cost override. Takes precedence over audioCost. */
+  audioOutputCost?: number;
   headers?: { [key: string]: string };
   /** defaults to 4; set to 0 to disable retries; negative values are clamped to 0. */
   maxRetries?: number;
@@ -52,8 +63,9 @@ export interface Reasoning {
    * **o-series models only**
    *
    * Constraints effort on reasoning for
-   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Currently
-   * supported values are `low`, `medium`, and `high`. Reducing reasoning effort can
+   * [reasoning models](https://platform.openai.com/docs/guides/reasoning). Supported
+   * values are `low`, `medium`, and `high` for o-series models. GPT-5 models may
+   * also support `none`, `minimal`, and `xhigh`. Reducing reasoning effort can
    * result in faster responses and fewer tokens used on reasoning in a response.
    */
   effort?: ReasoningEffort;
@@ -66,8 +78,10 @@ export interface Reasoning {
   summary?: 'auto' | 'concise' | 'detailed' | null;
 }
 
+export type GPT5ReasoningEffort = Exclude<ReasoningEffort, null> | 'minimal' | 'xhigh';
+
 export type GPT5Reasoning = Omit<Reasoning, 'effort'> & {
-  effort?: ReasoningEffort | 'minimal';
+  effort?: GPT5ReasoningEffort;
 };
 
 /** Verbosity level supported by GPT-5 models */
@@ -182,4 +196,103 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
    * GPT-5 only: Controls the verbosity of the model's responses. Ignored for non-GPT-5 models.
    */
   verbosity?: GPT5Verbosity;
+
+  /**
+   * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
+   * Only values explicitly set via config or environment variables will be sent.
+   * Used by proxy providers (e.g. LiteLLM) that want the upstream API/proxy to
+   * apply its own defaults.
+   */
+  omitDefaults?: boolean;
 };
+
+// =============================================================================
+// Video Generation Types (Sora)
+// =============================================================================
+
+/**
+ * Supported Sora video models
+ */
+export type OpenAiVideoModel = 'sora-2' | 'sora-2-pro';
+
+/**
+ * Supported video sizes (aspect ratios)
+ */
+export type OpenAiVideoSize = '1280x720' | '720x1280' | '1792x1024' | '1024x1792';
+
+/**
+ * Valid video duration in seconds (Sora API only accepts these values)
+ */
+export type OpenAiVideoDuration = 4 | 8 | 12;
+
+/**
+ * Video generation job status
+ */
+export type OpenAiVideoStatus = 'queued' | 'in_progress' | 'completed' | 'failed';
+
+/**
+ * Video content variants available for download
+ */
+export type OpenAiVideoVariant = 'video' | 'thumbnail' | 'spritesheet';
+
+/**
+ * Configuration options for OpenAI video generation (Sora)
+ */
+export interface OpenAiVideoOptions extends OpenAiSharedOptions {
+  // Model selection
+  model?: OpenAiVideoModel;
+
+  // Video parameters
+  size?: OpenAiVideoSize;
+  seconds?: OpenAiVideoDuration;
+
+  // Image-to-video: base64 image data or file path (file://path)
+  input_reference?: string;
+
+  // Remix mode: ID of previous video to modify
+  remix_video_id?: string;
+
+  // Polling configuration
+  poll_interval_ms?: number; // Default: 10000 (10 seconds)
+  max_poll_time_ms?: number; // Default: 600000 (10 minutes)
+
+  // Output options
+  download_thumbnail?: boolean; // Default: true
+  download_spritesheet?: boolean; // Default: true
+}
+
+/**
+ * Sora API video job response
+ */
+export interface OpenAiVideoJob {
+  id: string;
+  object: 'video';
+  created_at: number;
+  status: OpenAiVideoStatus;
+  model: string;
+  progress?: number; // 0-100
+  seconds?: string;
+  size?: string;
+  error?: {
+    message: string;
+    code?: string;
+  };
+}
+
+/**
+ * Request body for creating a new video
+ */
+export interface OpenAiVideoCreateRequest {
+  model: string;
+  prompt: string;
+  size?: string;
+  seconds?: OpenAiVideoDuration;
+  input_reference?: string;
+}
+
+/**
+ * Request body for remixing an existing video
+ */
+export interface OpenAiVideoRemixRequest {
+  prompt: string;
+}

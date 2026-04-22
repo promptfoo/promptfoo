@@ -42,18 +42,24 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 20)
+   # Use the Node.js version specified in .nvmrc
    nvm use
+
+   # If you're using npm, match the major used in CI so release-age policy is applied
+   npm install -g npm@11
+
+   # Install dependencies (CI uses npm; pnpm and yarn also work for local development)
    npm install
    ```
 
-   3.2 Setup using `devcontainer` (requires Docker and VSCode)
+   3.2 Set up using `devcontainer` (requires Docker and VSCode)
 
    Open the repository in VSCode and click on the "Reopen in Container" button. This will build a Docker container with all the necessary dependencies.
 
    Now install node based dependencies:
 
    ```bash
+   npm install -g npm@11
    npm install
    ```
 
@@ -84,7 +90,7 @@ We particularly welcome contributions in the following areas:
 
    :::
 
-If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) or join our [Discord community](https://discord.gg/promptfoo) for guidance.
+If you're not sure where to start, check out our [good first issues](https://github.com/promptfoo/promptfoo/issues?q=state%3Aopen%20label%3Agood-first-issue%20is%3Aissue) or join our [Discord community](https://discord.gg/promptfoo) for guidance.
 
 ## Development Workflow
 
@@ -130,7 +136,7 @@ Don't hesitate to ask for help. We're here to support you. If you're worried abo
 
 ### Running Tests
 
-We use Jest for testing. To run the test suite:
+We use both Vitest and Jest. To run the test suite:
 
 ```bash
 npm test
@@ -142,33 +148,28 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
-You can also run specific tests with (see [jest documentation](https://jestjs.io/docs/cli#jest-regexfortestfiles)):
+You can also run specific tests with:
 
 ```bash
+# Vitest
+npx vitest [pattern]
+
+# Jest
 npx jest [pattern]
 
 # Example:
 # Runs all provider tests
-npx jest providers
+npx vitest providers
 ```
 
 ### Writing Tests
 
 When writing tests, please:
 
-- Run the test suite you modified with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
-
-  ```bash
-  # Run specific test file with randomization
-  npx jest path/to/your/test.test.ts --randomize
-
-  # Run all tests in a directory with randomization
-  npm run test -- --testPathPattern="test/providers" --randomize
-  ```
-
+- **Use Vitest for new test files.** When modifying existing files, use whichever framework that file uses.
 - Ensure proper test isolation by:
   - Using `beforeEach` and `afterEach` to set up and clean up mocks
-  - Calling `jest.clearAllMocks()` or `jest.restoreAllMocks()` as appropriate
+  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()` for Vitest (or `jest.clearAllMocks()` for Jest)
   - Avoiding shared state between tests
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
@@ -192,7 +193,7 @@ To build the project:
 npm run build
 ```
 
-For continuous building of the api during development:
+For continuous building of the API during development:
 
 ```bash
 npm run build:watch
@@ -202,20 +203,20 @@ npm run build:watch
 
 ### Running the CLI During Development
 
-We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` package:
+We recommend using `npm link` to link your local `promptfoo` package to the global `promptfoo` command:
 
 ```bash
 npm link
-promptfoo --help
+promptfoo eval --config examples/provider-cloudflare/ai/chat_config.yaml
 ```
 
-We recommend running `npm run build:watch` in a separate terminal while you are working on the CLI. This will automatically build the CLI when you make changes.
-
-Alternatively, you can run the CLI directly:
+Alternatively, you can use `npm run local` to run your local build directly:
 
 ```bash
-npm run local -- eval --config examples/cloudflare-ai/chat_config.yaml
+npm run local -- eval --config examples/provider-cloudflare/ai/chat_config.yaml
 ```
+
+**Important:** Always use `--` before flags so they're passed to promptfoo, not npm.
 
 When working on a new feature, we recommend setting up a local `promptfooconfig.yaml` that tests your feature. Think of this as an end-to-end test for your feature.
 
@@ -344,14 +345,15 @@ npm run dev
 This will host the web UI at http://localhost:3000. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
 
 ```bash
-npm run dev:web
+npm run dev:app
 ```
 
-To test the entire thing end-to-end, we recommend building the entire project and linking it to promptfoo:
+To test the entire thing end-to-end, build the project and run it:
 
 ```bash
 npm run build
 promptfoo view
+# Or: npm run dev
 ```
 
 :::note
@@ -438,78 +440,70 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
    npm run db:migrate
    ```
 
-### Release Steps
+### Release Process
 
-Note: releases are only issued by maintainers. If you need to to release a new version quickly please send a message on [Discord](https://discord.gg/promptfoo).
+This project uses [release-please](https://github.com/googleapis/release-please) for automated releases:
 
-As a maintainer, when you are ready to release a new version:
+1. Merge PRs to main with conventional commit messages
+2. release-please creates/updates a release PR with changelog entries, version bumps, and updated `package.json`
+3. When merged, a GitHub release is created and the npm package is published
 
-1. From main, run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically:
-   - Pull latest changes from main branch
-   - Update `package.json`, `package-lock.json` and `CITATION.cff` with the new version
-   - Create a new branch named `chore/bump-version-<new-version>`
-   - Create a pull request titled `"chore: bump version <new-version>"`
+For urgent releases, contact maintainers on [Discord](https://discord.gg/promptfoo).
 
-   When creating a new release version, please follow these guidelines:
-   - Patch will bump the version by `0.0.1` and is used for bug fixes and minor features
-   - Minor will bump the version by `0.1.0` and is used for major features and breaking changes
+## AI-Assisted Contributions
 
-   To determine the appropriate release type, review the changes between the latest release and main branch by visiting ([example](https://github.com/promptfoo/promptfoo/compare/0.103.13...main)):
+We welcome AI-assisted development. Use whatever tools help you ship better work.
 
-   ```
-   https://github.com/promptfoo/promptfoo/compare/[latest-version]...main
-   ```
+We don't judge contributions by how they were produced. We judge them by the quality of the result. The same standards apply regardless of whether you wrote every character by hand or used Copilot, Cursor, Claude Code, or any other tool.
 
-2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
+:::tip You own the change
 
-3. Update `CHANGELOG.md`:
-   - Move all entries from `## [Unreleased]` to a new version section
-   - Format: `## [X.Y.Z] - YYYY-MM-DD`
-   - Keep entries organized by category (Added, Changed, Fixed, etc.)
-   - The release notes will be based on these changelog entries
+If you open a pull request, you are responsible for what you submit. AI can help you write code faster, but it cannot take accountability for correctness, security, or maintainability. That stays with you.
 
-4. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
-   - Break up each PR in the release into one of the following 5 sections (as applicable)
-     - New Features
-     - Bug Fixes
-     - Chores
-     - Docs
-     - Dependencies
-   - Sort the lines in each section alphabetically
-   - Ensure that the author of the PR is correctly cited
+:::
 
-5. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+### Prove the change works
+
+A pull request should include clear instructions so that a reviewer can verify correctness by running the code locally. Don't make reviewers reverse-engineer how to test your change.
+
+**What to include:**
+
+- What changed and why (a few sentences is fine)
+- Steps to reproduce or verify the change (commands, config files, expected output)
+- Any tradeoffs or edge cases you considered
+
+If the change is hard to demonstrate, include something concrete: a minimal repro, a log excerpt, a screenshot, or a short recording.
+
+### Be able to explain the diff
+
+You don't need to have typed every character. You do need to be able to answer reviewer questions about your changes:
+
+- Why is this implemented this way?
+- What alternatives did you consider?
+- What did you test?
+- What could break?
+
+If you can't explain a non-trivial part of your PR, revise it until you can.
+
+### No hypothetical platform support
+
+Don't submit changes for environments you cannot actually run or test. If you want to add support for a platform you don't have access to, open an issue or discussion describing what you need and what you can verify today.
+
+### Maintain agent guidance files
+
+This repository uses `AGENTS.md` files to provide context to AI coding assistants. If your changes affect how agents should work in a particular area (new patterns, conventions, or gotchas), update the relevant `AGENTS.md` file following existing patterns. See the root `AGENTS.md` for the directory structure and conventions.
+
+### Disclosure
+
+Disclosure of AI usage is optional. We won't try to guess whether you used AI.
+
+That said, if a maintainer asks about your process, please answer candidly. If an agent produced a large portion of the change, a short note describing how you validated the output can help reviewers and speed up the process.
 
 ## Changelog
 
-All PRs should include an entry in `CHANGELOG.md` under the `## [Unreleased]` section. This is enforced by a GitHub Action.
+**Do not manually edit `CHANGELOG.md`.** release-please generates entries from conventional commit messages.
 
-We follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with these categories:
-
-- **Added**: New features
-- **Changed**: Changes to existing functionality
-- **Fixed**: Bug fixes
-- **Dependencies**: Dependency updates
-- **Documentation**: Documentation changes
-- **Tests**: Test changes
-
-### Entry Format
-
-```markdown
-- feat(providers): add new provider for XYZ (#1234)
-- fix(evaluator): correct scoring for edge case (#1235)
-```
-
-Each entry must include the PR number and use a conventional commit prefix.
-
-### Bypass Labels
-
-PRs can skip the changelog requirement with these labels:
-
-- `no-changelog` - For exceptional cases (automated bot PRs, reverts)
-- `dependencies` - For automated dependency updates (Dependabot, Renovate)
-
-If the GitHub Action reminds you to update the changelog, either add an entry or apply an appropriate label.
+Use [Conventional Commits](https://www.conventionalcommits.org/) format for PR titles (they become squash-merge commit messages).
 
 ## Getting Help
 

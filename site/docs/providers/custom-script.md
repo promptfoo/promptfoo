@@ -1,9 +1,9 @@
 ---
-sidebar_label: Custom scripts
+sidebar_label: Custom Scripts
 description: Configure custom shell commands and scripts as LLM providers to test chains, Python frameworks, and unsupported APIs with promptfoo's testing framework
 ---
 
-# Custom scripts
+# Custom Scripts
 
 You may use any shell command as an API provider. This is particularly useful when you want to use a language or framework that is not directly supported by promptfoo.
 
@@ -16,6 +16,12 @@ While Script Providers are particularly useful for evaluating chains, they can g
 :::
 
 To use a script provider, you need to create an executable that takes a prompt as its first argument and returns the result of the API call. The script should be able to be invoked from the command line.
+
+Your script receives three arguments:
+
+1. **prompt** - The rendered prompt string
+2. **options** - JSON string with provider configuration
+3. **context** - JSON string with test case variables, metadata, and evaluation info (see [Python provider context](/docs/providers/python#the-context-parameter) for the full structure)
 
 Here is an example of how to use a script provider:
 

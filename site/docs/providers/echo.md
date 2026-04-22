@@ -39,7 +39,7 @@ The Echo Provider requires no additional configuration and returns the input aft
 ```yaml
 providers:
   - echo
-  - openai:chat:gpt-4.1-mini
+  - openai:chat:gpt-5-mini
 
 prompts:
   - 'Summarize this: {{text}}'

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import {
   AegisGrader,
@@ -6,17 +7,15 @@ import {
   fetchDataset,
 } from '../../../src/redteam/plugins/aegis';
 import { RedteamGraderBase } from '../../../src/redteam/plugins/base';
+import { createMockProvider } from '../../factories/provider';
 
-import type { ApiProvider, TestCase } from '../../../src/types/index';
+import type { TestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/integrations/huggingfaceDatasets');
+vi.mock('../../../src/integrations/huggingfaceDatasets');
 
 describe('AegisPlugin', () => {
   let plugin: AegisPlugin;
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: jest.fn(),
-  };
+  const mockProvider = createMockProvider();
 
   beforeEach(() => {
     plugin = new AegisPlugin(mockProvider, 'test-var', 'test-var');
@@ -51,7 +50,7 @@ describe('AegisPlugin', () => {
         },
       },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const tests = await plugin.generateTests(1);
 
@@ -74,7 +73,7 @@ describe('AegisPlugin', () => {
   });
 
   it('should handle empty dataset', async () => {
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue([]);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue([]);
     const tests = await plugin.generateTests(1);
     expect(tests).toEqual([]);
   });
@@ -82,7 +81,7 @@ describe('AegisPlugin', () => {
 
 describe('fetchDataset', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should fetch and filter dataset', async () => {
@@ -92,7 +91,7 @@ describe('fetchDataset', () => {
       },
       { vars: { text: 'ignore me', text_type: 'llm_response' } },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const result = await fetchDataset(1);
     expect(fetchHuggingFaceDataset).toHaveBeenCalledWith(DATASET_PATH, 5);
@@ -102,7 +101,7 @@ describe('fetchDataset', () => {
   });
 
   it('should handle errors', async () => {
-    jest.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('fail'));
+    vi.mocked(fetchHuggingFaceDataset).mockRejectedValue(new Error('fail'));
     const result = await fetchDataset(2);
     expect(result).toEqual([]);
   });
@@ -112,7 +111,7 @@ describe('fetchDataset', () => {
       { vars: { text: 'valid', text_type: 'wrong_type' } },
       { vars: { text: 'valid', text_type: 'user_message' } },
     ];
-    jest.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
+    vi.mocked(fetchHuggingFaceDataset).mockResolvedValue(mockTestCases);
 
     const result = await fetchDataset(1);
     expect(result).toEqual([
@@ -156,7 +155,7 @@ describe('AegisGrader', () => {
       grade: { pass: true, score: 0.8, reason: 'test' },
       rubric: 'test rubric',
     };
-    jest.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue(mockSuperResult);
+    vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue(mockSuperResult);
 
     const result = await grader.getResult('test prompt', output, {}, undefined);
     expect(result).toEqual(mockSuperResult);

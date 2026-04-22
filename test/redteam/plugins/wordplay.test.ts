@@ -1,6 +1,7 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WordplayGrader } from '../../../src/redteam/plugins/wordplay';
 
-jest.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/util/fetch/index.ts');
 
 describe('WordplayGrader', () => {
   let grader: WordplayGrader;
@@ -10,7 +11,7 @@ describe('WordplayGrader', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should render rubric with variables', () => {

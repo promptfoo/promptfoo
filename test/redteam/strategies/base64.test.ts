@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { addBase64Encoding } from '../../../src/redteam/strategies/base64';
 
 import type { TestCase } from '../../../src/types/index';

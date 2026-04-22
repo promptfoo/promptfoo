@@ -1,4 +1,4 @@
-import { sha256 } from '../util/createHash';
+import { generateIdFromPrompt } from '../models/prompt';
 import { VALID_FILE_EXTENSIONS } from './constants';
 
 import type { Prompt } from '../types/index';
@@ -23,7 +23,9 @@ export function maybeFilePath(str: string): boolean {
     VALID_FILE_EXTENSIONS.some((ext) => {
       const tokens = str.split(':'); // str may be file.js:functionName
       // Checks if the second to last token or the last token ends with the extension
-      return tokens.pop()?.endsWith(ext) || tokens.pop()?.endsWith(ext);
+      const pathOrFunctionToken = tokens[tokens.length - 1];
+      const pathToken = tokens[tokens.length - 2];
+      return pathOrFunctionToken?.endsWith(ext) || pathToken?.endsWith(ext);
     }) ||
     str.charAt(str.length - 3) === '.' ||
     str.charAt(str.length - 4) === '.' ||
@@ -86,8 +88,13 @@ export function normalizeInput(
   throw new Error(`Invalid input prompt: ${JSON.stringify(promptPathOrGlobs)}`);
 }
 
+/**
+ * Generates a hash identifier for a prompt.
+ * This is an alias for generateIdFromPrompt for backward compatibility.
+ *
+ * @param prompt - The prompt to hash
+ * @returns A SHA-256 hash string
+ */
 export function hashPrompt(prompt: Prompt): string {
-  return prompt.id || prompt.label
-    ? sha256(prompt.label)
-    : sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw);
+  return generateIdFromPrompt(prompt);
 }

@@ -1,25 +1,82 @@
-import { jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
+import { mockProcessEnv } from '../util/utils';
 
-// Mock AWS SDK modules
-jest.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
-  BedrockAgentRuntimeClient: jest.fn(),
-  InvokeAgentCommand: jest.fn(),
+// Hoisted mocks for AWS SDK
+const mockSend = vi.hoisted(() => vi.fn());
+const MockBedrockAgentRuntimeClient = vi.hoisted(() =>
+  vi.fn(function MockBedrockAgentRuntimeClient() {
+    return { send: mockSend };
+  }),
+);
+const MockInvokeAgentCommand = vi.hoisted(() =>
+  vi.fn(function MockInvokeAgentCommand(this: any, input: any) {
+    Object.assign(this, input);
+  }),
+);
+const NodeHttpHandlerMock = vi.hoisted(() =>
+  vi.fn(function NodeHttpHandlerMock() {
+    return {
+      handle: vi.fn(),
+    };
+  }),
+);
+const ProxyAgentMock = vi.hoisted(() => vi.fn(function ProxyAgentMock() {}));
+
+// Mock AWS SDK modules - don't use importOriginal to avoid module resolution issues
+vi.mock('@aws-sdk/client-bedrock-agent-runtime', () => ({
+  BedrockAgentRuntimeClient: MockBedrockAgentRuntimeClient,
+  InvokeAgentCommand: MockInvokeAgentCommand,
 }));
 
-jest.mock('../../src/cache', () => ({
-  getCache: jest.fn(() =>
-    Promise.resolve({
-      get: jest.fn(() => Promise.resolve(null)),
-      set: jest.fn(),
-    }),
-  ),
-  isCacheEnabled: jest.fn(() => false),
+vi.mock('@smithy/node-http-handler', () => ({
+  __esModule: true,
+  NodeHttpHandler: NodeHttpHandlerMock,
+  default: NodeHttpHandlerMock,
 }));
+
+vi.mock('proxy-agent', () => ({
+  __esModule: true,
+  ProxyAgent: ProxyAgentMock,
+  default: ProxyAgentMock,
+}));
+
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    getCache: vi.fn(() =>
+      Promise.resolve({
+        get: vi.fn(() => Promise.resolve(null)),
+        set: vi.fn(),
+      }),
+    ),
+
+    isCacheEnabled: vi.fn(() => false),
+  };
+});
+
+const ORIGINAL_HTTP_PROXY = process.env.HTTP_PROXY;
+const ORIGINAL_HTTPS_PROXY = process.env.HTTPS_PROXY;
 
 describe('AwsBedrockAgentsProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    mockProcessEnv({ HTTP_PROXY: '' });
+    mockProcessEnv({ HTTPS_PROXY: '' });
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_HTTP_PROXY === undefined) {
+      mockProcessEnv({ HTTP_PROXY: undefined });
+    } else {
+      mockProcessEnv({ HTTP_PROXY: ORIGINAL_HTTP_PROXY });
+    }
+    if (ORIGINAL_HTTPS_PROXY === undefined) {
+      mockProcessEnv({ HTTPS_PROXY: undefined });
+    } else {
+      mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
+    }
   });
 
   describe('constructor', () => {
@@ -71,25 +128,65 @@ describe('AwsBedrockAgentsProvider', () => {
     });
   });
 
+  describe('getAgentRuntimeClient', () => {
+    it('should create runtime client without custom handler by default', async () => {
+      const provider = new AwsBedrockAgentsProvider('test-agent-123', {
+        config: {
+          agentId: 'test-agent-123',
+          agentAliasId: 'test-alias',
+          region: 'us-east-1',
+        },
+      });
+
+      await provider.getAgentRuntimeClient();
+
+      // client-bedrock-agent-runtime already defaults to HTTP/1.1,
+      // so no custom handler is needed without proxy
+      expect(NodeHttpHandlerMock).not.toHaveBeenCalled();
+      expect(MockBedrockAgentRuntimeClient).toHaveBeenCalledWith({
+        region: 'us-east-1',
+        retryMode: 'adaptive',
+        maxAttempts: 10,
+      });
+    });
+
+    it('should create runtime client with proxy agent when proxy is configured', async () => {
+      mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example:8080' });
+
+      const provider = new AwsBedrockAgentsProvider('test-agent-123', {
+        config: {
+          agentId: 'test-agent-123',
+          agentAliasId: 'test-alias',
+          region: 'us-east-1',
+        },
+      });
+
+      await provider.getAgentRuntimeClient();
+
+      expect(ProxyAgentMock).toHaveBeenCalled();
+      expect(NodeHttpHandlerMock).toHaveBeenCalledWith({
+        httpsAgent: expect.any(Object),
+        requestTimeout: 300000,
+      });
+      const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
+      expect(MockBedrockAgentRuntimeClient).toHaveBeenCalledWith({
+        region: 'us-east-1',
+        retryMode: 'adaptive',
+        maxAttempts: 10,
+        requestHandler,
+      });
+    });
+  });
+
   describe('callApi', () => {
-    let mockSend: jest.Mock;
     let provider: AwsBedrockAgentsProvider;
 
     beforeEach(() => {
-      jest.clearAllMocks();
-
-      // Create a fresh mock for each test
-      mockSend = jest.fn();
-      const {
-        BedrockAgentRuntimeClient,
-        InvokeAgentCommand,
-      } = require('@aws-sdk/client-bedrock-agent-runtime');
-
-      BedrockAgentRuntimeClient.mockImplementation(() => ({
-        send: mockSend,
-      }));
-
-      InvokeAgentCommand.mockImplementation((input: any) => input);
+      vi.clearAllMocks();
+      // Reset the hoisted mocks
+      mockSend.mockReset();
+      MockBedrockAgentRuntimeClient.mockClear();
+      MockInvokeAgentCommand.mockClear();
 
       // Create provider after mocks are set up
       provider = new AwsBedrockAgentsProvider('test-agent', {
@@ -102,8 +199,8 @@ describe('AwsBedrockAgentsProvider', () => {
     });
 
     afterEach(() => {
-      jest.clearAllMocks();
-      jest.restoreAllMocks();
+      vi.clearAllMocks();
+      vi.restoreAllMocks();
     });
 
     it('should require agentAliasId', async () => {
@@ -241,8 +338,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(provider.config.memoryId).toBe('LONG_TERM_MEMORY');
     });
 
-    it.skip('should handle API errors gracefully', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
+    it('should handle API errors gracefully', async () => {
       // Override the mock to reject for this test
       (mockSend as any).mockRejectedValue(new Error('AWS API Error'));
 
@@ -253,8 +349,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(result.output).toBeUndefined();
     });
 
-    it.skip('should handle token usage in metadata', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
+    it('should handle token usage in metadata', async () => {
       // Clear previous mock and set up new response
       mockSend.mockClear();
 
@@ -308,8 +403,7 @@ describe('AwsBedrockAgentsProvider', () => {
       expect(provider.config.sessionId).toBe('fixed-session-id');
     });
 
-    it.skip('should generate session ID if not provided', async () => {
-      // TODO: Fix mock isolation issue - test passes in isolation but fails when run with other tests
+    it('should generate session ID if not provided', async () => {
       // Clear previous mock and set up new response
       mockSend.mockClear();
 
