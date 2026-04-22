@@ -4,7 +4,7 @@ import type { Assertion, EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 export type MetricDisplayKind = 'percentage' | 'value';
 
 export function isValueMetricAssertion(assertion: { type: string; threshold?: number }): boolean {
-  if (assertion.threshold !== undefined) {
+  if (assertion.threshold !== undefined || assertion.type.startsWith('not-')) {
     return false;
   }
   return assertion.type === 'cost' || assertion.type === 'latency';

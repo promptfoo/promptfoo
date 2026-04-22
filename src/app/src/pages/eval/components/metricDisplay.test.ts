@@ -50,6 +50,32 @@ describe('metricDisplay', () => {
     });
   });
 
+  it('does not classify thresholdless not-cost/not-latency as value metrics', () => {
+    const table: EvaluateTable = {
+      head: { prompts: [], vars: [] },
+      body: [
+        {
+          description: 'row 1',
+          outputs: [],
+          test: {
+            assert: [
+              { type: 'not-cost', metric: 'cost_guard' },
+              { type: 'not-latency', metric: 'latency_guard' },
+            ],
+            vars: {},
+          },
+          testIdx: 0,
+          vars: [],
+        },
+      ],
+    };
+
+    expect(getMetricDisplayKinds(table)).toEqual({
+      cost_guard: 'percentage',
+      latency_guard: 'percentage',
+    });
+  });
+
   it('resolves nunjucks metric templates before classifying them', () => {
     const table: EvaluateTable = {
       head: {

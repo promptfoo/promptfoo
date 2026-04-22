@@ -1,3 +1,4 @@
+import { countAssertionPassFail } from '../../../assertions/componentResults';
 import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
 import { truncateText } from './utils';
 
@@ -126,10 +127,11 @@ function formatSingleResult(
   let assertions: FormattedEvalResult['assertions'] = null;
   if (result.gradingResult) {
     const componentResults = result.gradingResult.componentResults || [];
+    const { passCount, failCount } = countAssertionPassFail(componentResults);
     assertions = {
       totalAssertions: result.testCase.assert?.length || 0,
-      passedAssertions: componentResults.filter((r) => r.pass).length,
-      failedAssertions: componentResults.filter((r) => !r.pass).length,
+      passedAssertions: passCount,
+      failedAssertions: failCount,
       componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => {
         const fallbackAssertion = result.testCase.assert?.[idx];
         return {

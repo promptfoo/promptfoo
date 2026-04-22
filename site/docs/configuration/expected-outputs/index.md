@@ -634,8 +634,8 @@ derivedMetrics:
 ### Notes
 
 - Missing metrics default to 0
-- The `__count` variable is per prompt-provider combination (number of test cases)
-- If multiple assertions write to the same metric, each assertion increments that metric's count
+- The `__count` variable is the number of test cases for the prompt-provider combination, regardless of how many assertions wrote to a given metric
+- Multiple assertions writing to the same metric accumulate into its `namedScoreWeights` (used for UI averaging), but `__count` is not incremented per assertion
 - Functions receive a copy of the context - return values, don't mutate
 - To avoid division by zero: `value: 'numerator / (denominator + 0.0001)'`
 - Debug errors with: `LOG_LEVEL=debug promptfoo eval`
