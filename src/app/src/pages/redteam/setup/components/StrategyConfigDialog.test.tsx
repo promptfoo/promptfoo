@@ -1216,6 +1216,22 @@ describe('StrategyConfigDialog', () => {
       expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
     });
 
+    it('should reject fractional iteration counts', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: 3.5 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      expect(screen.getByText(/Must be a whole number/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
+
     it('should show normal helper text when numIterations is below 30', () => {
       render(
         <StrategyConfigDialog

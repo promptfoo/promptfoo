@@ -45,6 +45,7 @@ const MAX_ITERATIONS_LIMIT_MESSAGE =
 const MAX_ITERATIONS_ERROR_MESSAGE =
   'Must be 30 or less. Higher values show diminishing returns while increasing scan time and cost.';
 const INVALID_NUMBER_ERROR_MESSAGE = 'Please enter a valid positive number.';
+const WHOLE_NUMBER_ERROR_MESSAGE = 'Must be a whole number.';
 
 function validateIterationValue(value: unknown, min: number): string | null {
   if (value === undefined || value === null || value === '') {
@@ -52,6 +53,9 @@ function validateIterationValue(value: unknown, min: number): string | null {
   }
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return INVALID_NUMBER_ERROR_MESSAGE;
+  }
+  if (!Number.isInteger(value)) {
+    return WHOLE_NUMBER_ERROR_MESSAGE;
   }
   if (value < min) {
     return `Must be at least ${min}.`;
@@ -577,6 +581,7 @@ export default function StrategyConfigDialog({
           placeholder="Number of iterations (default: 10)"
           min={MIN_ITERATIONS}
           max={maxIterationsLimit}
+          step={1}
           className={getIterationInputClassName(localConfig.numIterations, MIN_ITERATIONS)}
         />
         <p className={getIterationHelperClassName(localConfig.numIterations, MIN_ITERATIONS)}>
@@ -732,6 +737,7 @@ export default function StrategyConfigDialog({
             placeholder="Maximum number of conversation turns (default: 10)"
             min={MIN_TURNS}
             max={maxTurnsLimit}
+            step={1}
             className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
           />
           <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
@@ -782,6 +788,7 @@ export default function StrategyConfigDialog({
           placeholder="Maximum conversation turns (default: 10)"
           min={MIN_TURNS}
           max={maxTurnsLimit}
+          step={1}
           className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
         />
         <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
@@ -836,6 +843,7 @@ export default function StrategyConfigDialog({
           placeholder="5"
           min={MIN_TURNS}
           max={maxTurnsLimit}
+          step={1}
           className={getIterationInputClassName(localConfig.maxTurns, MIN_TURNS)}
         />
         <p className={getIterationHelperClassName(localConfig.maxTurns, MIN_TURNS)}>
@@ -883,6 +891,7 @@ export default function StrategyConfigDialog({
           placeholder="Number of iterations (default: 10)"
           min={MIN_ITERATIONS}
           max={maxIterationsLimit}
+          step={1}
           className={getIterationInputClassName(localConfig.numIterations, MIN_ITERATIONS)}
         />
         <p className={getIterationHelperClassName(localConfig.numIterations, MIN_ITERATIONS)}>
