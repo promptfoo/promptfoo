@@ -28,6 +28,7 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from './mistral/defaults';
+import { getCodexDefaultProviders, hasCodexDefaultCredentials } from './openai/codexDefaults';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
@@ -59,6 +60,177 @@ const EMBEDDING_PROVIDERS: (keyof DefaultProviders)[] = ['embeddingProvider'];
 let defaultCompletionProvider: ApiProvider;
 let defaultEmbeddingProvider: ApiProvider;
 
+interface DefaultProviderPreferences {
+  detectedCredentials: string[];
+  hasAnthropicCredentials: boolean;
+  hasAzureApiKey: boolean;
+  hasAzureClientCreds: boolean;
+  hasAzureContentSafety: boolean;
+  hasAzureDeploymentName: boolean;
+  hasCodexCredentials: boolean;
+  hasGeminiApiKey: boolean;
+  hasGitHubCredentials: boolean;
+  hasGoogleAiStudioCredentials: boolean;
+  hasGoogleApiKey: boolean;
+  hasGoogleDefaultCredentials: boolean;
+  hasMistralCredentials: boolean;
+  hasOpenAiCredentials: boolean;
+  hasPalmApiKey: boolean;
+  preferAnthropic: boolean;
+  preferAzure: boolean;
+  useCodexDefaults: boolean;
+  useGitHubDefaults: boolean;
+  useGoogleAiStudioDefaults: boolean;
+  useGoogleVertexDefaults: boolean;
+  useMistralDefaults: boolean;
+}
+
+type DefaultProviderCredentialState = Pick<
+  DefaultProviderPreferences,
+  | 'hasAnthropicCredentials'
+  | 'hasAzureApiKey'
+  | 'hasAzureClientCreds'
+  | 'hasAzureContentSafety'
+  | 'hasAzureDeploymentName'
+  | 'hasGeminiApiKey'
+  | 'hasGitHubCredentials'
+  | 'hasGoogleAiStudioCredentials'
+  | 'hasGoogleApiKey'
+  | 'hasMistralCredentials'
+  | 'hasOpenAiCredentials'
+  | 'hasPalmApiKey'
+>;
+
+type DefaultProviderRoutingState = Pick<
+  DefaultProviderPreferences,
+  | 'hasCodexCredentials'
+  | 'hasGoogleDefaultCredentials'
+  | 'preferAnthropic'
+  | 'preferAzure'
+  | 'useCodexDefaults'
+  | 'useGitHubDefaults'
+  | 'useGoogleAiStudioDefaults'
+  | 'useGoogleVertexDefaults'
+  | 'useMistralDefaults'
+>;
+
+function hasAnyEnvValue(names: string[], env?: EnvOverrides): boolean {
+  return names.some((name) => Boolean(getEnvString(name) || env?.[name]));
+}
+
+function hasAllEnvValues(names: string[], env?: EnvOverrides): boolean {
+  return names.every((name) => Boolean(getEnvString(name) || env?.[name]));
+}
+
+function getDefaultProviderCredentialState(env?: EnvOverrides): DefaultProviderCredentialState {
+  const hasAnthropicCredentials = hasAnyEnvValue(['ANTHROPIC_API_KEY'], env);
+  const hasGeminiApiKey = hasAnyEnvValue(['GEMINI_API_KEY'], env);
+  const hasGoogleApiKey = hasAnyEnvValue(['GOOGLE_API_KEY'], env);
+  const hasPalmApiKey = hasAnyEnvValue(['PALM_API_KEY'], env);
+
+  return {
+    hasAnthropicCredentials,
+    hasAzureApiKey: hasAnyEnvValue(['AZURE_OPENAI_API_KEY', 'AZURE_API_KEY'], env),
+    hasAzureClientCreds: hasAllEnvValues(
+      ['AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID'],
+      env,
+    ),
+    hasAzureContentSafety: hasAnyEnvValue(['AZURE_CONTENT_SAFETY_ENDPOINT'], env),
+    hasAzureDeploymentName: hasAllEnvValues(
+      ['AZURE_DEPLOYMENT_NAME', 'AZURE_OPENAI_DEPLOYMENT_NAME'],
+      env,
+    ),
+    hasGeminiApiKey,
+    hasGitHubCredentials: hasAnyEnvValue(['GITHUB_TOKEN'], env),
+    hasGoogleAiStudioCredentials: [hasGeminiApiKey, hasGoogleApiKey, hasPalmApiKey].some(Boolean),
+    hasGoogleApiKey,
+    hasMistralCredentials: hasAnyEnvValue(['MISTRAL_API_KEY'], env),
+    hasOpenAiCredentials: hasAnyEnvValue(['OPENAI_API_KEY'], env),
+    hasPalmApiKey,
+  };
+}
+
+async function getDefaultProviderRoutingState(
+  credentials: DefaultProviderCredentialState,
+  env?: EnvOverrides,
+): Promise<DefaultProviderRoutingState> {
+  const preferAzure =
+    !credentials.hasOpenAiCredentials &&
+    (credentials.hasAzureApiKey || credentials.hasAzureClientCreds) &&
+    credentials.hasAzureDeploymentName;
+  const preferAnthropic = !credentials.hasOpenAiCredentials && credentials.hasAnthropicCredentials;
+  const shouldUseFallbackDefaults =
+    !preferAzure &&
+    !credentials.hasOpenAiCredentials &&
+    !credentials.hasAnthropicCredentials &&
+    !credentials.hasGoogleAiStudioCredentials;
+  const useGoogleVertexDefaults = shouldUseFallbackDefaults
+    ? await hasGoogleDefaultCredentials()
+    : false;
+  const useNonGoogleFallbackDefaults = shouldUseFallbackDefaults && !useGoogleVertexDefaults;
+  const hasCodexCredentials =
+    useNonGoogleFallbackDefaults &&
+    !credentials.hasMistralCredentials &&
+    hasCodexDefaultCredentials(env);
+
+  return {
+    hasCodexCredentials,
+    hasGoogleDefaultCredentials: useGoogleVertexDefaults,
+    preferAnthropic,
+    preferAzure,
+    useCodexDefaults: hasCodexCredentials,
+    useGitHubDefaults:
+      useNonGoogleFallbackDefaults &&
+      !credentials.hasMistralCredentials &&
+      !hasCodexCredentials &&
+      credentials.hasGitHubCredentials,
+    useGoogleAiStudioDefaults:
+      !credentials.hasOpenAiCredentials &&
+      !credentials.hasAnthropicCredentials &&
+      credentials.hasGoogleAiStudioCredentials,
+    useGoogleVertexDefaults,
+    useMistralDefaults: useNonGoogleFallbackDefaults && credentials.hasMistralCredentials,
+  };
+}
+
+function getDetectedDefaultProviderCredentials({
+  credentials,
+  routing,
+}: {
+  credentials: DefaultProviderCredentialState;
+  routing: DefaultProviderRoutingState;
+}): string[] {
+  return [
+    [credentials.hasOpenAiCredentials, 'OPENAI_API_KEY'],
+    [credentials.hasAnthropicCredentials, 'ANTHROPIC_API_KEY'],
+    [credentials.hasGitHubCredentials, 'GITHUB_TOKEN'],
+    [credentials.hasGeminiApiKey, 'GEMINI_API_KEY'],
+    [credentials.hasGoogleApiKey, 'GOOGLE_API_KEY'],
+    [credentials.hasPalmApiKey, 'PALM_API_KEY'],
+    [credentials.hasMistralCredentials, 'MISTRAL_API_KEY'],
+    [credentials.hasAzureApiKey, 'AZURE_OPENAI_API_KEY'],
+    [credentials.hasAzureClientCreds, 'AZURE_CLIENT_CREDENTIALS'],
+    [routing.useGoogleVertexDefaults, 'GOOGLE_APPLICATION_CREDENTIALS'],
+    [routing.hasCodexCredentials, 'CHATGPT_CODEX_CREDENTIALS'],
+    [credentials.hasAzureContentSafety, 'AZURE_CONTENT_SAFETY_ENDPOINT'],
+  ]
+    .filter(([isPresent]) => isPresent)
+    .map(([, credential]) => credential as string);
+}
+
+async function getDefaultProviderPreferences(
+  env?: EnvOverrides,
+): Promise<DefaultProviderPreferences> {
+  const credentials = getDefaultProviderCredentialState(env);
+  const routing = await getDefaultProviderRoutingState(credentials, env);
+
+  return {
+    ...credentials,
+    ...routing,
+    detectedCredentials: getDetectedDefaultProviderCredentials({ credentials, routing }),
+  };
+}
+
 /**
  * This will override all of the completion type providers defined in the constant COMPLETION_PROVIDERS
  * @param provider - The provider to set as the default completion provider.
@@ -71,138 +243,25 @@ export async function setDefaultEmbeddingProviders(provider: ApiProvider) {
   defaultEmbeddingProvider = provider;
 }
 
-/**
- * Helper to get provider ID safely
- */
-function getProviderId(provider: ApiProvider | undefined): string | undefined {
-  if (!provider) {
-    return undefined;
-  }
-  try {
-    return provider.id();
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Gets the default providers along with metadata about how they were selected.
- * This provides visibility into the auto-detection logic for debugging and user information.
- *
- * @param env - Optional environment overrides
- * @returns Default providers and selection metadata
- */
-export async function getDefaultProvidersWithInfo(
+async function resolveDefaultProviders(
   env?: EnvOverrides,
-): Promise<DefaultProvidersWithInfo> {
-  const detectedCredentials: string[] = [];
-  const skippedProviders: SkippedProviderInfo[] = [];
-
-  // Check for provider credentials and build detected list
-  const hasOpenAiCredentials = Boolean(getEnvString('OPENAI_API_KEY') || env?.OPENAI_API_KEY);
-  if (hasOpenAiCredentials) {
-    detectedCredentials.push('OPENAI_API_KEY');
-  }
-
-  const hasAnthropicCredentials = Boolean(
-    getEnvString('ANTHROPIC_API_KEY') || env?.ANTHROPIC_API_KEY,
-  );
-  if (hasAnthropicCredentials) {
-    detectedCredentials.push('ANTHROPIC_API_KEY');
-  }
-
-  const hasGitHubCredentials = Boolean(getEnvString('GITHUB_TOKEN') || env?.GITHUB_TOKEN);
-  if (hasGitHubCredentials) {
-    detectedCredentials.push('GITHUB_TOKEN');
-  }
-
-  const hasGeminiApiKey = Boolean(getEnvString('GEMINI_API_KEY') || env?.GEMINI_API_KEY);
-  if (hasGeminiApiKey) {
-    detectedCredentials.push('GEMINI_API_KEY');
-  }
-
-  const hasGoogleApiKey = Boolean(getEnvString('GOOGLE_API_KEY') || env?.GOOGLE_API_KEY);
-  if (hasGoogleApiKey) {
-    detectedCredentials.push('GOOGLE_API_KEY');
-  }
-
-  const hasPalmApiKey = Boolean(getEnvString('PALM_API_KEY') || env?.PALM_API_KEY);
-  if (hasPalmApiKey) {
-    detectedCredentials.push('PALM_API_KEY');
-  }
-
-  const hasGoogleAiStudioCredentials = hasGeminiApiKey || hasGoogleApiKey || hasPalmApiKey;
-
-  const hasMistralCredentials = Boolean(getEnvString('MISTRAL_API_KEY') || env?.MISTRAL_API_KEY);
-  if (hasMistralCredentials) {
-    detectedCredentials.push('MISTRAL_API_KEY');
-  }
-
-  const hasAzureApiKey = Boolean(
-    getEnvString('AZURE_OPENAI_API_KEY') ||
-      env?.AZURE_OPENAI_API_KEY ||
-      getEnvString('AZURE_API_KEY') ||
-      env?.AZURE_API_KEY,
-  );
-  if (hasAzureApiKey) {
-    detectedCredentials.push('AZURE_OPENAI_API_KEY');
-  }
-
-  const hasAzureClientCreds = Boolean(
-    (getEnvString('AZURE_CLIENT_ID') || env?.AZURE_CLIENT_ID) &&
-      (getEnvString('AZURE_CLIENT_SECRET') || env?.AZURE_CLIENT_SECRET) &&
-      (getEnvString('AZURE_TENANT_ID') || env?.AZURE_TENANT_ID),
-  );
-  if (hasAzureClientCreds) {
-    detectedCredentials.push('AZURE_CLIENT_CREDENTIALS');
-  }
-
-  const hasAzureDeploymentName = Boolean(
-    (getEnvString('AZURE_DEPLOYMENT_NAME') || env?.AZURE_DEPLOYMENT_NAME) &&
-      (getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME),
-  );
-
-  const hasAzureContentSafety = Boolean(
-    getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT,
-  );
-  if (hasAzureContentSafety) {
-    detectedCredentials.push('AZURE_CONTENT_SAFETY_ENDPOINT');
-  }
-
-  // Determine which provider to use with priority tracking
-  const preferAzure =
-    !hasOpenAiCredentials && (hasAzureApiKey || hasAzureClientCreds) && hasAzureDeploymentName;
-
-  const preferAnthropic = !hasOpenAiCredentials && hasAnthropicCredentials;
-
-  // Only check Google ADC when it could actually affect provider selection.
-  // ADC lookup involves metadata/file probing which can add latency or hang in some environments.
-  // We only need to check ADC if:
-  // 1. No higher-priority credentials are set (OpenAI, Anthropic, Azure, Google AI Studio API keys)
-  // 2. OR we want to report it in detectedCredentials for the "skipped" list
-  const shouldCheckGoogleADC =
-    !hasOpenAiCredentials &&
-    !hasAnthropicCredentials &&
-    !preferAzure &&
-    !hasGoogleAiStudioCredentials;
-
-  let hasGoogleADC = false;
-  if (shouldCheckGoogleADC) {
-    hasGoogleADC = await hasGoogleDefaultCredentials();
-    if (hasGoogleADC) {
-      detectedCredentials.push('GOOGLE_APPLICATION_CREDENTIALS');
-    }
-  }
+  preferences?: DefaultProviderPreferences,
+): Promise<DefaultProviders> {
+  const resolvedPreferences = preferences ?? (await getDefaultProviderPreferences(env));
+  const {
+    preferAnthropic,
+    preferAzure,
+    useCodexDefaults,
+    useGitHubDefaults,
+    useGoogleAiStudioDefaults,
+    useGoogleVertexDefaults,
+    useMistralDefaults,
+  } = resolvedPreferences;
 
   let providers: Pick<DefaultProviders, keyof DefaultProviders>;
-  let selectedProvider: string;
-  let reason: string;
 
   if (preferAzure) {
-    selectedProvider = 'Azure OpenAI';
-    reason = 'Azure credentials and deployment name found, OPENAI_API_KEY not set';
     logger.debug('Using Azure OpenAI default providers');
-
     const deploymentName =
       getEnvString('AZURE_OPENAI_DEPLOYMENT_NAME') || env?.AZURE_OPENAI_DEPLOYMENT_NAME;
     if (!deploymentName) {
@@ -215,7 +274,9 @@ export async function getDefaultProvidersWithInfo(
       deploymentName;
 
     const azureProvider = new AzureChatCompletionProvider(deploymentName, { env });
-    const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, { env });
+    const azureEmbeddingProvider = new AzureEmbeddingProvider(embeddingDeploymentName, {
+      env,
+    });
 
     providers = {
       embeddingProvider: azureEmbeddingProvider,
@@ -224,40 +285,10 @@ export async function getDefaultProvidersWithInfo(
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: azureProvider,
       synthesizeProvider: azureProvider,
+      // Azure doesn't have web search by default
     };
-
-    // Track skipped providers
-    // Note: We don't check Google ADC here because ADC lookup is expensive and
-    // we've already determined Azure will be used.
-    if (hasAnthropicCredentials) {
-      skippedProviders.push({
-        name: 'Anthropic',
-        reason: 'Azure has higher priority when OPENAI_API_KEY not set',
-      });
-    }
-    if (hasGoogleAiStudioCredentials) {
-      skippedProviders.push({
-        name: 'Google AI Studio',
-        reason: 'Azure has higher priority',
-      });
-    }
-    if (hasMistralCredentials) {
-      skippedProviders.push({
-        name: 'Mistral',
-        reason: 'Azure has higher priority',
-      });
-    }
-    if (hasGitHubCredentials) {
-      skippedProviders.push({
-        name: 'GitHub Models',
-        reason: 'Azure has higher priority',
-      });
-    }
   } else if (preferAnthropic) {
-    selectedProvider = 'Anthropic';
-    reason = 'ANTHROPIC_API_KEY found, OPENAI_API_KEY not set';
     logger.debug('Using Anthropic default providers');
-
     const anthropicProviders = getAnthropicProviders(env);
 
     providers = {
@@ -270,40 +301,10 @@ export async function getDefaultProvidersWithInfo(
       synthesizeProvider: anthropicProviders.synthesizeProvider,
       webSearchProvider: anthropicProviders.webSearchProvider,
     };
-
-    // Track skipped providers
-    // Note: We don't check Google ADC here because ADC lookup is expensive and
-    // we've already determined Anthropic will be used.
-    if (hasGoogleAiStudioCredentials) {
-      skippedProviders.push({
-        name: 'Google AI Studio',
-        reason: 'Anthropic has higher priority',
-      });
-    }
-    if (hasMistralCredentials) {
-      skippedProviders.push({
-        name: 'Mistral',
-        reason: 'Anthropic has higher priority',
-      });
-    }
-    if (hasGitHubCredentials) {
-      skippedProviders.push({
-        name: 'GitHub Models',
-        reason: 'Anthropic has higher priority',
-      });
-    }
-  } else if (!hasOpenAiCredentials && !hasAnthropicCredentials && hasGoogleAiStudioCredentials) {
-    selectedProvider = 'Google AI Studio';
-    const credKey = hasGeminiApiKey
-      ? 'GEMINI_API_KEY'
-      : hasGoogleApiKey
-        ? 'GOOGLE_API_KEY'
-        : 'PALM_API_KEY';
-    reason = `${credKey} found, OPENAI_API_KEY and ANTHROPIC_API_KEY not set`;
+  } else if (useGoogleAiStudioDefaults) {
     logger.debug('Using Google AI Studio default providers');
-
     providers = {
-      embeddingProvider: GeminiEmbeddingProvider,
+      embeddingProvider: GeminiEmbeddingProvider, // AI Studio supports embeddings via google:embedding:*, but Vertex is the richer default
       gradingJsonProvider: GoogleAiStudioGradingJsonProvider,
       gradingProvider: GoogleAiStudioGradingProvider,
       llmRubricProvider: GoogleAiStudioLlmRubricProvider,
@@ -311,36 +312,8 @@ export async function getDefaultProvidersWithInfo(
       suggestionsProvider: GoogleAiStudioSuggestionsProvider,
       synthesizeProvider: GoogleAiStudioSynthesizeProvider,
     };
-
-    if (hasGoogleADC) {
-      skippedProviders.push({
-        name: 'Google Vertex',
-        reason: 'Google AI Studio API key takes priority over ADC',
-      });
-    }
-    if (hasMistralCredentials) {
-      skippedProviders.push({
-        name: 'Mistral',
-        reason: 'Google AI Studio has higher priority',
-      });
-    }
-    if (hasGitHubCredentials) {
-      skippedProviders.push({
-        name: 'GitHub Models',
-        reason: 'Google AI Studio has higher priority',
-      });
-    }
-  } else if (
-    !hasOpenAiCredentials &&
-    !hasAnthropicCredentials &&
-    !hasGoogleAiStudioCredentials &&
-    hasGoogleADC
-  ) {
-    selectedProvider = 'Google Vertex';
-    reason =
-      'Google Application Default Credentials found, no API keys for OpenAI/Anthropic/Google AI Studio';
+  } else if (useGoogleVertexDefaults) {
     logger.debug('Using Google Vertex default providers');
-
     providers = {
       embeddingProvider: GeminiEmbeddingProvider,
       gradingJsonProvider: GeminiGradingProvider,
@@ -349,30 +322,8 @@ export async function getDefaultProvidersWithInfo(
       suggestionsProvider: GeminiGradingProvider,
       synthesizeProvider: GeminiGradingProvider,
     };
-
-    if (hasMistralCredentials) {
-      skippedProviders.push({
-        name: 'Mistral',
-        reason: 'Google Vertex has higher priority',
-      });
-    }
-    if (hasGitHubCredentials) {
-      skippedProviders.push({
-        name: 'GitHub Models',
-        reason: 'Google Vertex has higher priority',
-      });
-    }
-  } else if (
-    !hasOpenAiCredentials &&
-    !hasAnthropicCredentials &&
-    !hasGoogleAiStudioCredentials &&
-    !hasGoogleADC &&
-    hasMistralCredentials
-  ) {
-    selectedProvider = 'Mistral';
-    reason = 'MISTRAL_API_KEY found, no credentials for higher-priority providers';
+  } else if (useMistralDefaults) {
     logger.debug('Using Mistral default providers');
-
     providers = {
       embeddingProvider: MistralEmbeddingProvider,
       gradingJsonProvider: MistralGradingJsonProvider,
@@ -380,39 +331,26 @@ export async function getDefaultProvidersWithInfo(
       moderationProvider: OpenAiModerationProvider,
       suggestionsProvider: MistralSuggestionsProvider,
       synthesizeProvider: MistralSynthesizeProvider,
+      // Mistral doesn't have web search
     };
-
-    if (hasGitHubCredentials) {
-      skippedProviders.push({
-        name: 'GitHub Models',
-        reason: 'Mistral has higher priority',
-      });
-    }
-  } else if (
-    !hasOpenAiCredentials &&
-    !hasAnthropicCredentials &&
-    !hasGoogleAiStudioCredentials &&
-    !hasGoogleADC &&
-    !hasMistralCredentials &&
-    hasGitHubCredentials
-  ) {
-    selectedProvider = 'GitHub Models';
-    reason = 'GITHUB_TOKEN found, no credentials for higher-priority providers';
-    logger.debug('Using GitHub Models default providers');
-
+  } else if (useCodexDefaults) {
+    logger.debug('Using Codex SDK default providers from ChatGPT/Codex credentials');
     providers = {
       embeddingProvider: OpenAiEmbeddingProvider,
+      moderationProvider: OpenAiModerationProvider,
+      ...getCodexDefaultProviders(env),
+    };
+  } else if (useGitHubDefaults) {
+    logger.debug('Using GitHub Models default providers');
+    providers = {
+      embeddingProvider: OpenAiEmbeddingProvider, // GitHub doesn't support embeddings yet
       gradingJsonProvider: DefaultGitHubGradingJsonProvider,
       gradingProvider: DefaultGitHubGradingProvider,
-      moderationProvider: OpenAiModerationProvider,
+      moderationProvider: OpenAiModerationProvider, // GitHub doesn't have moderation
       suggestionsProvider: DefaultGitHubSuggestionsProvider,
       synthesizeProvider: DefaultGitHubGradingJsonProvider,
     };
   } else {
-    selectedProvider = 'OpenAI';
-    reason = hasOpenAiCredentials
-      ? 'OPENAI_API_KEY found (highest priority)'
-      : 'Default provider (no other credentials detected)';
     logger.debug('Using OpenAI default providers');
 
     providers = {
@@ -424,80 +362,248 @@ export async function getDefaultProvidersWithInfo(
       synthesizeProvider: OpenAiGradingJsonProvider,
       webSearchProvider: OpenAiWebSearchProvider,
     };
-
-    // Track skipped providers (OpenAI wins because it has the key)
-    // Note: We don't check Google ADC here because ADC lookup is expensive and
-    // we've already determined OpenAI will be used. Users with OpenAI keys
-    // typically don't need to know about Google ADC availability.
-    if (hasAnthropicCredentials) {
-      skippedProviders.push({
-        name: 'Anthropic',
-        reason: 'OpenAI has higher priority when OPENAI_API_KEY is set',
-      });
-    }
-    if (hasGoogleAiStudioCredentials) {
-      skippedProviders.push({
-        name: 'Google AI Studio',
-        reason: 'OpenAI has higher priority',
-      });
-    }
-    if (hasMistralCredentials) {
-      skippedProviders.push({
-        name: 'Mistral',
-        reason: 'OpenAI has higher priority',
-      });
-    }
-    if (hasGitHubCredentials) {
-      skippedProviders.push({
-        name: 'GitHub Models',
-        reason: 'OpenAI has higher priority',
-      });
-    }
   }
 
-  // Handle Azure Content Safety moderation override
-  let moderationOverride: string | undefined;
-  if (hasAzureContentSafety) {
+  // If Azure Content Safety endpoint is available, use it for moderation
+  if (getEnvString('AZURE_CONTENT_SAFETY_ENDPOINT') || env?.AZURE_CONTENT_SAFETY_ENDPOINT) {
     providers.moderationProvider = new AzureModerationProvider('text-content-safety', { env });
-    moderationOverride = 'Azure Content Safety';
   }
 
-  // Handle default provider overrides
-  let completionOverride: string | undefined;
   if (defaultCompletionProvider) {
     logger.debug(`Overriding default completion provider: ${defaultCompletionProvider.id()}`);
-    completionOverride = defaultCompletionProvider.id();
     COMPLETION_PROVIDERS.forEach((provider) => {
       providers[provider] = defaultCompletionProvider;
     });
   }
 
-  let embeddingOverride: string | undefined;
   if (defaultEmbeddingProvider) {
-    embeddingOverride = defaultEmbeddingProvider.id();
     EMBEDDING_PROVIDERS.forEach((provider) => {
       providers[provider] = defaultEmbeddingProvider;
     });
   }
+  return providers;
+}
 
-  // Update reason if there are overrides
+export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+  return resolveDefaultProviders(env);
+}
+
+function getProviderId(provider: ApiProvider | undefined): string | undefined {
+  if (!provider) {
+    return undefined;
+  }
+
+  try {
+    return provider.id();
+  } catch {
+    return undefined;
+  }
+}
+
+function getDefaultProviderSelection(
+  preferences: DefaultProviderPreferences,
+): Pick<DefaultProviderSelectionInfo, 'selectedProvider' | 'reason'> {
+  if (preferences.preferAzure) {
+    return {
+      selectedProvider: 'Azure OpenAI',
+      reason: 'Azure credentials and deployment name found, OPENAI_API_KEY not set',
+    };
+  }
+
+  if (preferences.preferAnthropic) {
+    return {
+      selectedProvider: 'Anthropic',
+      reason: 'ANTHROPIC_API_KEY found, OPENAI_API_KEY not set',
+    };
+  }
+
+  if (preferences.useGoogleAiStudioDefaults) {
+    const credential = preferences.hasGeminiApiKey
+      ? 'GEMINI_API_KEY'
+      : preferences.hasGoogleApiKey
+        ? 'GOOGLE_API_KEY'
+        : 'PALM_API_KEY';
+    return {
+      selectedProvider: 'Google AI Studio',
+      reason: `${credential} found, OPENAI_API_KEY and ANTHROPIC_API_KEY not set`,
+    };
+  }
+
+  if (preferences.useGoogleVertexDefaults) {
+    return {
+      selectedProvider: 'Google Vertex',
+      reason:
+        'Google Application Default Credentials found, no API keys for OpenAI/Anthropic/Google AI Studio',
+    };
+  }
+
+  if (preferences.useMistralDefaults) {
+    return {
+      selectedProvider: 'Mistral',
+      reason: 'MISTRAL_API_KEY found, no credentials for higher-priority providers',
+    };
+  }
+
+  if (preferences.useCodexDefaults) {
+    return {
+      selectedProvider: 'Codex SDK',
+      reason: 'ChatGPT/Codex credentials found, no credentials for higher-priority providers',
+    };
+  }
+
+  if (preferences.useGitHubDefaults) {
+    return {
+      selectedProvider: 'GitHub Models',
+      reason: 'GITHUB_TOKEN found, no credentials for higher-priority providers',
+    };
+  }
+
+  return {
+    selectedProvider: 'OpenAI',
+    reason: preferences.hasOpenAiCredentials
+      ? 'OPENAI_API_KEY found (highest priority)'
+      : 'Default provider (no other credentials detected)',
+  };
+}
+
+function getSkippedProviders({
+  preferences,
+  selectedProvider,
+}: {
+  preferences: DefaultProviderPreferences;
+  selectedProvider: string;
+}): SkippedProviderInfo[] {
+  const skippedProviders: SkippedProviderInfo[] = [];
+  const addSkippedProvider = (name: string, credentialPresent: boolean, reason: string) => {
+    if (credentialPresent) {
+      skippedProviders.push({ name, reason });
+    }
+  };
+
+  switch (selectedProvider) {
+    case 'Azure OpenAI':
+      addSkippedProvider(
+        'Anthropic',
+        preferences.hasAnthropicCredentials,
+        'Azure has higher priority when OPENAI_API_KEY is not set',
+      );
+      addSkippedProvider(
+        'Google AI Studio',
+        preferences.hasGoogleAiStudioCredentials,
+        'Azure has higher priority',
+      );
+      addSkippedProvider('Mistral', preferences.hasMistralCredentials, 'Azure has higher priority');
+      addSkippedProvider(
+        'GitHub Models',
+        preferences.hasGitHubCredentials,
+        'Azure has higher priority',
+      );
+      break;
+    case 'Anthropic':
+      addSkippedProvider(
+        'Google AI Studio',
+        preferences.hasGoogleAiStudioCredentials,
+        'Anthropic has higher priority',
+      );
+      addSkippedProvider(
+        'Mistral',
+        preferences.hasMistralCredentials,
+        'Anthropic has higher priority',
+      );
+      addSkippedProvider(
+        'GitHub Models',
+        preferences.hasGitHubCredentials,
+        'Anthropic has higher priority',
+      );
+      break;
+    case 'Google AI Studio':
+      addSkippedProvider(
+        'Mistral',
+        preferences.hasMistralCredentials,
+        'Google AI Studio has higher priority',
+      );
+      addSkippedProvider(
+        'GitHub Models',
+        preferences.hasGitHubCredentials,
+        'Google AI Studio has higher priority',
+      );
+      break;
+    case 'Google Vertex':
+      addSkippedProvider(
+        'Mistral',
+        preferences.hasMistralCredentials,
+        'Google Vertex has higher priority',
+      );
+      addSkippedProvider(
+        'GitHub Models',
+        preferences.hasGitHubCredentials,
+        'Google Vertex has higher priority',
+      );
+      break;
+    case 'Mistral':
+      addSkippedProvider(
+        'GitHub Models',
+        preferences.hasGitHubCredentials,
+        'Mistral has higher priority',
+      );
+      break;
+    case 'Codex SDK':
+      addSkippedProvider(
+        'GitHub Models',
+        preferences.hasGitHubCredentials,
+        'Codex SDK has higher priority',
+      );
+      break;
+    case 'OpenAI':
+      addSkippedProvider(
+        'Anthropic',
+        preferences.hasAnthropicCredentials,
+        'OpenAI has higher priority when OPENAI_API_KEY is set',
+      );
+      addSkippedProvider(
+        'Google AI Studio',
+        preferences.hasGoogleAiStudioCredentials,
+        'OpenAI has higher priority',
+      );
+      addSkippedProvider(
+        'Mistral',
+        preferences.hasMistralCredentials,
+        'OpenAI has higher priority',
+      );
+      addSkippedProvider(
+        'GitHub Models',
+        preferences.hasGitHubCredentials,
+        'OpenAI has higher priority',
+      );
+      break;
+  }
+
+  return skippedProviders;
+}
+
+export async function getDefaultProvidersWithInfo(
+  env?: EnvOverrides,
+): Promise<DefaultProvidersWithInfo> {
+  const preferences = await getDefaultProviderPreferences(env);
+  const providers = await resolveDefaultProviders(env, preferences);
+  const { selectedProvider, reason: selectionReason } = getDefaultProviderSelection(preferences);
+  let reason = selectionReason;
+
+  const completionOverride = defaultCompletionProvider?.id();
+  const embeddingOverride = defaultEmbeddingProvider?.id();
   if (completionOverride || embeddingOverride) {
-    const overrides: string[] = [];
-    if (completionOverride) {
-      overrides.push(`completion provider overridden to ${completionOverride}`);
-    }
-    if (embeddingOverride) {
-      overrides.push(`embedding provider overridden to ${embeddingOverride}`);
-    }
+    const overrides = [
+      completionOverride ? `completion provider overridden to ${completionOverride}` : undefined,
+      embeddingOverride ? `embedding provider overridden to ${embeddingOverride}` : undefined,
+    ].filter((override): override is string => override != null);
     reason = `${reason}; ${overrides.join(', ')}`;
   }
 
-  // Build provider slot info
   const selectionInfo: DefaultProviderSelectionInfo = {
     selectedProvider,
     reason,
-    detectedCredentials,
-    skippedProviders,
+    detectedCredentials: preferences.detectedCredentials,
+    skippedProviders: getSkippedProviders({ preferences, selectedProvider }),
     providerSlots: {
       grading: providers.gradingProvider
         ? { id: getProviderId(providers.gradingProvider) || selectedProvider }
@@ -506,11 +612,13 @@ export async function getDefaultProvidersWithInfo(
         ? { id: getProviderId(providers.gradingJsonProvider) || selectedProvider }
         : undefined,
       embedding: providers.embeddingProvider
-        ? { id: getProviderId(providers.embeddingProvider) || 'openai:embedding' }
+        ? { id: getProviderId(providers.embeddingProvider) || selectedProvider }
         : undefined,
       moderation: providers.moderationProvider
         ? {
-            id: moderationOverride || getProviderId(providers.moderationProvider) || 'openai',
+            id: preferences.hasAzureContentSafety
+              ? 'Azure Content Safety'
+              : getProviderId(providers.moderationProvider) || selectedProvider,
           }
         : undefined,
       suggestions: providers.suggestionsProvider
@@ -528,25 +636,18 @@ export async function getDefaultProvidersWithInfo(
     },
   };
 
-  // Add model information for Anthropic
   if (selectedProvider === 'Anthropic') {
-    if (selectionInfo.providerSlots.grading) {
-      selectionInfo.providerSlots.grading.model = DEFAULT_ANTHROPIC_MODEL;
-    }
-    if (selectionInfo.providerSlots.gradingJson) {
-      selectionInfo.providerSlots.gradingJson.model = DEFAULT_ANTHROPIC_MODEL;
-    }
-    if (selectionInfo.providerSlots.suggestions) {
-      selectionInfo.providerSlots.suggestions.model = DEFAULT_ANTHROPIC_MODEL;
-    }
-    if (selectionInfo.providerSlots.synthesize) {
-      selectionInfo.providerSlots.synthesize.model = DEFAULT_ANTHROPIC_MODEL;
-    }
-    if (selectionInfo.providerSlots.llmRubric) {
-      selectionInfo.providerSlots.llmRubric.model = DEFAULT_ANTHROPIC_MODEL;
-    }
-    if (selectionInfo.providerSlots.webSearch) {
-      selectionInfo.providerSlots.webSearch.model = DEFAULT_ANTHROPIC_MODEL;
+    for (const slot of [
+      selectionInfo.providerSlots.grading,
+      selectionInfo.providerSlots.gradingJson,
+      selectionInfo.providerSlots.suggestions,
+      selectionInfo.providerSlots.synthesize,
+      selectionInfo.providerSlots.llmRubric,
+      selectionInfo.providerSlots.webSearch,
+    ]) {
+      if (slot) {
+        slot.model = DEFAULT_ANTHROPIC_MODEL;
+      }
     }
   }
 
@@ -554,16 +655,4 @@ export async function getDefaultProvidersWithInfo(
     providers,
     selectionInfo,
   };
-}
-
-/**
- * Gets the default providers for grading, embedding, moderation, etc.
- * This is the original function signature maintained for backward compatibility.
- *
- * @param env - Optional environment overrides
- * @returns Default provider instances
- */
-export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
-  const { providers } = await getDefaultProvidersWithInfo(env);
-  return providers;
 }

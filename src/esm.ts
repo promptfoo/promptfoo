@@ -143,6 +143,27 @@ export function resolvePackageEntryPoint(packageName: string, baseDir: string): 
 // undefined in development (tsx) and Jest tests
 declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
 
+let tsxLoaderPromise: Promise<unknown> | undefined;
+
+async function ensureTypescriptLoader(modulePath: string): Promise<void> {
+  if (!/\.[cm]?ts$/.test(modulePath)) {
+    return;
+  }
+
+  if (!tsxLoaderPromise) {
+    logger.debug('TypeScript module detected, registering tsx loader');
+    // Use the same loader entrypoint as `NODE_OPTIONS=--import tsx` so package-less
+    // providers can resolve extensionless transitive TypeScript imports.
+    // @ts-ignore: tsx's loader entrypoint does not publish declaration files.
+    tsxLoaderPromise = import('tsx').catch((err) => {
+      tsxLoaderPromise = undefined;
+      throw err;
+    });
+  }
+
+  await tsxLoaderPromise;
+}
+
 /**
  * ESM replacement for __dirname - guarded for dual CJS/ESM builds.
  *
@@ -201,11 +222,7 @@ export async function importModule(modulePath: string, functionName?: string) {
   );
 
   try {
-    if (modulePath.endsWith('.ts') || modulePath.endsWith('.mjs')) {
-      logger.debug('TypeScript/ESM module detected, importing tsx/cjs');
-      // @ts-ignore: It actually works
-      await import('tsx/cjs');
-    }
+    await ensureTypescriptLoader(modulePath);
 
     const resolvedPath = pathToFileURL(safeResolve(modulePath));
     const resolvedPathStr = resolvedPath.toString();

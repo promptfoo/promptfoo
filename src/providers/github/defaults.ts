@@ -3,7 +3,7 @@ import { OpenAiChatCompletionProvider } from '../openai/chat';
 // GitHub Models default providers
 // Using OpenAI-compatible API with GitHub's endpoint
 const githubConfig = {
-  apiBaseUrl: 'https://models.github.ai',
+  apiBaseUrl: 'https://models.github.ai/inference',
   apiKeyEnvar: 'GITHUB_TOKEN',
 };
 

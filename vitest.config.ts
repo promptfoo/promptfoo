@@ -18,6 +18,10 @@ export default defineConfig({
     root: '.',
     setupFiles: ['./vitest.setup.ts'],
 
+    // Keep successful backend unit-test runs focused on failures. Set
+    // PROMPTFOO_TEST_SHOW_OUTPUT=true when debugging stdout/stderr from tests.
+    silent: process.env.PROMPTFOO_TEST_SHOW_OUTPUT !== 'true',
+
     // Run tests in random order to catch test isolation issues early.
     // Tests should not depend on execution order or shared state.
     // Override with --sequence.shuffle=false when debugging specific failures.
@@ -46,5 +50,25 @@ export default defineConfig({
 
     // Fail fast on first error in CI, continue locally for full picture
     bail: process.env.CI ? 1 : 0,
+
+    // Coverage configuration
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.ts', 'src/**/*.tsx'],
+      exclude: [
+        'src/**/*.d.ts',
+        'src/**/*.test.ts',
+        'src/**/*.test.tsx',
+        'src/__mocks__/**',
+        'src/app/**', // Frontend workspace has its own coverage
+        'src/entrypoint.ts',
+        'src/main.ts',
+        'src/migrate.ts',
+      ],
+      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
+      all: true,
+    },
   },
 });

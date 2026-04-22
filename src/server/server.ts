@@ -32,6 +32,7 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
+import { csrfProtection } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
@@ -119,6 +120,7 @@ export function createApp() {
   const staticDir = findStaticDir();
 
   app.use(cors());
+  app.use(csrfProtection);
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
@@ -333,7 +335,7 @@ export async function startServer(
         logger.debug(
           `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
         );
-        io.emit('update', updatedEval);
+        io.emit('update', { evalId: updatedEval?.id });
         allPrompts = null;
       }
     };
@@ -342,7 +344,8 @@ export async function startServer(
   });
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await Eval.latest());
+    const latestEval = await Eval.latest();
+    socket.emit('init', latestEval ? { evalId: latestEval.id } : null);
   });
 
   // Return a Promise that only resolves when the server shuts down

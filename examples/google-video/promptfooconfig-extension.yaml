@@ -5,7 +5,7 @@ prompts:
   - 'Continue this video: {{continuation}}'
 
 providers:
-  - id: google:video:veo-3.1-generate-preview
+  - id: vertex:video:veo-3.1-generate-preview
     config:
       # Use the operation ID from a previous Veo video generation
       # This is returned in metadata.operationName of the generation response
@@ -22,7 +22,7 @@ tests:
     assert:
       - type: is-valid-video
 
-# Note: Video extension requires an operation ID from a previous Veo generation.
+# Note: Video extension uses the explicit Vertex AI provider path.
 # To use this:
 # 1. First generate a video using promptfooconfig.yaml
 # 2. Get the operation ID from the results (metadata.operationName field)

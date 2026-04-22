@@ -16,11 +16,14 @@ import {
   dereferenceConfig,
   maybeReadConfig,
   readConfig,
+  resolveCliProvidersWithConfig,
   resolveConfigs,
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
 import { readTests } from '../../../src/util/testCaseReader';
+import { createMockProvider } from '../../factories/provider';
+import { mockProcessEnv } from '../utils';
 
 vi.mock('../../../src/database', () => ({
   getDb: vi.fn(),
@@ -1456,11 +1459,9 @@ describe('resolveConfigs', () => {
 
     // Mock loadApiProviders to return the expected format
     vi.mocked(loadApiProviders).mockResolvedValue([
-      {
-        id: () => 'openai:gpt-4',
-        label: 'openai:gpt-4',
+      Object.assign(createMockProvider({ id: 'openai:gpt-4', label: 'openai:gpt-4' }), {
         modelName: 'gpt-4',
-      } as any,
+      }),
     ]);
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
@@ -1507,6 +1508,8 @@ describe('resolveConfigs', () => {
     );
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No promptfooconfig found'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Searched in'));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('promptfooconfig.{yaml'));
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('npx promptfoo@latest eval -c'),
     );
@@ -1668,6 +1671,134 @@ describe('resolveConfigs', () => {
     expect(result.testSuite.defaultTest).toBeDefined();
     expect((result.testSuite.defaultTest as any)?.options?.provider).toBe('openai:gpt-4');
   });
+
+  describe('--providers flag config preservation', () => {
+    afterEach(() => {
+      vi.mocked(readPrompts).mockClear();
+      vi.mocked(loadApiProviders).mockClear();
+    });
+
+    /**
+     * Sets up mocks for testing --providers flag config preservation.
+     * Returns a function that resolves configs with the given CLI provider tokens.
+     */
+    function setupProviderConfigMocks(
+      configProviders: object[],
+    ): (cliProviders: string[]) => Promise<void> {
+      const config = {
+        prompts: ['Tell me about {{topic}}'],
+        providers: configProviders,
+        tests: [{ vars: { topic: 'AI' } }],
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+        if (typeof filePath === 'string' && filePath.endsWith('config.yaml')) {
+          return yaml.dump(config);
+        }
+        return Buffer.from('');
+      });
+      vi.mocked(globSync).mockReturnValue(['config.yaml']);
+      vi.mocked(isCI).mockReturnValue(true);
+      vi.mocked(readPrompts).mockResolvedValue([
+        { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
+      ]);
+      vi.mocked(loadApiProviders).mockResolvedValue([
+        createMockProvider({
+          id: 'ollama:llama3.1:8b-instruct-fp16',
+          label: 'ollama:llama3.1:8b-instruct-fp16',
+        }),
+      ]);
+
+      return (cliProviders: string[]) =>
+        resolveConfigs({ config: ['config.yaml'], providers: cliProviders }, {}).then(() => {});
+    }
+
+    it('should preserve provider config when --providers flag matches a config file provider', async () => {
+      const ollamaConfig = { num_ctx: 40960, temperature: 0.1, seed: 1 };
+      const runResolve = setupProviderConfigMocks([
+        { id: 'ollama:llama3.1:8b-instruct-fp16', config: ollamaConfig },
+        { id: 'ollama:llama3.3:8b-instruct-fp16', config: ollamaConfig },
+      ]);
+
+      await runResolve(['ollama:llama3.1:8b-instruct-fp16']);
+
+      // loadApiProviders should have been called with the config-file version
+      // (with config options preserved), not the bare CLI string
+      const providersArg = vi.mocked(loadApiProviders).mock.calls[0][0] as any[];
+      expect(providersArg).toHaveLength(1);
+      expect(providersArg[0]).toEqual({
+        id: 'ollama:llama3.1:8b-instruct-fp16',
+        config: ollamaConfig,
+      });
+    });
+
+    it('should preserve provider config when --providers flag partially matches (without prefix)', async () => {
+      const ollamaConfig = { num_ctx: 40960, temperature: 0.1, seed: 1 };
+      const runResolve = setupProviderConfigMocks([
+        { id: 'ollama:llama3.1:8b-instruct-fp16', config: ollamaConfig },
+      ]);
+
+      await runResolve(['llama3.1:8b-instruct-fp16']);
+
+      const providersArg = vi.mocked(loadApiProviders).mock.calls[0][0] as any[];
+      expect(providersArg[0]).toEqual({
+        id: 'ollama:llama3.1:8b-instruct-fp16',
+        config: ollamaConfig,
+      });
+    });
+
+    it('should preserve provider config from file:// references when --providers flag matches', async () => {
+      const ollamaConfig = { num_ctx: 40960, temperature: 0.1, seed: 1 };
+      const fileProviders = [
+        { id: 'ollama:llama3.1:8b-instruct-fp16', config: ollamaConfig },
+        { id: 'ollama:llama3.3:8b-instruct-fp16', config: ollamaConfig },
+      ];
+
+      // Config references providers via file://
+      const config = {
+        prompts: ['Tell me about {{topic}}'],
+        providers: ['file://providers.yaml'],
+        tests: [{ vars: { topic: 'AI' } }],
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: fs.PathOrFileDescriptor) => {
+        const p = String(filePath);
+        if (p.endsWith('config.yaml')) {
+          return yaml.dump(config);
+        }
+        if (p.endsWith('providers.yaml')) {
+          return yaml.dump(fileProviders);
+        }
+        return Buffer.from('');
+      });
+      vi.mocked(globSync).mockReturnValue(['config.yaml']);
+      vi.mocked(isCI).mockReturnValue(true);
+      vi.mocked(readPrompts).mockResolvedValue([
+        { raw: 'Tell me about {{topic}}', label: 'Tell me about {{topic}}', config: {} },
+      ]);
+      vi.mocked(loadApiProviders).mockResolvedValue([
+        createMockProvider({
+          id: 'ollama:llama3.1:8b-instruct-fp16',
+          label: 'ollama:llama3.1:8b-instruct-fp16',
+        }),
+      ]);
+
+      await resolveConfigs(
+        { config: ['config.yaml'], providers: ['ollama:llama3.1:8b-instruct-fp16'] },
+        {},
+      );
+
+      // loadApiProviders should receive the resolved file provider with config preserved
+      const providersArg = vi.mocked(loadApiProviders).mock.calls[0][0] as any[];
+      expect(providersArg).toHaveLength(1);
+      expect(providersArg[0]).toEqual({
+        id: 'ollama:llama3.1:8b-instruct-fp16',
+        config: ollamaConfig,
+      });
+    });
+  });
 });
 
 describe('readConfig', () => {
@@ -1801,6 +1932,90 @@ describe('readConfig', () => {
       ...mockConfig,
       prompts: ['{{prompt}}'],
     });
+  });
+
+  it('should not warn for multi-input targets without prompts', async () => {
+    const mockConfig = {
+      description: 'Multi-input config',
+      targets: [
+        {
+          id: 'http',
+          inputs: {
+            document: 'Uploaded document content',
+            query: 'User question about the document',
+          },
+          config: {
+            url: 'https://example.com/chat',
+          },
+        },
+      ],
+      redteam: {
+        purpose: 'Answer questions about documents',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result).toEqual({
+      description: 'Multi-input config',
+      providers: [
+        {
+          id: 'http',
+          inputs: {
+            document: 'Uploaded document content',
+            query: 'User question about the document',
+          },
+          config: {
+            url: 'https://example.com/chat',
+          },
+        },
+      ],
+      redteam: {
+        purpose: 'Answer questions about documents',
+      },
+      prompts: ['{{prompt}}'],
+    });
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      'Warning: Expected top-level "prompts" property in config or a test variable named "prompt"',
+    );
+  });
+
+  it('should still warn when only a later target defines multi-input inputs', async () => {
+    const mockConfig = {
+      description: 'Multi-target config',
+      targets: [
+        {
+          id: 'http',
+          config: {
+            url: 'https://example.com/first',
+          },
+        },
+        {
+          id: 'http',
+          inputs: {
+            document: 'Uploaded document content',
+            query: 'User question about the document',
+          },
+          config: {
+            url: 'https://example.com/second',
+          },
+        },
+      ],
+      tests: [],
+      redteam: {
+        purpose: 'Answer questions about documents',
+      },
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    await readConfig('config.json');
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Warning: Expected top-level "prompts" property in config or a test variable named "prompt"',
+    );
   });
 
   it('should resolve YAML references before validation', async () => {
@@ -2092,16 +2307,16 @@ describe('readConfig with environment variable substitution', () => {
     vi.restoreAllMocks();
     // Restore or delete environment variables to prevent test pollution
     for (const varName of testEnvVars) {
-      if (originalEnv[varName] !== undefined) {
-        process.env[varName] = originalEnv[varName];
+      if (originalEnv[varName] === undefined) {
+        mockProcessEnv({ [varName]: undefined });
       } else {
-        delete process.env[varName];
+        mockProcessEnv({ [varName]: originalEnv[varName] });
       }
     }
   });
 
   it('should substitute environment variables in prompts paths', async () => {
-    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    mockProcessEnv({ TEST_PROMPT_PATH: '/custom/prompts' });
     const mockConfig = {
       description: 'Test config with env vars',
       providers: ['openai:gpt-4o'],
@@ -2116,7 +2331,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in providers paths', async () => {
-    process.env.TEST_PROVIDER_PATH = '/custom/providers';
+    mockProcessEnv({ TEST_PROVIDER_PATH: '/custom/providers' });
     const mockConfig = {
       description: 'Test config with env vars',
       providers: ['{{ env.TEST_PROVIDER_PATH }}/custom_provider.js'],
@@ -2131,7 +2346,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in nested config values', async () => {
-    process.env.MY_API_KEY = 'sk-test-12345';
+    mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });
     const mockConfig = {
       description: 'Test config with env vars',
       providers: [
@@ -2152,8 +2367,48 @@ describe('readConfig with environment variable substitution', () => {
     expect((result.providers as any)[0].config.apiKey).toEqual('sk-test-12345');
   });
 
+  it('should preserve env templates in static _conversation vars', async () => {
+    mockProcessEnv({ MY_API_KEY: 'sk-test-12345' });
+    const mockConfig = {
+      description: 'Test config with _conversation vars',
+      providers: ['{{ env.MY_API_KEY }}'],
+      prompts: ['Hello, world!'],
+      tests: [
+        {
+          vars: {
+            _conversation: [
+              {
+                input: 'Tell me a secret',
+                output: 'The answer is {{ env.MY_API_KEY }}',
+              },
+            ],
+            apiKey: '{{ env.MY_API_KEY }}',
+          },
+          assert: [
+            {
+              type: 'conversation-relevance',
+            },
+          ],
+        },
+      ],
+    };
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockConfig));
+    vi.mocked(path.parse).mockReturnValue({ ext: '.json' } as unknown as path.ParsedPath);
+
+    const result = await readConfig('config.json');
+
+    expect(result.providers).toEqual(['sk-test-12345']);
+    expect((result.tests as any)[0].vars.apiKey).toEqual('sk-test-12345');
+    expect((result.tests as any)[0].vars._conversation).toEqual([
+      {
+        input: 'Tell me a secret',
+        output: 'The answer is {{ env.MY_API_KEY }}',
+      },
+    ]);
+  });
+
   it('should substitute environment variables in assertion paths', async () => {
-    process.env.TEST_ASSERTION_PATH = '/custom/assertions';
+    mockProcessEnv({ TEST_ASSERTION_PATH: '/custom/assertions' });
     const mockConfig = {
       description: 'Test config with env vars',
       providers: ['openai:gpt-4o'],
@@ -2181,7 +2436,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should preserve runtime templates like {{ vars.x }}', async () => {
-    process.env.TEST_PROMPT_PATH = '/custom/prompts';
+    mockProcessEnv({ TEST_PROMPT_PATH: '/custom/prompts' });
     const mockConfig = {
       description: 'Test config with mixed templates',
       providers: ['openai:gpt-4o'],
@@ -2242,7 +2497,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in JavaScript config files', async () => {
-    process.env.TEST_PROMPT_PATH = '/js/prompts';
+    mockProcessEnv({ TEST_PROMPT_PATH: '/js/prompts' });
     const mockConfig = {
       description: 'JS config with env vars',
       providers: ['openai:gpt-4o'],
@@ -2258,7 +2513,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in YAML config files', async () => {
-    process.env.TEST_PROMPT_PATH = '/yaml/prompts';
+    mockProcessEnv({ TEST_PROMPT_PATH: '/yaml/prompts' });
     const mockConfig = {
       description: 'YAML config with env vars',
       providers: ['openai:gpt-4o'],
@@ -2273,8 +2528,8 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute multiple environment variables in a single string', async () => {
-    process.env.TEST_BASE_PATH = '/base';
-    process.env.TEST_SUB_PATH = 'prompts';
+    mockProcessEnv({ TEST_BASE_PATH: '/base' });
+    mockProcessEnv({ TEST_SUB_PATH: 'prompts' });
     const mockConfig = {
       description: 'Test config with multiple env vars',
       providers: ['openai:gpt-4o'],
@@ -2289,7 +2544,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables using bracket notation', async () => {
-    process.env['TEST-PATH-WITH-DASHES'] = '/dashed/path';
+    mockProcessEnv({ ['TEST-PATH-WITH-DASHES']: '/dashed/path' });
     const mockConfig = {
       description: 'Test config with bracket notation',
       providers: ['openai:gpt-4o'],
@@ -2304,7 +2559,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in defaultTest options', async () => {
-    process.env.TEST_GRADER_PROVIDER = 'openai:gpt-4-turbo';
+    mockProcessEnv({ TEST_GRADER_PROVIDER: 'openai:gpt-4-turbo' });
     const mockConfig = {
       description: 'Test config with env vars in defaultTest',
       providers: ['openai:gpt-4o'],
@@ -2324,7 +2579,7 @@ describe('readConfig with environment variable substitution', () => {
   });
 
   it('should substitute environment variables in env config field', async () => {
-    process.env.EXTERNAL_API_KEY = 'external-key-123';
+    mockProcessEnv({ EXTERNAL_API_KEY: 'external-key-123' });
     const mockConfig = {
       description: 'Test config with env vars in env field',
       providers: ['openai:gpt-4o'],
@@ -2347,7 +2602,7 @@ describe('readConfig with environment variable substitution', () => {
 
   describe('security edge cases', () => {
     it('should handle empty string environment variables', async () => {
-      process.env.EMPTY_VAR = '';
+      mockProcessEnv({ EMPTY_VAR: '' });
       const mockConfig = {
         description: 'Test config with empty env var',
         providers: ['openai:gpt-4o'],
@@ -2363,7 +2618,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should safely handle env vars containing template-like syntax', async () => {
-      process.env.PROMPT_TEXT = 'Hello {{ vars.name }}';
+      mockProcessEnv({ PROMPT_TEXT: 'Hello {{ vars.name }}' });
       const mockConfig = {
         description: 'Test config with template-like env var',
         providers: ['openai:gpt-4o'],
@@ -2379,7 +2634,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should safely handle env vars containing Nunjucks statement syntax', async () => {
-      process.env.EVIL_VAR = '{% for i in range(100) %}x{% endfor %}';
+      mockProcessEnv({ EVIL_VAR: '{% for i in range(100) %}x{% endfor %}' });
       const mockConfig = {
         description: 'Test config with statement syntax in env var',
         providers: ['openai:gpt-4o'],
@@ -2395,7 +2650,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle env vars containing special regex characters', async () => {
-      process.env.SPECIAL_PATH = '/path/with/$pecial/chars.*[test]';
+      mockProcessEnv({ SPECIAL_PATH: '/path/with/$pecial/chars.*[test]' });
       const mockConfig = {
         description: 'Test config with special chars in env var',
         providers: ['openai:gpt-4o'],
@@ -2412,7 +2667,7 @@ describe('readConfig with environment variable substitution', () => {
     it('should handle potential path traversal in env vars', async () => {
       // Note: This test demonstrates that path traversal is possible if env vars are controlled by attackers
       // File validation should happen at file load time, not in the template renderer
-      process.env.TRAVERSAL_PATH = '../../etc';
+      mockProcessEnv({ TRAVERSAL_PATH: '../../etc' });
       const mockConfig = {
         description: 'Test config with path traversal',
         providers: ['openai:gpt-4o'],
@@ -2443,7 +2698,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle malformed template syntax gracefully', async () => {
-      process.env.MY_VAR = 'test-value';
+      mockProcessEnv({ MY_VAR: 'test-value' });
       const mockConfig = {
         description: 'Test config with malformed templates',
         providers: ['openai:gpt-4o'],
@@ -2468,7 +2723,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle env vars with newlines and special whitespace', async () => {
-      process.env.MULTILINE_VAR = 'line1\nline2\ttab';
+      mockProcessEnv({ MULTILINE_VAR: 'line1\nline2\ttab' });
       const mockConfig = {
         description: 'Test config with multiline env var',
         providers: ['openai:gpt-4o'],
@@ -2483,7 +2738,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle deeply nested objects with env vars', async () => {
-      process.env.DEEP_VAR = 'nested-value';
+      mockProcessEnv({ DEEP_VAR: 'nested-value' });
       const mockConfig = {
         description: 'Test config with deeply nested env vars',
         providers: ['openai:gpt-4o'],
@@ -2521,10 +2776,10 @@ describe('readConfig with environment variable substitution', () => {
 
   describe('provider ID with env variables (regression test for #7079)', () => {
     it('should substitute process.env variables in provider ID URLs', async () => {
-      process.env.TEST_APPLICATION = 'myapp';
-      process.env.TEST_BASE_URL = 'example.com';
-      process.env.TEST_SERVICE_NAME = 'api';
-      process.env.TEST_SERVICE_VERSION = 'v1';
+      mockProcessEnv({ TEST_APPLICATION: 'myapp' });
+      mockProcessEnv({ TEST_BASE_URL: 'example.com' });
+      mockProcessEnv({ TEST_SERVICE_NAME: 'api' });
+      mockProcessEnv({ TEST_SERVICE_VERSION: 'v1' });
       const mockConfig = {
         description: 'Test config with env vars in provider ID',
         providers: [
@@ -2574,7 +2829,7 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should handle mixed defined and undefined env vars in provider ID', async () => {
-      process.env.TEST_DEFINED_VAR = 'defined-value';
+      mockProcessEnv({ TEST_DEFINED_VAR: 'defined-value' });
       const mockConfig = {
         description: 'Test config with mixed env vars',
         providers: [
@@ -2600,8 +2855,8 @@ describe('readConfig with environment variable substitution', () => {
     });
 
     it('should substitute env vars in provider config headers', async () => {
-      process.env.TEST_SESSION = 'session-123';
-      process.env.TEST_TOKEN = 'token-456';
+      mockProcessEnv({ TEST_SESSION: 'session-123' });
+      mockProcessEnv({ TEST_TOKEN: 'token-456' });
       const mockConfig = {
         description: 'Test config with env vars in headers',
         providers: [
@@ -2722,7 +2977,7 @@ describe('readConfig with environment variable substitution', () => {
     it('should handle nested templates in config.env values (two-pass rendering)', async () => {
       // This test verifies that config.env values can reference process.env variables
       // and the two-pass rendering correctly resolves them before using as overrides
-      process.env.TEST_BASE_URL = 'api.example.com';
+      mockProcessEnv({ TEST_BASE_URL: 'api.example.com' });
       const mockConfig = {
         description: 'Test config with nested templates in env section',
         env: {
@@ -2783,5 +3038,168 @@ describe('readConfig with environment variable substitution', () => {
         'https://defined-value.{{env.UNDEFINED_VAR_7079}}/api/endpoint',
       );
     });
+  });
+});
+
+describe('resolveCliProvidersWithConfig', () => {
+  const ollamaProvider = {
+    id: 'ollama:llama3.1:8b-instruct-fp16',
+    config: { num_ctx: 40960, temperature: 0.1, seed: 1 },
+  };
+
+  it('should return CLI providers as-is when no config providers exist', () => {
+    const result = resolveCliProvidersWithConfig(['ollama:llama3.1:8b-instruct-fp16'], undefined);
+    expect(result).toEqual(['ollama:llama3.1:8b-instruct-fp16']);
+  });
+
+  it('should return CLI providers as-is when config providers is not an array', () => {
+    const result = resolveCliProvidersWithConfig(
+      ['ollama:llama3.1:8b-instruct-fp16'],
+      'openai:gpt-4' as any,
+    );
+    expect(result).toEqual(['ollama:llama3.1:8b-instruct-fp16']);
+  });
+
+  it('should match CLI provider by exact id and preserve config', () => {
+    const configProviders = [
+      ollamaProvider,
+      {
+        id: 'ollama:llama3.3:8b-instruct-fp16',
+        config: { num_ctx: 40960, temperature: 0.1, seed: 1 },
+      },
+    ];
+
+    const result = resolveCliProvidersWithConfig(
+      ['ollama:llama3.1:8b-instruct-fp16'],
+      configProviders,
+    );
+
+    expect(result).toEqual([ollamaProvider]);
+  });
+
+  it('should match CLI provider by provider-prefix (id ends with :cliProvider)', () => {
+    const result = resolveCliProvidersWithConfig(['llama3.1:8b-instruct-fp16'], [ollamaProvider]);
+
+    expect(result).toEqual([ollamaProvider]);
+  });
+
+  it('should not over-match: gpt-4 should not match gpt-4o', () => {
+    const gpt4 = { id: 'openai:gpt-4', config: { temperature: 0.5 } };
+    const configProviders = [gpt4, { id: 'openai:gpt-4o', config: { temperature: 0.7 } }];
+
+    const result = resolveCliProvidersWithConfig(['openai:gpt-4'], configProviders);
+
+    expect(result).toEqual([gpt4]);
+  });
+
+  it('should return unmatched CLI token as bare string', () => {
+    const result = resolveCliProvidersWithConfig(
+      ['openai:gpt-4'],
+      [{ id: 'ollama:llama3.1:8b-instruct-fp16', config: { num_ctx: 40960 } }],
+    );
+
+    expect(result).toEqual(['openai:gpt-4']);
+  });
+
+  it('should handle mixed matched and unmatched CLI tokens', () => {
+    const provider = {
+      id: 'ollama:llama3.1:8b-instruct-fp16',
+      config: { num_ctx: 40960, temperature: 0.1 },
+    };
+
+    const result = resolveCliProvidersWithConfig(
+      ['ollama:llama3.1:8b-instruct-fp16', 'openai:gpt-4'],
+      [provider],
+    );
+
+    const resultArr = result as any[];
+    expect(resultArr).toHaveLength(2);
+    expect(resultArr[0]).toEqual(provider);
+    expect(resultArr[1]).toEqual('openai:gpt-4');
+  });
+
+  it('should match CLI provider by exact label', () => {
+    const provider = {
+      id: 'ollama:llama3.1:8b-instruct-fp16',
+      label: 'my-llama',
+      config: { num_ctx: 40960 },
+    };
+
+    const result = resolveCliProvidersWithConfig(['my-llama'], [provider]);
+
+    expect(result).toEqual([provider]);
+  });
+
+  it('should not match partial label', () => {
+    const result = resolveCliProvidersWithConfig(
+      ['my-llama'],
+      [
+        {
+          id: 'ollama:llama3.1:8b-instruct-fp16',
+          label: 'my-llama-model',
+          config: { num_ctx: 40960 },
+        },
+      ],
+    );
+
+    expect(result).toEqual(['my-llama']);
+  });
+
+  it('should match against ProviderOptionsMap format', () => {
+    const provider = { 'ollama:llama3.1:8b-instruct-fp16': { config: { num_ctx: 40960 } } };
+
+    const result = resolveCliProvidersWithConfig(['llama3.1:8b-instruct-fp16'], [provider]);
+
+    expect(result).toEqual([provider]);
+  });
+
+  it('should match against string config providers by prefix match', () => {
+    const result = resolveCliProvidersWithConfig(
+      ['llama3.1:8b-instruct-fp16'],
+      ['ollama:llama3.1:8b-instruct-fp16', 'openai:gpt-4'],
+    );
+
+    expect(result).toEqual(['ollama:llama3.1:8b-instruct-fp16']);
+  });
+
+  it('should map multiple CLI tokens independently preserving order', () => {
+    const configProviders = [
+      { id: 'ollama:llama3.1:8b-instruct-fp16', config: { num_ctx: 40960 } },
+      { id: 'openai:gpt-4', config: { temperature: 0.5 } },
+      { id: 'anthropic:claude-3', config: { max_tokens: 1024 } },
+    ];
+
+    const result = resolveCliProvidersWithConfig(
+      ['gpt-4', 'llama3.1:8b-instruct-fp16'],
+      configProviders,
+    );
+
+    // Order follows CLI order, not config order
+    const resultArr = result as any[];
+    expect(resultArr).toHaveLength(2);
+    expect(resultArr[0]).toEqual(configProviders[1]); // gpt-4 matched
+    expect(resultArr[1]).toEqual(configProviders[0]); // llama3.1 matched
+  });
+
+  it('should prefer exact id match over suffix match earlier in config', () => {
+    const configProviders = [
+      { id: 'custom:foo:bar', config: { custom: true } },
+      { id: 'foo:bar', config: { exact: true } },
+    ];
+
+    const result = resolveCliProvidersWithConfig(['foo:bar'], configProviders);
+
+    expect(result).toEqual([configProviders[1]]);
+  });
+
+  it('should prefer exact label match over suffix match earlier in config', () => {
+    const configProviders = [
+      { id: 'prefix:my-model', config: { suffixed: true } },
+      { id: 'other:provider', label: 'my-model', config: { labeled: true } },
+    ];
+
+    const result = resolveCliProvidersWithConfig(['my-model'], configProviders);
+
+    expect(result).toEqual([configProviders[1]]);
   });
 });

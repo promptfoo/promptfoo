@@ -46,6 +46,7 @@ export function providersCommand(program: Command) {
         'AZURE_CLIENT_CREDENTIALS',
         'AZURE_CONTENT_SAFETY_ENDPOINT',
         'GOOGLE_APPLICATION_CREDENTIALS',
+        'CHATGPT_CODEX_CREDENTIALS',
       ];
 
       for (const cred of allCredentials) {

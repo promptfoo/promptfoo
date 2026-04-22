@@ -5,7 +5,12 @@ import yaml from 'js-yaml';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
-import { getDefaultNFanout, HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
+import {
+  getDefaultNFanout,
+  HARM_PLUGINS,
+  MULTI_INPUT_VAR,
+  PII_PLUGINS,
+} from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
@@ -19,7 +24,9 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-import { stripAnsi } from '../util/utils';
+import { mockProcessEnv, stripAnsi } from '../util/utils';
+
+import type { Inputs } from '../../src/types/shared';
 
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
@@ -50,6 +57,10 @@ vi.mock('../../src/redteam/strategies', async () => ({
 
 vi.mock('../../src/util/apiHealth');
 vi.mock('../../src/redteam/remoteGeneration');
+vi.mock('../../src/redteam/sharpAvailability', async () => ({
+  ...(await vi.importActual('../../src/redteam/sharpAvailability')),
+  validateSharpDependency: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../src/redteam/util')),
   extractGoalFromPrompt: vi.fn().mockResolvedValue('mocked goal'),
@@ -239,6 +250,75 @@ describe('synthesize', () => {
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin1' }) }),
         expect.objectContaining({ metadata: expect.objectContaining({ pluginId: 'plugin2' }) }),
       ]);
+    });
+
+    it('should pass maxCharsPerMessage through synthesize into plugin metadata and strategy config', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'short' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          metadata: {
+            ...testCase.metadata,
+            strategyId: 'goat',
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'goat',
+      });
+
+      const result = await synthesize({
+        maxCharsPerMessage: 12,
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'goat' }],
+        targetIds: ['test-provider'],
+      });
+
+      expect(mockPluginAction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          config: expect.objectContaining({
+            maxCharsPerMessage: 12,
+            modifiers: expect.objectContaining({
+              maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+            }),
+          }),
+        }),
+      );
+      expect(mockStrategyAction).toHaveBeenCalledWith(
+        expect.any(Array),
+        'query',
+        expect.objectContaining({
+          maxCharsPerMessage: 12,
+        }),
+        'goat',
+      );
+      expect(result.testCases).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              pluginId: 'test-plugin',
+              pluginConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+              modifiers: expect.objectContaining({
+                maxCharsPerMessage: 'Each generated user message must be 12 characters or fewer.',
+              }),
+            }),
+          }),
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              strategyConfig: expect.objectContaining({
+                maxCharsPerMessage: 12,
+              }),
+            }),
+          }),
+        ]),
+      );
     });
 
     it('should warn about unregistered plugins', async () => {
@@ -568,6 +648,122 @@ describe('synthesize', () => {
           }),
         ]),
       );
+    });
+
+    it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
+      const inputs = {
+        document: {
+          config: {
+            injectionPlacements: ['comment'],
+            inputPurpose: 'Summarize an uploaded policy draft',
+          },
+          description: 'DOCX document to summarize',
+          type: 'docx',
+        },
+        question: {
+          config: {
+            benign: true,
+          },
+          description: 'Benign user question',
+          type: 'text',
+        },
+      } satisfies Inputs;
+      const stalePayload = 'stale pre-strategy payload';
+      const strategyPayload = 'strategy-mutated payload';
+      const strategyQuestion = 'Please summarize the uploaded document.';
+      const wrapperSummary = 'Fresh strategy wrapper summary';
+      const injectedInstruction = 'Fresh strategy injected instruction';
+      const baseMultiInputPrompt = JSON.stringify({
+        document: stalePayload,
+        question: 'base question',
+      });
+      const strategyMultiInputPrompt = JSON.stringify({
+        document: strategyPayload,
+        question: strategyQuestion,
+      });
+
+      mockProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          bodyText: 'Fresh strategy document body',
+          injectedInstruction,
+          injectionPlacement: 'comment',
+          wrapperSummary,
+        }),
+      });
+
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        {
+          metadata: {
+            inputMaterialization: {
+              document: {
+                injectedInstruction: 'stale injected instruction',
+                injectionPlacement: 'body',
+                inputPurpose: 'Summarize an uploaded policy draft',
+                wrapperSummary: 'stale wrapper summary',
+              },
+            },
+            pluginConfig: { inputs },
+            pluginId: 'prompt-extraction',
+          },
+          vars: {
+            [MULTI_INPUT_VAR]: baseMultiInputPrompt,
+            document: 'stale-document-data-uri',
+            question: 'base question',
+          },
+        },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'prompt-extraction',
+      });
+
+      const mockStrategyAction = vi.fn().mockImplementation((testCases: any[]) =>
+        testCases.map((testCase: any) => ({
+          ...testCase,
+          vars: {
+            ...testCase.vars,
+            [MULTI_INPUT_VAR]: strategyMultiInputPrompt,
+          },
+        })),
+      );
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        action: mockStrategyAction,
+        id: 'jailbreak:meta',
+      });
+
+      const result = await synthesize({
+        inputs,
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+        prompts: ['{{document}} {{question}}'],
+        provider: mockProvider,
+        purpose: 'Summarize uploaded documents',
+        strategies: [{ id: 'jailbreak:meta' }],
+        targetIds: ['test-provider'],
+      });
+
+      const strategyTestCase = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'jailbreak:meta',
+      );
+
+      expect(strategyTestCase).toBeDefined();
+      expect(mockProvider.callApi).toHaveBeenCalledWith(expect.stringContaining(strategyPayload));
+      expect(mockProvider.callApi).not.toHaveBeenCalledWith(expect.stringContaining(stalePayload));
+      expect(strategyTestCase?.vars?.document).toEqual(
+        expect.stringMatching(
+          /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document;base64,/,
+        ),
+      );
+      expect(strategyTestCase?.vars?.question).toBe(strategyQuestion);
+      expect(strategyTestCase?.metadata?.inputMaterialization).toMatchObject({
+        document: {
+          injectedInstruction,
+          injectionPlacement: 'comment',
+          inputPurpose: 'Summarize an uploaded policy draft',
+          wrapperSummary,
+        },
+      });
     });
 
     it('should find exact strategy ID for custom strategy', async () => {
@@ -983,21 +1179,21 @@ describe('synthesize', () => {
 
   describe('Logger', () => {
     it('debug log level hides progress bar', async () => {
-      const originalLogLevel = process.env.LOG_LEVEL;
-      process.env.LOG_LEVEL = 'debug';
+      const restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug' });
+      try {
+        await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [],
+          targetIds: ['test-provider'],
+        });
 
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-        targetIds: ['test-provider'],
-      });
-
-      expect(cliProgress.SingleBar).not.toHaveBeenCalled();
-
-      process.env.LOG_LEVEL = originalLogLevel;
+        expect(cliProgress.SingleBar).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
   });
 
@@ -2018,14 +2214,11 @@ describe('Language configuration', () => {
       expect(result.testCases).toHaveLength(4);
 
       // Check that we have tests for both languages
-      const languageCounts = result.testCases.reduce(
-        (acc, tc) => {
-          const lang = tc.metadata?.language || 'en';
-          acc[lang] = (acc[lang] || 0) + 1;
-          return acc;
-        },
-        {} as Record<string, number>,
-      );
+      const languageCounts = result.testCases.reduce<Record<string, number>>((acc, tc) => {
+        const lang = tc.metadata?.language || 'en';
+        acc[lang] = (acc[lang] || 0) + 1;
+        return acc;
+      }, {});
 
       expect(languageCounts).toEqual({
         en: 2,
@@ -2250,8 +2443,8 @@ describe('Language configuration', () => {
     });
   });
 
-  describe('Language-disallowed strategies', () => {
-    it('should filter multilingual test cases for audio strategy', async () => {
+  describe('Multilingual support for media strategies', () => {
+    it('should support multilingual test cases for audio strategy', async () => {
       // Mock strategy action for audio
       const mockAudioAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
@@ -2278,24 +2471,19 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With audio strategy present, language is forced to 'en' early in synthesize
-      // Base tests: 2 tests * 1 language = 2
-      // Audio strategy tests: 2 tests
-      // Total: 4 tests
-      expect(result.testCases.length).toBe(4);
+      // Audio strategy now supports multiple languages
+      // Mock plugin always returns 2 tests (ignores numTests)
+      // Base tests: 2 tests * 3 languages = 6
+      // Audio strategy tests: 6 tests (applies to all base tests)
+      // Total: 12 tests
+      expect(result.testCases.length).toBe(12);
 
-      // Check that audio strategy was applied
+      // Check that audio strategy was applied to all language variants
       const audioTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'audio');
-      expect(audioTests.length).toBe(2);
-
-      // All tests should be in English only
-      const allTests = result.testCases;
-      const languages = allTests.map((tc) => tc.metadata?.language || 'en');
-      expect(new Set(languages).size).toBe(1); // Only one language
-      expect(languages[0]).toBe('en');
+      expect(audioTests.length).toBe(6);
     });
 
-    it('should filter multilingual test cases for video strategy', async () => {
+    it('should support multilingual test cases for video strategy', async () => {
       const mockVideoAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2318,17 +2506,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With video strategy present, language is forced to 'en' early in synthesize
+      // Video strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 1)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 video tests
-      // Total: 2 base + 2 video = 4 tests
+      // Base tests: 2 tests * 2 languages = 4
+      // Strategy transforms: 4 tests → 4 video tests
+      // Total: 4 base + 4 video = 8 tests
       const videoTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'video');
-      expect(videoTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(videoTests.length).toBe(4);
+      expect(result.testCases.length).toBe(8);
     });
 
-    it('should filter multilingual test cases for image strategy', async () => {
+    it('should support multilingual test cases for image strategy', async () => {
       const mockImageAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2351,17 +2539,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With image strategy present, language is forced to 'en' early in synthesize
+      // Image strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 3)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 image tests
-      // Total: 2 base + 2 image = 4 tests
+      // Base tests: 2 tests * 4 languages = 8
+      // Strategy transforms: 8 tests → 8 image tests
+      // Total: 8 base + 8 image = 16 tests
       const imageTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'image');
-      expect(imageTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(imageTests.length).toBe(8);
+      expect(result.testCases.length).toBe(16);
     });
 
-    it('should support multilingual test cases for layer strategy', async () => {
+    it('should support multilingual test cases for jailbreak strategy', async () => {
       const mockJailbreakAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2384,7 +2572,7 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // Layer strategy now supports multiple languages
+      // Jailbreak strategy supports multiple languages
       // Base tests: 2 tests * 2 languages = 4
       // Jailbreak strategy tests: 4 tests (applies to all base tests)
       // Total: 8 tests
@@ -2395,7 +2583,7 @@ describe('Language configuration', () => {
       expect(result.testCases.length).toBe(8);
     });
 
-    it('should filter multilingual test cases for math-prompt strategy', async () => {
+    it('should support multilingual test cases for math-prompt strategy', async () => {
       const mockMathPromptAction = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2418,17 +2606,17 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // With math-prompt strategy present, language is forced to 'en' early in synthesize
+      // Math-prompt strategy now supports multiple languages
       // Mock plugin always returns 2 tests (ignores numTests: 1)
-      // Base tests: 2 tests (from mock)
-      // Strategy transforms: 2 tests → 2 math tests
-      // Total: 2 base + 2 math = 4 tests
+      // Base tests: 2 tests * 3 languages = 6
+      // Strategy transforms: 6 tests → 6 math tests
+      // Total: 6 base + 6 math = 12 tests
       const mathTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'math-prompt');
-      expect(mathTests.length).toBe(2);
-      expect(result.testCases.length).toBe(4);
+      expect(mathTests.length).toBe(6);
+      expect(result.testCases.length).toBe(12);
     });
 
-    it('should NOT filter multilingual test cases for non-disallowed strategies', async () => {
+    it('should support multilingual test cases for rot13 strategy', async () => {
       const mockRot13Action = vi.fn().mockImplementation(function (testCases) {
         return testCases.map((tc: any) => ({
           ...tc,
@@ -2451,7 +2639,7 @@ describe('Language configuration', () => {
         targetIds: ['test-provider'],
       });
 
-      // Rot13 is NOT in the disallow list, so it should process all languages
+      // Rot13 supports multilingual test cases
       const rot13Tests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'rot13');
       expect(rot13Tests.length).toBe(4); // 2 tests * 2 languages = 4
     });
@@ -2486,7 +2674,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'policy', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'goat' }],
         targetIds: ['test-provider'],
       });
 
@@ -2524,7 +2712,7 @@ describe('Language configuration', () => {
         numTests: 1,
         plugins: [{ id: 'other-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
-        strategies: [],
+        strategies: [{ id: 'jailbreak:hydra' }],
         targetIds: ['test-provider'],
       });
 
@@ -2585,7 +2773,7 @@ describe('Language configuration', () => {
           numTests: 1,
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
-          strategies: [],
+          strategies: [{ id: 'jailbreak:meta' }],
           targetIds: ['test-provider'],
         });
 
@@ -3178,6 +3366,404 @@ describe('Language configuration', () => {
       // Should have 4 plugin rows (hallucination, contracts, named policy, inline policy)
       const pluginRows = cleanReport.match(/│\s+\d+\s+│\s+Plugin/g);
       expect(pluginRows?.length).toBe(4);
+    });
+  });
+
+  describe('redteamProvider config propagation to strategies', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+
+      vi.mocked(logger.info).mockImplementation(() => logger as any);
+      vi.mocked(logger.warn).mockImplementation(() => logger as any);
+      vi.mocked(logger.debug).mockImplementation(() => logger as any);
+      vi.mocked(logger.error).mockImplementation(() => logger as any);
+      vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
+      vi.mocked(extractEntities).mockResolvedValue([]);
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+      vi.mocked(checkRemoteHealth).mockResolvedValue({
+        status: 'OK',
+        message: 'Cloud API is healthy',
+      });
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
+      vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
+
+      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
+        return {
+          start: vi.fn(),
+          update: vi.fn(),
+          stop: vi.fn(),
+          increment: vi.fn(),
+        } as any;
+      });
+    });
+
+    it('should pass redteamProvider from cliState.config to strategy actions', async () => {
+      // Import cliState to set up the redteam provider config
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState with a mock redteam provider - this is the provider that should
+      // be passed to strategies for use by agentic providers (iterative, crescendo, etc.)
+      cliState.config = {
+        redteam: {
+          provider: 'vertex:gemini-2.5-flash',
+        },
+      } as any;
+
+      try {
+        // Mock plugin to return a test case
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        // Mock strategy that captures the config it receives
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        // Mock the provider loading to return a mock provider for test generation
+        // This avoids the loadApiProviders error while still testing strategy config
+        const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
+        const providerSpy = vi
+          .spyOn(
+            await import('../../src/redteam/providers/shared'),
+            'redteamProviderManager',
+            'get',
+          )
+          .mockReturnValue({
+            getProvider: vi.fn().mockResolvedValue(mockProvider),
+            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
+            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
+            setProvider: vi.fn(),
+            setGradingProvider: vi.fn(),
+            setMultilingualProvider: vi.fn(),
+            clearProvider: vi.fn(),
+          } as any);
+
+        try {
+          await synthesize({
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            strategies: [{ id: 'jailbreak' }],
+            targetIds: ['test-provider'],
+          });
+
+          // KEY ASSERTION: The strategy should receive redteamProvider from cliState.config
+          expect(mockStrategyAction).toHaveBeenCalled();
+          expect(capturedConfig).toBeDefined();
+          expect(capturedConfig?.redteamProvider).toBe('vertex:gemini-2.5-flash');
+        } finally {
+          providerSpy.mockRestore();
+        }
+      } finally {
+        // Restore original cliState
+        cliState.config = originalConfig;
+      }
+    });
+
+    it('should pass redteamProvider as undefined when not configured in cliState', async () => {
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState WITHOUT redteam provider
+      cliState.config = {
+        redteam: {},
+      } as any;
+
+      try {
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        await synthesize({
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'jailbreak' }],
+          targetIds: ['test-provider'],
+        });
+
+        expect(mockStrategyAction).toHaveBeenCalled();
+        expect(capturedConfig).toBeDefined();
+        // When not configured, redteamProvider should be undefined
+        expect(capturedConfig?.redteamProvider).toBeUndefined();
+      } finally {
+        cliState.config = originalConfig;
+      }
+    });
+
+    it('should pass redteamProvider as object when configured as provider options', async () => {
+      const cliState = (await import('../../src/cliState')).default;
+      const originalConfig = cliState.config;
+
+      // Set up cliState with provider options object
+      const providerOptions = {
+        id: 'vertex:gemini-2.5-flash',
+        config: { temperature: 0.7 },
+      };
+      cliState.config = {
+        redteam: {
+          provider: providerOptions,
+        },
+      } as any;
+
+      try {
+        const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
+
+        let capturedConfig: Record<string, any> | undefined;
+        const mockStrategyAction = vi.fn().mockImplementation((testCases, _injectVar, config) => {
+          capturedConfig = config;
+          return testCases.map((tc: any) => ({
+            ...tc,
+            metadata: { ...tc.metadata, strategyId: 'jailbreak' },
+          }));
+        });
+
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'jailbreak',
+          action: mockStrategyAction,
+        });
+
+        // Mock the provider loading
+        const mockProvider = { id: () => 'mock-provider', callApi: vi.fn() };
+        const providerSpy = vi
+          .spyOn(
+            await import('../../src/redteam/providers/shared'),
+            'redteamProviderManager',
+            'get',
+          )
+          .mockReturnValue({
+            getProvider: vi.fn().mockResolvedValue(mockProvider),
+            getGradingProvider: vi.fn().mockResolvedValue(mockProvider),
+            getMultilingualProvider: vi.fn().mockResolvedValue(undefined),
+            setProvider: vi.fn(),
+            setGradingProvider: vi.fn(),
+            setMultilingualProvider: vi.fn(),
+            clearProvider: vi.fn(),
+          } as any);
+
+        try {
+          await synthesize({
+            numTests: 1,
+            plugins: [{ id: 'test-plugin', numTests: 1 }],
+            prompts: ['Test prompt'],
+            strategies: [{ id: 'jailbreak' }],
+            targetIds: ['test-provider'],
+          });
+
+          expect(mockStrategyAction).toHaveBeenCalled();
+          expect(capturedConfig).toBeDefined();
+          // Should pass the full provider options object
+          expect(capturedConfig?.redteamProvider).toEqual(providerOptions);
+        } finally {
+          providerSpy.mockRestore();
+        }
+      } finally {
+        cliState.config = originalConfig;
+      }
+    });
+  });
+
+  describe('Multi-input mode plugin exclusion', () => {
+    it('should exclude dataset-exempt plugins in multi-input mode', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'aegis', numTests: 1 }, // DATASET_EXEMPT_PLUGIN
+          { id: 'contracts', numTests: 1 }, // Regular plugin
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
+      });
+
+      // aegis should be excluded, contracts should remain
+      // Result should only contain test cases from contracts
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Check that logger.info was called with skipping message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('aegis');
+    });
+
+    it('should exclude multi-input excluded plugins in multi-input mode', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
+          { id: 'cross-session-leak', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
+          { id: 'contracts', numTests: 1 }, // Regular plugin
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
+      });
+
+      // cca and cross-session-leak should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Check that logger.info was called with skipping message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('cca');
+      expect(skipMessage).toContain('cross-session-leak');
+    });
+
+    it('should NOT exclude plugins when inputs is empty object', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
+          { id: 'contracts', numTests: 1 },
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: {}, // Empty inputs - not multi-input mode
+      });
+
+      // No plugins should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Should NOT have skipping message for cca
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string =>
+            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
+        );
+
+      expect(skipMessage).toBeUndefined();
+    });
+
+    it('should NOT exclude plugins when inputs is undefined', async () => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
+          { id: 'contracts', numTests: 1 },
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        // No inputs - not multi-input mode
+      });
+
+      // No plugins should be excluded
+      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
+
+      // Should NOT have skipping message for cca
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find(
+          (arg): arg is string =>
+            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
+        );
+
+      expect(skipMessage).toBeUndefined();
+    });
+
+    it('should log info about using multi-input mode', async () => {
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'contracts', numTests: 1 }],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      // Check that logger.info was called with multi-input mode message
+      const multiInputMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('multi-input mode'));
+
+      expect(multiInputMessage).toBeDefined();
+      expect(multiInputMessage).toContain('2 variables');
+      expect(multiInputMessage).toContain('query');
+      expect(multiInputMessage).toContain('context');
+    });
+
+    it('should exclude all MULTI_INPUT_EXCLUDED_PLUGINS in multi-input mode', async () => {
+      await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'cca', numTests: 1 },
+          { id: 'cross-session-leak', numTests: 1 },
+          { id: 'special-token-injection', numTests: 1 },
+          { id: 'system-prompt-override', numTests: 1 },
+          { id: 'contracts', numTests: 1 }, // Regular plugin - should NOT be excluded
+        ],
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs: { query: 'user query', context: 'additional context' },
+      });
+
+      // Check that all 4 MULTI_INPUT_EXCLUDED_PLUGINS are in skip message
+      const skipMessage = vi
+        .mocked(logger.info)
+        .mock.calls.map(([arg]) => arg)
+        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping 4 plugin'));
+
+      expect(skipMessage).toBeDefined();
+      expect(skipMessage).toContain('cca');
+      expect(skipMessage).toContain('cross-session-leak');
+      expect(skipMessage).toContain('special-token-injection');
+      expect(skipMessage).toContain('system-prompt-override');
     });
   });
 });

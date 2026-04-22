@@ -1,7 +1,13 @@
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import { describe, expect, it } from 'vitest';
-import { getHumanRating, hasHumanRating } from './utils';
-import type { EvaluateTableOutput } from '@promptfoo/types';
+import {
+  getHumanRating,
+  getNamedMetricTotal,
+  getNamedMetricTotals,
+  hasHumanRating,
+  hashVarSchema,
+} from './utils';
+import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
 // Helper to create a base output object with all required properties
 const createBaseOutput = (): EvaluateTableOutput => ({
@@ -312,5 +318,101 @@ describe('getHumanRating', () => {
     };
 
     expect(getHumanRating(output)).toBeUndefined();
+  });
+});
+
+describe('named metric helpers', () => {
+  const baseMetrics: Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'> = {
+    namedScoresCount: { accuracy: 2, safety: 1 },
+    namedScoreWeights: { accuracy: 4 },
+  };
+
+  it('prefers namedScoreWeights when available', () => {
+    expect(getNamedMetricTotal(baseMetrics, 'accuracy')).toBe(4);
+  });
+
+  it('falls back to namedScoresCount when weights are absent', () => {
+    expect(getNamedMetricTotal(baseMetrics, 'safety')).toBe(1);
+  });
+
+  it('returns 0 for missing metrics', () => {
+    expect(getNamedMetricTotal(baseMetrics, 'missing')).toBe(0);
+  });
+
+  it('merges sparse namedScoreWeights over namedScoresCount', () => {
+    expect(getNamedMetricTotals(baseMetrics)).toEqual({
+      accuracy: 4,
+      safety: 1,
+    });
+    expect(
+      getNamedMetricTotals({
+        namedScoresCount: { relevance: 3 },
+      } as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>),
+    ).toEqual({ relevance: 3 });
+  });
+
+  it('returns undefined when no totals are available', () => {
+    expect(
+      getNamedMetricTotals({} as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>),
+    ).toBeUndefined();
+  });
+});
+
+describe('hashVarSchema', () => {
+  it('should return consistent hash for same variables in same order', () => {
+    const vars = ['question', 'answer', 'context'];
+    expect(hashVarSchema(vars)).toBe(hashVarSchema(vars));
+  });
+
+  it('should return same hash regardless of input order', () => {
+    const vars1 = ['question', 'answer', 'context'];
+    const vars2 = ['context', 'question', 'answer'];
+    const vars3 = ['answer', 'context', 'question'];
+
+    expect(hashVarSchema(vars1)).toBe(hashVarSchema(vars2));
+    expect(hashVarSchema(vars2)).toBe(hashVarSchema(vars3));
+  });
+
+  it('should return different hash for different variables', () => {
+    const vars1 = ['question', 'answer'];
+    const vars2 = ['input', 'output'];
+
+    expect(hashVarSchema(vars1)).not.toBe(hashVarSchema(vars2));
+  });
+
+  it('should handle empty array', () => {
+    expect(hashVarSchema([])).toBe('[]');
+  });
+
+  it('should handle single variable', () => {
+    expect(hashVarSchema(['query'])).toBe('["query"]');
+  });
+
+  it('should handle variables with special characters', () => {
+    const vars1 = ['var|with|pipes', 'var\x00with\x00nulls'];
+    const vars2 = ['var\x00with\x00nulls', 'var|with|pipes'];
+
+    // Should produce same hash regardless of order
+    expect(hashVarSchema(vars1)).toBe(hashVarSchema(vars2));
+  });
+
+  it('should handle variables with unicode characters', () => {
+    const vars = ['变量', 'переменная', '変数'];
+    expect(hashVarSchema(vars)).toBe(hashVarSchema([...vars].reverse()));
+  });
+
+  it('should not mutate input array', () => {
+    const vars = ['c', 'a', 'b'];
+    const original = [...vars];
+    hashVarSchema(vars);
+    expect(vars).toEqual(original);
+  });
+
+  it('should distinguish between similar variable names', () => {
+    // These could collide with naive delimiter-based approaches
+    const vars1 = ['a', 'b'];
+    const vars2 = ['a,b'];
+
+    expect(hashVarSchema(vars1)).not.toBe(hashVarSchema(vars2));
   });
 });
