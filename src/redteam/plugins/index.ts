@@ -739,7 +739,7 @@ remotePlugins.push(
   createRemotePlugin<{ examples?: string[] }>(
     'role-confusion',
     (config: { examples?: string[] }) => {
-      if (config.examples) {
+      if ('examples' in config) {
         invariant(
           Array.isArray(config.examples),
           'Role confusion plugin config.examples must be an array of strings',

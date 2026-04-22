@@ -179,6 +179,11 @@ describe('Plugins', () => {
           examples: 'pirate',
         } as unknown as PluginConfig),
       ).toThrow('config.examples must be an array of strings');
+      expect(() =>
+        roleConfusionPlugin?.validate?.({
+          examples: false,
+        } as unknown as PluginConfig),
+      ).toThrow('config.examples must be an array of strings');
       expect(() => roleConfusionPlugin?.validate?.({ examples: [] })).toThrow(
         'config.examples must not be empty',
       );
