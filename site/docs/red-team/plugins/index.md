@@ -291,7 +291,7 @@ plugins:
 
 ### Custom prompts
 
-You can also include custom prompts using the [Intent (Custom Prompts) plugin](intent.md). Intents are seed prompts that Promptfoo turns into one base test case per prompt; selected strategies can then transform those seeds, and nested arrays run as multi-step sequences.
+You can also include custom prompts using the [Intent (Custom Prompts) plugin](intent.md). Intents are seed prompts that Promptfoo turns into one base test case per prompt. Selected strategies can transform single-turn seeds, while nested arrays run as authored multi-step sequences.
 
 Unlike the policy plugin, which enforces guidelines, the intent plugin actively attempts to elicit particular (potentially undesirable) behaviors from the model.
 

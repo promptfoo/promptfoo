@@ -7,7 +7,7 @@ description: Red team LLM applications with custom intent prompts, batch uploads
 
 The Intent plugin lets you bring your own attack prompts into a red team run. Use it when you already know the exact requests you want to test, such as historical abuse attempts, compliance scenarios, customer-reported prompts, or prompts from a separate threat model.
 
-Custom intents are different from [custom policies](policy.md). A policy describes a rule the target must follow, and Promptfoo generates probes that try to make the target violate it. An intent is the starting prompt itself. Promptfoo creates one base test case for each intent, then any selected strategies can transform that prompt into adversarial variants.
+Custom intents are different from [custom policies](policy.md). A policy describes a rule the target must follow, and Promptfoo generates probes that try to make the target violate it. An intent is the starting prompt itself. Promptfoo creates one base test case for each intent. For single-turn prompt intents, selected strategies can transform that prompt into adversarial variants. Multi-step or nested-array sequence intents run as authored and are not transformed by strategies.
 
 ## Add Intents In The UI
 
@@ -118,7 +118,7 @@ redteam:
         intent: file://path/to/intents.csv
 ```
 
-Strategies are configured normally and apply to intent-generated test cases just like other red team tests.
+Strategies are configured normally and apply to single-turn intent-generated test cases just like other red team tests. Multi-step sequence intents run in order as authored and are not transformed by strategies.
 
 ```yaml
 redteam:
@@ -135,9 +135,9 @@ redteam:
 
 The Intent plugin does not ask Promptfoo to invent new base prompts. Instead, it creates one test case for each configured intent. The `numTests` setting is ignored for this plugin; the number of base test cases comes from the number of intents you provide.
 
-For a string intent, Promptfoo passes that string into the configured prompt variable and stores an extracted goal in test metadata for strategies and grading. For a multi-step intent, Promptfoo uses the sequence provider and sends each string in the nested array in order.
+For a string intent, Promptfoo passes that string into the configured prompt variable and stores an extracted goal in test metadata for strategies and grading. For a multi-step intent, Promptfoo uses the sequence provider and sends each string in the nested array in order. Strategy generation skips sequence-provider test cases, so multi-step intents run exactly as authored.
 
-Selected strategies can still transform intent test cases. For example, `jailbreak:meta`, `jailbreak:hydra`, and other jailbreak strategies can rewrite or extend your seed prompts into adversarial variants.
+Selected strategies can still transform single-turn intent test cases. For example, `jailbreak:meta`, `jailbreak:hydra`, and other jailbreak strategies can rewrite or extend your seed prompts into adversarial variants.
 
 ## How Results Are Graded
 
