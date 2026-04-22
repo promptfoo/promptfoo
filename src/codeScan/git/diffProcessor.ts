@@ -11,17 +11,18 @@
 
 import path from 'path';
 
+import async from 'async';
 import binaryExtensions from 'binary-extensions';
 import { execa } from 'execa';
 import { isText } from 'istextorbinary';
-import async from 'async';
 import textExtensions from 'text-extensions';
-import { annotateSingleFileDiffWithLineNumbers } from './diffAnnotator';
+import logger from '../../logger';
+import { DiffProcessorError } from '../../types/codeScan';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
+import { annotateDiffWithLineRanges } from './diffAnnotator';
 
 import type { FileRecord } from '../../types/codeScan';
-import { DiffProcessorError } from '../../types/codeScan';
-import logger from '../../logger';
+import type { LineRange } from '../util/diffLineRanges';
 
 interface RawDiffEntry {
   path: string;
@@ -37,7 +38,7 @@ interface NumstatEntry {
 }
 
 type PatchResult =
-  | { success: true; patch: string }
+  | { success: true; patch: string; lineRanges: LineRange[] }
   | { success: false; skipReason: 'patch too large' }
   | { success: false; skipReason: 'diff error' };
 
@@ -399,10 +400,10 @@ async function generatePatchForFile(
       return { success: false, skipReason: 'patch too large' };
     }
 
-    // Annotate the patch with line numbers for easier LLM processing
-    const annotatedPatch = annotateSingleFileDiffWithLineNumbers(patch);
+    // Annotate the patch with line numbers and extract valid line ranges
+    const { annotatedDiff, lineRanges } = annotateDiffWithLineRanges(patch);
 
-    return { success: true, patch: annotatedPatch };
+    return { success: true, patch: annotatedDiff, lineRanges };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
@@ -443,6 +444,7 @@ async function generatePatches(
     return {
       ...file,
       patch: result.patch,
+      lineRanges: result.lineRanges,
     };
   });
 }

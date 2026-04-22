@@ -7,7 +7,7 @@ prompts:
 targets:
   - id: http
     config:
-      url: https://example-app-staging-58786025894.us-central1.run.app/minnow/chat?auth_type=bearer
+      url: https://example-app.promptfoo.app/minnow/chat?auth_type=bearer
       method: POST
       headers:
         Content-Type: application/json
@@ -18,7 +18,7 @@ targets:
         grantType: client_credentials
         clientId: '{{env.PROMPTFOO_TARGET_CLIENT_ID}}'
         clientSecret: '{{env.PROMPTFOO_TARGET_CLIENT_SECRET}}'
-        tokenUrl: https://example-app-staging-58786025894.us-central1.run.app/oauth/token
+        tokenUrl: https://example-app.promptfoo.app/oauth/token
         scopes: []
       stateful: true
       transformResponse: (json) => json

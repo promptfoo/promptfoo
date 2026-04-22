@@ -1,13 +1,14 @@
-import { handleTraceSpanCount } from '../../src/assertions/traceSpanCount';
-
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
-import type { TraceData } from '../../src/types/tracing';
 import { describe, expect, it } from 'vitest';
+import { handleTraceSpanCount } from '../../src/assertions/traceSpanCount';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
+import type { TraceData } from '../../src/types/tracing';
+
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const mockTraceData: TraceData = {
   traceId: 'test-trace-id',

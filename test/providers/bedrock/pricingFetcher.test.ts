@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  mapBedrockModelIdToApiName,
-  getPricingData,
-  calculateCostWithFetchedPricing,
-  type BedrockPricingData,
   type BedrockModelPricing,
+  type BedrockPricingData,
+  calculateCostWithFetchedPricing,
+  getPricingData,
+  mapBedrockModelIdToApiName,
 } from '../../../src/providers/bedrock/pricingFetcher';
 
 // Mock the cache module
@@ -30,8 +30,8 @@ vi.mock('@aws-sdk/client-pricing', () => ({
   GetProductsCommand: vi.fn(),
 }));
 
-import { getCache, isCacheEnabled } from '../../../src/cache';
 import { PricingClient } from '@aws-sdk/client-pricing';
+import { getCache, isCacheEnabled } from '../../../src/cache';
 
 const mockGetCache = vi.mocked(getCache);
 const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
@@ -146,13 +146,19 @@ describe('pricingFetcher', () => {
       expect(cost).toBeCloseTo(0.00105, 6);
     });
 
-    it('should return undefined when pricing data is null', () => {
+    it('should use fallback pricing when pricing data is null and the model is known', () => {
       const cost = calculateCostWithFetchedPricing(
         'anthropic.claude-3-5-sonnet-20241022-v2:0',
         null,
         1000,
         500,
       );
+
+      expect(cost).toBeCloseTo(0.0105, 6);
+    });
+
+    it('should return undefined when pricing data is null and no fallback exists', () => {
+      const cost = calculateCostWithFetchedPricing('unknown.model-v1:0', null, 1000, 500);
 
       expect(cost).toBeUndefined();
     });
@@ -344,7 +350,7 @@ describe('pricingFetcher', () => {
                 term1: {
                   priceDimensions: {
                     dim1: {
-                      pricePerUnit: { USD: '0.035' },
+                      pricePerUnit: { USD: '0.000035' },
                     },
                   },
                 },
@@ -364,7 +370,7 @@ describe('pricingFetcher', () => {
                 term1: {
                   priceDimensions: {
                     dim1: {
-                      pricePerUnit: { USD: '0.14' },
+                      pricePerUnit: { USD: '0.00014' },
                     },
                   },
                 },
@@ -384,7 +390,57 @@ describe('pricingFetcher', () => {
       const result = await getPricingData(testRegion);
 
       expect(result).not.toBeNull();
+      expect(result?.models.get('Nova Micro')?.input).toBeCloseTo(0.000000035);
+      expect(result?.models.get('Nova Micro')?.output).toBeCloseTo(0.00000014);
       expect(MockPricingClient).toHaveBeenCalled();
+    });
+
+    it('should omit incomplete API pricing rows', async () => {
+      const testRegion = 'eu-west-2';
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+
+      mockGetCache.mockResolvedValue(mockCache as any);
+      mockIsCacheEnabled.mockReturnValue(false);
+
+      const mockSend = vi.fn().mockResolvedValue({
+        PriceList: [
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
+                inferenceType: 'Input tokens',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.000035' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        ],
+        NextToken: undefined,
+      });
+
+      MockPricingClient.mockImplementation(function () {
+        return {
+          send: mockSend,
+        };
+      } as any);
+
+      const result = await getPricingData(testRegion);
+
+      expect(result).not.toBeNull();
+      expect(result?.models.has('Nova Micro')).toBe(false);
     });
 
     it('should return null when cache is disabled and API fails', async () => {
@@ -442,7 +498,27 @@ describe('pricingFetcher', () => {
                         term1: {
                           priceDimensions: {
                             dim1: {
-                              pricePerUnit: { USD: '0.035' },
+                              pricePerUnit: { USD: '0.000035' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  }),
+                  JSON.stringify({
+                    product: {
+                      attributes: {
+                        model: 'Nova Micro',
+                        inferenceType: 'Output tokens',
+                        feature: 'On-demand Inference',
+                      },
+                    },
+                    terms: {
+                      OnDemand: {
+                        term1: {
+                          priceDimensions: {
+                            dim1: {
+                              pricePerUnit: { USD: '0.00014' },
                             },
                           },
                         },

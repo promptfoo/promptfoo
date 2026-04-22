@@ -1,7 +1,7 @@
-import { fromError } from 'zod-validation-error';
+import { z } from 'zod';
 import {
-  AssertionOrSetSchema,
   type Assertion,
+  AssertionOrSetSchema,
   type AssertionSet,
   type TestCase,
 } from '../types/index';
@@ -46,10 +46,9 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
   const result = AssertionOrSetSchema.safeParse(assertion);
 
   if (!result.success) {
-    const zodError = fromError(result.error);
     throw new AssertValidationError(
       `Invalid assertion at ${context}:\n` +
-        `${zodError.message}\n\n` +
+        `${z.prettifyError(result.error)}\n\n` +
         `Received: ${JSON.stringify(assertion, null, 2)}`,
     );
   }

@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
+import { mockProcessEnv } from '../../../util/utils';
+
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
 // Mock dependencies
+vi.mock('../../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 vi.mock('../../../../src/providers/elevenlabs/client');
 vi.mock('../../../../src/providers/elevenlabs/cache');
 vi.mock('../../../../src/providers/elevenlabs/cost-tracker', () => {
@@ -21,11 +31,12 @@ vi.mock('../../../../src/providers/elevenlabs/cost-tracker', () => {
 describe('ElevenLabsAgentsProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ELEVENLABS_API_KEY = 'test-api-key';
+    mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
-    delete process.env.ELEVENLABS_API_KEY;
+    mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
+    vi.resetAllMocks();
   });
 
   describe('constructor', () => {
@@ -37,7 +48,7 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should throw error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsAgentsProvider('elevenlabs:agent')).toThrow(
         'ELEVENLABS_API_KEY environment variable is not set',
@@ -50,15 +61,34 @@ describe('ElevenLabsAgentsProvider', () => {
           agentId: 'test-agent-123',
           maxTurns: 5,
           simulatedUser: {
-            persona: 'helpful customer',
-            first_message: 'Hello',
+            prompt: 'helpful customer',
           },
         },
       });
 
       expect(provider.config.agentId).toBe('test-agent-123');
       expect(provider.config.maxTurns).toBe(5);
-      expect(provider.config.simulatedUser?.persona).toBe('helpful customer');
+      expect(provider.config.simulatedUser?.prompt).toBe('helpful customer');
+    });
+
+    it('should preserve an explicit maxTurns value of 0', () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          maxTurns: 0,
+        },
+      });
+
+      expect(provider.config.maxTurns).toBe(0);
+    });
+
+    it('should preserve explicit zero retries', () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          retries: 0,
+        },
+      });
+
+      expect(provider.config.retries).toBe(0);
     });
 
     it('should use custom label if provided', () => {
@@ -70,15 +100,15 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should respect environment variable overrides', () => {
-      const env = { CUSTOM_API_KEY: 'custom-key' };
+      mockProcessEnv({ CUSTOM_API_KEY: 'custom-key' });
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
           apiKeyEnvar: 'CUSTOM_API_KEY',
         },
-        env,
       });
 
       expect(provider).toBeDefined();
+      mockProcessEnv({ CUSTOM_API_KEY: undefined });
     });
   });
 
@@ -181,15 +211,15 @@ describe('ElevenLabsAgentsProvider', () => {
 
       // Verify conversation data is present
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.conversationHistory).toBeDefined();
-      expect(result.metadata.conversationHistory.length).toBe(4);
+      expect(result.metadata!.conversationHistory).toBeDefined();
+      expect(result.metadata!.conversationHistory.length).toBe(4);
 
       // Verify tool usage is tracked
-      expect(result.metadata.toolUsageAnalysis).toBeDefined();
-      expect(result.metadata.toolUsageAnalysis.totalCalls).toBe(1);
-      expect(result.metadata.toolUsageAnalysis.successfulCalls).toBe(1);
-      expect(result.metadata.toolUsageAnalysis.failedCalls).toBe(0);
-      expect(result.metadata.toolUsageAnalysis.callsByTool.get('get_weather')).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis).toBeDefined();
+      expect(result.metadata!.toolUsageAnalysis.totalCalls).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis.successfulCalls).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis.failedCalls).toBe(0);
+      expect(result.metadata!.toolUsageAnalysis.callsByTool.get('get_weather')).toBe(1);
 
       // Verify LLM usage is tracked
       expect(result.tokenUsage).toEqual({
@@ -219,7 +249,8 @@ describe('ElevenLabsAgentsProvider', () => {
         },
       });
 
-      const mockApiResponse: AgentSimulationResponse = {
+      // Mock the raw API response format (differs from typed interface)
+      const mockApiResponse = {
         conversation_id: 'conv_abc123',
         status: 'completed',
         simulated_conversation: [
@@ -252,7 +283,7 @@ describe('ElevenLabsAgentsProvider', () => {
           completion_tokens: 30,
           model: 'gpt-4o-mini',
         },
-      };
+      } as unknown as AgentSimulationResponse;
 
       // Mock the client's post method on the provider instance
       (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
@@ -260,12 +291,12 @@ describe('ElevenLabsAgentsProvider', () => {
       const result = await provider.callApi('Hello');
 
       // Verify evaluation results are present
-      expect(result.metadata.evaluationResults).toBeDefined();
-      expect(result.metadata.evaluationResults).toHaveLength(2);
-      expect(result.metadata.overallScore).toBeDefined();
+      expect(result.metadata!.evaluationResults).toBeDefined();
+      expect(result.metadata!.evaluationResults).toHaveLength(2);
+      expect(result.metadata!.overallScore).toBeDefined();
 
       // Find specific evaluation results
-      const helpfulnessResult = result.metadata.evaluationResults.find(
+      const helpfulnessResult = result.metadata!.evaluationResults.find(
         (r: any) => r.criterion === 'Helpfulness',
       );
       expect(helpfulnessResult).toEqual({
@@ -276,7 +307,7 @@ describe('ElevenLabsAgentsProvider', () => {
         evidence: undefined,
       });
 
-      const accuracyResult = result.metadata.evaluationResults.find(
+      const accuracyResult = result.metadata!.evaluationResults.find(
         (r: any) => r.criterion === 'Accuracy',
       );
       expect(accuracyResult).toEqual({
@@ -288,16 +319,41 @@ describe('ElevenLabsAgentsProvider', () => {
       });
     });
 
+    it('should preserve an explicit maxTurns value of 0 in simulation requests', async () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          agentId: 'test-agent-123',
+          maxTurns: 0,
+        },
+      });
+
+      const mockApiResponse: AgentSimulationResponse = {
+        conversation_id: 'conv_zero',
+        status: 'completed',
+        simulated_conversation: [],
+      } as unknown as AgentSimulationResponse;
+
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
+
+      await provider.callApi('Hello');
+
+      expect((provider as any).client.post).toHaveBeenCalledWith(
+        '/convai/agents/test-agent-123/simulate-conversation',
+        expect.objectContaining({
+          new_turns_limit: 0,
+        }),
+      );
+    });
+
     it('should handle tool mocking configuration', async () => {
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
           agentId: 'test-agent-123',
-          toolMockConfig: [
-            {
-              name: 'get_weather',
-              mock_response: { temperature: 72, condition: 'sunny' },
+          toolMockConfig: {
+            get_weather: {
+              returnValue: { temperature: 72, condition: 'sunny' },
             },
-          ],
+          },
         },
       });
 

@@ -1,11 +1,11 @@
 import {
-  PricingClient,
   GetProductsCommand,
   type GetProductsCommandOutput,
+  PricingClient,
 } from '@aws-sdk/client-pricing';
-import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
 /**
  * Cache TTL for pricing data in milliseconds.
@@ -252,9 +252,7 @@ export async function getPricingData(
   // No cached data, check if there's already a fetch in progress for this region
   let fetchPromise = pricingFetchPromises.get(region);
 
-  if (fetchPromise) {
-    logger.debug('[Bedrock Pricing]: Reusing in-flight pricing fetch', { region });
-  } else {
+  if (fetchPromise === undefined) {
     // No fetch in progress, start a new one
     logger.debug('[Bedrock Pricing]: Starting new pricing fetch', { region });
     fetchPromise = fetchBedrockPricing(region, credentials);
@@ -265,6 +263,8 @@ export async function getPricingData(
       pricingFetchPromises.delete(region);
       logger.debug('[Bedrock Pricing]: Cleared fetch promise from cache', { region });
     });
+  } else {
+    logger.debug('[Bedrock Pricing]: Reusing in-flight pricing fetch', { region });
   }
 
   // Wait for the fetch (either the one we started or one already in progress)
@@ -298,6 +298,148 @@ export async function getPricingData(
  * @param credentials - AWS credentials for Pricing API access (identity or provider)
  * @returns Promise resolving to pricing data, or null if fetch fails
  */
+async function sendPricingCommandWithTimeout(
+  pricingClient: PricingClient,
+  command: GetProductsCommand,
+): Promise<GetProductsCommandOutput> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error('Pricing API request timed out after 10 seconds')),
+      10000,
+    );
+  });
+
+  return Promise.race([pricingClient.send(command), timeoutPromise]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }) as Promise<GetProductsCommandOutput>;
+}
+
+async function fetchAllPriceItems(pricingClient: PricingClient, region: string): Promise<string[]> {
+  const allPriceItems: string[] = [];
+  let nextToken: string | undefined;
+
+  do {
+    const response = await sendPricingCommandWithTimeout(
+      pricingClient,
+      new GetProductsCommand({
+        ServiceCode: 'AmazonBedrock',
+        Filters: [
+          {
+            Type: 'TERM_MATCH',
+            Field: 'regionCode',
+            Value: region,
+          },
+        ],
+        MaxResults: 100,
+        NextToken: nextToken,
+      }),
+    );
+
+    if (response.PriceList) {
+      allPriceItems.push(...response.PriceList);
+    }
+
+    nextToken = response.NextToken;
+  } while (nextToken);
+
+  return allPriceItems;
+}
+
+function getOnDemandUsdPrice(product: any): number | undefined {
+  const onDemand = Object.values(product.terms?.OnDemand ?? {})[0] as any;
+  const priceDim = Object.values(onDemand?.priceDimensions ?? {})[0] as any;
+  const priceRaw = priceDim?.pricePerUnit?.USD;
+
+  if (!priceRaw) {
+    return undefined;
+  }
+
+  const price = parseFloat(priceRaw);
+  return Number.isFinite(price) && price >= 0 ? price : undefined;
+}
+
+function setModelPricingRate(
+  models: Map<string, BedrockModelPricing>,
+  modelName: string,
+  inferenceType: string,
+  price: number,
+) {
+  if (!models.has(modelName)) {
+    models.set(modelName, { input: 0, output: 0 });
+  }
+
+  const modelPricing = models.get(modelName)!;
+  const rate = price / 1000;
+  const normalizedInferenceType = inferenceType.toLowerCase();
+
+  if (normalizedInferenceType.includes('input')) {
+    modelPricing.input = rate;
+  } else if (normalizedInferenceType.includes('output')) {
+    modelPricing.output = rate;
+  }
+}
+
+function removeIncompleteModelPricing(models: Map<string, BedrockModelPricing>) {
+  for (const [modelName, modelPricing] of models) {
+    if (modelPricing.input <= 0 || modelPricing.output <= 0) {
+      logger.debug('[Bedrock Pricing]: Skipping incomplete pricing data', {
+        modelName,
+        modelPricing,
+      });
+      models.delete(modelName);
+    }
+  }
+}
+
+function parseBedrockPriceItems(priceItems: string[]): {
+  models: Map<string, BedrockModelPricing>;
+  allModelsFound: Set<string>;
+  usageTypeSamples: Record<string, string>;
+} {
+  const models = new Map<string, BedrockModelPricing>();
+  const allModelsFound = new Set<string>();
+  const usageTypeSamples: Record<string, string> = {};
+
+  for (const priceItem of priceItems) {
+    try {
+      const product = JSON.parse(priceItem);
+      const attrs = product.product?.attributes;
+      const modelName = attrs?.model;
+
+      if (!modelName) {
+        continue;
+      }
+
+      allModelsFound.add(modelName);
+      usageTypeSamples[modelName] ||= attrs.usagetype || '';
+
+      if (attrs.feature !== 'On-demand Inference') {
+        continue;
+      }
+
+      const price = getOnDemandUsdPrice(product);
+      if (price === undefined) {
+        logger.debug('[Bedrock Pricing]: Skipping invalid price', {
+          modelName,
+        });
+        continue;
+      }
+
+      setModelPricingRate(models, modelName, attrs.inferenceType || '', price);
+    } catch (err) {
+      logger.debug('[Bedrock Pricing]: Failed to parse price item', {
+        error: String(err),
+      });
+    }
+  }
+
+  removeIncompleteModelPricing(models);
+  return { models, allModelsFound, usageTypeSamples };
+}
+
 async function fetchBedrockPricing(
   region: string,
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
@@ -315,121 +457,8 @@ async function fetchBedrockPricing(
       ...(credentials ? { credentials } : {}),
     });
 
-    // Fetch ALL pricing products with pagination
-    let allPriceItems: string[] = [];
-    let nextToken: string | undefined;
-
-    do {
-      const command = new GetProductsCommand({
-        ServiceCode: 'AmazonBedrock',
-        Filters: [
-          {
-            Type: 'TERM_MATCH',
-            Field: 'regionCode',
-            Value: region,
-          },
-        ],
-        MaxResults: 100,
-        NextToken: nextToken,
-      });
-
-      // Set 10-second timeout per page
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error('Pricing API request timed out after 10 seconds')),
-          10000,
-        );
-      });
-
-      const response = (await Promise.race([
-        pricingClient.send(command),
-        timeoutPromise,
-      ])) as GetProductsCommandOutput;
-
-      if (response.PriceList) {
-        allPriceItems = allPriceItems.concat(response.PriceList);
-      }
-
-      nextToken = response.NextToken;
-    } while (nextToken);
-
-    // Parse pricing data
-    const models = new Map<string, BedrockModelPricing>();
-    const allModelsFound = new Set<string>();
-    const usageTypeSamples: Record<string, string> = {};
-
-    for (const priceItem of allPriceItems) {
-      try {
-        const product = JSON.parse(priceItem);
-        const attrs = product.product?.attributes;
-
-        if (!attrs || !attrs.model) {
-          continue;
-        }
-
-        const modelName = attrs.model;
-        const inferenceType = attrs.inferenceType || '';
-        const usagetype = attrs.usagetype || '';
-        const feature = attrs.feature || '';
-
-        // Track all models we find (for debugging)
-        allModelsFound.add(modelName);
-
-        // Store sample usagetype for each model (for debugging)
-        if (!usageTypeSamples[modelName]) {
-          usageTypeSamples[modelName] = usagetype;
-        }
-
-        // Only process On-demand Inference pricing
-        if (feature !== 'On-demand Inference') {
-          continue;
-        }
-
-        // Get pricing from OnDemand terms with defensive checks
-        if (product.terms?.OnDemand) {
-          const onDemand = Object.values(product.terms.OnDemand)[0] as any;
-          if (!onDemand?.priceDimensions) {
-            continue;
-          }
-
-          const priceDim = Object.values(onDemand.priceDimensions)[0] as any;
-          if (!priceDim?.pricePerUnit?.USD) {
-            continue;
-          }
-
-          const price = parseFloat(priceDim.pricePerUnit.USD);
-
-          // Skip invalid prices (NaN, negative, or Infinity)
-          if (!Number.isFinite(price) || price < 0) {
-            logger.debug('[Bedrock Pricing]: Skipping invalid price', {
-              modelName,
-              priceRaw: priceDim.pricePerUnit?.USD,
-              parsedPrice: price,
-            });
-            continue;
-          }
-
-          // Only create model entry when we find on-demand pricing
-          if (!models.has(modelName)) {
-            models.set(modelName, { input: 0, output: 0 });
-          }
-
-          const modelPricing = models.get(modelName)!;
-
-          // Pricing is per 1K tokens, convert to per-token
-          if (inferenceType.toLowerCase().includes('input')) {
-            modelPricing.input = price / 1000;
-          } else if (inferenceType.toLowerCase().includes('output')) {
-            modelPricing.output = price / 1000;
-          }
-        }
-      } catch (err) {
-        logger.debug('[Bedrock Pricing]: Failed to parse price item', {
-          error: String(err),
-        });
-        continue;
-      }
-    }
+    const allPriceItems = await fetchAllPriceItems(pricingClient, region);
+    const { models, allModelsFound, usageTypeSamples } = parseBedrockPriceItems(allPriceItems);
 
     const duration = Date.now() - startTime;
 
@@ -554,6 +583,14 @@ function getFallbackPricing(modelId: string): BedrockModelPricing | undefined {
   return undefined;
 }
 
+function calculateModelCost(
+  modelPricing: BedrockModelPricing,
+  promptTokens: number,
+  completionTokens: number,
+): number {
+  return promptTokens * modelPricing.input + completionTokens * modelPricing.output;
+}
+
 /**
  * Calculates cost using fetched pricing data.
  *
@@ -580,14 +617,24 @@ export function calculateCostWithFetchedPricing(
     return undefined;
   }
 
+  const modelName = mapBedrockModelIdToApiName(modelId);
+
   if (!pricingData) {
-    logger.debug('[Bedrock Pricing]: No pricing data available', {
+    const fallbackPricing = getFallbackPricing(modelId);
+    if (!fallbackPricing) {
+      logger.debug('[Bedrock Pricing]: No pricing data available', {
+        modelId,
+      });
+      return undefined;
+    }
+
+    logger.debug('[Bedrock Pricing]: Using fallback pricing because pricing data is unavailable', {
       modelId,
+      pricing: fallbackPricing,
     });
-    return undefined;
+    return calculateModelCost(fallbackPricing, promptTokens, completionTokens);
   }
 
-  const modelName = mapBedrockModelIdToApiName(modelId);
   let modelPricing = pricingData.models.get(modelName);
 
   // If not found in API pricing, try fallback pricing
@@ -610,19 +657,14 @@ export function calculateCostWithFetchedPricing(
     });
   }
 
-  const inputCostPerToken = modelPricing.input;
-  const outputCostPerToken = modelPricing.output;
-
   logger.debug('[Bedrock Pricing]: Using fetched pricing', {
     modelId,
     modelName,
-    inputCostPerToken,
-    outputCostPerToken,
+    inputCostPerToken: modelPricing.input,
+    outputCostPerToken: modelPricing.output,
     promptTokens,
     completionTokens,
   });
 
-  const cost = promptTokens * inputCostPerToken + completionTokens * outputCostPerToken;
-
-  return cost;
+  return calculateModelCost(modelPricing, promptTokens, completionTokens);
 }

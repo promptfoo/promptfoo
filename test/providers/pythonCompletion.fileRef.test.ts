@@ -1,13 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import fs from 'fs';
 import path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
-import { parsePathOrGlob } from '../../src/util/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
+import { parsePathOrGlob } from '../../src/util/index';
 import type { Logger } from 'winston';
 
 vi.mock('fs');

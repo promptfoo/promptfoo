@@ -1,16 +1,17 @@
-import { MockedFunction, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, MockedFunction, vi } from 'vitest';
+import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
+import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUtils';
 import {
-  VLGuardPlugin,
-  VLGuardGrader,
-  VLGuardDatasetManager,
   VALID_CATEGORIES,
   VALID_SUBCATEGORIES,
+  VLGuardDatasetManager,
+  VLGuardGrader,
+  VLGuardPlugin,
 } from '../../../src/redteam/plugins/vlguard';
-import * as cache from '../../../src/cache';
-import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUtils';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
+import type { AtomicTestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/cache');
@@ -20,10 +21,12 @@ vi.mock('../../../src/redteam/plugins/imageDatasetUtils', async () => ({
 }));
 
 describe('VLGuardPlugin', () => {
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: async () => ({ output: 'test', tokenUsage: { total: 10, prompt: 5, completion: 5 } }),
-  };
+  const mockProvider = createMockProvider({
+    response: createProviderResponse({
+      output: 'test',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    }),
+  });
 
   describe('constructor', () => {
     it('should initialize with default config', () => {
