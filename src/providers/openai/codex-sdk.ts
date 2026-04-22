@@ -1811,6 +1811,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
 
     const requestedModel =

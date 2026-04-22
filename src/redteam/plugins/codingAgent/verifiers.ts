@@ -4,9 +4,9 @@ import path from 'node:path';
 import type { Dirent } from 'node:fs';
 
 import { sha256 } from '../../../util/createHash';
+import { type AgentObservation, observationsFromGradingContext } from '../../agentic/observations';
 
 import type { AssertionValue, AtomicTestCase } from '../../../types/index';
-import type { TraceData } from '../../../types/tracing';
 import type { CodingAgentPlugin } from '../../constants/codingAgents';
 import type { RedteamGradingContext } from '../../grading/types';
 
@@ -517,18 +517,6 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function parseProviderRaw(raw: unknown): unknown {
-  if (typeof raw !== 'string') {
-    return raw;
-  }
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-}
-
 function collectValuesByKey(
   value: unknown,
   keyNames: ReadonlySet<string>,
@@ -647,125 +635,67 @@ async function evidenceFromConfiguredFiles(
   return evidence;
 }
 
-function evidenceFromProviderRaw(raw: unknown): TargetEvidence[] {
-  const parsed = parseProviderRaw(raw);
-  const object = getObject(parsed);
-  if (!object) {
-    return [];
-  }
-
+function targetEvidenceFromObservation(observation: AgentObservation): TargetEvidence[] {
   const evidence: TargetEvidence[] = [];
-  const finalResponse = getString(object.finalResponse);
-  if (finalResponse) {
+
+  if (observation.kind === 'message' && observation.text) {
     evidence.push({
-      evidenceSource: 'agent-response',
-      location: 'provider raw final response',
-      text: finalResponse,
+      evidenceSource:
+        observation.source === 'provider-output' ? 'provider-output' : 'agent-response',
+      location: observation.fieldLocations?.text ?? observation.location,
+      text: observation.text,
     });
+    return evidence;
   }
 
-  const items = Array.isArray(object.items) ? object.items : [];
-  items.forEach((item, index) => {
-    const itemObject = getObject(item);
-    if (!itemObject) {
-      return;
-    }
-
-    const type = getString(itemObject.type);
-    if (type === 'agent_message') {
-      const text = getString(itemObject.text);
-      if (text) {
-        evidence.push({
-          evidenceSource: 'agent-response',
-          location: `provider raw item ${index + 1} agent message`,
-          text,
-        });
-      }
-    }
-
-    if (type === 'command_execution') {
-      const command = getString(itemObject.command);
-      const commandOutput = getString(itemObject.aggregated_output);
-      if (command) {
-        evidence.push({
-          evidenceSource: 'command',
-          location: `provider raw item ${index + 1} command`,
-          text: command,
-        });
-      }
-      if (commandOutput) {
-        evidence.push({
-          evidenceSource: 'command-output',
-          location: `provider raw item ${index + 1} command output`,
-          text: commandOutput,
-        });
-      }
-    }
-  });
-
-  return evidence;
-}
-
-function traceAttributeEvidenceSource(
-  normalizedAttributeName: string,
-): TargetEvidence['evidenceSource'] | undefined {
-  if (
-    normalizedAttributeName === 'codex.output' ||
-    normalizedAttributeName.includes('command.output') ||
-    normalizedAttributeName.endsWith('.stdout') ||
-    normalizedAttributeName.endsWith('.stderr') ||
-    normalizedAttributeName.includes('tool.output')
-  ) {
-    return 'command-output';
-  }
-
-  if (
-    normalizedAttributeName === 'codex.message' ||
-    normalizedAttributeName.includes('agent.message') ||
-    normalizedAttributeName.includes('assistant.message') ||
-    normalizedAttributeName.includes('final.response') ||
-    normalizedAttributeName.includes('response.output') ||
-    normalizedAttributeName.includes('completion')
-  ) {
-    return 'agent-response';
-  }
-
-  if (
-    normalizedAttributeName === 'codex.command' ||
-    normalizedAttributeName.includes('command.line') ||
-    normalizedAttributeName.includes('command.name')
-  ) {
-    return 'command';
-  }
-
-  return undefined;
-}
-
-function evidenceFromTraceData(traceData?: Pick<TraceData, 'spans'> | null): TargetEvidence[] {
-  if (!traceData) {
-    return [];
-  }
-
-  const evidence: TargetEvidence[] = [];
-  traceData.spans.forEach((span, spanIndex) => {
-    for (const [attributeName, attributeValue] of Object.entries(span.attributes ?? {})) {
-      const text = getString(attributeValue);
-      if (!text) {
-        continue;
-      }
-
-      const evidenceSource = traceAttributeEvidenceSource(attributeName.toLowerCase());
-      if (!evidenceSource) {
-        continue;
-      }
-
+  if (observation.kind === 'command') {
+    if (observation.command) {
       evidence.push({
-        evidenceSource,
-        location: `trace span ${spanIndex + 1} attribute ${attributeName}`,
-        text,
+        evidenceSource: 'command',
+        location: observation.fieldLocations?.command ?? observation.location,
+        text: observation.command,
       });
     }
-  });
+    if (observation.output) {
+      evidence.push({
+        evidenceSource: 'command-output',
+        location: observation.fieldLocations?.output ?? observation.location,
+        text: observation.output,
+      });
+    }
+    return evidence;
+  }
+
+  if (observation.kind === 'tool_call' || observation.kind === 'connector_call') {
+    if (observation.input) {
+      evidence.push({
+        evidenceSource: 'command',
+        location: observation.fieldLocations?.input ?? observation.location,
+        text: observation.input,
+      });
+    }
+    if (observation.output) {
+      evidence.push({
+        evidenceSource: 'command-output',
+        location: observation.fieldLocations?.output ?? observation.location,
+        text: observation.output,
+      });
+    }
+    return evidence;
+  }
+
+  if (
+    (observation.kind === 'file_read' ||
+      observation.kind === 'file_write' ||
+      observation.kind === 'network_request') &&
+    observation.text
+  ) {
+    evidence.push({
+      evidenceSource: 'command',
+      location: observation.location,
+      text: observation.text,
+    });
+  }
 
   return evidence;
 }
@@ -774,20 +704,9 @@ function targetEvidence(
   llmOutput: string,
   gradingContext?: RedteamGradingContext,
 ): TargetEvidence[] {
-  const evidence: TargetEvidence[] = [
-    { evidenceSource: 'agent-response', location: 'final output', text: llmOutput },
-    {
-      evidenceSource: 'provider-output',
-      location: 'provider output',
-      text:
-        typeof gradingContext?.providerResponse?.output === 'string'
-          ? gradingContext.providerResponse.output
-          : '',
-    },
-    ...evidenceFromProviderRaw(gradingContext?.providerResponse?.raw),
-    ...evidenceFromTraceData(gradingContext?.traceData),
-    ...evidenceFromTraceData(gradingContext?.traceContext),
-  ];
+  const evidence = observationsFromGradingContext({ gradingContext, llmOutput }).flatMap(
+    targetEvidenceFromObservation,
+  );
 
   return evidence.filter((item) => item.text.trim() !== '');
 }
