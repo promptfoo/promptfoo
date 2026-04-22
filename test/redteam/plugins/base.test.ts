@@ -1054,6 +1054,34 @@ describe('parseGeneratedInputs', () => {
     expect(parsed.message).toContain('world');
   });
 
+  it('should return parseable JSON when falling back from bare JSON objects', () => {
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const result = parseGeneratedInputs(
+      JSON.stringify({ username: 'admin', message: 'Hello world' }),
+      inputs,
+    );
+
+    expect(result).toEqual([{ __prompt: '{"username":"admin","message":"Hello world"}' }]);
+    expect(JSON.parse(result[0].__prompt)).toEqual({
+      message: 'Hello world',
+      username: 'admin',
+    });
+  });
+
+  it('should return parseable JSON when falling back from bare JSON arrays', () => {
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const result = parseGeneratedInputs(
+      JSON.stringify([{ username: 'admin', message: 'Hello world' }]),
+      inputs,
+    );
+
+    expect(result).toEqual([{ __prompt: '{"username":"admin","message":"Hello world"}' }]);
+    expect(JSON.parse(result[0].__prompt)).toEqual({
+      message: 'Hello world',
+      username: 'admin',
+    });
+  });
+
   it('should handle multiple inputs for complex redteam scenarios', () => {
     const inputs = {
       userId: 'The user ID',
