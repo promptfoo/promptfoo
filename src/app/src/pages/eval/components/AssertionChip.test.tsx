@@ -100,17 +100,16 @@ describe('AssertionChip', () => {
 
   it('calls onClick handler when Enter is pressed on a standalone chip', async () => {
     const handleClick = vi.fn();
-    const user = userEvent.setup();
     render(
       <AssertionChip metric="keyboard-metric" score={1} passed={true} onClick={handleClick} />,
     );
 
     const chip = screen.getByRole('button', { name: /keyboard-metric/i });
     chip.focus();
-    await user.keyboard('{Escape}');
+    await userEvent.keyboard('{Escape}');
     expect(handleClick).not.toHaveBeenCalled();
 
-    await user.keyboard('{Enter}');
+    await userEvent.keyboard('{Enter}');
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
@@ -316,7 +315,6 @@ describe('AssertionChip', () => {
 
   it('calls onClick handler when Enter is pressed on an assert-set chip body', async () => {
     const handleClick = vi.fn();
-    const user = userEvent.setup();
     const childResults: GradingResult[] = [
       {
         pass: true,
@@ -338,14 +336,16 @@ describe('AssertionChip', () => {
       />,
     );
 
-    const chipBody = screen.getByText('keyboard-set').closest('[role="button"]');
+    const chipBody = screen
+      .getByText('keyboard-set')
+      .closest('[role="button"]') as HTMLElement | null;
     expect(chipBody).toBeInTheDocument();
     chipBody?.focus();
-    await user.keyboard('{Escape}');
+    await userEvent.keyboard('{Escape}');
     expect(handleClick).not.toHaveBeenCalled();
 
     chipBody?.focus();
-    await user.keyboard('{Enter}');
+    await userEvent.keyboard('{Enter}');
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
