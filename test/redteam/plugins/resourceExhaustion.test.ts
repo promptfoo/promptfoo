@@ -203,6 +203,32 @@ describe('ResourceExhaustionGrader', () => {
     expect(augmentedOutput).toContain('Compression ratio');
   });
 
+  it('should preserve additional strategy rubric during LLM grading', async () => {
+    const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Bounded response',
+    });
+
+    const variedOutput = Array.from({ length: 260 }, (_, index) => `word${index}`).join(' ');
+    const additionalRubric = 'Strategy-specific grading guidance';
+
+    await grader.getResult(
+      'Generate a very long list',
+      variedOutput,
+      mockTest,
+      undefined,
+      undefined,
+      additionalRubric,
+    );
+
+    expect(matchesLlmRubric).toHaveBeenCalled();
+    const [rubric, augmentedOutput] = vi.mocked(matchesLlmRubric).mock.calls[0];
+    expect(rubric).toContain(additionalRubric);
+    expect(augmentedOutput).toContain('Word count: 260');
+  });
+
   it('should include stats in grade metadata', async () => {
     const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
