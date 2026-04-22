@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getDb } from '../../database/index';
 import { evalResultsTable, evalsTable } from '../../database/tables';
@@ -66,22 +66,11 @@ export class BulkGradeService {
       }
 
       // Get all matching test indices
-      const { testIndices, filteredCount } = await eval_.getAllFilteredTestIndices({
+      const { testIndices } = await eval_.getAllFilteredTestIndices({
         filterMode: request.filterMode,
         filters: request.filters,
         searchQuery: request.searchQuery,
       });
-
-      // Check confirmation threshold
-      if (filteredCount >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD && !request.confirmBulk) {
-        return {
-          success: false,
-          matched: filteredCount,
-          updated: 0,
-          skipped: 0,
-          error: `Bulk operation affects ${filteredCount} results. Set confirmBulk: true to proceed.`,
-        };
-      }
 
       if (testIndices.length === 0) {
         return {
@@ -92,7 +81,7 @@ export class BulkGradeService {
         };
       }
 
-      // Fetch all results in batches
+      // Fetch all results for the matching table rows.
       const allResults = await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices);
 
       if (allResults.length === 0) {
@@ -101,6 +90,17 @@ export class BulkGradeService {
           matched: 0,
           updated: 0,
           skipped: 0,
+        };
+      }
+
+      // Check confirmation threshold against the actual result rows that will be updated.
+      if (allResults.length >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD && !request.confirmBulk) {
+        return {
+          success: false,
+          matched: allResults.length,
+          updated: 0,
+          skipped: 0,
+          error: `Bulk operation affects ${allResults.length} results. Set confirmBulk: true to proceed.`,
         };
       }
 
@@ -175,13 +175,8 @@ export class BulkGradeService {
 
         for (let i = 0; i < resultsToUpdate.length; i += BATCH_SIZE) {
           const batch = resultsToUpdate.slice(i, i + BATCH_SIZE);
-          const batchIds = batch.map((r) => r.id);
 
-          // Use a single UPDATE with CASE statements for the batch
-          // This is more efficient than individual updates
-          if (batch.length === 1) {
-            // Single result - use simple update
-            const result = batch[0];
+          for (const result of batch) {
             db.update(evalResultsTable)
               .set({
                 gradingResult: result.gradingResult,
@@ -191,32 +186,6 @@ export class BulkGradeService {
               })
               .where(eq(evalResultsTable.id, result.id))
               .run();
-          } else {
-            // Multiple results - build CASE statements for batch update
-            // Build CASE expressions for each field
-            const gradingResultCases = batch
-              .map(
-                (r) =>
-                  `WHEN id = '${r.id}' THEN '${JSON.stringify(r.gradingResult).replace(/'/g, "''")}'`,
-              )
-              .join(' ');
-            const successCases = batch
-              .map((r) => `WHEN id = '${r.id}' THEN ${r.success ? 1 : 0}`)
-              .join(' ');
-            const scoreCases = batch.map((r) => `WHEN id = '${r.id}' THEN ${r.score}`).join(' ');
-
-            db.run(sql`
-              UPDATE ${evalResultsTable}
-              SET
-                grading_result = CASE ${sql.raw(gradingResultCases)} END,
-                success = CASE ${sql.raw(successCases)} END,
-                score = CASE ${sql.raw(scoreCases)} END,
-                updated_at = ${currentTimestamp}
-              WHERE id IN (${sql.join(
-                batchIds.map((id) => sql`${id}`),
-                sql`, `,
-              )})
-            `);
           }
         }
 
@@ -297,13 +266,14 @@ export class BulkGradeService {
       return 0;
     }
 
-    const { filteredCount } = await eval_.getAllFilteredTestIndices({
+    const { testIndices } = await eval_.getAllFilteredTestIndices({
       filterMode,
       filters,
       searchQuery,
     });
 
-    return filteredCount;
+    const results = await EvalResult.findManyByEvalIdAndTestIndices(evalId, testIndices);
+    return results.length;
   }
 
   /**

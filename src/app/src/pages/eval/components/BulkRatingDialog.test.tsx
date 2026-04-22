@@ -222,6 +222,7 @@ describe('BulkRatingDialog', () => {
     });
 
     it('sets confirmBulk when above threshold', async () => {
+      mockHook.fetchPreviewCount.mockResolvedValue(100);
       vi.mocked(useBulkRating).mockReturnValue({
         ...mockHook,
         previewCount: 100,

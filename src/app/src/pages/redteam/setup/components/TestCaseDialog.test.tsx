@@ -8,7 +8,7 @@ import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 // Helper to render with TooltipProvider
 const renderWithTooltipProvider = (ui: React.ReactElement) => {
-  return render(<TooltipProvider>{ui}</TooltipProvider>);
+  return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
 };
 
 // Alias for tests that use renderWithTheme
@@ -60,11 +60,9 @@ describe('TestCaseGenerateButton', () => {
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
 
-      await waitFor(() => {
-        const tooltip = screen.getByRole('tooltip');
-        expect(tooltip).toBeInTheDocument();
-        expect(tooltip).toHaveTextContent('Test tooltip');
-      });
+      const tooltip = screen.getByRole('tooltip');
+      expect(tooltip).toBeInTheDocument();
+      expect(tooltip).toHaveTextContent('Test tooltip');
     });
 
     it('should hide tooltip on mouse leave', async () => {
@@ -75,17 +73,10 @@ describe('TestCaseGenerateButton', () => {
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       await user.unhover(iconButton);
-
-      await waitFor(() => {
-        const tooltip = screen.queryByRole('tooltip');
-        expect(tooltip).not.toBeInTheDocument();
-      });
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
 
     it('should hide tooltip when button is clicked', async () => {
@@ -96,17 +87,10 @@ describe('TestCaseGenerateButton', () => {
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       await user.click(iconButton);
-
-      await waitFor(() => {
-        const tooltip = screen.queryByRole('tooltip');
-        expect(tooltip).not.toBeInTheDocument();
-      });
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
       expect(mockOnClick).toHaveBeenCalledTimes(1);
     });
@@ -118,10 +102,7 @@ describe('TestCaseGenerateButton', () => {
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
 
-      await waitFor(() => {
-        const tooltip = screen.getByRole('tooltip');
-        expect(tooltip).toHaveTextContent('Generate test case');
-      });
+      expect(screen.getByRole('tooltip')).toHaveTextContent('Generate test case');
     });
 
     it('should display "Requires Promptfoo Cloud connection" tooltip when API is not connected', async () => {
@@ -139,12 +120,12 @@ describe('TestCaseGenerateButton', () => {
       const iconButton = screen.getByRole('button');
       expect(iconButton).toBeDisabled();
 
-      // Hover the button directly to trigger the tooltip
       await user.hover(iconButton);
 
       await waitFor(() => {
-        const tooltip = screen.getByRole('tooltip');
-        expect(tooltip).toHaveTextContent('Requires Promptfoo Cloud connection');
+        expect(screen.getByRole('tooltip')).toHaveTextContent(
+          'Requires Promptfoo Cloud connection',
+        );
       });
     });
 
@@ -156,27 +137,17 @@ describe('TestCaseGenerateButton', () => {
 
       const iconButton = screen.getByRole('button');
 
-      // First hover cycle
       await user.hover(iconButton);
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       await user.unhover(iconButton);
-      await waitFor(() => {
-        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-      });
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
 
-      // Second hover cycle
       await user.hover(iconButton);
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       await user.unhover(iconButton);
-      await waitFor(() => {
-        expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-      });
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
 
     it('should close tooltip via onClose handler when clicking outside', async () => {
@@ -190,10 +161,7 @@ describe('TestCaseGenerateButton', () => {
 
       const iconButton = screen.getByRole('button');
       await user.hover(iconButton);
-
-      await waitFor(() => {
-        expect(screen.getByRole('tooltip')).toBeInTheDocument();
-      });
+      expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
       // Click outside the button, which should trigger Tooltip's onClose handler
       const outsideElement = screen.getByTestId('outside-element');

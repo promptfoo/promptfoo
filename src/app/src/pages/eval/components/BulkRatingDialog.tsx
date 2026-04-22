@@ -85,38 +85,34 @@ export function BulkRatingDialog({
       const freshCount = await fetchPreviewCount(filterMode, filters, searchQuery);
       setPreviewFetchedAt(Date.now());
 
-      // Warn if the count changed significantly
-      if (previewCount !== null && Math.abs(freshCount - previewCount) > 0) {
-        // Count changed - the user should be aware
-        // We continue with the operation using the fresh count
+      const requiresFreshConfirmation =
+        freshCount >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD;
+
+      const response = await bulkRate({
+        pass,
+        reason: reason.trim(),
+        filterMode,
+        filters,
+        searchQuery,
+        confirmBulk: requiresFreshConfirmation,
+      });
+
+      if (!response.success) {
+        setError(response.error || 'Bulk rating failed');
+        return;
       }
+
+      setResult({ updated: response.updated, skipped: response.skipped });
+
+      // Auto-close after success (brief delay to show results)
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 1500);
     } catch {
-      // If we can't refresh, show error and abort
+      // If we can't refresh, show error and abort.
       setError('Failed to verify result count. Please try again.');
-      return;
     }
-
-    const response = await bulkRate({
-      pass,
-      reason: reason.trim(),
-      filterMode,
-      filters,
-      searchQuery,
-      confirmBulk: (previewCount ?? 0) >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD,
-    });
-
-    if (!response.success) {
-      setError(response.error || 'Bulk rating failed');
-      return;
-    }
-
-    setResult({ updated: response.updated, skipped: response.skipped });
-
-    // Auto-close after success (brief delay to show results)
-    setTimeout(() => {
-      onSuccess();
-      onClose();
-    }, 1500);
   };
 
   const requiresConfirmation = (previewCount ?? 0) >= BULK_RATING_CONSTANTS.CONFIRMATION_THRESHOLD;

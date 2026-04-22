@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { handleTraceErrorSpans } from '../../src/assertions/traceErrorSpans';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
+import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const mockTraceDataWithErrors: TraceData = {
   traceId: 'test-trace-id',
@@ -171,6 +172,44 @@ describe('handleTraceErrorSpans', () => {
       score: 0,
       reason:
         'Found 2 error spans, expected at most 0. Errors: api.call (status: 500), api.call (status: 403)',
+      assertion: params.assertion,
+    });
+  });
+
+  it('should detect OTLP error status codes', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-error-spans',
+        value: { max_count: 0 },
+      },
+      renderedValue: { max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: {
+          traceId: 'otlp-status-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [
+            {
+              spanId: '1',
+              name: 'tool.lookup',
+              startTime: 0,
+              endTime: 100,
+              statusCode: 2,
+              statusMessage: 'Tool failed',
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Found 1 error spans, expected at most 0. Errors: tool.lookup (Tool failed)',
       assertion: params.assertion,
     });
   });

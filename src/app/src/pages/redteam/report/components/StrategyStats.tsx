@@ -123,7 +123,7 @@ const DrawerContent = ({
         }
       }
     } catch {
-      console.debug('Failed to parse prompt as JSON, using raw string');
+      // Raw prompt strings are valid display input.
     }
     return prompt;
   };
@@ -216,7 +216,7 @@ const DrawerContent = ({
               )}
               %
             </p>
-            <p className="text-sm text-muted-foreground">Success Rate</p>
+            <p className="text-sm text-muted-foreground">Attack Success Rate</p>
           </div>
         </div>
       </div>
@@ -429,7 +429,7 @@ const StrategyStats = ({
       <Card
         role="region"
         aria-label="Attack Methods Statistics"
-        className="break-inside-avoid print:break-inside-avoid print:break-after-page"
+        className="break-inside-avoid print:break-inside-avoid"
       >
         <CardContent className="p-6">
           <h2 className="mb-4 text-xl font-semibold">Attack Methods</h2>
@@ -463,7 +463,7 @@ const StrategyStats = ({
                   </p>
                   {/* Progress bar */}
                   <div className="mb-2 flex items-center">
-                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600">
+                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600 print:bg-zinc-300">
                       <div
                         className={cn(
                           'h-full rounded-full transition-all',
