@@ -266,6 +266,22 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   const getFirstOutput = (row: EvaluateTableRow): EvaluateTableOutput | null =>
     row.outputs.find((output): output is EvaluateTableOutput => Boolean(output)) ?? null;
 
+  const getFullConfigTest = (
+    fullConfig: Partial<UnifiedConfig>,
+    row: EvaluateTableRow,
+  ): EvaluateTableRow['test'] | undefined => {
+    if (!Array.isArray(fullConfig.tests) || !Number.isInteger(row.testIdx)) {
+      return undefined;
+    }
+
+    const test = fullConfig.tests[row.testIdx];
+    if (test && typeof test === 'object' && !Array.isArray(test)) {
+      return test as EvaluateTableRow['test'];
+    }
+
+    return undefined;
+  };
+
   const getRowVars = (
     row: EvaluateTableRow,
     detail?: EvalResultDetailResponse | null,
@@ -357,21 +373,23 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
       setExportProgressTotal(failedRows.length);
 
-      const [{ config: fullConfig }, failedTests] = await Promise.all([
-        fetchEvalConfig(evalId),
-        mapWithConcurrency(failedRows, DETAIL_EXPORT_CONCURRENCY, async (row) => {
+      const { config: fullConfig } = await fetchEvalConfig(evalId);
+      const failedTests = await mapWithConcurrency(
+        failedRows,
+        DETAIL_EXPORT_CONCURRENCY,
+        async (row) => {
           try {
             const failedOutput =
               row.outputs.find((output): output is EvaluateTableOutput =>
                 Boolean(output && !output.pass),
               ) ?? getFirstOutput(row);
             const detail = await getOutputDetail(failedOutput);
-            return detail?.testCase ?? row.test;
+            return detail?.testCase ?? getFullConfigTest(fullConfig, row) ?? row.test;
           } finally {
             incrementExportProgress();
           }
-        }),
-      ]);
+        },
+      );
 
       const configCopy = { ...fullConfig, tests: failedTests };
       const fileName = getFilename('failed-tests.yaml');

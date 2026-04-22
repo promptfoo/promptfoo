@@ -1,11 +1,6 @@
 import { z } from 'zod';
-import {
-  EVAL_CONFIG_DETAIL_FIELDS,
-  EVAL_TABLE_CELL_DETAIL_FIELDS,
-  EvalResultsFilterMode,
-  EvaluateOptionsSchema,
-  TestSuiteConfigSchema,
-} from '../index';
+import { EVAL_CONFIG_DETAIL_FIELDS, EVAL_TABLE_CELL_DETAIL_FIELDS } from '../evalDetailFields';
+import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
 /** Eval ID parameter schema. */

@@ -449,15 +449,19 @@ describe('DownloadMenu', () => {
     expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'failed-output');
   });
 
-  it('falls back to lean failed-test rows when detail hydration fails', async () => {
+  it('falls back to full config tests when failed-test detail hydration fails', async () => {
     const fullConfig = {
       ...mockConfig,
       defaultTest: { options: { provider: 'full-default' } },
-      tests: [{ vars: { prompt: 'original test' } }],
+      tests: [
+        {
+          vars: { prompt: 'original test' },
+          assert: [{ type: 'contains', value: 'original expected' }],
+        },
+      ],
     };
     const leanFailedTest = {
-      vars: { prompt: 'lean failed prompt' },
-      assert: [{ type: 'contains', value: 'lean expected' }],
+      description: 'lean failed prompt',
     };
     vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
@@ -469,6 +473,7 @@ describe('DownloadMenu', () => {
           {
             test: leanFailedTest,
             vars: ['lean failed prompt'],
+            testIdx: 0,
             outputs: [{ id: 'failed-output', pass: false, text: 'failed output' }],
           },
         ],
@@ -486,7 +491,7 @@ describe('DownloadMenu', () => {
       expect(yamlDumpMock).toHaveBeenCalledWith(
         expect.objectContaining({
           defaultTest: fullConfig.defaultTest,
-          tests: [leanFailedTest],
+          tests: [fullConfig.tests[0]],
         }),
         { skipInvalid: true },
       );

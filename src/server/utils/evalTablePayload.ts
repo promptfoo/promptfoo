@@ -1,8 +1,8 @@
+import { ResultFailureReason } from '../../types';
 import {
   EVAL_CONFIG_DETAIL_FIELDS,
   EVAL_TABLE_CELL_DETAIL_FIELDS,
-  ResultFailureReason,
-} from '../../types';
+} from '../../types/evalDetailFields';
 import {
   DEFAULT_OVERSIZED_STRING_LIMIT,
   type OversizedStringStats,
