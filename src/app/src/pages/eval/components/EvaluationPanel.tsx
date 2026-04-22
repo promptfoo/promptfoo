@@ -13,12 +13,18 @@ import type { Assertion, GradingResult } from '@promptfoo/types';
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
 const ASSERTION_VALUE_PREVIEW_LENGTH = 300;
+const ASSERTION_TEMPLATE_PREVIEW_LENGTH = 160;
 const ASSERTION_ROW_INDENT_PX = 24;
 
 interface AssertionResultRow {
   depth: number;
   result: GradingResult;
   rowId: string;
+}
+
+interface AssertionDisplayValue {
+  value: string;
+  templateValue?: string;
 }
 
 interface AssertionSetMetadata {
@@ -83,6 +89,10 @@ function getAssertionType(result: GradingResult): string {
     getAssertionSet(result)?.type ||
     (getChildResults(result).length > 0 ? 'assert-set' : '-')
   );
+}
+
+export function stringifyAssertionValue(value: unknown): string {
+  return typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
 }
 
 function isMatchingAssertion(
@@ -170,7 +180,7 @@ function buildAssertionRows(
   return rows;
 }
 
-function getValue(result: GradingResult): string {
+function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   // For context-related assertions, read the context value from metadata, if it exists
   // These assertions require special handling and should always use metadata.context
   if (
@@ -181,32 +191,46 @@ function getValue(result: GradingResult): string {
     result.metadata?.context
   ) {
     const context = result.metadata.context;
-    return Array.isArray(context) ? context.join('\n') : context;
+    return {
+      value: Array.isArray(context)
+        ? context.map((item) => stringifyAssertionValue(item)).join('\n')
+        : stringifyAssertionValue(context),
+    };
   }
 
   // Prefer rendered assertion value with substituted variables over raw template
-  if (result.metadata?.renderedAssertionValue !== undefined) {
-    return result.metadata.renderedAssertionValue;
+  if (result.metadata?.renderedAssertionValue != null) {
+    const renderedValue = stringifyAssertionValue(result.metadata.renderedAssertionValue);
+    const rawAssertionValue =
+      result.assertion?.value === undefined
+        ? undefined
+        : stringifyAssertionValue(result.assertion.value);
+
+    return {
+      value: renderedValue,
+      templateValue:
+        rawAssertionValue !== undefined && rawAssertionValue !== renderedValue
+          ? rawAssertionValue
+          : undefined,
+    };
   }
 
   if (result.assertion?.value !== undefined) {
-    return typeof result.assertion.value === 'object'
-      ? JSON.stringify(result.assertion.value, null, 2)
-      : String(result.assertion.value);
+    return { value: stringifyAssertionValue(result.assertion.value) };
   }
 
   const assertionSet = getAssertionSet(result);
   if (assertionSet) {
     const assertionCount = getAssertionSetCount(result) ?? getChildResults(result).length;
-    return `${assertionCount} nested assertion${assertionCount === 1 ? '' : 's'}`;
+    return { value: `${assertionCount} nested assertion${assertionCount === 1 ? '' : 's'}` };
   }
 
   const childResultCount = getChildResults(result).length;
   if (childResultCount > 0) {
-    return `${childResultCount} nested assertion${childResultCount === 1 ? '' : 's'}`;
+    return { value: `${childResultCount} nested assertion${childResultCount === 1 ? '' : 's'}` };
   }
 
-  return '-';
+  return { value: '-' };
 }
 
 function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
@@ -250,8 +274,13 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
         </thead>
         <tbody>
           {assertionRows.map(({ depth, result, rowId }) => {
-            const value = getValue(result);
+            const displayValue = getDisplayValue(result);
+            const value = displayValue.value;
+            const templateValue = displayValue.templateValue;
             const truncatedValue = ellipsize(value, ASSERTION_VALUE_PREVIEW_LENGTH);
+            const truncatedTemplateValue = templateValue
+              ? ellipsize(templateValue, ASSERTION_TEMPLATE_PREVIEW_LENGTH)
+              : undefined;
             const isExpanded = expandedValues[rowId] || false;
             const valueKey = `value-${rowId}`;
             const reasonKey = `reason-${rowId}`;
@@ -300,7 +329,17 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                 >
                   <div className="flex items-start gap-2" style={indentationStyle}>
                     {depth > 0 && <span className="mt-2 h-px w-4 shrink-0 bg-border" />}
-                    <span className="break-words">{isExpanded ? value : truncatedValue}</span>
+                    <div className="min-w-0">
+                      <span className="break-words">{isExpanded ? value : truncatedValue}</span>
+                      {templateValue && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          <span className="font-medium">Template:</span>{' '}
+                          <span className="break-words">
+                            {isExpanded ? templateValue : truncatedTemplateValue}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {(hoveredAssertion === valueKey || copiedAssertions[valueKey]) && (
                     <Button

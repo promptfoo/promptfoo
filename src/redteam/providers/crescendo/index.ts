@@ -14,6 +14,10 @@ import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
 import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import {
+  buildPromptInputDescriptions,
+  materializeInputVariablesWithMetadata,
+} from '../../inputVariables';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import {
   applyRuntimeTransforms,
@@ -58,6 +62,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -116,9 +121,10 @@ interface CrescendoConfig {
   _perTurnLayers?: LayerConfig[];
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
+   * Keys are variable names, values are Inputs definitions: plain descriptions
+   * or structured typed configs with fields like description, type, and config.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   [key: string]: unknown;
 }
 
@@ -342,7 +348,7 @@ export class CrescendoProvider implements ApiProvider {
         )
           .map(([key, value]) => `${key}: ${value}`)
           .join('\n') || undefined,
-      inputs: this.config.inputs,
+      inputs: buildPromptInputDescriptions(this.config.inputs),
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -383,7 +389,7 @@ export class CrescendoProvider implements ApiProvider {
             )
               .map(([key, value]) => `${key}: ${value}`)
               .join('\n') || undefined,
-          inputs: this.config.inputs,
+          inputs: buildPromptInputDescriptions(this.config.inputs),
         });
 
         const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
@@ -926,12 +932,22 @@ export class CrescendoProvider implements ApiProvider {
 
     // Extract input vars from the processed prompt for multi-input mode
     const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
+    const materializedInputVars =
+      currentInputVars && this.config.inputs
+        ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+            materializationIndex: _roundNum,
+            pluginId: 'crescendo',
+            provider: await this.getRedTeamProvider(),
+            purpose: context?.test?.metadata?.purpose as string | undefined,
+          })
+        : undefined;
+    const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
     // Build updated vars - handle multi-input mode
     const updatedVars: Record<string, VarValue> = {
       ...vars,
       [this.config.injectVar]: processedPrompt,
-      ...(currentInputVars || {}),
+      ...(currentRenderInputVars || {}),
     };
 
     const renderedPrompt = await renderPrompt(
@@ -1075,7 +1091,22 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const iterationStart = Date.now();
-    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    const targetContext = context
+      ? {
+          ...context,
+          vars: {
+            ...vars,
+            ...(currentRenderInputVars || {}),
+            [this.config.injectVar]: finalTargetPrompt,
+          },
+        }
+      : context;
+    let targetResponse = await getTargetResponse(
+      provider,
+      finalTargetPrompt,
+      targetContext,
+      options,
+    );
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
       evalId: context?.evaluationId,
       testIdx: context?.testIdx,
@@ -1127,7 +1158,7 @@ export class CrescendoProvider implements ApiProvider {
     return {
       response: targetResponse,
       transformResult: lastTransformResult,
-      inputVars: currentInputVars,
+      inputVars: currentRenderInputVars,
     };
   }
 
