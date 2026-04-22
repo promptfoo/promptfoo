@@ -53,6 +53,7 @@ env:
   SOURCE_REF: ${{ inputs.tag_name || github.event.release.tag_name || github.ref }}
   BUILD_VERSION: ${{ inputs.tag_name || github.event.release.tag_name || github.ref_name }}
   BUILD_DATE: ${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event_name == 'release' && github.event.release.published_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
+  IS_RELEASE_BACKFILL: ${{ (github.event_name == 'workflow_dispatch' && inputs.tag_name != '') || github.event_name == 'release' }}
 
 permissions:
   contents: read
@@ -84,6 +85,10 @@ jobs:
         with:
           ref: ${{ env.SOURCE_REF }}
 
+      - name: Resolve source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
@@ -102,7 +107,7 @@ jobs:
           build-args: |
             BUILD_VERSION=${{ env.BUILD_VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
-            GIT_SHA=${{ github.sha }}
+            GIT_SHA=${{ steps.source.outputs.sha }}
 
       - name: Run Docker container for testing
         run: docker run -d --name promptfoo-container -p 3000:3000 local-test-image:latest
@@ -208,6 +213,10 @@ jobs:
         with:
           ref: ${{ env.SOURCE_REF }}
 
+      - name: Resolve source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
 
@@ -219,6 +228,8 @@ jobs:
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
 
       - name: Log in to the Container registry
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
@@ -240,7 +251,7 @@ jobs:
           build-args: |
             BUILD_VERSION=${{ env.BUILD_VERSION }}
             BUILD_DATE=${{ env.BUILD_DATE }}
-            GIT_SHA=${{ github.sha }}
+            GIT_SHA=${{ steps.source.outputs.sha }}
           outputs: |
             type=image,push-by-digest=true,name-canonical=true,push=true,annotation-index.org.opencontainers.image.description=promptfoo is a tool for testing evaluating and red-teaming LLM apps.
 
@@ -290,13 +301,13 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
+            type=ref,event=branch,enable=${{ env.IS_RELEASE_BACKFILL != 'true' }}
+            type=ref,event=pr,enable=${{ env.IS_RELEASE_BACKFILL != 'true' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha
+            type=sha,enable=${{ env.IS_RELEASE_BACKFILL != 'true' }}
             type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' }}
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || env.RELEASE_TAG != '' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.IS_RELEASE_BACKFILL != 'true' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
