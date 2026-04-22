@@ -336,6 +336,10 @@ describe('DownloadMenu', () => {
       expect.stringContaining('Failed to export'),
       'error',
     );
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Export used table data for 1 result because full result details could not be loaded.',
+      'warning',
+    );
   });
 
   it('downloads Human Eval Test YAML when clicking the button', async () => {
@@ -444,6 +448,10 @@ describe('DownloadMenu', () => {
     expect(showToastMock).not.toHaveBeenCalledWith(
       expect.stringContaining('Failed to export'),
       'error',
+    );
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Export used table data for 1 result because full result details could not be loaded.',
+      'warning',
     );
   });
 

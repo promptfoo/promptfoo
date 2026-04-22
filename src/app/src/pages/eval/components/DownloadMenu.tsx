@@ -113,6 +113,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     current: number;
     total: number;
   } | null>(null);
+  const detailHydrationFailuresRef = React.useRef(0);
   const { showToast } = useToast();
 
   // Use the new hooks for CSV and JSON downloads
@@ -242,6 +243,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     try {
       return await fetchEvalResultDetail(output.evalId || evalId, output.id);
     } catch {
+      detailHydrationFailuresRef.current += 1;
       return null;
     }
   };
@@ -274,8 +276,18 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
     setAdvancedExportInProgress(exportName);
     setAdvancedExportProgress(null);
+    detailHydrationFailuresRef.current = 0;
     try {
       await action();
+      const detailHydrationFailures = detailHydrationFailuresRef.current;
+      if (detailHydrationFailures > 0) {
+        showToast(
+          `Export used table data for ${detailHydrationFailures} result${
+            detailHydrationFailures === 1 ? '' : 's'
+          } because full result details could not be loaded.`,
+          'warning',
+        );
+      }
     } catch (error) {
       showToast(
         `Failed to export ${exportName.replace('-', ' ')}: ${
