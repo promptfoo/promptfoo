@@ -9,9 +9,18 @@ vi.mock('../../src/envars', () => ({
 // Mock the langfuse package with hoisted mocks
 const mockTraceList = vi.hoisted(() => vi.fn());
 const mockShutdownAsync = vi.hoisted(() => vi.fn());
+const mockLangfuseConstructorError = vi.hoisted(() => ({
+  error: undefined as Error | undefined,
+}));
 
 vi.mock('langfuse', () => ({
   Langfuse: class MockLangfuse {
+    constructor() {
+      if (mockLangfuseConstructorError.error) {
+        throw mockLangfuseConstructorError.error;
+      }
+    }
+
     api = {
       traceList: mockTraceList,
     };
@@ -33,6 +42,7 @@ describe('langfuseTraces', () => {
     // Reset mocks to ensure test isolation
     mockTraceList.mockReset();
     mockShutdownAsync.mockReset();
+    mockLangfuseConstructorError.error = undefined;
     vi.mocked(getEnvString).mockReset();
     // Shutdown any existing langfuse instance to reset singleton state
     await shutdownLangfuse();
@@ -144,6 +154,12 @@ describe('langfuseTraces', () => {
       await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
         'Langfuse credentials not configured',
       );
+    });
+
+    it('should preserve Langfuse client construction errors', async () => {
+      mockLangfuseConstructorError.error = new Error('Invalid baseUrl');
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow('Invalid baseUrl');
     });
 
     it('should fetch traces and convert to test cases', async () => {
@@ -333,7 +349,30 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
+      expect(tests[0].vars).not.toHaveProperty('__langfuse_output');
+      expect(tests[0].vars).not.toHaveProperty('output');
       expect(tests[0].providerOutput).toBeUndefined();
+    });
+
+    it('should skip null inputs and preserve non-string primitive outputs', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-primitive-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: null,
+            output: false,
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars).not.toHaveProperty('__langfuse_input');
+      expect(tests[0].vars).not.toHaveProperty('input');
+      expect(tests[0].vars?.__langfuse_output).toBe(false);
+      expect(tests[0].vars?.output).toBe(false);
+      expect(tests[0].providerOutput).toBe('false');
     });
 
     it('should preserve empty string outputs for assertion-only mode', async () => {

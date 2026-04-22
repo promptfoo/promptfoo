@@ -29,7 +29,7 @@ import { getEnvString, isCI } from '../envars';
 import logger from '../logger';
 import type { ApiTraceListParams, ApiTraces } from 'langfuse';
 
-import type { TestCase } from '../types';
+import type { TestCase, VarValue } from '../types';
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 1000;
@@ -85,6 +85,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function isDefinedVarValue(value: unknown): value is VarValue {
+  return value !== undefined && value !== null;
+}
+
+function setVar(vars: Record<string, VarValue>, key: string, value: unknown): void {
+  if (isDefinedVarValue(value)) {
+    vars[key] = value;
+  }
+}
+
 function findTextBlock(content: unknown[]): unknown {
   const textBlock = content.find(
     (item): item is { text: unknown } => isRecord(item) && item.type === 'text' && 'text' in item,
@@ -128,19 +138,22 @@ async function getLangfuseClient(): Promise<LangfuseTracesClient> {
     );
   }
 
+  let Langfuse: typeof import('langfuse').Langfuse;
   try {
-    const { Langfuse } = await import('langfuse');
-    langfuseInstance = new Langfuse({
-      publicKey,
-      secretKey,
-      baseUrl,
-    }) as unknown as LangfuseTracesClient;
-    return langfuseInstance;
-  } catch {
+    ({ Langfuse } = await import('langfuse'));
+  } catch (error) {
     throw new Error(
-      'The langfuse package is required for Langfuse traces integration. Install it with: npm install langfuse',
+      `The langfuse package is required for Langfuse traces integration. Install it with: npm install langfuse. Original error: ${getFetchErrorMessage(error)}`,
+      { cause: error },
     );
   }
+
+  langfuseInstance = new Langfuse({
+    publicKey,
+    secretKey,
+    baseUrl,
+  }) as unknown as LangfuseTracesClient;
+  return langfuseInstance;
 }
 
 /**
@@ -281,19 +294,15 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
 
   // Create the test case with vars populated from trace data
   // Build vars object, filtering out undefined values
-  const vars: Record<string, string | number | boolean | string[] | Record<string, unknown>> = {
+  const vars: Record<string, VarValue> = {
     // Prefixed Langfuse fields to avoid collisions
     __langfuse_trace_id: trace.id,
     __langfuse_timestamp: trace.timestamp,
   };
 
   // Add optional fields only if they have values
-  if (trace.input !== undefined) {
-    vars.__langfuse_input = trace.input as Record<string, unknown>;
-  }
-  if (trace.output !== undefined) {
-    vars.__langfuse_output = trace.output as Record<string, unknown>;
-  }
+  setVar(vars, '__langfuse_input', trace.input);
+  setVar(vars, '__langfuse_output', trace.output);
   if (trace.name) {
     vars.__langfuse_name = trace.name;
   }
@@ -320,14 +329,8 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
   }
 
   // Also provide convenient unprefixed access to main content
-  if (inputValue !== undefined) {
-    vars.input =
-      typeof inputValue === 'string' ? inputValue : (inputValue as Record<string, unknown>);
-  }
-  if (outputValue !== undefined) {
-    vars.output =
-      typeof outputValue === 'string' ? outputValue : (outputValue as Record<string, unknown>);
-  }
+  setVar(vars, 'input', inputValue);
+  setVar(vars, 'output', outputValue);
 
   const testCase: TestCase = {
     description: `Trace: ${trace.name || trace.id} (${new Date(trace.timestamp).toLocaleDateString()})`,

@@ -377,7 +377,7 @@ For formats not listed above, the full object is used. Access raw data via `__la
 
 ### Troubleshooting
 
-**Authentication failed (401)**
+#### Authentication failed (401)
 
 ```text
 Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL environment variables.
@@ -389,7 +389,7 @@ Verify your credentials:
 - Using the right host (`https://cloud.langfuse.com` for cloud, `https://us.cloud.langfuse.com` for US region)
 - Environment variables are properly exported
 
-**No traces found**
+#### No traces found
 
 If traces exist in Langfuse but aren't being loaded:
 
@@ -397,7 +397,7 @@ If traces exist in Langfuse but aren't being loaded:
 - Verify traces have both `input` and `output` populated
 - Try removing filters to fetch all traces: `langfuse://traces?limit=10`
 
-**Empty input/output variables**
+#### Empty input/output variables
 
 If `input` or `output` are empty but `__langfuse_input`/`__langfuse_output` have data:
 
