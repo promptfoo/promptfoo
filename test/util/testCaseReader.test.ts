@@ -10,6 +10,7 @@ import { importModule } from '../../src/esm';
 import { fetchCsvFromGoogleSheet } from '../../src/googleSheets';
 import { fetchHuggingFaceDataset } from '../../src/integrations/huggingfaceDatasets';
 import logger from '../../src/logger';
+import { fetchCsvFromSharepoint } from '../../src/microsoftSharepoint';
 import { loadApiProvider } from '../../src/providers/index';
 import { runPython } from '../../src/python/pythonUtils';
 import { maybeLoadConfigFromExternalFile } from '../../src/util/file';
@@ -20,12 +21,13 @@ import {
   readTestFiles,
   readTests,
 } from '../../src/util/testCaseReader';
+import { createMockProvider } from '../factories/provider';
 
 import type { AssertionType, TestCase, TestCaseWithVarsFile } from '../../src/types/index';
-import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
+import type { ProviderOptions } from '../../src/types/providers';
 
 // Spy on logger.warn for tests that check warnings
-vi.spyOn(logger, 'warn');
+vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
 // Mock fetchWithTimeout before any imports that might use telemetry
 vi.mock('../../src/util/fetch', () => ({
@@ -79,6 +81,10 @@ vi.mock('../../src/googleSheets', () => ({
   fetchCsvFromGoogleSheet: vi.fn(),
 }));
 
+vi.mock('../../src/microsoftSharepoint', () => ({
+  fetchCsvFromSharepoint: vi.fn(),
+}));
+
 vi.mock('../../src/envars', async () => ({
   ...(await vi.importActual('../../src/envars')),
   getEnvBool: vi.fn(),
@@ -124,7 +130,7 @@ vi.mock('../../src/util/file', () => ({
     }
 
     // Handle objects (but not arrays)
-    if (config && typeof config === 'object' && config !== null) {
+    if (typeof config === 'object' && config !== null) {
       const result = { ...config };
       for (const [key, value] of Object.entries(config)) {
         if (typeof value === 'string' && value.startsWith('file://')) {
@@ -156,6 +162,7 @@ const clearAllMocks = () => {
   vi.mocked(getEnvBool).mockReset();
   vi.mocked(getEnvString).mockReset();
   vi.mocked(fetchCsvFromGoogleSheet).mockReset();
+  vi.mocked(fetchCsvFromSharepoint).mockReset();
   vi.mocked(loadApiProvider).mockReset();
   vi.mocked(runPython).mockReset();
   vi.mocked(fetchHuggingFaceDataset).mockReset();
@@ -179,7 +186,7 @@ describe('readStandaloneTestsFile', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -349,6 +356,31 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should prefer SharePoint URL handling over local JSON parsing when URL ends with .json', async () => {
+    const sharepointUrls = [
+      'https://example.sharepoint.com/sites/team/tests.json',
+      'https://example.sharepoint.com/:x:/r/sites/team/tests.json',
+    ];
+    vi.mocked(fetchCsvFromSharepoint).mockResolvedValue([
+      { var1: 'value1', __expected: 'expected1' },
+    ]);
+
+    for (const sharepointUrl of sharepointUrls) {
+      const result = await readStandaloneTestsFile(sharepointUrl);
+
+      expect(fetchCsvFromSharepoint).toHaveBeenCalledWith(sharepointUrl);
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+      expect(result).toEqual([
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+          description: 'Row #1',
+          options: {},
+          vars: { var1: 'value1' },
+        },
+      ]);
+    }
+  });
+
   it('should read JS file and return test cases', async () => {
     const mockTestCases = [
       { vars: { var1: 'value1', var2: 'value2' } },
@@ -458,24 +490,14 @@ describe('readStandaloneTestsFile', () => {
   });
 
   it('should read XLSX file and return test cases', async () => {
-    // read-excel-file returns array of arrays where first row is headers
-    const mockRows = [
-      ['var1', 'var2', '__expected'], // headers
-      ['value1', 'value2', 'expected1'], // data row 1
-      ['value3', 'value4', 'expected2'], // data row 2
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [
+      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
     ];
 
-    // Mock fs module to survive resetModules
-    vi.doMock('fs', () => ({
-      ...vi.importActual('fs'),
-      existsSync: vi.fn().mockReturnValue(true),
-    }));
-
-    // Mock the dynamic import
-    vi.doMock('read-excel-file/node', () => ({
-      __esModule: true,
-      default: vi.fn().mockResolvedValue(mockRows),
-      readSheetNames: vi.fn().mockResolvedValue(['Sheet1']),
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
     }));
 
     vi.resetModules();
@@ -502,79 +524,13 @@ describe('readStandaloneTestsFile', () => {
         },
       ]);
     } finally {
-      // Clean up the mock
-      vi.doUnmock('read-excel-file/node');
-      vi.doUnmock('fs');
+      vi.doUnmock('../../src/util/xlsx');
       vi.resetModules();
     }
   });
 
-  it('should throw helpful error when read-excel-file module is not installed', async () => {
-    // Create a test that validates the error message is properly formatted
-    // when the read-excel-file module cannot be found
-    const mockError = new Error("Cannot find module 'read-excel-file/node'");
-
-    // Clear module cache FIRST to ensure fresh imports
-    vi.resetModules();
-
-    // Mock fs module - use require to get actual fs since vi.importActual may return mocked version
-    const actualFs = await vi.importActual<typeof import('fs')>('fs');
-    vi.doMock('fs', () => ({
-      ...actualFs,
-      existsSync: vi.fn().mockReturnValue(true),
-    }));
-
-    // Create a new instance with mocked read-excel-file module
-    vi.doMock('read-excel-file/node', () => {
-      throw mockError;
-    });
-
-    try {
-      // Import the module which will attempt to import read-excel-file
-      const { parseXlsxFile } = await import('../../src/util/xlsx');
-
-      // Attempt to parse a file, which should trigger the error
-      await expect(parseXlsxFile('test.xlsx')).rejects.toThrow(
-        'read-excel-file is not installed. Please install it with: npm install read-excel-file\n' +
-          'Note: read-excel-file is an optional peer dependency for reading Excel files.',
-      );
-    } finally {
-      // Clean up
-      vi.doUnmock('read-excel-file/node');
-      vi.doUnmock('fs');
-      vi.resetModules();
-    }
-  });
-
-  it('should throw error when Excel file has no sheets', async () => {
-    // Reset modules first, then set up mocks
-    vi.resetModules();
-
-    // Get actual fs module first
-    const actualFs = await vi.importActual<typeof import('fs')>('fs');
-
-    // Mock fs module with existsSync returning true
-    vi.doMock('fs', () => ({
-      ...actualFs,
-      existsSync: vi.fn().mockReturnValue(true),
-    }));
-
-    vi.doMock('read-excel-file/node', () => ({
-      __esModule: true,
-      default: vi.fn(),
-      readSheetNames: vi.fn().mockResolvedValue([]),
-    }));
-
-    try {
-      const { parseXlsxFile } = await import('../../src/util/xlsx');
-
-      await expect(parseXlsxFile('empty.xlsx')).rejects.toThrow('Excel file has no sheets');
-    } finally {
-      vi.doUnmock('read-excel-file/node');
-      vi.doUnmock('fs');
-      vi.resetModules();
-    }
-  });
+  // Note: parseXlsxFile error handling tests (module not installed, empty sheets, etc.)
+  // are covered in test/util/xlsx.test.ts which uses proper hoisted mocks
 
   it('should read real XLSX file from examples (integration test)', async () => {
     // Integration test using the actual Excel file from examples
@@ -584,32 +540,34 @@ describe('readStandaloneTestsFile', () => {
     // Only run if read-excel-file is actually installed (in dev environment)
     try {
       await import('read-excel-file/node');
-      const fs = require('fs');
-
-      if (fs.existsSync(exampleFile)) {
-        const result = await readStandaloneTestsFile(exampleFile);
-
-        // Verify the structure matches expected test cases
-        expect(result).toHaveLength(4); // Based on the known test data
-        expect(result[0]).toMatchObject({
-          vars: expect.objectContaining({
-            language: expect.any(String),
-            body: expect.any(String),
-          }),
-          assert: expect.any(Array),
-        });
-
-        // Verify specific test case content
-        const frenchTest = result.find((test) => test.vars?.language === 'French');
-        expect(frenchTest).toBeDefined();
-        expect(frenchTest?.vars?.body).toBe('Hello world');
-      } else {
-        console.log('Skipping integration test - example Excel file not found');
-      }
-    } catch (error) {
+    } catch {
       // Skip test if read-excel-file is not installed
-      console.log('Skipping integration test - read-excel-file not available:', error);
+      return;
     }
+
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
+    if (!actualFs.existsSync(exampleFile)) {
+      return;
+    }
+
+    vi.mocked(fs.existsSync).mockImplementation((filePath) => actualFs.existsSync(filePath));
+
+    const result = await readStandaloneTestsFile(exampleFile);
+
+    // Verify the structure matches expected test cases
+    expect(result).toHaveLength(4); // Based on the known test data
+    expect(result[0]).toMatchObject({
+      vars: expect.objectContaining({
+        language: expect.any(String),
+        body: expect.any(String),
+      }),
+      assert: expect.any(Array),
+    });
+
+    // Verify specific test case content
+    const frenchTest = result.find((test) => test.vars?.language === 'French');
+    expect(frenchTest).toBeDefined();
+    expect(frenchTest?.vars?.body).toBe('Hello world');
   });
 
   it('should handle Python files with default function name', async () => {
@@ -672,7 +630,7 @@ describe('readStandaloneTestsFile', () => {
         });
       }
 
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -749,7 +707,7 @@ describe('readTest', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -838,7 +796,7 @@ describe('readTest', () => {
 
   describe('readTest with provider', () => {
     it('should load provider when provider is a string', async () => {
-      const mockProvider = { callApi: vi.fn(), id: vi.fn().mockReturnValue('mock-provider') };
+      const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const testCase: TestCase = {
@@ -854,10 +812,7 @@ describe('readTest', () => {
     });
 
     it('should load provider when provider is an object with id', async () => {
-      const mockProvider = {
-        callApi: vi.fn(),
-        id: vi.fn().mockReturnValue('mock-provider'),
-      } as ApiProvider;
+      const mockProvider = createMockProvider({ id: 'mock-provider' });
       vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
 
       const providerInput: ProviderOptions & { callApi: ReturnType<typeof vi.fn> } = {
@@ -1008,7 +963,7 @@ describe('readTests', () => {
       }
 
       // Mock implementation that handles file:// references
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {
@@ -1514,6 +1469,113 @@ describe('readTests', () => {
     );
     expect(result).toEqual(pythonTests);
   });
+
+  it('should handle xlsx files in array format', async () => {
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [
+      { var1: 'value1', var2: 'value2', __expected: 'expected1' },
+      { var1: 'value3', var2: 'value4', __expected: 'expected2' },
+    ];
+
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['test.xlsx']);
+
+      expect(result).toEqual([
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
+          description: 'Row #1',
+          options: {},
+          vars: { var1: 'value1', var2: 'value2' },
+        },
+        {
+          assert: [{ metric: undefined, type: 'equals', value: 'expected2' }],
+          description: 'Row #2',
+          options: {},
+          vars: { var1: 'value3', var2: 'value4' },
+        },
+      ]);
+    } finally {
+      vi.doUnmock('../../src/util/xlsx');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle xlsx files with sheet specifier in array format', async () => {
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [{ name: 'test1', value: 'result1' }];
+
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['test.xlsx#DataSheet']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
+    } finally {
+      vi.doUnmock('../../src/util/xlsx');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle xls files in array format', async () => {
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [{ col1: 'data1', col2: 'data2' }];
+
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['legacy.xls']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ col1: 'data1', col2: 'data2' });
+    } finally {
+      vi.doUnmock('../../src/util/xlsx');
+      vi.resetModules();
+    }
+  });
+
+  it('should handle file:// prefix with xlsx files in array format', async () => {
+    // Mock parseXlsxFile to return processed CsvRow[] data
+    const mockData = [{ input: 'hello', expected: 'world' }];
+
+    vi.doMock('../../src/util/xlsx', () => ({
+      parseXlsxFile: vi.fn().mockResolvedValue(mockData),
+    }));
+
+    vi.resetModules();
+
+    try {
+      const { readTests: freshReadTests } = await import('../../src/util/testCaseReader');
+
+      const result = await freshReadTests(['file://test.xlsx']);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual({ input: 'hello', expected: 'world' });
+    } finally {
+      vi.doUnmock('../../src/util/xlsx');
+      vi.resetModules();
+    }
+  });
 });
 
 describe('testCaseFromCsvRow', () => {
@@ -1563,7 +1625,7 @@ describe('readVarsFiles', () => {
       }
 
       // Handle objects (but not arrays)
-      if (config && typeof config === 'object' && config !== null) {
+      if (typeof config === 'object' && config !== null) {
         const result = { ...config };
         for (const [key, value] of Object.entries(config)) {
           if (typeof value === 'string' && value.startsWith('file://')) {

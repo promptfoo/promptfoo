@@ -1,8 +1,9 @@
-import { useActionState, useEffect, useState } from 'react';
+import { useActionState, useCallback, useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
 import {
   KeyIcon,
   OpenInNewIcon,
@@ -76,7 +77,7 @@ export default function LoginPage() {
     fetchEmail();
   }, [fetchEmail]);
 
-  const handleRedirect = () => {
+  const handleRedirect = useCallback(() => {
     // Handle special case where redirect URL contains query parameters
     // e.g., ?redirect=/some-page?param1=value1&param2=value2
     const searchStr = location.search;
@@ -95,7 +96,7 @@ export default function LoginPage() {
     } else {
       navigate('/');
     }
-  };
+  }, [location.search, navigate]);
 
   // Handle successful login
   useEffect(() => {
@@ -112,7 +113,7 @@ export default function LoginPage() {
     }
   }, [isLoading, email, handleRedirect]);
 
-  if (isLoading || (!isLoading && email)) {
+  if (isLoading || email) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner size="lg" />
@@ -127,7 +128,7 @@ export default function LoginPage() {
           {/* Logo and Header */}
           <div className="mb-8 flex flex-col items-center space-y-4 text-center">
             <div className="flex items-center gap-2">
-              <img src={logoPanda} alt="Promptfoo" className="h-10 w-10" />
+              <img src={logoPanda} alt="Promptfoo" className="size-10" />
               <h1 className="text-2xl font-semibold tracking-tight">promptfoo</h1>
             </div>
 
@@ -164,7 +165,7 @@ export default function LoginPage() {
                 <Label htmlFor="apiKey">API Key</Label>
                 <div className="relative">
                   <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    <KeyIcon className="h-4 w-4" />
+                    <KeyIcon className="size-4" />
                   </div>
                   <Input
                     id="apiKey"
@@ -186,13 +187,13 @@ export default function LoginPage() {
                     aria-label="toggle API key visibility"
                   >
                     {showApiKey ? (
-                      <VisibilityOffIcon className="h-4 w-4" />
+                      <VisibilityOffIcon className="size-4" />
                     ) : (
-                      <VisibilityIcon className="h-4 w-4" />
+                      <VisibilityIcon className="size-4" />
                     )}
                   </button>
                 </div>
-                {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+                {state.error && <HelperText error>{state.error}</HelperText>}
               </div>
 
               {/* API Host Field */}
@@ -236,7 +237,7 @@ export default function LoginPage() {
                 className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
               >
                 Get your API key
-                <OpenInNewIcon className="h-4 w-4" />
+                <OpenInNewIcon className="size-4" />
               </a>
             </div>
           </div>

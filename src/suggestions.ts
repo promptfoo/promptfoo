@@ -1,5 +1,5 @@
 import { SUGGEST_PROMPTS_SYSTEM_MESSAGE } from './prompts/index';
-import { DefaultSuggestionsProvider } from './providers/openai/defaults';
+import { getDefaultProviders } from './providers/defaults';
 import { normalizeTokenUsage } from './util/tokenUsageUtils';
 
 import type { TokenUsage } from './types/index';
@@ -14,7 +14,7 @@ export async function generatePrompts(
   prompt: string,
   _num: number,
 ): Promise<GeneratePromptsOutput> {
-  const provider = DefaultSuggestionsProvider;
+  const provider = (await getDefaultProviders()).suggestionsProvider;
 
   const resp = await provider.callApi(
     JSON.stringify([

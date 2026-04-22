@@ -42,7 +42,7 @@ You'll learn how to use adversarial LLM models to test your LangChain applicatio
 Before you begin, ensure you have the following:
 
 - **Python**: Python 3.8 or later
-- **Node.js**: Version 20 or later
+- **Node.js 20+**
 - **Promptfoo**: No prior installation needed; we'll use `npx`
 - **LangChain**: Install via pip: `pip install langchain`
 - **API Keys**: For your LLM provider (e.g., OpenAI, Anthropic)
@@ -141,7 +141,7 @@ Plugins are organized into categories:
 - **Access Control**: Tests for RBAC and authorization issues
 - **Business Logic**: Tests for competitor mentions, excessive agency, etc.
 
-You can also create [custom policies](/docs/red-team/plugins/custom) or upload your own [promptfoo plugins](/docs/red-team/plugins/intent/) to test specific business requirements or regulatory compliance.
+You can also create [custom policies](/docs/red-team/plugins/policy/) or upload your own [promptfoo plugins](/docs/red-team/plugins/custom/) to test specific business requirements or regulatory compliance.
 
 ### What are Strategies?
 

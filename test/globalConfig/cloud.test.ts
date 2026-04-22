@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import { fetchWithProxy } from '../../src/util/fetch/index';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/util/fetch/index');
 vi.mock('../../src/logger');
@@ -82,12 +83,41 @@ describe('CloudConfig', () => {
         }),
       });
     });
+
+    it('should set and get sharing', () => {
+      cloudConfigInstance.setSharing(true);
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
+        cloud: expect.objectContaining({
+          sharing: true,
+        }),
+      });
+    });
+
+    it('should return undefined for sharing when not set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: {},
+      });
+      const config = new CloudConfig();
+      expect(config.getSharing()).toBeUndefined();
+    });
   });
 
   describe('delete', () => {
     it('should clear cloud config', () => {
       cloudConfigInstance.delete();
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({ cloud: {} });
+    });
+
+    it('should reset in-memory state after delete', () => {
+      // After delete, readGlobalConfig returns empty cloud config
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: {},
+      });
+      cloudConfigInstance.delete();
+      expect(cloudConfigInstance.getSharing()).toBeUndefined();
+      expect(cloudConfigInstance.getApiKey()).toBeUndefined();
     });
   });
 
@@ -109,6 +139,7 @@ describe('CloudConfig', () => {
       app: {
         url: 'https://test.app',
       },
+      hasActiveLicense: true,
     };
 
     it('should validate token and update config on success', async () => {
@@ -126,13 +157,109 @@ describe('CloudConfig', () => {
       );
 
       expect(result).toEqual(mockResponse);
-      expect(writeGlobalConfigPartial).toHaveBeenCalledWith({
-        cloud: expect.objectContaining({
-          apiKey: 'test-token',
-          apiHost: 'https://test.api',
-          appUrl: 'https://test.app',
+      // Verify sharing was persisted as true
+      expect(writeGlobalConfigPartial).toHaveBeenCalledWith(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: true,
+          }),
         }),
+      );
+    });
+
+    it('should set sharing to false when hasActiveLicense is false and user created after cutoff', async () => {
+      const noLicenseResponse = {
+        ...mockResponse,
+        hasActiveLicense: false,
+        user: { ...mockResponse.user, createdAt: new Date('2026-03-10T00:00:00Z') },
+      };
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(noLicenseResponse),
+        text: () => Promise.resolve(JSON.stringify(noLicenseResponse)),
+      } as Response;
+
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+
+      const result = await cloudConfigInstance.validateAndSetApiToken(
+        'test-token',
+        'https://test.api',
+      );
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: false,
+          }),
+        }),
+      );
+    });
+
+    it('should set sharing to true when hasActiveLicense is false but user created before cutoff (grandfathered)', async () => {
+      const grandfatheredResponse = {
+        ...mockResponse,
+        hasActiveLicense: false,
+        user: { ...mockResponse.user, createdAt: new Date('2026-03-01T00:00:00Z') },
+      };
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(grandfatheredResponse),
+        text: () => Promise.resolve(JSON.stringify(grandfatheredResponse)),
+      } as Response;
+
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+
+      const result = await cloudConfigInstance.validateAndSetApiToken(
+        'test-token',
+        'https://test.api',
+      );
+
+      expect(result.hasActiveLicense).toBe(false);
+      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
+      expect(lastCall).toEqual(
+        expect.objectContaining({
+          cloud: expect.objectContaining({
+            sharing: true,
+          }),
+        }),
+      );
+    });
+
+    it('should preserve existing sharing value when hasActiveLicense is omitted from response', async () => {
+      // Pre-set sharing to true to verify it is preserved
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: {
+          appUrl: 'https://test.app',
+          apiHost: 'https://test.api',
+          apiKey: 'test-key',
+          sharing: true,
+        },
       });
+      cloudConfigInstance = new CloudConfig();
+
+      const { hasActiveLicense: _, ...noLicenseResponse } = mockResponse;
+      const mockFetchResponse = {
+        ok: true,
+        json: () => Promise.resolve(noLicenseResponse),
+        text: () => Promise.resolve(JSON.stringify(noLicenseResponse)),
+      } as Response;
+
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      const setSharingSpy = vi.spyOn(cloudConfigInstance, 'setSharing');
+
+      const result = await cloudConfigInstance.validateAndSetApiToken(
+        'test-token',
+        'https://test.api',
+      );
+
+      expect(result.hasActiveLicense).toBe(false);
+      // setSharing should NOT have been called when hasActiveLicense is undefined
+      expect(setSharingSpy).not.toHaveBeenCalled();
+      // The existing sharing value should be preserved
+      expect(cloudConfigInstance.getSharing()).toBe(true);
     });
 
     it('should throw error on failed validation', async () => {
@@ -154,6 +281,146 @@ describe('CloudConfig', () => {
   describe('cloudConfig singleton', () => {
     it('should be an instance of CloudConfig', () => {
       expect(cloudConfig).toBeInstanceOf(CloudConfig);
+    });
+  });
+
+  describe('getApiKey with environment variable', () => {
+    const originalEnv = process.env.PROMPTFOO_API_KEY;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+      } else {
+        mockProcessEnv({ PROMPTFOO_API_KEY: originalEnv });
+      }
+    });
+
+    it('should return API key from config file when set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'config-key' },
+      });
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+      const config = new CloudConfig();
+      expect(config.getApiKey()).toBe('config-key');
+    });
+
+    it('should return API key from PROMPTFOO_API_KEY env var when config is empty', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      mockProcessEnv({ PROMPTFOO_API_KEY: 'env-key' });
+      const config = new CloudConfig();
+      expect(config.getApiKey()).toBe('env-key');
+    });
+
+    it('should prefer config file over env var when both are set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'config-key' },
+      });
+      mockProcessEnv({ PROMPTFOO_API_KEY: 'env-key' });
+      const config = new CloudConfig();
+      expect(config.getApiKey()).toBe('config-key');
+    });
+
+    it('should return undefined when neither config nor env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+      const config = new CloudConfig();
+      expect(config.getApiKey()).toBeUndefined();
+    });
+  });
+
+  describe('isEnabled with environment variable', () => {
+    const originalEnv = process.env.PROMPTFOO_API_KEY;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+      } else {
+        mockProcessEnv({ PROMPTFOO_API_KEY: originalEnv });
+      }
+    });
+
+    it('should return true when config file has apiKey', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiKey: 'config-key' },
+      });
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+      const config = new CloudConfig();
+      expect(config.isEnabled()).toBe(true);
+    });
+
+    it('should return true when PROMPTFOO_API_KEY env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      mockProcessEnv({ PROMPTFOO_API_KEY: 'env-key' });
+      const config = new CloudConfig();
+      expect(config.isEnabled()).toBe(true);
+    });
+
+    it('should return false when neither config nor env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      mockProcessEnv({ PROMPTFOO_API_KEY: undefined });
+      const config = new CloudConfig();
+      expect(config.isEnabled()).toBe(false);
+    });
+  });
+
+  describe('getApiHost with environment variable', () => {
+    const originalEnv = process.env.PROMPTFOO_CLOUD_API_URL;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined });
+      } else {
+        mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: originalEnv });
+      }
+    });
+
+    it('should return API host from config file when set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiHost: 'https://config-host.example.com' },
+      });
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined });
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://config-host.example.com');
+    });
+
+    it('should return API host from PROMPTFOO_CLOUD_API_URL env var when config is empty', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: 'https://env-host.example.com' });
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://env-host.example.com');
+    });
+
+    it('should prefer config file over env var when both are set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        cloud: { apiHost: 'https://config-host.example.com' },
+      });
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: 'https://env-host.example.com' });
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe('https://config-host.example.com');
+    });
+
+    it('should return default API_HOST when neither config nor env var is set', () => {
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
+      mockProcessEnv({ PROMPTFOO_CLOUD_API_URL: undefined });
+      const config = new CloudConfig();
+      expect(config.getApiHost()).toBe(API_HOST);
     });
   });
 });

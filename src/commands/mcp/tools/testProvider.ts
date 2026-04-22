@@ -4,13 +4,15 @@ import { loadApiProvider, loadApiProviders } from '../../../providers/index';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
+import type { TokenUsage } from '../../../types/index';
+
 interface TestResult {
   providerId: string;
   success: boolean;
   responseTime: number;
   response?: string;
   error?: string;
-  tokenUsage?: any;
+  tokenUsage?: TokenUsage;
   cost?: number;
   timedOut: boolean;
   metadata: {
@@ -39,7 +41,7 @@ export function registerTestProviderTool(server: McpServer) {
           z.string().min(1, 'Provider ID cannot be empty'),
           z.object({
             id: z.string().min(1, 'Provider ID cannot be empty'),
-            config: z.record(z.unknown()).optional(),
+            config: z.record(z.string(), z.unknown()).optional(),
           }),
         ])
         .describe(
@@ -61,12 +63,11 @@ export function registerTestProviderTool(server: McpServer) {
           `,
         ),
       timeoutMs: z
-        .number()
         .int()
         .min(1000)
         .max(300000)
         .optional()
-        .default(30000)
+        .prefault(30000)
         .describe(
           dedent`
             Request timeout in milliseconds. 

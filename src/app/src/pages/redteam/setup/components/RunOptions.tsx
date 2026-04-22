@@ -4,7 +4,6 @@ import { Label } from '@app/components/ui/label';
 import { NumberInput } from '@app/components/ui/number-input';
 import { Switch } from '@app/components/ui/switch';
 import { TagInput } from '@app/components/ui/tag-input';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { COMMON_LANGUAGE_NAMES, normalizeLanguage } from '@app/constants/languages';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { Config } from '../types';
@@ -15,6 +14,11 @@ export const RUNOPTIONS_TEXT = {
   numberOfTests: {
     helper: 'Number of test cases to generate for each plugin',
     error: 'Number of test cases must be greater than 0',
+  },
+  maxCharsPerMessage: {
+    helper:
+      'Optional character cap for each generated user message and final prompt sent to the target. Leave blank for no limit.',
+    error: 'Max chars per message must be greater than 0',
   },
   delayBetweenApiCalls: {
     helper:
@@ -33,22 +37,15 @@ export const RUNOPTIONS_TEXT = {
   },
 } as const;
 
-const LabelWithTooltip = ({ label, tooltip }: { label: string; tooltip: string }) => {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="cursor-help underline decoration-dotted">{label}</span>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-  );
-};
-
 interface RunOptionsProps {
   numTests: number | undefined;
+  maxCharsPerMessage?: number;
   runOptions?: Partial<RedteamRunOptions>;
-  updateConfig: (section: keyof Config, value: any) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   language?: string | string[];
 }
@@ -56,7 +53,7 @@ interface RunOptionsProps {
 export interface NumberOfTestCasesInputProps {
   value: string;
   setValue: (value: string) => void;
-  updateConfig: (section: keyof Config, value: any) => void;
+  updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
   readOnly?: boolean;
   defaultNumberOfTests?: number;
 }
@@ -116,11 +113,63 @@ export const NumberOfTestCasesInput = ({
 export interface DelayBetweenAPICallsInputProps {
   value: string;
   setValue: (value: string) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   readOnly?: boolean;
   canSetDelay?: boolean;
   setMaxConcurrencyValue: (value: string) => void;
 }
+
+export interface MaxCharsPerMessageInputProps {
+  value: string;
+  setValue: (value: string) => void;
+  updateConfig: (section: keyof Config, value: Config[keyof Config]) => void;
+  readOnly?: boolean;
+}
+
+export const MaxCharsPerMessageInput = ({
+  value,
+  setValue,
+  updateConfig,
+  readOnly,
+}: MaxCharsPerMessageInputProps) => {
+  const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxCharsPerMessage.error : undefined;
+
+  return (
+    <NumberInput
+      fullWidth
+      label="Max chars per message"
+      value={value}
+      min={1}
+      onChange={(v) => {
+        setValue(v?.toString() || '');
+      }}
+      onBlur={() => {
+        if (readOnly) {
+          return;
+        }
+        if (value.trim() === '') {
+          updateConfig('maxCharsPerMessage', undefined);
+          setValue('');
+          return;
+        }
+        const parsed = Number(value);
+        if (Number.isNaN(parsed) || parsed < 1) {
+          updateConfig('maxCharsPerMessage', undefined);
+          setValue('');
+          return;
+        }
+        updateConfig('maxCharsPerMessage', parsed);
+        setValue(String(parsed));
+      }}
+      readOnly={readOnly}
+      helperText={error ? error : RUNOPTIONS_TEXT.maxCharsPerMessage.helper}
+      error={Boolean(error)}
+    />
+  );
+};
 
 /**
  * Delay between API calls (ms)
@@ -138,21 +187,18 @@ export const DelayBetweenAPICallsInput = ({
   value,
 }: DelayBetweenAPICallsInputProps) => {
   const error = isBelowMin(value, 0) ? RUNOPTIONS_TEXT.delayBetweenApiCalls.error : undefined;
-  return (
+  const isDisabled = !canSetDelay || readOnly;
+  const disabledReason = 'Set concurrent requests to 1 to enable delay';
+  const helperText = canSetDelay
+    ? error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper
+    : disabledReason;
+
+  const input = (
     <NumberInput
       fullWidth
-      label={
-        canSetDelay ? (
-          'Delay between API calls (ms)'
-        ) : (
-          <LabelWithTooltip
-            label="Delay between API calls (ms)"
-            tooltip="To set a delay, you must set the number of concurrent requests to 1."
-          />
-        )
-      }
+      label="Delay between API calls"
       value={value}
-      disabled={!canSetDelay || readOnly}
+      disabled={isDisabled}
       onChange={(v) => {
         if (readOnly) {
           return;
@@ -174,17 +220,30 @@ export const DelayBetweenAPICallsInput = ({
       min={0}
       readOnly={readOnly}
       endAdornment={<span className="text-xs text-muted-foreground">ms</span>}
-      helperText={error || RUNOPTIONS_TEXT.delayBetweenApiCalls.helper}
+      helperText={helperText}
       error={Boolean(error)}
     />
   );
+
+  if (!canSetDelay && !readOnly) {
+    return (
+      <div title={disabledReason} className="cursor-not-allowed">
+        {input}
+      </div>
+    );
+  }
+
+  return input;
 };
 
 export interface MaxNumberOfConcurrentRequestsInputProps {
   value: string;
   setValue: (value: string) => void;
   setDelayValue: (value: string) => void;
-  updateRunOption: (key: keyof RedteamRunOptions, value: any) => void;
+  updateRunOption: (
+    key: keyof RedteamRunOptions,
+    value: RedteamRunOptions[keyof RedteamRunOptions],
+  ) => void;
   readOnly?: boolean;
   canSetMaxConcurrency?: boolean;
 }
@@ -198,21 +257,18 @@ export const MaxNumberOfConcurrentRequestsInput = ({
   canSetMaxConcurrency,
 }: MaxNumberOfConcurrentRequestsInputProps) => {
   const error = isBelowMin(value, 1) ? RUNOPTIONS_TEXT.maxConcurrentRequests.error : undefined;
-  return (
+  const isDisabled = !canSetMaxConcurrency || readOnly;
+  const disabledReason = 'Set delay to 0 to enable concurrency';
+  const helperText = canSetMaxConcurrency
+    ? error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper
+    : disabledReason;
+
+  const input = (
     <NumberInput
       fullWidth
-      label={
-        canSetMaxConcurrency ? (
-          'Max number of concurrent requests'
-        ) : (
-          <LabelWithTooltip
-            label="Max number of concurrent requests"
-            tooltip="To set a max concurrency, you must set the delay to 0."
-          />
-        )
-      }
+      label="Max concurrent requests"
       value={value}
-      disabled={!canSetMaxConcurrency || readOnly}
+      disabled={isDisabled}
       onChange={(v) => {
         if (readOnly) {
           return;
@@ -233,33 +289,46 @@ export const MaxNumberOfConcurrentRequestsInput = ({
         setDelayValue('0');
       }}
       readOnly={readOnly}
-      endAdornment={<span className="text-xs text-muted-foreground">requests</span>}
-      helperText={error || RUNOPTIONS_TEXT.maxConcurrentRequests.helper}
+      helperText={helperText}
       error={Boolean(error)}
     />
   );
+
+  if (!canSetMaxConcurrency && !readOnly) {
+    return (
+      <div title={disabledReason} className="cursor-not-allowed">
+        {input}
+      </div>
+    );
+  }
+
+  return input;
 };
 
 export const RunOptionsContent = ({
   numTests,
+  maxCharsPerMessage,
   runOptions,
   updateConfig,
   updateRunOption,
   language,
 }: RunOptionsProps) => {
   // These two settings are mutually exclusive
-  const canSetDelay = Boolean(!runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1);
+  const canSetDelay = !runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1;
 
-  const canSetMaxConcurrency = Boolean(!runOptions?.delay || runOptions?.delay === 0);
+  const canSetMaxConcurrency = !runOptions?.delay || runOptions?.delay === 0;
 
   const [numTestsInput, setNumTestsInput] = useState<string>(
-    numTests !== undefined ? String(numTests) : '0',
+    numTests === undefined ? '0' : String(numTests),
+  );
+  const [maxCharsPerMessageInput, setMaxCharsPerMessageInput] = useState<string>(
+    maxCharsPerMessage === undefined ? '' : String(maxCharsPerMessage),
   );
   const [delayInput, setDelayInput] = useState<string>(
-    runOptions?.delay !== undefined ? String(runOptions.delay) : '0',
+    runOptions?.delay === undefined ? '0' : String(runOptions.delay),
   );
   const [maxConcurrencyInput, setMaxConcurrencyInput] = useState<string>(
-    runOptions?.maxConcurrency !== undefined ? String(runOptions.maxConcurrency) : '1',
+    runOptions?.maxConcurrency === undefined ? '1' : String(runOptions.maxConcurrency),
   );
 
   // Normalize language to array
@@ -283,28 +352,26 @@ export const RunOptionsContent = ({
         updateConfig={updateConfig}
       />
 
-      <DelayBetweenAPICallsInput
-        value={delayInput}
-        setValue={setDelayInput}
-        updateRunOption={updateRunOption}
-        readOnly={!canSetDelay}
-        canSetDelay={canSetDelay}
-        setMaxConcurrencyValue={setMaxConcurrencyInput}
+      <MaxCharsPerMessageInput
+        value={maxCharsPerMessageInput}
+        setValue={setMaxCharsPerMessageInput}
+        updateConfig={updateConfig}
       />
-      {/**
-       * Max number of concurrent requests
-       * - Enabled only when delay is 0 (mutual exclusivity rule)
-       * - Accepts only digits; onBlur clamps to ≥ 1 and persists via updateRunOption
-       * - Any change forces delay to 0 to uphold exclusivity
-       * - Prevents non-numeric characters like e/E/+/−/.
-       */}
+
       <MaxNumberOfConcurrentRequestsInput
         value={maxConcurrencyInput}
         setValue={setMaxConcurrencyInput}
         updateRunOption={updateRunOption}
-        readOnly={!canSetMaxConcurrency}
         canSetMaxConcurrency={canSetMaxConcurrency}
         setDelayValue={setDelayInput}
+      />
+
+      <DelayBetweenAPICallsInput
+        value={delayInput}
+        setValue={setDelayInput}
+        updateRunOption={updateRunOption}
+        canSetDelay={canSetDelay}
+        setMaxConcurrencyValue={setMaxConcurrencyInput}
       />
 
       <div className="flex items-start gap-3">

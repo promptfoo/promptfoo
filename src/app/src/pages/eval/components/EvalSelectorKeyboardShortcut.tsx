@@ -25,6 +25,7 @@ const EvalSelector = ({ onEvalSelected }: EvalSelectorProps) => {
     handleClose();
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   React.useEffect(() => {
     const handleGlobalKeyDown = (event: KeyboardEvent) => {
       // Don't trigger if user is typing in an input field or textarea

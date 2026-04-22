@@ -15,7 +15,7 @@ export default function EstimatedDurationDisplay({ config }: EstimatedDurationDi
       <span className="font-bold text-primary">{getEstimatedDuration(config)}</span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Info className="h-4 w-4 cursor-help text-muted-foreground" />
+          <Info className="size-4 cursor-help text-muted-foreground" />
         </TooltipTrigger>
         <TooltipContent>
           Estimated time includes test generation and probe execution. Actual time may vary based on

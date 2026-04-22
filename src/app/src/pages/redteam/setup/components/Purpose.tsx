@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { Code } from '@app/components/ui/code';
 import {
@@ -8,6 +8,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
+import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -62,12 +63,12 @@ function DiscoveryResult({
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary/80">
             Auto-Discovery Result
           </p>
-          <p className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-foreground">
+          <p className="whitespace-pre-wrap wrap-break-word font-mono text-[13px] leading-relaxed text-foreground">
             {text}
           </p>
         </div>
         <Button size="sm" onClick={handleApply} disabled={applied}>
-          <Sparkles className="mr-2 h-3.5 w-3.5" />
+          <Sparkles className="mr-2 size-3.5" />
           Apply
         </Button>
       </div>
@@ -79,7 +80,7 @@ function DiscoveryResult({
  * "Usage Details" step of the red teaming config setup wizard.
  */
 export default function Purpose({ onNext, onBack }: PromptsProps) {
-  const { config, updateApplicationDefinition, updateConfig } = useRedTeamConfig();
+  const { config, updateApplicationDefinition } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -90,6 +91,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_purpose' });
   }, []);
@@ -156,6 +158,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   const [discoveryResult, setDiscoveryResult] = useState<TargetPurposeDiscoveryResult | null>(null);
   const [showSlowDiscoveryMessage, setShowSlowDiscoveryMessage] = useState(false);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
@@ -299,14 +302,14 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             <div className="space-y-8">
               {/* Auto-Discover Target Details */}
               {!discoveryResult && (
-                <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background p-6 shadow-sm">
+                <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-linear-to-br from-primary/5 via-background to-background p-6 shadow-sm">
                   {/* Subtle decorative element */}
-                  <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-primary/5 blur-2xl" />
+                  <div className="absolute -right-8 -top-8 size-32 rounded-full bg-primary/5 blur-2xl" />
 
                   <div className="relative space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                        <Sparkles className="h-5 w-5 text-primary" />
+                      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10">
+                        <Sparkles className="size-5 text-primary" />
                       </div>
                       <div>
                         <h2 className="text-base font-semibold tracking-tight">Auto-Discovery</h2>
@@ -337,42 +340,50 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         isDiscovering
                       }
                       onClick={handleTargetPurposeDiscovery}
-                      className="w-[150px]"
+                      className="w-37.5"
                     >
                       {isDiscovering ? 'Discovering...' : 'Discover'}
                     </Button>
 
                     {isDiscovering && showSlowDiscoveryMessage && (
                       <Alert variant="info">
-                        <Info className="h-4 w-4" />
-                        <AlertDescription>
-                          Discovery is taking a little while. This is normal for complex
-                          applications.
-                        </AlertDescription>
+                        <Info className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>
+                            Discovery is taking a little while. This is normal for complex
+                            applications.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {!hasTargetConfigured && (
                       <Alert variant="warning">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription>
-                          You must configure a target to run auto-discovery.
-                        </AlertDescription>
+                        <AlertTriangle className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>
+                            You must configure a target to run auto-discovery.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {hasTargetConfigured && ['blocked', 'disabled'].includes(apiHealthStatus) && (
                       <Alert variant="destructive">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription>
-                          Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
-                          connection.
-                        </AlertDescription>
+                        <AlertTriangle className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>
+                            Cannot connect to Promptfoo API. Auto-discovery requires a healthy API
+                            connection.
+                          </AlertDescription>
+                        </AlertContent>
                       </Alert>
                     )}
                     {discoveryError && (
                       <>
                         <Alert variant="destructive">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>{discoveryError}</AlertDescription>
+                          <AlertTriangle className="size-4" />
+                          <AlertContent>
+                            <AlertDescription>{discoveryError}</AlertDescription>
+                          </AlertContent>
                         </Alert>
                         <div className="rounded-lg border border-border bg-background/80 p-4">
                           <p className="mb-3 text-[13px] text-muted-foreground">
@@ -410,10 +421,10 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-base font-medium">
+                  <Label className="mb-1.5 block text-base">
                     What is the main purpose of your application?
                     <span className="ml-1 text-destructive/80">*</span>
-                  </label>
+                  </Label>
                   <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
                     Describe the primary objective and goals of your application. This foundational
                     information provides essential context for generating targeted security tests.
@@ -428,7 +439,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     onChange={(e) => updateApplicationDefinition('purpose', e.target.value)}
                     placeholder="e.g. Assist healthcare professionals and patients with medical-related tasks, access medical information, schedule appointments..."
                     rows={3}
-                    className="min-h-[72px] resize-y"
+                    className="min-h-18 resize-y"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground/80">
@@ -452,12 +463,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         {getCompletionPercentage('Core Application Details')}
                       </span>
                       {getCompletionPercentage('Core Application Details') === '100%' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
                       className={cn(
-                        'h-5 w-5 transition-transform',
+                        'size-5 transition-transform',
                         expandedSections.has('Core Application Details') && 'rotate-180',
                       )}
                     />
@@ -465,12 +476,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What key features does your application provide?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           List the main capabilities and functionalities available to users.
                         </p>
@@ -484,12 +495,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What industry or domain does your application operate in?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Helps generate industry-specific attacks and compliance tests.
                         </p>
@@ -498,17 +509,17 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           onChange={(e) => updateApplicationDefinition('industry', e.target.value)}
                           placeholder="e.g. Healthcare, Financial Services, Education, E-commerce, Government, Legal..."
                           rows={1}
-                          className="min-h-[40px] resize-y"
+                          className="min-h-10 resize-y"
                         />
                       </div>
 
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           Any constraints or rules attackers should know about?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Describe guardrails, restricted topics, input formats, or domain-specific
                           rules.
@@ -550,12 +561,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         {getCompletionPercentage('Access & Permissions')}
                       </span>
                       {getCompletionPercentage('Access & Permissions') === '100%' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
                       className={cn(
-                        'h-5 w-5 transition-transform',
+                        'size-5 transition-transform',
                         expandedSections.has('Access & Permissions') && 'rotate-180',
                       )}
                     />
@@ -563,12 +574,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What systems or resources does your application have access to?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Describe what your application can legitimately access and use.
                         </p>
@@ -589,12 +600,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What should your application NOT have access to?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Specify restricted systems, data, or resources.
                         </p>
@@ -610,12 +621,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What types of users interact with your application?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Describe user roles and their authorization levels.
                         </p>
@@ -629,12 +640,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What security and compliance requirements apply?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           List security, privacy, and regulatory requirements.
                         </p>
@@ -643,7 +654,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                           onChange={(e) =>
                             updateApplicationDefinition('securityRequirements', e.target.value)
                           }
-                          placeholder="e.g. HIPAA compliance, patient confidentiality, audit logging..."
+                          placeholder="e.g. patient privacy controls, confidentiality, audit logging..."
                           rows={2}
                           className="min-h-14 resize-y"
                         />
@@ -665,12 +676,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         {getCompletionPercentage('Data & Content')}
                       </span>
                       {getCompletionPercentage('Data & Content') === '100%' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
                       className={cn(
-                        'h-5 w-5 transition-transform',
+                        'size-5 transition-transform',
                         expandedSections.has('Data & Content') && 'rotate-180',
                       )}
                     />
@@ -678,12 +689,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What types of sensitive data does your application handle?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Helps generate targeted privacy and data protection attacks. Also used to
                           grade attack effectiveness.
@@ -700,12 +711,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           Example identifiers or data points your application uses?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Realistic examples help test for PII exposure. Specific formats improve
                           grading accuracy.
@@ -722,12 +733,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What critical or dangerous actions can your application perform?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           High-risk operations that should be protected from misuse.
                         </p>
@@ -743,12 +754,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       </div>
 
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           What topics should your application never discuss?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Content boundaries to test for harmful or inappropriate responses.
                         </p>
@@ -779,12 +790,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         {getCompletionPercentage('Business Context')}
                       </span>
                       {getCompletionPercentage('Business Context') === '100%' && (
-                        <CheckCircle className="h-4 w-4 text-emerald-500" />
+                        <CheckCircle className="size-4 text-emerald-500" />
                       )}
                     </div>
                     <ChevronDown
                       className={cn(
-                        'h-5 w-5 transition-transform',
+                        'size-5 transition-transform',
                         expandedSections.has('Business Context') && 'rotate-180',
                       )}
                     />
@@ -792,12 +803,12 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   <CollapsibleContent className="border-t border-border px-6 py-4">
                     <div className="space-y-6">
                       <div>
-                        <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                        <Label className="mb-1.5 flex items-baseline gap-2">
                           Competitors that shouldn't be endorsed or promoted?
                           <span className="text-xs font-normal text-muted-foreground/70">
                             optional
                           </span>
-                        </label>
+                        </Label>
                         <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                           Companies or products your application should remain neutral about.
                         </p>
@@ -820,10 +831,10 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               <div className="mt-8 space-y-4">
                 <h2 className="text-lg font-semibold tracking-tight">Red Team User</h2>
                 <div>
-                  <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
+                  <Label className="mb-1.5 flex items-baseline gap-2">
                     Who typically uses this system?
                     <span className="text-xs font-normal text-muted-foreground/70">optional</span>
-                  </label>
+                  </Label>
                   <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
                     The red team will simulate these user personas when testing for vulnerabilities.
                   </p>
@@ -841,39 +852,17 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   />
                 </div>
               </div>
-
-              {/* Test Generation Instructions - Standalone Section */}
-              <div className="mt-8 space-y-4">
-                <h2 className="text-lg font-semibold tracking-tight">
-                  Test Generation Instructions
-                </h2>
-                <div>
-                  <label className="mb-1.5 flex items-baseline gap-2 text-sm font-medium">
-                    Additional instructions for test generation
-                    <span className="text-xs font-normal text-muted-foreground/70">optional</span>
-                  </label>
-                  <p className="mb-3 text-[13px] leading-relaxed text-muted-foreground">
-                    Guidance on how red team attacks should be generated. Useful for domain-specific
-                    applications.
-                  </p>
-                  <Textarea
-                    value={config.testGenerationInstructions ?? ''}
-                    onChange={(e) => updateConfig('testGenerationInstructions', e.target.value)}
-                    placeholder="e.g. Focus on healthcare-specific attacks using medical terminology..."
-                    rows={3}
-                    className="min-h-[72px] resize-y"
-                  />
-                </div>
-              </div>
             </div>
           ) : (
             <div>
               <Alert variant="info">
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  When testing a model directly, you don't need to provide application details. You
-                  can proceed to configure the model and test scenarios in the next steps.
-                </AlertDescription>
+                <Info className="size-4" />
+                <AlertContent>
+                  <AlertDescription>
+                    When testing a model directly, you don't need to provide application details.
+                    You can proceed to configure the model and test scenarios in the next steps.
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             </div>
           )}

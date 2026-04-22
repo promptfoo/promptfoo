@@ -1,23 +1,27 @@
-import React, { type KeyboardEvent, useEffect, useState } from 'react';
+import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 
-import EditIcon from '@mui/icons-material/Edit';
-import EmailIcon from '@mui/icons-material/Email';
-import InfoIcon from '@mui/icons-material/Info';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
-import Popover from '@mui/material/Popover';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import { Chip } from '@app/components/ui/chip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useToast } from '@app/hooks/useToast';
+import { Check, Pencil, X } from 'lucide-react';
 
 interface AuthorChipProps {
   author: string | null;
   onEditAuthor: (newAuthor: string) => Promise<void>;
   currentUserEmail: string | null;
   editable: boolean;
-  isCloudEnabled: boolean;
+  isCloudEnabled?: boolean;
 }
 
 export const AuthorChip = ({
@@ -25,201 +29,191 @@ export const AuthorChip = ({
   onEditAuthor,
   currentUserEmail,
   editable,
-  isCloudEnabled,
+  isCloudEnabled = false,
 }: AuthorChipProps) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [isClaimDialogOpen, setIsClaimDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const [email, setEmail] = useState(author || '');
-  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
-    if (!author && currentUserEmail) {
-      setEmail(currentUserEmail);
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
     }
-  }, [author, currentUserEmail]);
+  }, [isEditing]);
 
-  const handleClick = (event: React.MouseEvent<HTMLElement>) => {
-    setAnchorEl(event.currentTarget);
+  const handleStartEdit = () => {
+    if (!editable) {
+      return;
+    }
+
+    if (isCloudEnabled) {
+      setClaimError(null);
+      setIsClaimDialogOpen(true);
+      return;
+    }
+
     setEmail(author || currentUserEmail || '');
-    setError(null);
+    setIsEditing(true);
   };
 
-  const handleClose = () => {
-    setAnchorEl(null);
+  const handleCancel = () => {
+    setEmail(author || '');
+    setIsEditing(false);
   };
 
-  // Handler for free-text mode (non-cloud)
   const handleSave = async () => {
     if (isLoading) {
       return;
     }
     setIsLoading(true);
-    setError(null);
     try {
       await onEditAuthor(email || '');
-      handleClose();
+      setIsEditing(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      const message = err instanceof Error ? err.message : 'Failed to save';
+      showToast(message, 'error');
+      setEmail(author || '');
+      setIsEditing(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Handler for cloud mode actions (Claim/Remove)
-  const handleCloudAction = async (newAuthor: string) => {
-    if (isLoading) {
+  const handleClaim = async () => {
+    if (isLoading || !currentUserEmail) {
       return;
     }
     setIsLoading(true);
-    setError(null);
+    setClaimError(null);
     try {
-      await onEditAuthor(newAuthor);
-      handleClose();
+      await onEditAuthor(currentUserEmail);
+      setIsClaimDialogOpen(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
+      setClaimError(err instanceof Error ? err.message : 'An unknown error occurred');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleKeyPress = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
       handleSave();
+    } else if (event.key === 'Escape') {
+      handleCancel();
     }
   };
 
-  const getTooltipTitle = () => {
+  const tooltipContent = (() => {
     if (!editable) {
-      if (!author) {
-        return 'Author';
+      if (isCloudEnabled && author && currentUserEmail && author !== currentUserEmail) {
+        return `This eval belongs to ${author}`;
       }
-      // For your own eval in cloud mode, just label the field
       if (isCloudEnabled && author === currentUserEmail) {
         return 'Eval author';
       }
-      return `This eval belongs to ${author}`;
+      return 'Author';
     }
+
     if (isCloudEnabled) {
-      // In cloud mode, editable=true when no author OR author is someone else
       return 'Click to claim this eval';
     }
+
     return author ? 'Click to edit author' : 'Click to set author';
-  };
+  })();
 
-  const renderPopoverContent = () => {
-    if (isCloudEnabled) {
-      // Cloud mode: shows claim UI (popover opens for unclaimed evals or evals claimed by others)
-      return (
-        <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
-          <Typography variant="body2" sx={{ mb: 2 }}>
-            {author
-              ? `This eval is currently attributed to ${author}.`
-              : 'This eval has no author assigned.'}
-          </Typography>
-          <Button
-            variant="contained"
-            onClick={() => handleCloudAction(currentUserEmail || '')}
-            disabled={isLoading || !currentUserEmail}
-          >
-            {isLoading ? (
-              <CircularProgress size={24} />
-            ) : currentUserEmail ? (
-              `Claim as mine (${currentUserEmail})`
-            ) : (
-              'Loading...'
-            )}
-          </Button>
-          {error && (
-            <Typography color="error" variant="caption" sx={{ mt: 1 }}>
-              {error}
-            </Typography>
-          )}
-        </Box>
-      );
-    }
-
-    // Non-cloud mode: keep existing free text UI
+  if (isEditing) {
     return (
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-end', mb: 2 }}>
-          <TextField
-            label="Author Email"
-            variant="standard"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyPress={handleKeyPress}
-            error={!!error}
-            helperText={error}
-            disabled={isLoading}
-            sx={{ flexGrow: 1, mr: 2 }}
-          />
-          <Button onClick={handleSave} disabled={isLoading || !email}>
-            {isLoading ? <CircularProgress size={24} /> : 'Save'}
-          </Button>
-        </Box>
-        {!currentUserEmail && (
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <InfoIcon color="info" fontSize="small" sx={{ mr: 1 }} />
-            <Typography variant="caption">
-              {`Setting an email address will also set the default author for future evals.
-                It is changeable with \`promptfoo auth login\``}
-            </Typography>
-          </Box>
-        )}
-      </Box>
+      <div className="flex items-center h-8 border border-input rounded-md bg-white dark:bg-zinc-900 overflow-hidden">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground pl-3 shrink-0">
+          AUTHOR
+        </span>
+        <Input
+          ref={inputRef}
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={isLoading}
+          className="h-auto py-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-xs min-w-[150px]"
+          placeholder="email@example.com"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isLoading}
+          className="p-1.5 hover:bg-muted/50 transition-colors text-emerald-600 dark:text-emerald-400"
+          aria-label="Save"
+        >
+          {isLoading ? <Spinner className="size-3.5" /> : <Check className="size-3.5" />}
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          disabled={isLoading}
+          className="p-1.5 pr-2 hover:bg-muted/50 transition-colors text-muted-foreground hover:text-destructive"
+          aria-label="Cancel"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
     );
-  };
-
-  const open = Boolean(anchorEl);
-  const id = open ? 'author-popover' : undefined;
+  }
 
   return (
     <>
-      <Tooltip title={getTooltipTitle()}>
-        <Box
-          display="flex"
-          alignItems="center"
-          onClick={editable ? handleClick : undefined}
-          sx={{
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1,
-            px: 1,
-            py: 0.5,
-            '&:hover': {
-              bgcolor: 'action.hover',
-            },
-            minHeight: 40,
-            cursor: editable ? 'pointer' : 'default',
-          }}
-        >
-          <EmailIcon fontSize="small" sx={{ mr: 1, opacity: 0.7 }} />
-          <Typography variant="body2" sx={{ mr: 1 }}>
-            <strong>Author:</strong> {author || 'Unknown'}
-          </Typography>
-          {editable && (
-            <IconButton size="small" sx={{ ml: 'auto' }} disabled={isLoading}>
-              <EditIcon fontSize="small" />
-            </IconButton>
-          )}
-        </Box>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Chip
+            label="AUTHOR"
+            onClick={handleStartEdit}
+            disabled={!editable}
+            interactive={editable}
+            trailingIcon={
+              editable ? <Pencil className="size-3.5 text-muted-foreground" /> : undefined
+            }
+          >
+            {author || 'Unknown'}
+          </Chip>
+        </TooltipTrigger>
+        <TooltipContent>{tooltipContent}</TooltipContent>
       </Tooltip>
-      <Popover
-        id={id}
-        open={open}
-        anchorEl={anchorEl}
-        onClose={handleClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'left',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'left',
-        }}
-      >
-        {renderPopoverContent()}
-      </Popover>
+      <Dialog open={isClaimDialogOpen} onOpenChange={setIsClaimDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Claim eval</DialogTitle>
+            <DialogDescription>
+              {author
+                ? `This eval is currently attributed to ${author}.`
+                : 'This eval has no author assigned.'}
+            </DialogDescription>
+          </DialogHeader>
+          {claimError && <p className="text-sm text-destructive">{claimError}</p>}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsClaimDialogOpen(false)}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleClaim} disabled={isLoading || !currentUserEmail}>
+              {isLoading ? (
+                <Spinner className="mr-2 size-4" />
+              ) : currentUserEmail ? (
+                `Claim as mine (${currentUserEmail})`
+              ) : (
+                'Loading...'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };
