@@ -1,4 +1,3 @@
-import { FILE_METADATA_KEY } from '../../providers/constants';
 import { ResultFailureReason } from '../../types';
 import { DEFAULT_OVERSIZED_STRING_LIMIT, stripOversizedStrings } from './safeJsonResponse';
 
@@ -126,10 +125,6 @@ function trimMetadataForTable(
   const leanMetadata: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(metadata)) {
     if (DETAIL_ONLY_METADATA_KEYS.has(key)) {
-      continue;
-    }
-    if (key === FILE_METADATA_KEY || key === 'transformDisplayVars' || key === 'comment') {
-      leanMetadata[key] = trimForTable(value, maxStringLength);
       continue;
     }
     leanMetadata[key] = trimForTable(value, maxStringLength);
