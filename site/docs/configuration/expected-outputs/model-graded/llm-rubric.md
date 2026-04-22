@@ -122,6 +122,28 @@ By default, `llm-rubric` uses `gpt-5` for grading. You can override this in seve
            // highlight-end
    ```
 
+### Setting grader parameters (temperature, etc.)
+
+To pin `temperature`, `max_tokens`, or other provider-specific parameters on the grader, expand the `provider` shorthand into an object with `id` and `config`. This is the supported way to push grading toward reproducibility when swapping in a custom judge:
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: Is not apologetic and provides a clear, concise answer
+    // highlight-start
+    provider:
+      id: openai:gpt-5-mini
+      config:
+        temperature: 0
+    // highlight-end
+```
+
+The same shape works under `defaultTest.options.provider` and `test.options.provider`.
+
+:::note
+The built-in OpenAI grader already defaults to `temperature=0`, so this override is only needed when you're pointing at a different model or provider whose default differs. GPT-5 series reasoning models ignore `temperature` and do not need it set.
+:::
+
 Custom `llm-rubric` providers can also return a `metadata` object in their `ProviderResponse`. promptfoo copies those keys onto the assertion's `GradingResult.metadata` alongside `renderedGradingPrompt`, which makes per-assertion fields such as upload IDs or trace IDs available in hooks like `afterEach`.
 
 ## Customizing the rubric prompt

@@ -192,8 +192,10 @@ jobs:
 
           # Keep the app token out of the remote URL and out of .git/config;
           # attach it per-command via `-c http.extraheader=...` and disable git
-          # hooks so nothing executes in the token's env.
-          auth_header="http.https://github.com/.extraheader=AUTHORIZATION: bearer ${GH_TOKEN}"
+          # hooks so nothing executes in the token's env. GitHub's Git smart
+          # HTTP endpoint expects Basic auth.
+          basic_auth="$(printf 'x-access-token:%s' "${GH_TOKEN}" | base64 | tr -d '\n')"
+          auth_header="http.https://github.com/.extraheader=AUTHORIZATION: basic ${basic_auth}"
           rm -rf "$mirror_dir"
           git -c "$auth_header" -c core.hooksPath=/dev/null clone \
             "https://github.com/promptfoo/code-scan-action.git" "$mirror_dir"

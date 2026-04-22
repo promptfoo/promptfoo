@@ -13,6 +13,7 @@ import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
+import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
   getRemoteGenerationExplicitlyDisabledError,
@@ -53,6 +54,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   GradingResult,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   ProviderResponse,
@@ -112,9 +114,10 @@ interface HydraConfig {
   _perTurnLayers?: LayerConfig[];
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
+   * Keys are variable names, values are Inputs definitions: plain descriptions
+   * or structured typed configs with fields like description, type, and config.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
 }
 
 function scrubOutputForHistory(output: string): string {
@@ -181,7 +184,7 @@ export class HydraProvider implements ApiProvider {
       jsonOnly: true,
       preferSmallModel: false,
       // Pass inputs schema for multi-input mode
-      inputs: this.config.inputs as Record<string, string> | undefined,
+      inputs: this.config.inputs,
     });
 
     logger.debug('[Hydra] Provider initialized', {
@@ -412,6 +415,16 @@ export class HydraProvider implements ApiProvider {
 
       // Extract input vars from the processed message for multi-input mode
       const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+      const materializedInputVars =
+        currentInputVars && this.config.inputs
+          ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+              materializationIndex: turn,
+              pluginId: 'hydra',
+              provider: this.agentProvider,
+              purpose: test?.metadata?.purpose as string | undefined,
+            })
+          : undefined;
+      const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
       // Add message to conversation history (without <Prompt> tags)
       this.conversationHistory.push({
@@ -436,7 +449,7 @@ export class HydraProvider implements ApiProvider {
           [this.injectVar]: escapedMessage,
           ...(this.sessionId ? { sessionId: this.sessionId } : {}),
           // Add extracted input vars if available
-          ...(currentInputVars || {}),
+          ...(currentRenderInputVars || {}),
         };
 
         targetPrompt = await renderPrompt(
@@ -570,10 +583,21 @@ export class HydraProvider implements ApiProvider {
 
       // Get target response
       const iterationStart = Date.now();
+      const targetContext = context
+        ? {
+            ...context,
+            vars: {
+              ...vars,
+              ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+              ...(currentRenderInputVars || {}),
+              [this.injectVar]: finalTargetPrompt,
+            },
+          }
+        : context;
       let targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
-        context,
+        targetContext,
         options,
       );
       lastTargetResponse = targetResponse;
@@ -846,7 +870,7 @@ export class HydraProvider implements ApiProvider {
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
-        inputVars: currentInputVars,
+        inputVars: currentRenderInputVars,
       });
 
       // Check if vulnerability was achieved
