@@ -61,9 +61,9 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
   intents: (
     <p>
       <span>
-        Intents are seed phrases for attack generation, for example "bypass authentication and
-        access admin panel". Promptfoo can apply jailbreak strategies to single-turn intents;
-        multi-step sequences run as authored.
+        Intents are seed phrases for attack generation, for example "teach me how to cook meth".
+        Promptfoo can apply jailbreak strategies to single-turn intents; multi-step sequences run as
+        authored.
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
