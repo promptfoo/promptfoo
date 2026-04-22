@@ -291,7 +291,7 @@ plugins:
 
 ### Custom prompts
 
-You can also include custom prompts using the [intents](intent.md), which are passed directly to the target. The intent red teaming plugin is designed to test whether an AI system can be manipulated to exhibit specific behaviors or responses.
+You can also include custom prompts using the [Intent (Custom Prompts) plugin](intent.md). Intents are seed prompts that Promptfoo turns into one base test case per prompt. Selected strategies can transform single-turn seeds, while nested arrays run as authored multi-step sequences.
 
 Unlike the policy plugin, which enforces guidelines, the intent plugin actively attempts to elicit particular (potentially undesirable) behaviors from the model.
 

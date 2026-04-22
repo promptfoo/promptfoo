@@ -400,12 +400,23 @@ html:not(.docs-wrapper) .DocSearch {
 .redteamPolicyScreenshotLink {
   display: block;
   margin: 1rem 0 1.5rem;
+  border-radius: 8px;
+  line-height: 0;
 }
 
-.redteamPolicyScreenshotLink:hover {
+.redteamPolicyScreenshotLink:hover,
+.redteamPolicyScreenshotLink:focus {
   text-decoration: none;
 }
 
+.redteamPolicyScreenshotLink:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.redteamPolicyScreenshotLink:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+}
 .redteamPolicyScreenshot {
   display: block;
   width: 100%;
@@ -424,12 +435,74 @@ html:not(.docs-wrapper) .DocSearch {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
 }
 
+.redteamPluginScreenshotFigure {
+  margin: 1.25rem 0 1.75rem;
+}
+
+.redteamPluginScreenshotFigure figcaption {
+  margin: 0.5rem 0 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.redteamPluginScreenshotLink {
+  display: block;
+  border-radius: 8px;
+  line-height: 0;
+}
+
+.redteamPluginScreenshotLink:hover,
+.redteamPluginScreenshotLink:focus {
+  text-decoration: none;
+}
+
+.redteamPluginScreenshotLink:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.redteamPluginScreenshotLink:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
+}
+
+.redteamPluginScreenshot {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.08);
+}
+
+[data-theme='dark'] .redteamPluginScreenshot {
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
+}
+
 @media (max-width: 768px) {
   .redteamPolicyScreenshotLink {
     margin: 0.75rem 0 1.25rem;
+    border-radius: 6px;
   }
 
   .redteamPolicyScreenshot {
+    border-radius: 6px;
+  }
+
+  .redteamPluginScreenshotFigure {
+    margin: 1rem 0 1.5rem;
+  }
+
+  .redteamPluginScreenshotLink {
+    border-radius: 6px;
+  }
+
+  .redteamPluginScreenshot {
     border-radius: 6px;
   }
 }
