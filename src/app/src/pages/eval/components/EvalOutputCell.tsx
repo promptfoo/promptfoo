@@ -28,6 +28,7 @@ import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
 import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
@@ -671,7 +672,8 @@ function getCombinedContextText(output: EvaluateTableOutput): string {
   return output.gradingResult.componentResults
     .map((result, index) => {
       const displayName = result.assertion?.metric || result.assertion?.type || 'unknown';
-      const value = result.assertion?.value || '';
+      const rawValue = result.metadata?.renderedAssertionValue ?? result.assertion?.value;
+      const value = rawValue === undefined ? '' : stringifyAssertionValue(rawValue);
       return `Assertion ${index + 1} (${displayName}): ${value}`;
     })
     .join('\n\n');

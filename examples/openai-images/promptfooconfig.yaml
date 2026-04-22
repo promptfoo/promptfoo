@@ -5,14 +5,26 @@ prompts:
   - 'In the style of {{artist}}: {{subject}}'
 
 providers:
-  # GPT Image 1.5 - OpenAI's state-of-the-art image generation model
+  # GPT Image 2 - OpenAI's latest image generation model
+  - id: openai:image:gpt-image-2
+    config:
+      size: 1024x1024 # Common sizes: 1024x1024, 1024x1536, 1536x1024, 2048x1152, 2048x2048, auto
+      quality: low # Options: low, medium, high, auto
+      # background: opaque # Options: opaque, auto (transparent is not supported)
+      # output_format: webp # Options: png, jpeg, webp
+      # output_compression: 80 # 0-100, only set with jpeg/webp
+      # moderation: auto # Options: auto, low
+      # n: 1 # 1-10 images
+      # user: promptfoo-user # Optional end-user identifier
+
+  # GPT Image 1.5 - High-quality GPT Image model
   - id: openai:image:gpt-image-1.5
     config:
       size: 1024x1024 # Valid sizes: 1024x1024, 1024x1536, 1536x1024, auto
       quality: low # Options: low, medium, high, auto
       # background: transparent # Options: transparent, opaque, auto (only works with png/webp)
-      # output_format: png # Options: png, jpeg, webp
-      # output_compression: 80 # 0-100, only for jpeg/webp
+      # output_format: webp # Options: png, jpeg, webp
+      # output_compression: 80 # 0-100, only set with jpeg/webp
       # moderation: auto # Options: auto, low
 
   # GPT Image 1 - High-quality image generation model
@@ -21,8 +33,8 @@ providers:
       size: 1024x1024 # Valid sizes: 1024x1024, 1024x1536, 1536x1024, auto
       quality: low # Options: low, medium, high, auto
       # background: transparent # Options: transparent, opaque, auto (only works with png/webp)
-      # output_format: png # Options: png, jpeg, webp
-      # output_compression: 80 # 0-100, only for jpeg/webp
+      # output_format: webp # Options: png, jpeg, webp
+      # output_compression: 80 # 0-100, only set with jpeg/webp
       # moderation: auto # Options: auto, low
 
   # GPT Image 1 Mini - Cost-efficient version of GPT Image 1

@@ -1017,6 +1017,15 @@ function parseFileAuthReference(filePath: string): { filePath: string; functionN
   return filePath.startsWith('file://') ? parseFileUrl(filePath) : { filePath };
 }
 
+function formatFileAuthFreshness(expiration?: number | null): string {
+  if (expiration == null) {
+    return 'never expires';
+  }
+
+  const freshForSeconds = Math.max(0, Math.ceil((expiration - Date.now()) / 1000));
+  return `expires in ${freshForSeconds} seconds`;
+}
+
 export async function createSessionParser(
   parser: string | Function | undefined,
 ): Promise<(data: SessionParserData) => string> {
@@ -1786,15 +1795,20 @@ export class HttpProvider implements ApiProvider {
     return false;
   }
 
-  private async refreshTokenWithLock(refreshToken: () => Promise<void>): Promise<void> {
+  private async refreshTokenWithLock(
+    refreshToken: () => Promise<void>,
+    onLockAcquired?: () => void,
+  ): Promise<void> {
     while (this.tokenRefreshLock != null) {
       if (await this.waitForInFlightTokenRefresh()) {
         return;
       }
     }
 
-    const refreshLock = { promise: refreshToken() };
+    const refreshLock = { promise: Promise.resolve() as Promise<void> };
     this.tokenRefreshLock = refreshLock;
+    onLockAcquired?.();
+    refreshLock.promise = refreshToken();
 
     try {
       await refreshLock.promise;
@@ -1822,7 +1836,12 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
-    await this.refreshTokenWithLock(() => this.performFileTokenRefresh(prompt, vars, context));
+    await this.refreshTokenWithLock(
+      () => this.performFileTokenRefresh(prompt, vars, context),
+      () => {
+        logger.debug('[HTTP Provider Auth]: Acquired file auth refresh lock');
+      },
+    );
   }
 
   private async performFileTokenRefresh(
@@ -1841,6 +1860,9 @@ export class HttpProvider implements ApiProvider {
     };
 
     try {
+      logger.debug(
+        `[HTTP Provider Auth]: Invoking file auth function ${filePath}#${functionName ?? defaultFunctionName}`,
+      );
       const authFn = await loadFunction<
         (authContext: CallApiContextParams) => Promise<FileAuthResult> | FileAuthResult
       >({
@@ -1851,7 +1873,9 @@ export class HttpProvider implements ApiProvider {
       const result = FileAuthResultSchema.parse(await authFn(authContext));
       this.lastToken = result.token;
       this.lastTokenExpiresAt = result.expiration ?? undefined;
-      logger.debug('[HTTP Provider Auth]: Successfully refreshed file auth token');
+      logger.info(
+        `[HTTP Provider Auth]: Successfully refreshed file auth token (${formatFileAuthFreshness(result.expiration)})`,
+      );
     } catch (err) {
       logger.error(`[HTTP Provider Auth]: Failed to refresh file auth token: ${String(err)}`);
       throw new Error(`Failed to refresh file auth token: ${String(err)}`);
