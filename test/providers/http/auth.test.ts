@@ -1350,6 +1350,7 @@ describe('HttpProvider - File Auth', () => {
       };
     });
     vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
 
     const provider = new HttpProvider(mockUrl, {
       config: {
@@ -1391,6 +1392,28 @@ describe('HttpProvider - File Auth', () => {
         }),
       );
     }
+    expect(debugSpy).toHaveBeenCalledWith('[HTTP Provider Auth]: Acquired file auth refresh lock');
+    expect(debugSpy).toHaveBeenCalledWith(
+      '[HTTP Provider Auth]: Invoking file auth function ./auth/get-token.js#default',
+    );
+    expect(
+      debugSpy.mock.calls.filter(
+        ([message]) => message === '[HTTP Provider Auth]: Acquired file auth refresh lock',
+      ),
+    ).toHaveLength(1);
+    expect(
+      debugSpy.mock.calls.filter(
+        ([message]) =>
+          message ===
+          '[HTTP Provider Auth]: Invoking file auth function ./auth/get-token.js#default',
+      ),
+    ).toHaveLength(1);
+    expect(
+      debugSpy.mock.calls.filter(
+        ([message]) =>
+          message === '[HTTP Provider Auth]: Token refresh already in progress, waiting...',
+      ).length,
+    ).toBeGreaterThan(0);
   });
 
   it('should make file auth values available to transformRequest before the request is rendered', async () => {
@@ -1522,6 +1545,68 @@ describe('HttpProvider - File Auth', () => {
           session: 'session-123',
         }),
       }),
+    );
+  });
+
+  it('should log how many seconds a refreshed file auth token stays fresh', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'expiring-token',
+      expiration: 43_000,
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {},
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[HTTP Provider Auth]: Successfully refreshed file auth token (expires in 42 seconds)',
+    );
+  });
+
+  it('should log when a refreshed file auth token never expires', async () => {
+    const authFn = vi.fn().mockResolvedValue({
+      token: 'non-expiring-token',
+    });
+    vi.mocked(importModule).mockImplementation(async () => ({ default: authFn }));
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => {});
+
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: {
+          Authorization: 'Bearer {{token}}',
+        },
+        auth: {
+          type: 'file',
+          path: './auth/get-token.js',
+        },
+      },
+    });
+
+    await provider.callApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test prompt' },
+      vars: {},
+    });
+
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[HTTP Provider Auth]: Successfully refreshed file auth token (never expires)',
     );
   });
 
