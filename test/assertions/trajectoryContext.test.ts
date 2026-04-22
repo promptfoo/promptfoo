@@ -60,6 +60,8 @@ describe('trajectory assertion context', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    createTraceTrajectorySpy.mockReset();
+    mockTraceStore.getTrace.mockReset();
     mockTraceStore.getTrace.mockResolvedValue(traceData);
   });
 
