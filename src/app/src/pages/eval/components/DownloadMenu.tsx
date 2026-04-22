@@ -358,10 +358,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         }),
       ]);
 
-      // Create a modified copy of the full config with only failed tests.
       const configCopy = { ...fullConfig, tests: failedTests };
-
-      // Create the file name
       const fileName = getFilename('failed-tests.yaml');
 
       downloadYamlConfig(
