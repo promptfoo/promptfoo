@@ -282,6 +282,46 @@ describe('EvalOutputCell', () => {
     expect(dialogContent).toHaveTextContent('Assertion 2 (relevance): another value');
   });
 
+  it('uses rendered assertion values in comment dialog when present', async () => {
+    const user = userEvent.setup();
+    const propsWithRenderedAssertionValue: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        gradingResult: {
+          ...defaultProps.output.gradingResult,
+          componentResults: [
+            {
+              assertion: {
+                type: 'llm-rubric' as AssertionType,
+                value: 'Does output reference {{myVar}}?',
+              },
+              metadata: {
+                renderedAssertionValue: 'Does output reference hello world?',
+              },
+              pass: true,
+              reason: 'Rendered rubric passed',
+              score: 1,
+            },
+          ],
+          pass: true,
+          reason: 'Test reason',
+          score: 1,
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithRenderedAssertionValue} />);
+
+    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+
+    const dialogContent = screen.getByTestId('context-text');
+    expect(dialogContent).toHaveTextContent(
+      'Assertion 1 (llm-rubric): Does output reference hello world?',
+    );
+    expect(dialogContent).not.toHaveTextContent('{{myVar}}');
+  });
+
   it('falls back to overall grading result when component results are empty', async () => {
     const propsWithEmptyComponentResults: MockEvalOutputCellProps = {
       ...defaultProps,
