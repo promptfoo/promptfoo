@@ -83,7 +83,7 @@ Follow the established pattern from HuggingFace datasets integration, with an ad
 
 ### URL Schema
 
-```
+```text
 langfuse://traces?<filter-params>
 langfuse://sessions/<session-id>
 ```
@@ -221,7 +221,7 @@ interface TestCaseFromTrace {
 
 ### Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                     promptfooconfig.yaml                         │
 │  tests: langfuse://traces?tags=production&limit=100             │

@@ -336,6 +336,24 @@ describe('langfuseTraces', () => {
       expect(tests[0].providerOutput).toBeUndefined();
     });
 
+    it('should preserve empty string outputs for assertion-only mode', async () => {
+      mockTraceList.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-empty-output',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: 'Some input',
+            output: '',
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      expect(tests[0].vars?.output).toBe('');
+      expect(tests[0].providerOutput).toBe('');
+    });
+
     it('should handle traces with OpenAI chat format', async () => {
       mockTraceList.mockResolvedValueOnce({
         data: [

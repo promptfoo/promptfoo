@@ -61,6 +61,20 @@ describe('runEval', () => {
     expect(mockProvider.callApi).toHaveBeenCalledWith('Test prompt', expect.anything(), undefined);
   });
 
+  it('should use empty providerOutput without calling the provider', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: { providerOutput: '' },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].response?.output).toBe('');
+    expect(mockProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should pass dynamic prompt config from prompt functions to the provider', async () => {
     const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
     const promptWithFunction: Prompt = {

@@ -1,6 +1,6 @@
 ---
 sidebar_label: Langfuse
-description: Integrate Langfuse prompts and traces with Promptfoo for LLM testing. Evaluate stored traces, use version-controlled prompts, and sync evaluation scores back to Langfuse.
+description: Integrate Langfuse prompts and traces with Promptfoo for LLM testing. Evaluate stored traces and use version-controlled prompts in evals.
 keywords:
   [langfuse, llm observability, traces, prompt management, production evaluation, llm monitoring]
 ---
@@ -29,7 +29,7 @@ Promptfoo integrates with Langfuse in two ways:
    ```bash
    export LANGFUSE_PUBLIC_KEY="pk-lf-..."
    export LANGFUSE_SECRET_KEY="sk-lf-..."
-   export LANGFUSE_HOST="https://cloud.langfuse.com"  # or self-hosted URL
+   export LANGFUSE_BASE_URL="https://cloud.langfuse.com"  # or LANGFUSE_HOST/self-hosted URL
    ```
 
 ## Using Langfuse prompts

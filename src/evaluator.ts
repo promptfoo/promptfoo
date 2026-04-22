@@ -768,10 +768,11 @@ async function callProviderForRunEval({
   vars: Vars;
 }): Promise<ProviderCallResult> {
   const startTime = Date.now();
-  const traceContext = test.providerOutput
+  const hasProviderOutput = test.providerOutput !== undefined;
+  const traceContext = hasProviderOutput
     ? null
     : await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx, testSuite);
-  const response = test.providerOutput
+  const response = hasProviderOutput
     ? {
         output: test.providerOutput,
         tokenUsage: createEmptyTokenUsage(),
