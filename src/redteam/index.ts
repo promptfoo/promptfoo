@@ -1326,17 +1326,19 @@ export async function synthesize({
 
       const languageResults = await Promise.allSettled(languagePromises);
 
-      for (const result of languageResults) {
+      for (const [index, result] of languageResults.entries()) {
         if (result.status === 'fulfilled') {
           const { lang, tests, requested, generated } = result.value;
 
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
+          const lang = languages[index];
           // Handle rejected promise
           logger.warn(
             `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
           );
+          resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
         }
       }
 
@@ -1461,16 +1463,18 @@ export async function synthesize({
 
         const languageResults = await Promise.allSettled(languagePromises);
 
-        for (const result of languageResults) {
+        for (const [index, result] of languageResults.entries()) {
           if (result.status === 'fulfilled') {
             const { lang, tests, requested, generated } = result.value;
 
             allCustomTests.push(...tests);
             resultsPerLanguage[lang || 'default'] = { requested, generated };
           } else {
+            const lang = languages[index];
             logger.warn(
               `[Language Processing] Error generating tests for custom plugin ${plugin.id}: ${result.reason}`,
             );
+            resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
           }
         }
 

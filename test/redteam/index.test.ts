@@ -409,6 +409,62 @@ describe('synthesize', () => {
       );
     });
 
+    it('should report failed custom file plugin language batches', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
+      const pluginPath = 'test/redteam/fixtures/custom-plugin-language-failure.yaml';
+      const fileUtil = await import('../../src/util/file');
+      vi.spyOn(fileUtil, 'maybeLoadFromExternalFile').mockImplementation((filePath) => {
+        if (String(filePath).endsWith(pluginPath)) {
+          return {
+            generator: 'Prompt: language-specific probe',
+            grader: 'Grade the response based on {{ purpose }}',
+            metric: 'custom-language-failure',
+          };
+        }
+        return filePath;
+      });
+
+      mockProvider.callApi.mockImplementation(async (input: string) => {
+        if (input.includes('language: fr')) {
+          throw new Error('French generation failed');
+        }
+        return { output: 'Prompt: guten tag' };
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          {
+            id: `file://./${pluginPath}`,
+            numTests: 1,
+            config: {
+              language: ['fr', 'de'],
+            },
+          },
+        ],
+        prompts: ['Test prompt'],
+        provider: mockProvider,
+        purpose: 'Custom plugin purpose',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.language).toBe('de');
+      expect(result.failedPlugins).toEqual([
+        {
+          pluginId: `(fr) file://./${pluginPath}`,
+          requested: 1,
+        },
+      ]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          `[Language Processing] Error generating tests for custom plugin file://./${pluginPath}: Error: French generation failed`,
+        ),
+      );
+    });
+
     it('should pass target inputs into custom file plugins in multi-input mode', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue(undefined);
       const pluginPath = 'test/redteam/fixtures/custom-plugin-multi-input.yaml';
