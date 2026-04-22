@@ -220,6 +220,11 @@ export function generateTable(
     const rowCells = [...row.vars.map((v) => ellipsize(v, tableCellMaxLength))];
 
     for (const output of row.outputs) {
+      if (!output) {
+        rowCells.push('');
+        continue;
+      }
+
       const text = ellipsize(output.text, tableCellMaxLength);
       let cellContent: string;
 

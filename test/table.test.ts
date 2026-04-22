@@ -152,6 +152,30 @@ describe('table', () => {
       );
     });
 
+    it('should preserve sparse output cells', () => {
+      const outputs = [] as EvaluateTableOutput[];
+      outputs[1] = createEvaluateTableOutput({ text: 'second output' });
+      const testTable: EvaluateTable = createEvaluateTable({
+        head: {
+          vars: [],
+          prompts: [createCompletedPrompt('first prompt'), createCompletedPrompt('second prompt')],
+        },
+        body: [
+          createEvaluateTableRow({
+            vars: [],
+            outputs,
+          }),
+        ],
+      });
+
+      generateTable(testTable);
+
+      expect(mockTableInstances[0].push).toHaveBeenCalledWith([
+        '',
+        chalk.green('[PASS] ') + 'second output',
+      ]);
+    });
+
     it('should append assertion details when requested', () => {
       const testTable = createEvaluateTable({
         body: [
