@@ -25,6 +25,8 @@ export OPENAI_API_KEY=sk-...
 
 When this environment variable is set, Promptfoo will use your OpenAI account instead of the built-in inference service for plugins that do not require remote generation.
 
+If your CI/CD environment sets `OPENAI_API_KEY` but you want the same behavior as `--remote` for remote-capable red-team paths, set `PROMPTFOO_ENABLE_REMOTE_GENERATION=true`. Explicit remote-generation disable flags still take precedence.
+
 You can also override the default red team providers with your own models:
 
 ```yaml

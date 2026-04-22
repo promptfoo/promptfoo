@@ -239,7 +239,7 @@ describe('remote generation error helpers', () => {
 
   it('should include the --remote and PROMPTFOO_ENABLE_REMOTE_GENERATION recovery paths when remote generation is implicitly disabled', () => {
     expect(getRemoteGenerationDisabledError('jailbreak:hydra strategy')).toBe(
-      'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it: run with --remote, set PROMPTFOO_ENABLE_REMOTE_GENERATION=1 (useful in CI/CD when OPENAI_API_KEY is set for other providers), set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+      'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_ENABLE_REMOTE_GENERATION=1 (useful in CI/CD when OPENAI_API_KEY is set for other providers), set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
     );
   });
 

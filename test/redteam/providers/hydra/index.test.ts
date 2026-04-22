@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import {
+  getRemoteGenerationDisabledError,
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../../../src/redteam/remoteGeneration';
@@ -209,9 +210,7 @@ describe('HydraProvider', () => {
 
       expect(() => {
         new HydraProvider({ injectVar: 'input' });
-      }).toThrow(
-        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
-      );
+      }).toThrow(getRemoteGenerationDisabledError('jailbreak:hydra strategy'));
     });
 
     it('should throw the explicit-disabled error when a disable flag is set', () => {

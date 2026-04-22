@@ -45,7 +45,7 @@ Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses host
 
 ## With Your Own API Key
 
-Setting `OPENAI_API_KEY` routes generation and grading through your OpenAI account instead of promptfoo servers:
+Setting `OPENAI_API_KEY` routes locally-capable generation and grading through your OpenAI account instead of promptfoo servers:
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -58,7 +58,17 @@ redteam:
   provider: anthropic:messages:claude-sonnet-4-20250514
 ```
 
-With this configuration, promptfoo servers receive only [telemetry](#telemetry).
+With this configuration, promptfoo servers receive only [telemetry](#telemetry), unless you opt back into hosted inference with `--remote` or `PROMPTFOO_ENABLE_REMOTE_GENERATION`.
+
+## Forcing Remote Generation
+
+Some red-team plugins and strategies require Promptfoo-hosted inference. If your CI/CD environment sets `OPENAI_API_KEY` for other providers but still needs those remote-only paths, set:
+
+```bash
+export PROMPTFOO_ENABLE_REMOTE_GENERATION=true
+```
+
+This is the environment-variable equivalent of passing `--remote`. It opts supported hosted generation and grading paths back into `api.promptfoo.app`, so Promptfoo may receive the generation and grading payloads listed above. `PROMPTFOO_DISABLE_REMOTE_GENERATION` and `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` still take precedence. To use your own hosted endpoint instead of Promptfoo's, set `PROMPTFOO_REMOTE_GENERATION_URL`.
 
 ## With Your ChatGPT Subscription
 
@@ -141,11 +151,11 @@ See the [Enterprise Overview](/docs/enterprise/) for deployment options.
 
 ## Configuration Summary
 
-| Requirement                  | Configuration                                                                                                                                             |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No data to Promptfoo servers | Use API-key/local providers for every generation, grading, embedding, and moderation path; avoid remote-only plugins; set `PROMPTFOO_DISABLE_TELEMETRY=1` |
-| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local provider                                                                                 |
-| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                                                                                                               |
+| Requirement                  | Configuration                                                                                                                                                                                                                                                                |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No data to Promptfoo servers | Use API-key/local providers for every generation, grading, embedding, and moderation path; avoid remote-only plugins; set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` and `PROMPTFOO_DISABLE_TELEMETRY=1`; do not pass `--remote` or set `PROMPTFOO_ENABLE_REMOTE_GENERATION` |
+| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local provider                                                                                                                                                                                                    |
+| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                                                                                                                                                                                                                                  |
 
 ## Related Documentation
 

@@ -830,11 +830,13 @@ Some providers such as Anthropic may disable your account for generating harmful
 
 ### Remote Generation
 
-By default, promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+Promptfoo can use a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. When local credentials such as `OPENAI_API_KEY` are present, promptfoo uses them for locally-capable generation and grading, but some plugins and strategies still require remote generation.
 
 :::info Cloud Users
 If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
 :::
+
+If your CI/CD environment sets `OPENAI_API_KEY` for other providers but still needs remote-only red team plugins or strategies, set `PROMPTFOO_ENABLE_REMOTE_GENERATION=true`. This is the environment-variable equivalent of passing `--remote`. `PROMPTFOO_DISABLE_REMOTE_GENERATION` and `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` still take precedence.
 
 :::warning
 Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.

@@ -54,6 +54,10 @@ If you cannot get network access to our remote generation service, you can:
 
 See our [configuration guide](/docs/configuration/guide/) for more details on these options.
 
+## CI/CD with Local Provider Keys
+
+Some pipelines set `OPENAI_API_KEY` for target providers or other non-red-team steps. If a remote-only plugin or strategy reports that remote generation is disabled, set `PROMPTFOO_ENABLE_REMOTE_GENERATION=true` or pass `--remote` for that run. This opts back into hosted remote generation where supported. If you need to keep Promptfoo-hosted endpoints disabled, use `PROMPTFOO_REMOTE_GENERATION_URL` to point at a self-hosted generation endpoint instead.
+
 ## Getting Help
 
 If you continue experiencing issues, [contact us](/contact/) for enterprise support.
