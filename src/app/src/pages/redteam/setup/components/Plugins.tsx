@@ -273,6 +273,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
         return policy.trim().length > 0;
       }
 
+      if (typeof policy !== 'object' || policy === null || !('text' in policy)) {
+        return false;
+      }
+
       return typeof policy.text === 'string' && policy.text.trim().length > 0;
     });
 
