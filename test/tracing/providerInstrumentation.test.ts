@@ -15,14 +15,14 @@ import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
   GenAIAttributes,
-  PromptfooAttributes,
-  getTraceparent,
   getCurrentTraceId,
+  getTraceparent,
+  PromptfooAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
+
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
 // Mock external dependencies for provider tests
@@ -47,8 +47,9 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({});
-    tracerProvider.addSpanProcessor(new SimpleSpanProcessor(memoryExporter));
+    tracerProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    });
     tracerProvider.register();
   });
 
@@ -307,7 +308,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(chatSpan).toBeDefined();
 
       // Verify parent-child relationship
-      expect(embeddingSpan!.parentSpanId).toBe(chatSpan!.spanContext().spanId);
+      expect(embeddingSpan!.parentSpanContext?.spanId).toBe(chatSpan!.spanContext().spanId);
       expect(embeddingSpan!.spanContext().traceId).toBe(chatSpan!.spanContext().traceId);
     });
   });

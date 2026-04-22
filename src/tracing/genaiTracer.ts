@@ -1,13 +1,13 @@
 import {
-  trace,
+  type Attributes,
   context,
   propagation,
-  SpanKind,
-  SpanStatusCode,
   ROOT_CONTEXT,
   type Span,
+  SpanKind,
+  SpanStatusCode,
   type Tracer,
-  type Attributes,
+  trace,
 } from '@opentelemetry/api';
 
 import type { TokenUsage } from '../types/shared';
@@ -47,6 +47,8 @@ export const GenAIAttributes = {
   USAGE_REASONING_TOKENS: 'gen_ai.usage.reasoning_tokens',
   USAGE_ACCEPTED_PREDICTION_TOKENS: 'gen_ai.usage.accepted_prediction_tokens',
   USAGE_REJECTED_PREDICTION_TOKENS: 'gen_ai.usage.rejected_prediction_tokens',
+  USAGE_CACHE_READ_INPUT_TOKENS: 'gen_ai.usage.cache_read_input_tokens',
+  USAGE_CACHE_CREATION_INPUT_TOKENS: 'gen_ai.usage.cache_creation_input_tokens',
 } as const;
 
 // Promptfoo-specific attributes
@@ -152,6 +154,8 @@ export interface GenAISpanResult {
   cacheHit?: boolean;
   /** Response body (will be truncated to MAX_BODY_LENGTH) */
   responseBody?: string;
+  /** Additional provider-specific attributes to add to the span */
+  additionalAttributes?: Record<string, string | number | boolean>;
 }
 
 /**
@@ -227,7 +231,17 @@ export async function withGenAISpan<T>(
         setGenAIResponseAttributes(span, result, ctx.sanitizeBodies);
       }
 
-      span.setStatus({ code: SpanStatusCode.OK });
+      // Check if response contains an error (ProviderResponse pattern)
+      // Many providers return { error: "..." } instead of throwing
+      const valueAsRecord = value as Record<string, unknown>;
+      if (valueAsRecord && typeof valueAsRecord.error === 'string' && valueAsRecord.error) {
+        span.setStatus({
+          code: SpanStatusCode.ERROR,
+          message: valueAsRecord.error,
+        });
+      } else {
+        span.setStatus({ code: SpanStatusCode.OK });
+      }
       return value;
     } catch (error) {
       span.setStatus({
@@ -316,7 +330,7 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
  * Sanitize sensitive data from a body string.
  * Redacts API keys, secrets, tokens, and other sensitive patterns.
  */
-function sanitizeBody(body: string): string {
+export function sanitizeBody(body: string): string {
   let sanitized = body;
   for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
     if (typeof replacement === 'function') {
@@ -395,6 +409,18 @@ export function setGenAIResponseAttributes(
           usage.completionDetails.rejectedPrediction,
         );
       }
+      if (usage.completionDetails.cacheReadInputTokens !== undefined) {
+        span.setAttribute(
+          GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+          usage.completionDetails.cacheReadInputTokens,
+        );
+      }
+      if (usage.completionDetails.cacheCreationInputTokens !== undefined) {
+        span.setAttribute(
+          GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
+          usage.completionDetails.cacheCreationInputTokens,
+        );
+      }
     }
   }
 
@@ -418,6 +444,21 @@ export function setGenAIResponseAttributes(
       PromptfooAttributes.RESPONSE_BODY,
       truncateBody(result.responseBody, sanitize),
     );
+  }
+
+  // Provider-specific additional attributes
+  // Apply same sanitization/truncation as request/response bodies to prevent secret leakage
+  if (result.additionalAttributes) {
+    for (const [key, value] of Object.entries(result.additionalAttributes)) {
+      if (value !== undefined && value !== null) {
+        // Sanitize string values (e.g., reasoning text, conversation content)
+        if (typeof value === 'string') {
+          span.setAttribute(key, truncateBody(value, sanitize));
+        } else {
+          span.setAttribute(key, value);
+        }
+      }
+    }
   }
 }
 

@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExportResultCode } from '@opentelemetry/core';
-import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalSpanExporter } from '../../src/tracing/localSpanExporter';
+import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 
 // Mock the store module
 const mockAddSpans = vi.fn();
@@ -33,6 +33,7 @@ describe('LocalSpanExporter', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.resetAllMocks();
   });
 
@@ -48,14 +49,18 @@ describe('LocalSpanExporter', () => {
       status: { code: number; message?: string };
     }> = {},
   ): ReadableSpan {
+    const traceId = overrides.traceId ?? 'trace-id-123';
     return {
       spanContext: () => ({
-        traceId: overrides.traceId ?? 'trace-id-123',
+        traceId,
         spanId: overrides.spanId ?? 'span-id-456',
         traceFlags: 1,
         isRemote: false,
       }),
-      parentSpanId: overrides.parentSpanId ?? undefined,
+      // OpenTelemetry SDK 2.x uses parentSpanContext instead of parentSpanId
+      parentSpanContext: overrides.parentSpanId
+        ? { traceId, spanId: overrides.parentSpanId, traceFlags: 1, isRemote: false }
+        : undefined,
       name: overrides.name ?? 'test-span',
       startTime: overrides.startTime ?? [1000, 500000000], // 1000.5 seconds
       endTime: overrides.endTime ?? [1001, 200000000], // 1001.2 seconds
@@ -103,7 +108,7 @@ describe('LocalSpanExporter', () => {
             name: 'test-span',
           }),
         ],
-        { skipTraceCheck: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
     });
 
@@ -130,21 +135,55 @@ describe('LocalSpanExporter', () => {
       expect(mockAddSpans).toHaveBeenCalledTimes(2);
 
       // First call for trace-1 with 2 spans
-      expect(mockAddSpans).toHaveBeenCalledWith(
+      expect(mockAddSpans).toHaveBeenNthCalledWith(
+        1,
         'trace-1',
         expect.arrayContaining([
           expect.objectContaining({ spanId: 'span-1' }),
           expect.objectContaining({ spanId: 'span-2' }),
         ]),
-        { skipTraceCheck: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
 
       // Second call for trace-2 with 1 span
-      expect(mockAddSpans).toHaveBeenCalledWith(
+      expect(mockAddSpans).toHaveBeenNthCalledWith(
+        2,
         'trace-2',
         [expect.objectContaining({ spanId: 'span-3' })],
-        { skipTraceCheck: false },
+        { skipTraceCheck: false, warnIfMissingTrace: false },
       );
+    });
+
+    it('retries once when the trace record is not visible yet', async () => {
+      vi.useFakeTimers();
+      try {
+        const span = createMockSpan();
+
+        mockAddSpans
+          .mockResolvedValueOnce({ stored: false, reason: 'Trace trace-id-123 not found' })
+          .mockResolvedValueOnce({ stored: true });
+
+        const resultPromise = exportSpans([span]);
+        await vi.advanceTimersByTimeAsync(50);
+        const result = await resultPromise;
+
+        expect(result.code).toBe(ExportResultCode.SUCCESS);
+        expect(mockAddSpans).toHaveBeenCalledTimes(2);
+        expect(mockAddSpans).toHaveBeenNthCalledWith(
+          1,
+          'trace-id-123',
+          [expect.objectContaining({ spanId: 'span-id-456' })],
+          { skipTraceCheck: false, warnIfMissingTrace: false },
+        );
+        expect(mockAddSpans).toHaveBeenNthCalledWith(
+          2,
+          'trace-id-123',
+          [expect.objectContaining({ spanId: 'span-id-456' })],
+          { skipTraceCheck: false, warnIfMissingTrace: false },
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should convert span times to milliseconds', async () => {

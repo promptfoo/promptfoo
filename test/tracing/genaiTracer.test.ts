@@ -1,15 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
-  PromptfooAttributes,
-  withGenAISpan,
-  setGenAIResponseAttributes,
-  getTraceparent,
-  getCurrentTraceId,
-  getCurrentSpanId,
   type GenAISpanContext,
   type GenAISpanResult,
+  getCurrentSpanId,
+  getCurrentTraceId,
+  getTraceparent,
+  PromptfooAttributes,
+  setGenAIResponseAttributes,
+  withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 
 // Mock @opentelemetry/api
@@ -271,6 +271,28 @@ describe('genaiTracer', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith(
         GenAIAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
         5,
+      );
+    });
+
+    it('should set cache token completion details attributes', () => {
+      const result: GenAISpanResult = {
+        tokenUsage: {
+          completionDetails: {
+            cacheReadInputTokens: 150,
+            cacheCreationInputTokens: 40,
+          },
+        },
+      };
+
+      setGenAIResponseAttributes(mockSpan as any, result);
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
+        150,
+      );
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith(
+        GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
+        40,
       );
     });
 

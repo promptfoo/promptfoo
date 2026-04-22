@@ -22,7 +22,7 @@ keywords:
   ]
 date: 2025-10-06
 authors: [ian]
-tags: [safety, benchmarks, best-practices, evaluation]
+tags: [ai-safety, best-practices, evaluation]
 ---
 
 # Top 10 Open Datasets for LLM Safety, Toxicity & Bias Evaluation

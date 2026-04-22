@@ -1,8 +1,9 @@
-import type { SpanData } from '../tracing/store';
 import { getTraceStore } from '../tracing/store';
-import type { TokenUsage } from '../types/shared';
 import { TokenUsageTracker } from './tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
+
+import type { SpanData } from '../tracing/store';
+import type { TokenUsage } from '../types/shared';
 
 /**
  * Query options for retrieving token usage from traces.
@@ -98,7 +99,9 @@ export async function getTokenUsageFromTrace(traceId: string): Promise<TokenUsag
  */
 export async function getTokenUsageFromEvaluation(evalId: string): Promise<TokenUsage> {
   const store = getTraceStore();
-  const traces = await store.getTracesByEvaluation(evalId);
+  const traces = await store.getTracesByEvaluation(evalId, {
+    sanitizeAttributes: false, // We need raw attributes to read token counts
+  });
 
   const result = createEmptyTokenUsage();
 
@@ -177,7 +180,9 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
   const hasCompletionDetails =
     attrs['gen_ai.usage.reasoning_tokens'] !== undefined ||
     attrs['gen_ai.usage.accepted_prediction_tokens'] !== undefined ||
-    attrs['gen_ai.usage.rejected_prediction_tokens'] !== undefined;
+    attrs['gen_ai.usage.rejected_prediction_tokens'] !== undefined ||
+    attrs['gen_ai.usage.cache_read_input_tokens'] !== undefined ||
+    attrs['gen_ai.usage.cache_creation_input_tokens'] !== undefined;
 
   if (hasCompletionDetails) {
     usage.completionDetails = {};
@@ -190,6 +195,13 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
     }
     if (typeof attrs['gen_ai.usage.rejected_prediction_tokens'] === 'number') {
       usage.completionDetails.rejectedPrediction = attrs['gen_ai.usage.rejected_prediction_tokens'];
+    }
+    if (typeof attrs['gen_ai.usage.cache_read_input_tokens'] === 'number') {
+      usage.completionDetails.cacheReadInputTokens = attrs['gen_ai.usage.cache_read_input_tokens'];
+    }
+    if (typeof attrs['gen_ai.usage.cache_creation_input_tokens'] === 'number') {
+      usage.completionDetails.cacheCreationInputTokens =
+        attrs['gen_ai.usage.cache_creation_input_tokens'];
     }
   }
 

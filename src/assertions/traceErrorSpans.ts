@@ -1,6 +1,7 @@
+import { matchesPattern } from './traceUtils';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
-import { matchesPattern } from './traceUtils';
 
 interface TraceErrorSpansValue {
   max_count?: number;
@@ -10,6 +11,10 @@ interface TraceErrorSpansValue {
 
 function isErrorSpan(span: TraceSpan): boolean {
   // Check various ways a span might indicate an error
+  if (span.statusCode === 2) {
+    return true;
+  }
+
   if (span.statusCode && span.statusCode >= 400) {
     return true;
   }

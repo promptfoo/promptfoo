@@ -9,11 +9,10 @@ import { SpanStatusCode } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
   GenAIAttributes,
-  PromptfooAttributes,
   getGenAITracer,
+  PromptfooAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 
@@ -26,8 +25,9 @@ describe('OpenTelemetry Tracing Integration', () => {
   beforeAll(() => {
     // Set up an in-memory exporter for testing
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({});
-    tracerProvider.addSpanProcessor(new SimpleSpanProcessor(memoryExporter));
+    tracerProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    });
     tracerProvider.register();
   });
 

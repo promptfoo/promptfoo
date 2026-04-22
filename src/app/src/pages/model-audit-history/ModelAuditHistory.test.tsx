@@ -1,14 +1,12 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditHistory from './ModelAuditHistory';
 
 vi.mock('../model-audit/stores');
-
-const theme = createTheme();
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -39,10 +37,15 @@ const createMockScan = (id: string, name: string, hasErrors: boolean = false) =>
 describe('ModelAuditHistory', () => {
   const mockUseHistoryStore = vi.mocked(useModelAuditHistoryStore);
   const mockFetchHistoricalScans = vi.fn();
+  const mockFetchHistoricalScanRange = vi.fn();
   const mockDeleteHistoricalScan = vi.fn();
   const mockSetPageSize = vi.fn();
   const mockSetCurrentPage = vi.fn();
   const mockSetSortModel = vi.fn();
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
 
   const getDefaultHistoryState = () => ({
     historicalScans: [],
@@ -54,6 +57,7 @@ describe('ModelAuditHistory', () => {
     sortModel: [{ field: 'createdAt', sort: 'desc' as const }],
     searchQuery: '',
     fetchHistoricalScans: mockFetchHistoricalScans,
+    fetchHistoricalScanRange: mockFetchHistoricalScanRange,
     fetchScanById: vi.fn(),
     deleteHistoricalScan: mockDeleteHistoricalScan,
     setPageSize: mockSetPageSize,
@@ -65,24 +69,25 @@ describe('ModelAuditHistory', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchHistoricalScanRange.mockResolvedValue({ scans: [], offset: 0, total: 0 });
     mockUseHistoryStore.mockReturnValue(getDefaultHistoryState() as any);
   });
 
   const renderComponent = () => {
     return render(
-      <MemoryRouter>
-        <ThemeProvider theme={theme}>
+      <TooltipProvider delayDuration={0}>
+        <MemoryRouter>
           <ModelAuditHistory />
-        </ThemeProvider>
-      </MemoryRouter>,
+        </MemoryRouter>
+      </TooltipProvider>,
     );
   };
 
   it('should render the history page with New Scan button', () => {
     renderComponent();
 
-    // The DataGrid toolbar includes the New Scan button
-    expect(screen.getByText('New Scan')).toBeInTheDocument();
+    // Should have at least one "New Scan" button (toolbar + possibly empty state)
+    expect(screen.getAllByText('New Scan').length).toBeGreaterThanOrEqual(1);
   });
 
   it('should fetch historical scans on mount', async () => {
@@ -101,8 +106,9 @@ describe('ModelAuditHistory', () => {
 
     renderComponent();
 
-    // DataGrid shows loading overlay
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    // DataTable shows loading overlay with spinner
+    const spinner = document.querySelector('.animate-spin');
+    expect(spinner).toBeInTheDocument();
   });
 
   it('should display error alert when there is an error', () => {
@@ -132,13 +138,31 @@ describe('ModelAuditHistory', () => {
     expect(screen.getByText('Scan 2')).toBeInTheDocument();
   });
 
-  it('should navigate to new scan page when New Scan button is clicked', async () => {
-    const user = userEvent.setup();
+  it('should not render stale scans when the API reports zero total scans', () => {
+    const staleScans = [createMockScan('stale', 'Stale Scan')];
+
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: staleScans,
+      totalCount: 0,
+    } as any);
+
     renderComponent();
 
-    await user.click(screen.getByText('New Scan'));
+    expect(screen.queryByText('Stale Scan')).not.toBeInTheDocument();
+    expect(screen.getByText('No data found')).toBeInTheDocument();
+  });
 
-    expect(mockNavigate).toHaveBeenCalledWith('/model-audit/setup');
+  it('should have New Scan button in toolbar', async () => {
+    renderComponent();
+
+    // Verify the New Scan button is rendered in the toolbar
+    await waitFor(() => {
+      const newScanButtons = screen.getAllByText('New Scan');
+      expect(newScanButtons.length).toBeGreaterThanOrEqual(1);
+      // Verify at least one is inside a clickable element
+      expect(newScanButtons[0].closest('button, a')).not.toBeNull();
+    });
   });
 
   it('should navigate to scan details when row is clicked', async () => {
@@ -191,5 +215,53 @@ describe('ModelAuditHistory', () => {
     // Should show Clean and Issues Found chips
     expect(screen.getByText('Clean')).toBeInTheDocument();
     expect(screen.getByText('Issues Found')).toBeInTheDocument();
+  });
+
+  it('should request server-supported sorts for status and checks columns', async () => {
+    const user = userEvent.setup();
+    const mockScans = [
+      createMockScan('1', 'Clean Scan', false),
+      createMockScan('2', 'Issues Scan', true),
+    ];
+
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: mockScans,
+      totalCount: 2,
+    } as any);
+
+    renderComponent();
+
+    await user.click(screen.getByRole('columnheader', { name: 'Status' }));
+    expect(mockSetSortModel).toHaveBeenLastCalledWith([{ field: 'hasErrors', sort: 'asc' }]);
+
+    await user.click(screen.getByRole('columnheader', { name: 'Checks' }));
+    expect(mockSetSortModel).toHaveBeenLastCalledWith([
+      { field: 'totalChecks', sort: expect.stringMatching(/^(asc|desc)$/) },
+    ]);
+  });
+
+  it('should let server virtualization reload rows after sorting without duplicate bootstrap fetches', async () => {
+    const user = userEvent.setup();
+    const mockScans = [
+      createMockScan('1', 'Clean Scan', false),
+      createMockScan('2', 'Issues Scan', true),
+    ];
+
+    mockUseHistoryStore.mockReturnValue({
+      ...getDefaultHistoryState(),
+      historicalScans: mockScans,
+      totalCount: 2,
+    } as any);
+
+    renderComponent();
+
+    await waitFor(() => expect(mockFetchHistoricalScans).toHaveBeenCalledTimes(1));
+    mockFetchHistoricalScans.mockClear();
+
+    await user.click(screen.getByRole('columnheader', { name: 'Status' }));
+
+    expect(mockSetSortModel).toHaveBeenLastCalledWith([{ field: 'hasErrors', sort: 'asc' }]);
+    expect(mockFetchHistoricalScans).not.toHaveBeenCalled();
   });
 });

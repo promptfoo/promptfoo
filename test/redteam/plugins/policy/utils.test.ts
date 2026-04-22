@@ -1,7 +1,4 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { validate as isUUID } from 'uuid';
-import { sha256 } from '../../../../src/util/createHash';
-import { PolicyObjectSchema } from '../../../../src/redteam/types';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { POLICY_METRIC_PREFIX } from '../../../../src/redteam/plugins/policy/constants';
 import {
   deserializePolicyIdFromMetric,
@@ -11,13 +8,15 @@ import {
   isValidPolicyObject,
   makeCustomPolicyCloudUrl,
   makeInlinePolicyId,
+  makeInlinePolicyIdSync,
 } from '../../../../src/redteam/plugins/policy/utils';
-import { v4 as uuidv4 } from 'uuid';
+import { PolicyObjectSchema } from '../../../../src/redteam/types';
+import { sha256 } from '../../../../src/util/createHash';
+import { isUuid } from '../../../../src/util/uuid';
 
 // Mock dependencies
-vi.mock('uuid', () => ({
-  validate: vi.fn(),
-  v4: vi.fn(),
+vi.mock('../../../../src/util/uuid', () => ({
+  isUuid: vi.fn(),
 }));
 
 vi.mock('../../../../src/util/createHash', () => ({
@@ -52,7 +51,6 @@ describe('Policy Utils', () => {
 
     it('should deserialize a policy ID and remove strategy suffix', () => {
       const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
-      (uuidv4 as Mock).mockReturnValue(mockUuid);
 
       const result = deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:${mockUuid}/jailbreak`);
       expect(result).toBe(mockUuid);
@@ -60,7 +58,6 @@ describe('Policy Utils', () => {
 
     it('should handle multiple strategy suffixes', () => {
       const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
-      (uuidv4 as Mock).mockReturnValue(mockUuid);
 
       const result = deserializePolicyIdFromMetric(
         `${POLICY_METRIC_PREFIX}:${mockUuid}/jailbreak/extra`,
@@ -105,10 +102,11 @@ describe('Policy Utils', () => {
     });
 
     it('should preserve strategy suffix from originalMetric', () => {
+      const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
       expect(
-        formatPolicyIdentifierAsMetric('test-policy', `PolicyViolation:${uuidv4()}/jailbreak`),
+        formatPolicyIdentifierAsMetric('test-policy', `PolicyViolation:${mockUuid}/jailbreak`),
       ).toBe('Policy/jailbreak: test-policy');
-      expect(formatPolicyIdentifierAsMetric('my-policy', `PolicyViolation:${uuidv4()}/GOAT`)).toBe(
+      expect(formatPolicyIdentifierAsMetric('my-policy', `PolicyViolation:${mockUuid}/GOAT`)).toBe(
         'Policy/GOAT: my-policy',
       );
     });
@@ -148,20 +146,20 @@ describe('Policy Utils', () => {
 
   describe('determinePolicyTypeFromId', () => {
     it('should return "reusable" for valid UUIDs', () => {
-      (isUUID as Mock).mockReturnValue(true);
+      (isUuid as Mock).mockReturnValue(true);
       expect(determinePolicyTypeFromId('550e8400-e29b-41d4-a716-446655440000')).toBe('reusable');
-      expect(isUUID).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000');
+      expect(isUuid).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000');
     });
 
     it('should return "inline" for non-UUID strings', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(determinePolicyTypeFromId('hash123456')).toBe('inline');
       expect(determinePolicyTypeFromId('not-a-uuid')).toBe('inline');
       expect(determinePolicyTypeFromId('')).toBe('inline');
     });
 
     it('should handle edge cases', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(determinePolicyTypeFromId('123')).toBe('inline');
       expect(determinePolicyTypeFromId('550e8400')).toBe('inline');
     });
@@ -211,9 +209,71 @@ describe('Policy Utils', () => {
   });
 
   describe('makeInlinePolicyId', () => {
-    it('should create a 12-character ID from policy text', () => {
+    it('should create a 12-character ID from policy text', async () => {
+      (sha256 as Mock).mockResolvedValue('abcdef1234567890abcdef1234567890');
+      const result = await makeInlinePolicyId('This is my policy text');
+
+      expect(result).toBe('abcdef123456');
+      expect(result).toHaveLength(12);
+      expect(sha256).toHaveBeenCalledWith('This is my policy text');
+    });
+
+    it('should create consistent IDs for the same text', async () => {
+      (sha256 as Mock).mockResolvedValue('1234567890abcdef1234567890abcdef');
+      const text = 'Same policy text';
+      const id1 = await makeInlinePolicyId(text);
+      const id2 = await makeInlinePolicyId(text);
+
+      expect(id1).toBe(id2);
+      expect(id1).toBe('1234567890ab');
+    });
+
+    it('should create different IDs for different text', async () => {
+      (sha256 as Mock)
+        .mockResolvedValueOnce('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        .mockResolvedValueOnce('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
+
+      const id1 = await makeInlinePolicyId('Policy A');
+      const id2 = await makeInlinePolicyId('Policy B');
+
+      expect(id1).toBe('aaaaaaaaaaaa');
+      expect(id2).toBe('bbbbbbbbbbbb');
+      expect(id1).not.toBe(id2);
+    });
+
+    it('should handle empty strings', async () => {
+      (sha256 as Mock).mockResolvedValue('emptyhashabcd1234567890abcdef');
+      const result = await makeInlinePolicyId('');
+
+      expect(result).toBe('emptyhashabc');
+      expect(sha256).toHaveBeenCalledWith('');
+    });
+
+    it('should handle special characters and multiline text', async () => {
+      (sha256 as Mock).mockResolvedValue('specialhash1234567890abcdef');
+      const text = `Line 1
+Line 2
+Special chars: !@#$%^&*()
+Unicode: 你好 🎉`;
+
+      const result = await makeInlinePolicyId(text);
+      expect(result).toBe('specialhash1');
+      expect(sha256).toHaveBeenCalledWith(text);
+    });
+
+    it('should always return 12 characters even if hash is shorter', async () => {
+      (sha256 as Mock).mockResolvedValue('short');
+      const result = await makeInlinePolicyId('Short hash text');
+
+      expect(result).toBe('short');
+      expect(result.length).toBeLessThanOrEqual(12);
+    });
+  });
+
+  describe('makeInlinePolicyIdSync', () => {
+    it('should create a 12-character ID from policy text synchronously', () => {
       (sha256 as Mock).mockReturnValue('abcdef1234567890abcdef1234567890');
-      const result = makeInlinePolicyId('This is my policy text');
+      const result = makeInlinePolicyIdSync('This is my policy text');
 
       expect(result).toBe('abcdef123456');
       expect(result).toHaveLength(12);
@@ -223,52 +283,19 @@ describe('Policy Utils', () => {
     it('should create consistent IDs for the same text', () => {
       (sha256 as Mock).mockReturnValue('1234567890abcdef1234567890abcdef');
       const text = 'Same policy text';
-      const id1 = makeInlinePolicyId(text);
-      const id2 = makeInlinePolicyId(text);
+      const id1 = makeInlinePolicyIdSync(text);
+      const id2 = makeInlinePolicyIdSync(text);
 
       expect(id1).toBe(id2);
       expect(id1).toBe('1234567890ab');
     });
 
-    it('should create different IDs for different text', () => {
-      (sha256 as Mock)
-        .mockReturnValueOnce('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-        .mockReturnValueOnce('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
-
-      const id1 = makeInlinePolicyId('Policy A');
-      const id2 = makeInlinePolicyId('Policy B');
-
-      expect(id1).toBe('aaaaaaaaaaaa');
-      expect(id2).toBe('bbbbbbbbbbbb');
-      expect(id1).not.toBe(id2);
-    });
-
     it('should handle empty strings', () => {
       (sha256 as Mock).mockReturnValue('emptyhashabcd1234567890abcdef');
-      const result = makeInlinePolicyId('');
+      const result = makeInlinePolicyIdSync('');
 
       expect(result).toBe('emptyhashabc');
       expect(sha256).toHaveBeenCalledWith('');
-    });
-
-    it('should handle special characters and multiline text', () => {
-      (sha256 as Mock).mockReturnValue('specialhash1234567890abcdef');
-      const text = `Line 1
-Line 2
-Special chars: !@#$%^&*()
-Unicode: 你好 🎉`;
-
-      const result = makeInlinePolicyId(text);
-      expect(result).toBe('specialhash1');
-      expect(sha256).toHaveBeenCalledWith(text);
-    });
-
-    it('should always return 12 characters even if hash is shorter', () => {
-      (sha256 as Mock).mockReturnValue('short');
-      const result = makeInlinePolicyId('Short hash text');
-
-      expect(result).toBe('short');
-      expect(result.length).toBeLessThanOrEqual(12);
     });
   });
 });

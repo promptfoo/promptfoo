@@ -4,7 +4,14 @@ import { modelAuditsTable } from '../database/tables';
 import logger from '../logger';
 import { randomSequence } from '../util/createHash';
 
+import type { MODEL_AUDIT_SORT_FIELDS } from '../types/api/modelAudit';
 import type { ModelAuditScanResults } from '../types/modelAudit';
+
+type ModelAuditSortField = (typeof MODEL_AUDIT_SORT_FIELDS)[number];
+
+function getModelAuditSortColumn(sortField: ModelAuditSortField) {
+  return modelAuditsTable[sortField];
+}
 
 export function createScanId(createdAt: Date = new Date()) {
   return `scan-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
@@ -25,6 +32,7 @@ export interface ModelAuditRecord {
   totalChecks?: number | null;
   passedChecks?: number | null;
   failedChecks?: number | null;
+  // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata?: Record<string, any> | null;
   // Revision tracking fields for deduplication
   modelId?: string | null;
@@ -50,6 +58,7 @@ export default class ModelAudit {
   totalChecks?: number | null;
   passedChecks?: number | null;
   failedChecks?: number | null;
+  // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
   metadata?: Record<string, any> | null;
   // Revision tracking fields for deduplication
   modelId?: string | null;
@@ -78,15 +87,15 @@ export default class ModelAudit {
     const resultsHasErrors = data.results?.has_errors ?? false;
 
     // If hasErrors is explicitly provided, use it; otherwise compute from results and issues
-    if (data.hasErrors !== undefined) {
-      this.hasErrors = data.hasErrors;
-    } else {
+    if (data.hasErrors === undefined) {
       const hasActualErrors =
         resultsHasErrors ||
         (issues &&
           issues.some((issue) => issue.severity === 'critical' || issue.severity === 'error')) ||
         false;
       this.hasErrors = hasActualErrors;
+    } else {
+      this.hasErrors = data.hasErrors;
     }
 
     this.totalChecks = data.totalChecks;
@@ -109,6 +118,7 @@ export default class ModelAudit {
     modelPath: string;
     modelType?: string;
     results: ModelAuditScanResults;
+    // biome-ignore lint/suspicious/noExplicitAny: I think this can truly be any?
     metadata?: Record<string, any>;
     // Revision tracking fields
     modelId?: string;
@@ -262,7 +272,7 @@ export default class ModelAudit {
   static async getMany(
     limit: number = 100,
     offset: number = 0,
-    sortField: 'createdAt' | 'name' | 'modelPath' = 'createdAt',
+    sortField: ModelAuditSortField = 'createdAt',
     sortOrder: 'asc' | 'desc' = 'desc',
     search?: string,
   ): Promise<ModelAudit[]> {
@@ -284,18 +294,21 @@ export default class ModelAudit {
     }
 
     // Determine the sort column using explicit allowlist mapping
-    const sortColumn =
-      sortField === 'name'
-        ? modelAuditsTable.name
-        : sortField === 'modelPath'
-          ? modelAuditsTable.modelPath
-          : modelAuditsTable.createdAt;
+    const sortColumn = getModelAuditSortColumn(sortField);
 
-    // Apply ordering
+    // Apply ordering with a unique tie-breaker so offset-based virtualized loads stay stable.
     if (sortOrder === 'asc') {
-      query = query.orderBy(asc(sortColumn)) as typeof query;
+      query = (
+        sortField === 'id'
+          ? query.orderBy(asc(sortColumn))
+          : query.orderBy(asc(sortColumn), asc(modelAuditsTable.id))
+      ) as typeof query;
     } else {
-      query = query.orderBy(desc(sortColumn)) as typeof query;
+      query = (
+        sortField === 'id'
+          ? query.orderBy(desc(sortColumn))
+          : query.orderBy(desc(sortColumn), desc(modelAuditsTable.id))
+      ) as typeof query;
     }
 
     // Apply pagination

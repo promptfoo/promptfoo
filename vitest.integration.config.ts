@@ -1,5 +1,6 @@
-import { defineConfig } from 'vitest/config';
 import os from 'os';
+
+import { defineConfig } from 'vitest/config';
 
 const cpuCount = os.cpus().length;
 // Use most cores but leave 2 for system/main process
@@ -26,16 +27,13 @@ export default defineConfig({
 
     // Use forks for better memory isolation
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        maxForks,
-        minForks: 2,
-        isolate: true,
-        execArgv: [
-          '--max-old-space-size=4096', // 4GB per worker for integration tests
-        ],
-      },
-    },
+    // Vitest 4 exposes fork worker options at the top level.
+    maxWorkers: maxForks,
+    minWorkers: 2,
+    isolate: true,
+    execArgv: [
+      '--max-old-space-size=4096', // 4GB per worker for integration tests
+    ],
 
     // Integration tests may take longer
     testTimeout: 60_000, // 60s per test

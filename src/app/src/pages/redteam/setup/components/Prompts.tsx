@@ -1,13 +1,10 @@
 import { useCallback } from 'react';
 
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
-import { Box } from '@mui/system';
+import { Button } from '@app/components/ui/button';
+import { Label } from '@app/components/ui/label';
+import { Textarea } from '@app/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Plus, Trash2 } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 
 const promptExamples = {
@@ -55,49 +52,46 @@ export default function Prompts() {
   );
 
   return (
-    <Box>
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
-        Prompts
-      </Typography>
-      <Typography
-        variant="body1"
-        paragraph
-        color="text.secondary"
-        sx={{
-          mb: 2,
-          '& code': {
-            px: 0.5,
-            py: 0.25,
-            backgroundColor: 'action.hover',
-            borderRadius: 0.5,
-            fontFamily: 'monospace',
-          },
-        }}
-      >
-        Enter your prompts below. Use <code>{'{{ prompt }}'}</code> as a placeholder where you want
-        the user's input to appear in your prompt template.
-      </Typography>
+    <div>
+      <h2 className="mb-2 text-xl font-medium">Prompts</h2>
+      <p className="mb-4 text-muted-foreground">
+        Enter your prompts below. Use{' '}
+        <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">{'{{ prompt }}'}</code> as
+        a placeholder where you want the user's input to appear in your prompt template.
+      </p>
       {config.prompts.map((prompt, index) => (
-        <Box key={index} display="flex" alignItems="center" mb={2}>
-          <TextField
-            fullWidth
-            label={config.prompts.length === 1 ? 'Prompt' : `Prompt ${index + 1}`}
-            value={prompt}
-            onChange={(e) => updatePrompt(index, e.target.value)}
-            margin="normal"
-            multiline
-            rows={3}
-          />
-          <Tooltip title="Remove prompt">
-            <IconButton onClick={() => removePrompt(index)}>
-              <DeleteIcon />
-            </IconButton>
+        <div key={index} className="mb-4 flex items-start gap-2">
+          <div className="flex-1">
+            <Label htmlFor={`prompt-${index}`}>
+              {config.prompts.length === 1 ? 'Prompt' : `Prompt ${index + 1}`}
+            </Label>
+            <Textarea
+              id={`prompt-${index}`}
+              value={prompt}
+              onChange={(e) => updatePrompt(index, e.target.value)}
+              rows={3}
+              className="mt-1"
+            />
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => removePrompt(index)}
+                className="mt-6 text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Remove prompt</TooltipContent>
           </Tooltip>
-        </Box>
+        </div>
       ))}
-      <Button startIcon={<AddIcon />} onClick={addPrompt} variant="outlined">
+      <Button variant="outline" onClick={addPrompt}>
+        <Plus className="mr-2 size-4" />
         Add Prompt
       </Button>
-    </Box>
+    </div>
   );
 }

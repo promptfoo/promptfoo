@@ -1,9 +1,14 @@
-import type { ExportResult } from '@opentelemetry/core';
 import { ExportResultCode } from '@opentelemetry/core';
+import logger from '../logger';
+import { getTraceStore, type SpanData, type TraceStore } from './store';
+import type { ExportResult } from '@opentelemetry/core';
 import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 
-import logger from '../logger';
-import { getTraceStore, type SpanData } from './store';
+const MISSING_TRACE_RETRY_DELAY_MS = 50;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * A span exporter that writes spans to the local TraceStore (SQLite).
@@ -67,8 +72,7 @@ export class LocalSpanExporter implements SpanExporter {
 
     for (const [traceId, spanDataList] of spansByTrace) {
       try {
-        // First try to add spans normally (if trace exists)
-        const result = await traceStore.addSpans(traceId, spanDataList, { skipTraceCheck: false });
+        const result = await this.addSpansWithTraceRetry(traceStore, traceId, spanDataList);
         if (result.stored) {
           logger.debug(
             `[LocalSpanExporter] Added ${spanDataList.length} spans to trace ${traceId}`,
@@ -101,6 +105,21 @@ export class LocalSpanExporter implements SpanExporter {
     return firstError;
   }
 
+  private async addSpansWithTraceRetry(
+    traceStore: TraceStore,
+    traceId: string,
+    spans: SpanData[],
+  ): ReturnType<TraceStore['addSpans']> {
+    const options = { skipTraceCheck: false, warnIfMissingTrace: false };
+    const result = await traceStore.addSpans(traceId, spans, options);
+    if (result.stored) {
+      return result;
+    }
+
+    await delay(MISSING_TRACE_RETRY_DELAY_MS);
+    return traceStore.addSpans(traceId, spans, options);
+  }
+
   /**
    * Convert an OTEL ReadableSpan to our SpanData format.
    */
@@ -114,7 +133,7 @@ export class LocalSpanExporter implements SpanExporter {
 
     return {
       spanId: spanContext.spanId,
-      parentSpanId: span.parentSpanId || undefined,
+      parentSpanId: span.parentSpanContext?.spanId || undefined,
       name: span.name,
       startTime: startTimeMs,
       endTime: endTimeMs,

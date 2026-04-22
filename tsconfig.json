@@ -13,7 +13,9 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "baseUrl": "./"
+    "ignoreDeprecations": "6.0",
+    "baseUrl": "./",
+    "jsx": "react-jsx"
   },
   "include": [
     "src/",
@@ -22,7 +24,8 @@
     "./package.json",
     "src/**/*.json",
     "test/**/*.json",
-    "src/types/globals.d.ts"
+    "src/types/globals.d.ts",
+    "src/types/optional-deps.d.ts"
   ],
   "exclude": [
     "dist",
