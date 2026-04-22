@@ -400,10 +400,22 @@ html:not(.docs-wrapper) .DocSearch {
 .redteamPolicyScreenshotLink {
   display: block;
   margin: 1rem 0 1.5rem;
+  border-radius: 8px;
+  line-height: 0;
 }
 
-.redteamPolicyScreenshotLink:hover {
+.redteamPolicyScreenshotLink:hover,
+.redteamPolicyScreenshotLink:focus {
   text-decoration: none;
+}
+
+.redteamPolicyScreenshotLink:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.redteamPolicyScreenshotLink:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
 }
 
 .redteamPolicyScreenshot {
@@ -437,10 +449,22 @@ html:not(.docs-wrapper) .DocSearch {
 
 .redteamPluginScreenshotLink {
   display: block;
+  border-radius: 8px;
+  line-height: 0;
 }
 
-.redteamPluginScreenshotLink:hover {
+.redteamPluginScreenshotLink:hover,
+.redteamPluginScreenshotLink:focus {
   text-decoration: none;
+}
+
+.redteamPluginScreenshotLink:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.redteamPluginScreenshotLink:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 3px;
 }
 
 .redteamPluginScreenshot {
@@ -464,6 +488,7 @@ html:not(.docs-wrapper) .DocSearch {
 @media (max-width: 768px) {
   .redteamPolicyScreenshotLink {
     margin: 0.75rem 0 1.25rem;
+    border-radius: 6px;
   }
 
   .redteamPolicyScreenshot {
@@ -472,6 +497,10 @@ html:not(.docs-wrapper) .DocSearch {
 
   .redteamPluginScreenshotFigure {
     margin: 1rem 0 1.5rem;
+  }
+
+  .redteamPluginScreenshotLink {
+    border-radius: 6px;
   }
 
   .redteamPluginScreenshot {
