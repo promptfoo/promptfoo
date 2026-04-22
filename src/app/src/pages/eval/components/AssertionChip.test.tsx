@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssertionChip, getThresholdLabel } from './AssertionChip';
@@ -98,17 +98,19 @@ describe('AssertionChip', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClick handler when Enter is pressed on a standalone chip', () => {
+  it('calls onClick handler when Enter is pressed on a standalone chip', async () => {
     const handleClick = vi.fn();
+    const user = userEvent.setup();
     render(
       <AssertionChip metric="keyboard-metric" score={1} passed={true} onClick={handleClick} />,
     );
 
     const chip = screen.getByRole('button', { name: /keyboard-metric/i });
-    fireEvent.keyDown(chip, { key: 'Escape' });
+    chip.focus();
+    await user.keyboard('{Escape}');
     expect(handleClick).not.toHaveBeenCalled();
 
-    fireEvent.keyDown(chip, { key: 'Enter' });
+    await user.keyboard('{Enter}');
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
@@ -312,8 +314,9 @@ describe('AssertionChip', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onClick handler when Enter is pressed on an assert-set chip body', () => {
+  it('calls onClick handler when Enter is pressed on an assert-set chip body', async () => {
     const handleClick = vi.fn();
+    const user = userEvent.setup();
     const childResults: GradingResult[] = [
       {
         pass: true,
@@ -336,10 +339,12 @@ describe('AssertionChip', () => {
 
     const chipBody = screen.getByText('keyboard-set').closest('[role="button"]') as HTMLElement;
     expect(chipBody).toBeInTheDocument();
-    fireEvent.keyDown(chipBody, { key: 'Tab' });
+    chipBody.focus();
+    await user.keyboard('{Tab}');
     expect(handleClick).not.toHaveBeenCalled();
 
-    fireEvent.keyDown(chipBody, { key: 'Enter' });
+    chipBody.focus();
+    await user.keyboard('{Enter}');
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
