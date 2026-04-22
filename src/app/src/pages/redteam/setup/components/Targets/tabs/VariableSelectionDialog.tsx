@@ -15,15 +15,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
+import { type Inputs, normalizeInputDefinition } from '@promptfoo/types';
 
 interface VariableSelectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   variables: string[];
-  variableDescriptions?: Record<string, string>;
+  variableDescriptions?: Inputs;
   selectedVariable: string;
   onSelectedVariableChange: (variable: string) => void;
   onConfirm: () => void;
+}
+
+function getVariableDescription(variableDescriptions: Inputs | undefined, variableName: string) {
+  const variableDescription = variableDescriptions?.[variableName];
+  return variableDescription
+    ? normalizeInputDefinition(variableDescription).description
+    : undefined;
 }
 
 export default function VariableSelectionDialog({
@@ -55,16 +63,18 @@ export default function VariableSelectionDialog({
               <SelectValue placeholder="Select a variable" />
             </SelectTrigger>
             <SelectContent>
-              {variables.map((varName) => (
-                <SelectItem key={varName} value={varName}>
-                  <span className="font-mono">{`{{${varName}}}`}</span>
-                  {variableDescriptions?.[varName] && (
-                    <span className="ml-2 text-muted-foreground">
-                      - {variableDescriptions[varName]}
-                    </span>
-                  )}
-                </SelectItem>
-              ))}
+              {variables.map((varName) => {
+                const description = getVariableDescription(variableDescriptions, varName);
+
+                return (
+                  <SelectItem key={varName} value={varName}>
+                    <span className="font-mono">{`{{${varName}}}`}</span>
+                    {description && (
+                      <span className="ml-2 text-muted-foreground">- {description}</span>
+                    )}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
           <p className="mt-2 text-xs text-muted-foreground">

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
+import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../../src/cache';
 import {
   formatModerationInput,
   type ImageInput,
@@ -20,6 +20,9 @@ describe('OpenAiModerationProvider', () => {
     vi.resetAllMocks();
     vi.mocked(isCacheEnabled).mockImplementation(function () {
       return false;
+    });
+    vi.mocked(getScopedCacheKey).mockImplementation(function (cacheKey) {
+      return cacheKey;
     });
     vi.mocked(fetchWithCache).mockImplementation(async function () {
       return {
@@ -85,13 +88,14 @@ describe('OpenAiModerationProvider', () => {
           method: 'POST',
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
+            'x-promptfoo-silent': 'true',
             Authorization: 'Bearer test-key',
           }),
           body: expect.stringContaining('"model":"text-moderation-latest"'),
         }),
         expect.any(Number),
         'json',
-        false,
+        true,
         undefined,
       );
     });
@@ -176,7 +180,13 @@ describe('OpenAiModerationProvider', () => {
       // Verify we got an error response with the expected message
       expect(result).toHaveProperty('error');
       expect(result.error).toContain(getOpenAiMissingApiKeyMessage());
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('API error'));
+      expect(errorSpy).toHaveBeenCalledWith(
+        'OpenAI moderation API error',
+        expect.objectContaining({
+          error: expect.stringContaining(getOpenAiMissingApiKeyMessage()),
+          hasData: false,
+        }),
+      );
     });
 
     it('should use custom apiKeyEnvar in missing API key errors', async () => {
@@ -223,7 +233,10 @@ describe('OpenAiModerationProvider', () => {
         return true;
       });
 
-      const provider = createProvider();
+      const headerSecret = 'Bearer cache-secret-header';
+      const provider = new OpenAiModerationProvider('text-moderation-latest', {
+        config: { apiKey: 'test-key', headers: { Authorization: headerSecret } },
+      });
 
       const mockResponse = {
         flags: [
@@ -248,9 +261,13 @@ describe('OpenAiModerationProvider', () => {
 
       expect(result).toEqual({ ...mockResponse, cached: true });
       expect(result.cached).toBe(true);
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('openai:moderation:text-moderation-latest:'),
+      const cacheKey = mockCache.get.mock.calls[0][0] as string;
+      expect(cacheKey).toMatch(
+        /^openai:moderation:text-moderation-latest:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
       );
+      expect(cacheKey).not.toContain('assistant response');
+      expect(cacheKey).not.toContain(headerSecret);
+      expect(cacheKey).not.toContain('test-key');
       // Verify fetchWithCache wasn't called because cache was used
       expect(fetchWithCache).not.toHaveBeenCalled();
     });
@@ -292,10 +309,231 @@ describe('OpenAiModerationProvider', () => {
       await provider.callModerationApi('user', 'assistant');
 
       // Verify we attempted to save to cache
+      const cacheKey = mockCache.set.mock.calls[0][0] as string;
+      expect(cacheKey).toMatch(
+        /^openai:moderation:text-moderation-latest:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKey).not.toContain('assistant');
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('openai:moderation:'),
+        cacheKey,
         expect.stringContaining('{"flags":[{"code":"hate"'),
       );
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    it('should build cache keys from normalized moderation inputs', async () => {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = createProvider('omni-moderation-latest');
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return mockCache as any;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'modr-123',
+          model: 'omni-moderation-latest',
+          results: [{ flagged: false, categories: {}, category_scores: {} }],
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      await provider.callModerationApi('user', 'same normalized text');
+      await provider.callModerationApi('user', [{ type: 'text', text: 'same normalized text' }]);
+
+      expect(mockCache.get.mock.calls[0][0]).toBe(mockCache.get.mock.calls[1][0]);
+    });
+
+    it('should isolate cache keys by resolved API key', async () => {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const providerA = new OpenAiModerationProvider('text-moderation-latest', {
+        config: { apiKey: 'sk-moderation-tenant-a' },
+      });
+      const providerB = new OpenAiModerationProvider('text-moderation-latest', {
+        config: { apiKey: 'sk-moderation-tenant-b' },
+      });
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return mockCache as any;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'modr-123',
+          model: 'text-moderation-latest',
+          results: [{ flagged: false, categories: {}, category_scores: {} }],
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      await providerA.callModerationApi('user', 'same sensitive text');
+      await providerB.callModerationApi('user', 'same sensitive text');
+
+      const [cacheKeyA, cacheKeyB] = mockCache.get.mock.calls.map(([key]) => key as string);
+      expect(cacheKeyA).toMatch(
+        /^openai:moderation:text-moderation-latest:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKeyB).toMatch(
+        /^openai:moderation:text-moderation-latest:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKeyA).not.toBe(cacheKeyB);
+      expect(cacheKeyA).not.toContain('same sensitive text');
+      expect(cacheKeyA).not.toContain('sk-moderation-tenant-a');
+      expect(cacheKeyB).not.toContain('sk-moderation-tenant-b');
+    });
+
+    it('should keep resolved API key cache identity stable across module reloads', async () => {
+      async function getCacheKeyFromFreshModule() {
+        vi.resetModules();
+        const freshCacheModule = await import('../../../src/cache');
+        const mockCache = {
+          get: vi.fn().mockResolvedValue(JSON.stringify({ flags: [] })),
+          set: vi.fn(),
+        };
+
+        vi.mocked(freshCacheModule.isCacheEnabled).mockImplementation(function () {
+          return true;
+        });
+        vi.mocked(freshCacheModule.getCache).mockImplementation(function () {
+          return mockCache as any;
+        });
+
+        const { OpenAiModerationProvider: FreshOpenAiModerationProvider } = await import(
+          '../../../src/providers/openai/moderation'
+        );
+        const provider = new FreshOpenAiModerationProvider('text-moderation-latest', {
+          config: { apiKey: 'sk-moderation-reload' },
+        });
+
+        await provider.callModerationApi('user', 'same sensitive text');
+
+        return mockCache.get.mock.calls[0][0] as string;
+      }
+
+      const cacheKeyA = await getCacheKeyFromFreshModule();
+      const cacheKeyB = await getCacheKeyFromFreshModule();
+
+      expect(cacheKeyA).toBe(cacheKeyB);
+      expect(cacheKeyA).toMatch(
+        /^openai:moderation:text-moderation-latest:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheKeyA).not.toContain('same sensitive text');
+      expect(cacheKeyA).not.toContain('sk-moderation-reload');
+    });
+
+    it('should deduplicate in-flight moderation requests without raw fetch cache keys', async () => {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = createProvider();
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      const mockResponse = {
+        id: 'modr-123',
+        model: 'text-moderation-latest',
+        results: [{ flagged: false, categories: {}, category_scores: {} }],
+      };
+      let resolveFetch: (value: any) => void;
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return mockCache as any;
+      });
+      vi.mocked(fetchWithCache).mockReturnValueOnce(
+        new Promise<any>((resolve) => {
+          resolveFetch = resolve;
+        }) as ReturnType<typeof fetchWithCache>,
+      );
+
+      const first = provider.callModerationApi('user', 'same sensitive text');
+      const second = provider.callModerationApi('user', 'same sensitive text');
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+
+      resolveFetch!({
+        data: mockResponse,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      await expect(Promise.all([first, second])).resolves.toEqual([{ flags: [] }, { flags: [] }]);
+    });
+
+    it('should not deduplicate in-flight requests across cache namespaces', async () => {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const provider = createProvider();
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+      const mockResponse = {
+        id: 'modr-123',
+        model: 'text-moderation-latest',
+        results: [{ flagged: false, categories: {}, category_scores: {} }],
+      };
+      const resolvers: Array<(value: any) => void> = [];
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return mockCache as any;
+      });
+      let namespaceIndex = 0;
+      vi.mocked(getScopedCacheKey).mockImplementation(function (cacheKey) {
+        const namespace = namespaceIndex++ === 0 ? 'repeat-0' : 'repeat-1';
+        return `${namespace}:${cacheKey}`;
+      });
+      vi.mocked(fetchWithCache).mockImplementation(
+        () =>
+          new Promise<any>((resolve) => {
+            resolvers.push(resolve);
+          }) as ReturnType<typeof fetchWithCache>,
+      );
+
+      const first = provider.callModerationApi('user', 'same sensitive text');
+      const second = provider.callModerationApi('user', 'same sensitive text');
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+
+      for (const resolveFetch of resolvers) {
+        resolveFetch({
+          data: mockResponse,
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        });
+      }
+
+      await expect(Promise.all([first, second])).resolves.toEqual([{ flags: [] }, { flags: [] }]);
     });
   });
 
@@ -325,7 +563,7 @@ describe('OpenAiModerationProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        true,
         undefined,
       );
     });
@@ -379,9 +617,71 @@ describe('OpenAiModerationProvider', () => {
         }),
         expect.any(Number),
         'json',
-        false,
+        true,
         undefined,
       );
+    });
+
+    it('hashes cached mixed text and image inputs without leaking raw content', async () => {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      const apiKey = 'sk-secret-moderation-key';
+      const headerSecret = 'Bearer moderation-header-secret';
+      const textSecret = 'multimodal-secret-text';
+      const imageUrl = 'https://example.com/image.png?token=image-secret-token';
+      const provider = new OpenAiModerationProvider('omni-moderation-latest', {
+        config: {
+          apiKey,
+          headers: {
+            Authorization: headerSecret,
+          },
+        },
+      });
+
+      const mockResponse = {
+        id: 'modr-123',
+        model: 'omni-moderation-latest',
+        results: [{ flagged: false, categories: {}, category_scores: {} }],
+      };
+
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue(undefined),
+      };
+
+      vi.mocked(getCache).mockImplementation(function () {
+        return mockCache as any;
+      });
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const imageInput: Array<TextInput | ImageInput> = [
+        { type: 'text' as const, text: textSecret },
+        {
+          type: 'image_url' as const,
+          image_url: { url: imageUrl },
+        },
+      ];
+
+      await provider.callModerationApi('user input', imageInput);
+
+      const cacheGetKey = mockCache.get.mock.calls[0][0] as string;
+      const cacheSetKey = mockCache.set.mock.calls[0][0] as string;
+      expect(cacheGetKey).toBe(cacheSetKey);
+      expect(cacheSetKey).toMatch(
+        /^openai:moderation:omni-moderation-latest:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+      );
+      expect(cacheSetKey).not.toContain(textSecret);
+      expect(cacheSetKey).not.toContain(imageUrl);
+      expect(cacheSetKey).not.toContain('image-secret-token');
+      expect(cacheSetKey).not.toContain(apiKey);
+      expect(cacheSetKey).not.toContain(headerSecret);
     });
 
     it('should show which input types triggered each flag', async () => {
@@ -474,11 +774,12 @@ describe('OpenAiModerationProvider', () => {
         expect.objectContaining({
           headers: expect.objectContaining({
             'Custom-Header': 'custom-value',
+            'x-promptfoo-silent': 'true',
           }),
         }),
         expect.any(Number),
         'json',
-        false,
+        true,
         undefined,
       );
     });
