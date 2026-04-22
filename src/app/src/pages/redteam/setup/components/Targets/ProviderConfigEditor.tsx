@@ -126,9 +126,9 @@ function ProviderConfigEditor({
       if (value === undefined) {
         delete updatedTarget.inputs;
       } else {
-        updatedTarget.inputs = value as Record<string, string>;
+        updatedTarget.inputs = value as NonNullable<ProviderOptions['inputs']>;
         // Clear body error if inputs are provided ({{prompt}} not required with multi-input)
-        if (Object.keys(value as Record<string, string>).length > 0) {
+        if (Object.keys(value as NonNullable<ProviderOptions['inputs']>).length > 0) {
           setBodyError(null);
         }
       }

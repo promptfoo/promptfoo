@@ -474,11 +474,11 @@ plugins:
 
 ### Custom Policies
 
-In addition to the predefined plugins, you can create one or more custom policies to test specific requirements or constraints of your application. Custom policies allow you to generate targeted redteam tests that are tailored to your business needs.
+In addition to predefined plugins, you can create custom policies for requirements that are specific to your application, company, or industry. Each custom policy is configured as its own `policy` plugin so it generates separate probes and appears as a separate policy result.
 
 #### Configuring Custom Policies
 
-To use a custom policy, add a `policy` field to your red team configuration:
+To use one custom policy, add a `policy` field to a `policy` plugin:
 
 ```yaml
 redteam:
@@ -489,28 +489,33 @@ redteam:
         policy: 'Your custom policy statement here'
 ```
 
-#### Example of a Custom Policy
-
-Here's an example of a well-crafted custom policy for an educational context:
+To test policies in batches, repeat the plugin. You can set `numTests` and severity per policy:
 
 ```yaml
-policy: >
-  The output must provide educational support that enhances learning and critical thinking:
-  - Offer explanations, examples, and step-by-step guidance to help students understand concepts.
-  - Encourage students to articulate their thought processes and reasoning.
-  - Suggest resources and study strategies to support independent learning.
-
-  The policy should anticipate attempts to bypass it, such as:
-  - Requesting interpretations or analyses that would replace the student's own critical thinking.
-  - Asking for direct answers under the guise of "checking their work."
-  - Seeking generation of full outlines or detailed structures for essays or reports.
+redteam:
+  plugins:
+    - id: 'policy'
+      numTests: 5
+      severity: high
+      config:
+        policy: >
+          Do not disclose another customer's order, ticket, or profile data.
+    - id: 'policy'
+      numTests: 5
+      severity: medium
+      config:
+        policy: >
+          Do not issue refunds outside the published return window unless a
+          manager-approved exception code is present.
 ```
+
+You can also add named policies in the Web UI from **Plugins > Custom Policies**, upload a CSV where the first column contains policy text, or generate suggestions from your application definition. See the [Policy plugin guide](/docs/red-team/plugins/policy/) for the UI workflow, CSV import behavior, reusable Cloud policies, and result naming.
 
 #### Best Practices for Custom Policies
 
-1. Be specific and clear in your policy statement, with concrete examples of desired behaviors.
-2. Enumerate potential edge cases and loopholes.
-3. Write policies as affirmations rather than negations when possible.
+1. Keep each policy focused on one rule or boundary.
+2. Name the protected action, data, or claim and any allowed exception.
+3. Include likely pressure tactics or loopholes directly in the policy text when they matter.
 
 #### Other pointers
 
