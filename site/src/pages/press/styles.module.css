@@ -1,0 +1,65 @@
+.pressContainer {
+  padding: 1rem;
+}
+
+.assetCard {
+  transition: transform 0.2s ease-in-out;
+}
+
+.assetCard:hover {
+  transform: translateY(-4px);
+}
+
+.coverageItem {
+  transition: all 0.2s ease-in-out;
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 8px;
+}
+
+.coverageItem:hover {
+  background-color: var(--ifm-color-emphasis-100);
+}
+
+.articleLink {
+  display: block;
+  padding: 0.75rem;
+  border-radius: 6px;
+  text-decoration: none !important;
+  transition: all 0.2s ease-in-out;
+}
+
+.articleLink:hover {
+  background-color: var(--ifm-color-emphasis-200);
+}
+
+.articleLink span {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.section {
+  scroll-margin-top: 80px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sectionHeading:hover .anchorLink,
+.sectionHeading:focus-within .anchorLink {
+  opacity: 1;
+}
+
+.anchorLink {
+  opacity: 0;
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+  font-weight: 400;
+  transition: opacity 0.2s ease;
+}
+
+.anchorLink:hover {
+  text-decoration: underline;
+}

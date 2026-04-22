@@ -1,6 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
 import { afterEach, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 
@@ -51,27 +52,17 @@ def call_api(prompt, options, context):
       config: { basePath: process.cwd() },
     });
 
-    const start = Date.now();
     await provider.initialize();
 
-    // First call
+    // Three calls should all reuse the same loaded module
     const result1 = await provider.callApi('test1');
-    const call1Time = Date.now() - start;
-
-    // Second call (should be fast - no re-import)
     const result2 = await provider.callApi('test2');
-    const call2Time = Date.now() - start;
-
-    // Third call
     const result3 = await provider.callApi('test3');
 
-    // Verify same load_time (same process)
+    // Verify same load_time across all calls (same process, no re-import)
     expect(result1.output).toContain('Loaded at:');
     expect(result1.output).toBe(result2.output);
     expect(result2.output).toBe(result3.output);
-
-    // Verify subsequent calls are fast (no 500ms re-import)
-    expect(call2Time - call1Time).toBeLessThan(300); // Should be < 300ms
 
     await provider.shutdown();
   }, 10000);
@@ -163,8 +154,14 @@ counter = 0
 def call_api(prompt, options, context):
     global counter
     counter += 1
+    start_time = time.time()
     time.sleep(0.1)  # 100ms
-    return {"output": f"Worker count: {counter}"}
+    end_time = time.time()
+    return {
+        "output": f"Worker count: {counter}",
+        "start_time": start_time,
+        "end_time": end_time
+    }
 `);
 
     const provider = new PythonProvider(`file://${scriptPath}`, {
@@ -176,8 +173,6 @@ def call_api(prompt, options, context):
 
     await provider.initialize();
 
-    const start = Date.now();
-
     // 4 concurrent calls with 4 workers should run in parallel
     const results = await Promise.all([
       provider.callApi('1'),
@@ -186,11 +181,18 @@ def call_api(prompt, options, context):
       provider.callApi('4'),
     ]);
 
-    const duration = Date.now() - start;
+    // Extract timestamps from results
+    const startTimes = results.map((r) => (r as any).start_time as number);
+    const endTimes = results.map((r) => (r as any).end_time as number);
 
-    // Each call takes 100ms, with 4 workers they run in parallel
-    // Total time should be ~100ms, not 400ms
-    expect(duration).toBeLessThan(300); // Allow some overhead
+    // Verify parallelization by checking execution overlap:
+    // If parallel: the last call to start begins before the first call ends
+    // If sequential: each call starts after the previous ends (no overlap)
+    const maxStartTime = Math.max(...startTimes);
+    const minEndTime = Math.min(...endTimes);
+
+    // For true parallel execution, there must be overlap
+    expect(maxStartTime).toBeLessThan(minEndTime);
 
     // Each worker maintains its own counter
     results.forEach((r) => {

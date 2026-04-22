@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getDefaultProviders } from '../../../src/providers/defaults';
 import { getEnvString } from '../../../src/envars';
+import { getDefaultProviders } from '../../../src/providers/defaults';
+import { hasGoogleDefaultCredentials } from '../../../src/providers/google/util';
+import { hasCodexDefaultCredentials } from '../../../src/providers/openai/codexDefaults';
 
 vi.mock('../../../src/envars');
 vi.mock('../../../src/logger', () => ({
@@ -18,12 +20,23 @@ vi.mock('../../../src/providers/google/util', async (importOriginal) => {
     hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false),
   };
 });
+vi.mock('../../../src/providers/openai/codexDefaults', async (importOriginal) => {
+  return {
+    ...(await importOriginal<typeof import('../../../src/providers/openai/codexDefaults')>()),
+    hasCodexDefaultCredentials: vi.fn().mockReturnValue(false),
+  };
+});
 
 const mockedGetEnvString = vi.mocked(getEnvString);
+const mockedHasCodexDefaultCredentials = vi.mocked(hasCodexDefaultCredentials);
+const mockedHasGoogleDefaultCredentials = vi.mocked(hasGoogleDefaultCredentials);
 
 describe('GitHub Models Default Providers', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockedGetEnvString.mockReset();
+    mockedHasCodexDefaultCredentials.mockReset();
+    mockedHasCodexDefaultCredentials.mockReturnValue(false);
+    mockedHasGoogleDefaultCredentials.mockResolvedValue(false);
   });
 
   it('should use GitHub token for github: model when only GITHUB_TOKEN is available', async () => {
@@ -38,9 +51,9 @@ describe('GitHub Models Default Providers', () => {
     const providers = await getDefaultProviders();
 
     // Should use GitHub Models for grading and suggestions
-    expect(providers.gradingProvider.id()).toBe('openai/gpt-4.1');
-    expect(providers.gradingJsonProvider.id()).toBe('openai/gpt-4.1');
-    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-4.1');
+    expect(providers.gradingProvider.id()).toBe('openai/gpt-5');
+    expect(providers.gradingJsonProvider.id()).toBe('openai/gpt-5');
+    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5');
 
     // Should fall back to OpenAI for embeddings and moderation (not supported by GitHub)
     expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
@@ -61,7 +74,7 @@ describe('GitHub Models Default Providers', () => {
     const providers = await getDefaultProviders();
 
     // Should use OpenAI, not GitHub
-    expect(providers.gradingProvider.id()).toBe('openai:gpt-4.1-2025-04-14');
+    expect(providers.gradingProvider.id()).toBe('openai:gpt-5.4-2026-03-05');
   });
 
   it('should prefer Anthropic over GitHub when Anthropic is available', async () => {
@@ -91,7 +104,7 @@ describe('GitHub Models Default Providers', () => {
     });
 
     // Should use GitHub Models
-    expect(providers.gradingProvider.id()).toBe('openai/gpt-4.1');
-    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-4.1');
+    expect(providers.gradingProvider.id()).toBe('openai/gpt-5');
+    expect(providers.suggestionsProvider.id()).toBe('openai/gpt-5');
   });
 });

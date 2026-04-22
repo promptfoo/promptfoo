@@ -1,4 +1,4 @@
-import { Mock, Mocked, MockedClass, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, Mock, Mocked, MockedClass, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -7,6 +7,7 @@ import { doRemoteGrading } from '../../src/remoteGrading';
 import { ResultFailureReason } from '../../src/types/index';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { testProviderConnectivity, testProviderSession } from '../../src/validators/testProvider';
+import { mockGlobal } from '../util/utils';
 
 import type { EvaluateResult, EvaluateSummaryV3 } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
@@ -29,11 +30,13 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
     },
   };
 });
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    v4: vi.fn(() => 'test-uuid-1234'),
-  };
+const restoreCrypto = mockGlobal('crypto', {
+  ...crypto,
+  randomUUID: vi.fn(() => 'test-uuid-1234'),
+} as Crypto);
+
+afterAll(() => {
+  restoreCrypto();
 });
 
 describe('Provider Test Functions', () => {
@@ -158,7 +161,7 @@ describe('Provider Test Functions', () => {
           json: vi.fn().mockResolvedValue(mockAgentResponse),
         });
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         // Verify evaluation was called WITHOUT assertions
         expect(evaluate).toHaveBeenCalledWith(
@@ -241,7 +244,7 @@ describe('Provider Test Functions', () => {
 
         mockSummary.results = [mockResult];
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         // Verify evaluation was called without assertions
         expect(evaluate).toHaveBeenCalledWith(
@@ -307,7 +310,7 @@ describe('Provider Test Functions', () => {
           }),
         });
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         expect(result.sessionId).toBe('provider-session-id');
       });
@@ -349,7 +352,7 @@ describe('Provider Test Functions', () => {
           }),
         });
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         expect(result.sessionId).toBe('response-session-id');
       });
@@ -390,7 +393,7 @@ describe('Provider Test Functions', () => {
           }),
         });
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         expect(result.sessionId).toBe('test-uuid-1234');
       });
@@ -433,7 +436,7 @@ describe('Provider Test Functions', () => {
           }),
         });
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         // Should call agent endpoint even when there's an error for analysis
         expect(fetchWithProxy).toHaveBeenCalledWith(
@@ -501,7 +504,7 @@ describe('Provider Test Functions', () => {
           json: vi.fn().mockResolvedValue(mockAgentResponse),
         });
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         expect(result).toEqual({
           success: false,
@@ -554,7 +557,7 @@ describe('Provider Test Functions', () => {
           statusText: 'Internal Server Error',
         });
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         expect(result).toEqual({
           success: false,
@@ -605,7 +608,7 @@ describe('Provider Test Functions', () => {
         // Mock agent endpoint throwing exception
         (fetchWithProxy as Mock).mockRejectedValue(new Error('Network error'));
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         expect(result).toEqual({
           success: false,
@@ -661,7 +664,7 @@ describe('Provider Test Functions', () => {
           json: vi.fn().mockResolvedValue(mockAgentResponse),
         });
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         expect(result).toEqual({
           success: false,
@@ -678,7 +681,7 @@ describe('Provider Test Functions', () => {
         const evalError = new Error('Evaluation failed');
         (evaluate as Mock).mockRejectedValue(evalError);
 
-        const result = await testProviderConnectivity(mockProvider);
+        const result = await testProviderConnectivity({ provider: mockProvider });
 
         expect(result).toEqual({
           success: false,
@@ -716,7 +719,7 @@ describe('Provider Test Functions', () => {
             output: 'You asked me what I can help you with.',
           });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         // Verify callApi was called twice with correct prompts and session ID
         expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
@@ -799,7 +802,7 @@ describe('Provider Test Functions', () => {
             sessionId: serverSessionId,
           });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         // Verify callApi was called twice
         expect(mockProvider.callApi).toHaveBeenCalledTimes(2);
@@ -867,7 +870,7 @@ describe('Provider Test Functions', () => {
             output: 'You asked what I can help you with.',
           });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         // Verify doRemoteGrading was NOT called
         expect(doRemoteGrading).not.toHaveBeenCalled();
@@ -916,7 +919,7 @@ describe('Provider Test Functions', () => {
           reason: 'The system did not remember the previous question',
         });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         expect(result).toEqual(
           expect.objectContaining({
@@ -958,7 +961,7 @@ describe('Provider Test Functions', () => {
             output: 'You asked about help.',
           });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         // Should log warning but still proceed with test
         expect(logger.warn).toHaveBeenCalledWith(
@@ -988,8 +991,9 @@ describe('Provider Test Functions', () => {
             output: 'You asked about help.',
           });
 
-        const result = await testProviderSession(mockProvider, undefined, {
-          skipConfigValidation: true,
+        const result = await testProviderSession({
+          provider: mockProvider,
+          options: { skipConfigValidation: true },
         });
 
         // Should NOT log warning
@@ -1019,7 +1023,10 @@ describe('Provider Test Functions', () => {
             output: 'You asked about help.',
           });
 
-        await testProviderSession(mockProvider, { sessionSource: 'server' });
+        await testProviderSession({
+          provider: mockProvider,
+          sessionConfig: { sessionSource: 'server' },
+        });
 
         // Should log warning about missing session parser
         expect(logger.warn).toHaveBeenCalledWith(
@@ -1047,7 +1054,7 @@ describe('Provider Test Functions', () => {
 
         mockProvider.getSessionId = vi.fn(() => undefined as any);
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         expect(result).toEqual({
           success: false,
@@ -1078,7 +1085,7 @@ describe('Provider Test Functions', () => {
           error: 'Connection failed',
         });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         expect(result).toEqual({
           success: false,
@@ -1109,7 +1116,7 @@ describe('Provider Test Functions', () => {
             error: 'Connection timeout',
           });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         expect(result).toEqual({
           success: false,
@@ -1164,7 +1171,7 @@ describe('Provider Test Functions', () => {
             sessionId: serverSessionId,
           });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         expect(result.details?.sessionSource).toBe('server');
         expect(result.details?.sessionId).toBe(serverSessionId);
@@ -1195,7 +1202,7 @@ describe('Provider Test Functions', () => {
           reason: 'Empty response cannot demonstrate session memory',
         });
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         expect(result.success).toBe(false);
         expect(result.details?.response1).toBe('');
@@ -1221,7 +1228,7 @@ describe('Provider Test Functions', () => {
         // Mock doRemoteGrading to throw error
         (doRemoteGrading as Mock).mockRejectedValue(new Error('Grading service unavailable'));
 
-        const result = await testProviderSession(mockProvider);
+        const result = await testProviderSession({ provider: mockProvider });
 
         expect(result.success).toBe(false);
         expect(result.message).toContain('Failed to evaluate session');

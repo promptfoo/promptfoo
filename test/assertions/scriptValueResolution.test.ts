@@ -1,9 +1,11 @@
-import { vi } from 'vitest';
 import * as path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import * as matchers from '../../src/matchers';
+import * as llmGradingMatchers from '../../src/matchers/llmGrading';
+import { runRuby } from '../../src/ruby/rubyUtils.js';
 
 import type { ProviderResponse } from '../../src/types/index';
 
@@ -39,13 +41,24 @@ vi.mock('../../src/database', () => ({
   getDb: vi.fn(),
 }));
 
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual('../../src/matchers');
+vi.mock('../../src/ruby/rubyUtils.js', () => ({
+  runRuby: vi.fn(),
+}));
+
+vi.mock('../../src/matchers/llmGrading', async () => {
+  const actual = await vi.importActual('../../src/matchers/llmGrading');
   return {
     ...actual,
     matchesLlmRubric: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
     matchesFactuality: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
     matchesClosedQa: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+  };
+});
+
+vi.mock('../../src/matchers/similarity', async () => {
+  const actual = await vi.importActual('../../src/matchers/similarity');
+  return {
+    ...actual,
     matchesSimilarity: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
   };
 });
@@ -70,6 +83,7 @@ describe('Script value resolution', () => {
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    vi.resetAllMocks();
   });
 
   const baseProviderResponse: ProviderResponse = {
@@ -79,14 +93,13 @@ describe('Script value resolution', () => {
 
   describe('llm-rubric with file:// script', () => {
     it('should pass script output to matchesLlmRubric', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
         assertion: {
           type: 'llm-rubric',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {}, options: { provider: { id: 'echo' } } },
         providerResponse: baseProviderResponse,
@@ -104,8 +117,7 @@ describe('Script value resolution', () => {
     });
 
     it('should pass direct value to matchesLlmRubric when no script', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
@@ -129,14 +141,13 @@ describe('Script value resolution', () => {
     });
 
     it('should pass object returned by script to matchesLlmRubric', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
         assertion: {
           type: 'llm-rubric',
-          value: 'file://rubric-generator.js:rubricObject',
+          value: 'file://rubric-generator.cjs:rubricObject',
         },
         test: { vars: {}, options: { provider: { id: 'echo' } } },
         providerResponse: baseProviderResponse,
@@ -156,12 +167,10 @@ describe('Script value resolution', () => {
 
   describe('contains with file:// script', () => {
     it('should use script output for contains assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'contains',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -174,12 +183,10 @@ describe('Script value resolution', () => {
     });
 
     it('should fail when output does not contain script value', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'contains',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -195,12 +202,10 @@ describe('Script value resolution', () => {
     });
 
     it('should use numeric script output for contains assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'contains',
-          value: 'file://rubric-generator.js:numericValue',
+          value: 'file://rubric-generator.cjs:numericValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -215,12 +220,10 @@ describe('Script value resolution', () => {
 
   describe('equals with file:// script', () => {
     it('should use script output for equals assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'equals',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -233,12 +236,10 @@ describe('Script value resolution', () => {
     });
 
     it('should fail when output does not equal script value', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'equals',
-          value: 'file://rubric-generator.js:knownValue',
+          value: 'file://rubric-generator.cjs:knownValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -253,12 +254,10 @@ describe('Script value resolution', () => {
 
   describe('regex with file:// script', () => {
     it('should use script output as regex pattern', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'regex',
-          value: 'file://rubric-generator.js:getPattern',
+          value: 'file://rubric-generator.cjs:getPattern',
         },
         test: { vars: { pattern: '\\d+' } },
         providerResponse: {
@@ -273,13 +272,11 @@ describe('Script value resolution', () => {
 
   describe('error handling', () => {
     it('should throw error when script returns function for non-script assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       await expect(
         runAssertion({
           assertion: {
             type: 'equals',
-            value: 'file://rubric-generator.js:functionValue',
+            value: 'file://rubric-generator.cjs:functionValue',
           },
           test: { vars: {} },
           providerResponse: baseProviderResponse,
@@ -288,13 +285,11 @@ describe('Script value resolution', () => {
     });
 
     it('should throw error when script returns boolean for non-script assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       await expect(
         runAssertion({
           assertion: {
             type: 'contains',
-            value: 'file://rubric-generator.js:booleanValue',
+            value: 'file://rubric-generator.cjs:booleanValue',
           },
           test: { vars: {} },
           providerResponse: baseProviderResponse,
@@ -303,13 +298,11 @@ describe('Script value resolution', () => {
     });
 
     it('should throw error when script returns GradingResult for non-script assertion', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       await expect(
         runAssertion({
           assertion: {
             type: 'llm-rubric',
-            value: 'file://rubric-generator.js:gradingResultValue',
+            value: 'file://rubric-generator.cjs:gradingResultValue',
           },
           test: { vars: {}, options: { provider: { id: 'echo' } } },
           providerResponse: baseProviderResponse,
@@ -321,13 +314,11 @@ describe('Script value resolution', () => {
   // REGRESSION TESTS: Ensure javascript/python/ruby assertions still work correctly
   describe('javascript assertion regression', () => {
     it('should use script return value as assertion result (NOT as comparison)', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       // The gradingFunction returns { pass: true, score: 1, reason: '...' } when output contains 'expected'
       const result = await runAssertion({
         assertion: {
           type: 'javascript',
-          value: 'file://rubric-generator.js:gradingFunction',
+          value: 'file://rubric-generator.cjs:gradingFunction',
         },
         test: { vars: {} },
         providerResponse: {
@@ -341,12 +332,10 @@ describe('Script value resolution', () => {
     });
 
     it('should fail when javascript grading function returns false', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'javascript',
-          value: 'file://rubric-generator.js:gradingFunction',
+          value: 'file://rubric-generator.cjs:gradingFunction',
         },
         test: { vars: {} },
         providerResponse: {
@@ -359,8 +348,6 @@ describe('Script value resolution', () => {
     });
 
     it('should work with inline javascript code', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'javascript',
@@ -379,12 +366,10 @@ describe('Script value resolution', () => {
 
   describe('edge cases', () => {
     it('should handle empty string from script', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'equals',
-          value: 'file://rubric-generator.js:emptyValue',
+          value: 'file://rubric-generator.cjs:emptyValue',
         },
         test: { vars: {} },
         providerResponse: {
@@ -397,12 +382,10 @@ describe('Script value resolution', () => {
     });
 
     it('should handle array from script for contains-all', async () => {
-      const { runAssertion } = await import('../../src/assertions/index');
-
       const result = await runAssertion({
         assertion: {
           type: 'contains-all',
-          value: 'file://rubric-generator.js:referenceArray',
+          value: 'file://rubric-generator.cjs:referenceArray',
         },
         test: { vars: {} },
         providerResponse: {
@@ -412,6 +395,55 @@ describe('Script value resolution', () => {
       });
 
       expect(result.pass).toBe(true);
+    });
+
+    it('should allow colons in class or function names when parsing file names', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockResolvedValue(true);
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'ruby',
+          value: 'file://some_ruby_file.rb:MyModule::Nested.method',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'namespaced result',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(mockRunRuby).toHaveBeenCalledWith(
+        expect.stringContaining('some_ruby_file.rb'),
+        'MyModule::Nested.method',
+        expect.any(Array),
+      );
+      expect(result.pass).toBe(true);
+    });
+
+    it('should return fail result when runRuby throws for a namespaced method', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockRejectedValue(new Error('Ruby execution error'));
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'ruby',
+          value: 'file://some_ruby_file.rb:MyModule::Nested.method',
+        },
+        test: { vars: {} },
+        providerResponse: {
+          output: 'namespaced result',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(mockRunRuby).toHaveBeenCalledWith(
+        expect.stringContaining('some_ruby_file.rb'),
+        'MyModule::Nested.method',
+        expect.any(Array),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Ruby execution error');
     });
   });
 });

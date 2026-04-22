@@ -138,7 +138,7 @@ prompts:
   - You are a helpful customer service agent. Answer questions politely and try to resolve issues.
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-5-mini
 
 defaultTest:
   provider:
@@ -157,7 +157,7 @@ For complex scenarios with function calling, you can define structured APIs with
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       tools:
         - file://functions/search_flights.json
@@ -202,7 +202,7 @@ tests:
 
 This enables automatic evaluation of whether your agent successfully handles different customer types and scenarios.
 
-For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/tau-simulated-user).
+For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-tau).
 
 ### Using with Custom Providers
 
@@ -280,7 +280,7 @@ The `###STOP###` marker is useful for agents that can determine when a conversat
 
 By default, SimulatedUser uses Promptfoo's hosted conversation models. Your target model always runs locally - only simulated user responses are generated remotely.
 
-To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`. See the [Privacy Policy](/privacy#remote-generation) for details on what data is sent.
+To disable remote generation, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`. See the [Privacy Notice](/privacy/) for details on what data is sent.
 
 ## Limitations
 

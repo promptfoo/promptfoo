@@ -3,6 +3,7 @@ import { HyperbolicAudioProvider } from '../../src/providers/hyperbolic/audio';
 import { calculateHyperbolicCost, HyperbolicProvider } from '../../src/providers/hyperbolic/chat';
 import { HyperbolicImageProvider } from '../../src/providers/hyperbolic/image';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -18,11 +19,11 @@ describe('HyperbolicProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.HYPERBOLIC_API_KEY = mockApiKey;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: mockApiKey });
   });
 
   afterEach(() => {
-    delete process.env.HYPERBOLIC_API_KEY;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -130,6 +131,26 @@ describe('HyperbolicProvider', () => {
       );
       expect(cost).toBe(customCost * 1000 + customCost * 500);
     });
+
+    it('should use separate custom input and output costs from config', () => {
+      const cost = calculateHyperbolicCost(
+        'deepseek-ai/DeepSeek-R1',
+        { inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
+
+    it('should prefer separate custom costs over custom cost', () => {
+      const cost = calculateHyperbolicCost(
+        'deepseek-ai/DeepSeek-R1',
+        { cost: 0.02, inputCost: 0.001, outputCost: 0.003 },
+        1000,
+        500,
+      );
+      expect(cost).toBe(2.5);
+    });
   });
 });
 
@@ -139,11 +160,11 @@ describe('HyperbolicImageProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.HYPERBOLIC_API_KEY = mockApiKey;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: mockApiKey });
   });
 
   afterEach(() => {
-    delete process.env.HYPERBOLIC_API_KEY;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
   });
 
   describe('constructor', () => {
@@ -191,11 +212,11 @@ describe('HyperbolicAudioProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.HYPERBOLIC_API_KEY = mockApiKey;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: mockApiKey });
   });
 
   afterEach(() => {
-    delete process.env.HYPERBOLIC_API_KEY;
+    mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
   });
 
   describe('constructor', () => {

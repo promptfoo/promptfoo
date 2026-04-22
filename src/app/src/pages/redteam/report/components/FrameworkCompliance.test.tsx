@@ -33,6 +33,8 @@ describe('FrameworkCompliance', () => {
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold: 0.9,
       setPluginPassRateThreshold: vi.fn(),
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: vi.fn(),
     });
   });
 
@@ -44,6 +46,8 @@ describe('FrameworkCompliance', () => {
     mockUseReportStore.mockReturnValue({
       pluginPassRateThreshold,
       setPluginPassRateThreshold: vi.fn(),
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: vi.fn(),
     });
 
     return renderWithProviders(
@@ -197,9 +201,9 @@ describe('FrameworkCompliance', () => {
 
     renderFrameworkCompliance(categoryStats, 0.9, undefined);
 
-    // Should render FrameworkCards for all frameworks (8 total)
+    // Should render FrameworkCards for all frameworks (9 total)
     const frameworkCardCalls = mockFrameworkCard.mock.calls;
-    expect(frameworkCardCalls.length).toBe(8); // All FRAMEWORK_COMPLIANCE_IDS
+    expect(frameworkCardCalls.length).toBe(9); // All FRAMEWORK_COMPLIANCE_IDS
   });
 
   it('should pass frameworksToShow to CSVExporter', () => {
@@ -220,6 +224,30 @@ describe('FrameworkCompliance', () => {
         frameworksToShow: ['owasp:llm'],
       }),
       undefined,
+    );
+  });
+
+  it('should pass showUntestedPlugins from the store to FrameworkCard', () => {
+    const categoryStats = {
+      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
+    };
+
+    mockUseReportStore.mockReturnValue({
+      pluginPassRateThreshold: 0.9,
+      setPluginPassRateThreshold: vi.fn(),
+      showUntestedPlugins: false,
+      setShowUntestedPlugins: vi.fn(),
+    });
+
+    renderWithProviders(
+      <FrameworkCompliance evalId="test-eval-id" categoryStats={categoryStats} />,
+    );
+
+    expect(mockFrameworkCard).toHaveBeenCalled();
+    expect(mockFrameworkCard.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        showUntestedPlugins: false,
+      }),
     );
   });
 });

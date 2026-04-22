@@ -5,7 +5,7 @@ description: Configure Google's Gemini models with support for text, images, and
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
+The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, images, and video inputs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -28,22 +28,16 @@ You have three options for providing your API key:
 
 #### Option 1: Environment Variable (Recommended)
 
-Set the `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable:
+Set the `GOOGLE_API_KEY` environment variable:
 
 ```bash
 # Using export (Linux/macOS)
-export GEMINI_API_KEY="your_api_key_here"
-# or
 export GOOGLE_API_KEY="your_api_key_here"
 
 # Using set (Windows Command Prompt)
-set GEMINI_API_KEY=your_api_key_here
-# or
 set GOOGLE_API_KEY=your_api_key_here
 
 # Using $env (Windows PowerShell)
-$env:GEMINI_API_KEY="your_api_key_here"
-# or
 $env:GOOGLE_API_KEY="your_api_key_here"
 ```
 
@@ -53,8 +47,6 @@ Create a `.env` file in your project root:
 
 ```bash
 # .env
-GEMINI_API_KEY=your_api_key_here
-# or
 GOOGLE_API_KEY=your_api_key_here
 ```
 
@@ -71,15 +63,15 @@ providers:
       apiKey: your_api_key_here
 ```
 
-**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. The API key is automatically detected from the `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable, so you typically don't need to specify it in the config.
+**Note:** Avoid hardcoding API keys in configuration files that might be committed to version control. The API key is automatically detected from the `GOOGLE_API_KEY` environment variable, so you typically don't need to specify it in the config.
 
 If you need to explicitly reference an environment variable in your config, use Nunjucks template syntax:
 
 ```yaml
 providers:
-  - id: google:gemini-2.5-flash # Uses GEMINI_API_KEY or GOOGLE_API_KEY env var
+  - id: google:gemini-2.5-flash # Uses GOOGLE_API_KEY env var
     config:
-      # apiKey: "{{ env.GEMINI_API_KEY }}"  # optional, auto-detected
+      # apiKey: "{{ env.GOOGLE_API_KEY }}"  # optional, auto-detected
       temperature: 0.7
 ```
 
@@ -107,6 +99,10 @@ providers:
       apiHost: custom.googleapis.com
       apiBaseUrl: https://custom.googleapis.com
 ```
+
+For promptfoo's built-in cost estimates, Google providers also support `config.cost`,
+`config.inputCost`, and `config.outputCost`. Use `inputCost` and `outputCost` for separate
+prompt and completion pricing. The legacy `cost` option remains the shared fallback.
 
 ## Quick Start
 
@@ -137,13 +133,14 @@ promptfoo eval
 
 ### 2. Comparing Models
 
-Compare different Gemini models:
+Compare different Gemini and Gemma models:
 
 ```yaml
 providers:
+  - google:gemma-4-31b-it
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
-  - google:gemini-1.5-flash
+  - google:gemini-2.0-flash
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -163,9 +160,9 @@ tests:
 ```yaml
 # Reference environment variables in your config
 providers:
-  - id: google:gemini-2.5-flash # Uses GEMINI_API_KEY or GOOGLE_API_KEY env var
+  - id: google:gemini-2.5-flash # Uses GOOGLE_API_KEY env var
     config:
-      # apiKey: "{{ env.GEMINI_API_KEY }}"  # optional, auto-detected
+      # apiKey: "{{ env.GOOGLE_API_KEY }}"  # optional, auto-detected
       temperature: '{{ env.TEMPERATURE | default(0.7) }}' # Default to 0.7 if not set
 ```
 
@@ -233,7 +230,7 @@ export GOOGLE_API_KEY="your_api_key_here"
 2. **Test your API key directly**:
 
    ```bash
-   curl -X POST "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=$GOOGLE_API_KEY" \
+   curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$GOOGLE_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
    ```
@@ -250,12 +247,12 @@ export GOOGLE_API_KEY="your_api_key_here"
 
 If you need more advanced features or enterprise capabilities, you can migrate to Vertex AI:
 
-| Google AI Studio          | Vertex AI                  | Notes                                   |
-| ------------------------- | -------------------------- | --------------------------------------- |
-| `google:gemini-2.5-flash` | `vertex:gemini-2.5-flash`  | Same model, different endpoint          |
-| `GOOGLE_API_KEY`          | `VERTEX_PROJECT_ID` + auth | Vertex uses Google Cloud authentication |
-| Simple API key            | Multiple auth methods      | Vertex supports ADC, service accounts   |
-| Global endpoint           | Regional endpoints         | Vertex requires region selection        |
+| Google AI Studio          | Vertex AI                     | Notes                                   |
+| ------------------------- | ----------------------------- | --------------------------------------- |
+| `google:gemini-2.5-flash` | `vertex:gemini-2.5-flash`     | Same model, different endpoint          |
+| `GOOGLE_API_KEY`          | `GOOGLE_CLOUD_PROJECT` + auth | Vertex uses Google Cloud authentication |
+| Simple API key            | Multiple auth methods         | Vertex supports ADC, service accounts   |
+| Global endpoint           | Regional endpoints            | Vertex requires region selection        |
 
 Example migration:
 
@@ -274,12 +271,14 @@ providers:
 
 See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
 
-You can use it by specifying one of the [available models](https://ai.google.dev/models). Currently, the following models are supported:
-
 ## Available Models
 
 ### Chat and Multimodal Models
 
+- `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
+- `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
+- `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
+- `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
@@ -295,16 +294,20 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 - `google:gemini-2.0-flash` - Multimodal model with next-gen features, 1M token context window
 - `google:gemini-2.0-flash-lite` - Cost-efficient version of 2.0 Flash with 1M token context
 - `google:gemini-2.0-flash-thinking-exp` - Optimized for complex reasoning and problem-solving
-- `google:gemini-1.5-flash` - Gemini 1.5 Flash multimodal model
-- `google:gemini-1.5-flash-8b` - Small Gemini 1.5 model optimized for high-volume, lower complexity tasks
-- `google:gemini-1.5-pro` - Gemini 1.5 Pro model for complex reasoning tasks
-- `google:gemini-pro` - General purpose text and chat
-- `google:gemini-pro-vision` - Multimodal understanding (text + vision)
 
 ### Embedding Models
 
-- `google:embedding:text-embedding-004` - Google text embedding model
-- `google:embedding:embedding-001` - Google embedding model
+Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
+
+- `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+
+Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
+
+- `taskType` - one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`
+- `outputDimensionality` - truncates the returned vector (useful for storage cost)
+- `title` - document title, only applied with `taskType: RETRIEVAL_DOCUMENT`
+
+If you need Vertex authentication or additional embedding models, see the [Vertex provider](/docs/providers/vertex#embedding-models) instead.
 
 ### Image Generation Models
 
@@ -363,13 +366,202 @@ providers:
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
 
+### Gemini Native Image Generation Models
+
+Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
+
+- `google:gemini-3.1-flash-image-preview` - Gemini 3.1 Flash (Nano Banana 2) with native image generation (~$0.067/image at 1K)
+- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.05/image, estimated)
+- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+
+Configuration options:
+
+```yaml
+providers:
+  - id: google:gemini-3.1-flash-image-preview
+    config:
+      imageAspectRatio: '16:9' # 1:1, 1:4, 1:8, 2:3, 3:2, 3:4, 4:1, 4:3, 4:5, 5:4, 8:1, 9:16, 16:9, 21:9
+      imageSize: '2K' # 512px (3.1 only), 1K, 2K, 4K
+      temperature: 0.7
+```
+
+Key differences from Imagen:
+
+- Uses same namespace as Gemini chat (`google:model-name`)
+- More aspect ratio options (includes 1:4, 1:8, 2:3, 3:2, 4:1, 4:5, 5:4, 8:1, 21:9)
+- Resolution control via `imageSize` (`512px`, `1K`, `2K`, `4K`) - `512px` is Gemini 3.1 only
+- Can return both text and images in the same response
+- Uses same authentication as Gemini chat models
+- Supports Google Search grounding via `tools`
+
+Google Search grounding lets the model use real-time search results to inform image generation:
+
+```yaml
+providers:
+  - id: google:gemini-3.1-flash-image-preview
+    config:
+      imageAspectRatio: '16:9'
+      tools:
+        - googleSearch: {}
+```
+
+See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
+
+### Video Generation Models (Veo)
+
+Google's Veo models enable AI-powered video generation from text prompts. Use the `google:video:` prefix with `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Google AI Studio. For explicit Vertex AI routing, use the `vertex:video:` prefix instead.
+
+#### Available Models
+
+| Model                                   | Description                                       | Duration Support |
+| --------------------------------------- | ------------------------------------------------- | ---------------- |
+| `google:video:veo-3.1-generate-preview` | Latest Veo 3.1 model with video extension support | 4, 6, 8 seconds  |
+| `google:video:veo-3.1-fast-preview`     | Fast Veo 3.1 model                                | 4, 6, 8 seconds  |
+| `google:video:veo-3-generate`           | Veo 3.0 standard model                            | 4, 6, 8 seconds  |
+| `google:video:veo-3-fast`               | Veo 3.0 fast model                                | 4, 6, 8 seconds  |
+| `google:video:veo-2-generate`           | Veo 2.0 model                                     | 5, 6, 8 seconds  |
+
+#### Basic Usage
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      # Uses GOOGLE_API_KEY / GEMINI_API_KEY by default
+      aspectRatio: '16:9' # or '9:16'
+      resolution: '720p' # or '1080p'
+      durationSeconds: 6 # 4, 6, or 8 for Veo 3.x; 5, 6, or 8 for Veo 2
+
+prompts:
+  - 'Generate a video of {{subject}}'
+
+tests:
+  - vars:
+      subject: 'a cat playing with a ball of yarn'
+```
+
+:::note
+`google:video:*` uses Google AI Studio by default and can auto-detect Vertex AI when project-based auth is configured. Existing project-based `google:video:*` configs remain compatible, but `vertex:video:*` is the recommended explicit path for Vertex-only flows like `extendVideoId`.
+:::
+
+#### Configuration Options
+
+| Option             | Type   | Description                                                                                                 |
+| ------------------ | ------ | ----------------------------------------------------------------------------------------------------------- |
+| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                                              |
+| `resolution`       | string | Video resolution: `720p` (default) or `1080p`                                                               |
+| `durationSeconds`  | number | Video duration: 4, 6, 8 for Veo 3.x; 5, 6, 8 for Veo 2                                                      |
+| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                                       |
+| `negativePrompt`   | string | Concepts to avoid in the generated video                                                                    |
+| `referenceImages`  | array  | Up to 3 reference images (file paths or objects, Veo 3.1 only)                                              |
+| `image`            | string | Source image for image-to-video generation                                                                  |
+| `lastImage`        | string | End frame for interpolation (requires `image`)                                                              |
+| `extendVideoId`    | string | Operation ID from a previous Vertex Veo generation (Veo 3.1 only)                                           |
+| `sourceVideo`      | string | Source video input. In Google AI Studio use base64 or `file://`; in Vertex you can also use an operation ID |
+
+#### Image-to-Video Generation
+
+Generate videos from a starting image:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      image: file://assets/start-frame.jpg
+      aspectRatio: '16:9'
+      durationSeconds: 6
+
+prompts:
+  - 'Animate this image: {{animation_description}}'
+
+tests:
+  - vars:
+      animation_description: 'the character slowly turns to face the camera'
+```
+
+#### Video Interpolation (First and Last Frame)
+
+Generate video that transitions between two images:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      image: file://assets/start.jpg # First frame
+      lastImage: file://assets/end.jpg # Last frame
+      durationSeconds: 6
+
+prompts:
+  - 'Create a smooth transition between these frames'
+```
+
+#### Video Extension (Veo 3.1 Only)
+
+Extend a previously generated Veo video using its operation ID:
+
+```yaml
+providers:
+  - id: vertex:video:veo-3.1-generate-preview
+    config:
+      # Use the operation ID from a previous Veo generation
+      extendVideoId: projects/my-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/abc123
+      durationSeconds: 6
+
+prompts:
+  - 'Continue this video with {{continuation}}'
+
+tests:
+  - vars:
+      continuation: 'the camera panning to reveal a sunset'
+```
+
+:::note
+`extendVideoId` is a Vertex AI flow and requires an operation ID from a previous Veo generation. For Google AI Studio, pass base64 or a `file://` video via `sourceVideo` instead. Older `google:video:*` configs with project-based auth still work through Vertex auto-detection, but `vertex:video:*` is the clearer form.
+:::
+
+#### Reference Images
+
+Use up to 3 reference images to guide video style (Veo 3.1 only):
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      referenceImages:
+        # Simple format: file paths (uses 'asset' reference type)
+        - file://assets/style-ref-1.jpg
+        - file://assets/style-ref-2.jpg
+      aspectRatio: '16:9'
+      durationSeconds: 6
+```
+
+You can also use the object format to specify the reference type:
+
+```yaml
+referenceImages:
+  - image: file://assets/character.jpg
+    referenceType: asset
+  - image: file://assets/background.jpg
+    referenceType: asset
+```
+
+#### Storage
+
+Generated videos are stored in promptfoo's blob storage system, which uses content-addressable hashing for deduplication. Videos with identical content share the same storage reference. Use `--no-cache` to force regeneration:
+
+```bash
+promptfoo eval --no-cache
+```
+
+See the [Google Video example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-video) for complete configurations.
+
 ### Basic Configuration
 
 The provider supports various configuration options that can be used to customize the behavior of the model:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       temperature: 0.7 # Controls randomness (0.0 to 1.0)
       maxOutputTokens: 2048 # Maximum length of response
@@ -380,7 +572,31 @@ providers:
 
 ### Thinking Configuration
 
-For models that support thinking capabilities (like Gemini 2.5 Flash), you can configure the thinking budget:
+For models that support thinking capabilities, you can configure how the model reasons through problems.
+
+#### Gemini 3 Models (thinkingLevel)
+
+Gemini 3 models use `thinkingLevel` for more granular control:
+
+```yaml
+providers:
+  - id: google:gemini-3-flash-preview
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM, or HIGH
+```
+
+| Level   | Description                                                |
+| ------- | ---------------------------------------------------------- |
+| MINIMAL | Fewest tokens. Best for low-complexity tasks (Flash only). |
+| LOW     | Fewer tokens. Suitable for simpler tasks.                  |
+| MEDIUM  | Balanced approach for moderate complexity (Flash only).    |
+| HIGH    | More tokens for deep reasoning. Default.                   |
+
+#### Gemini 2.5 Models (thinkingBudget)
+
+Gemini 2.5 models use `thinkingBudget`:
 
 ```yaml
 providers:
@@ -395,11 +611,13 @@ providers:
 
 The thinking configuration allows the model to show its reasoning process before providing the final answer, which can be helpful for complex tasks that require step-by-step thinking.
 
+**Note:** You cannot use both `thinkingLevel` and `thinkingBudget` in the same request.
+
 You can also specify a response schema for structured output:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         response_mime_type: application/json
@@ -440,7 +658,7 @@ providers:
     config:
       safetySettings:
         - category: HARM_CATEGORY_DANGEROUS_CONTENT
-          probability: BLOCK_ONLY_HIGH # or other thresholds
+          threshold: BLOCK_ONLY_HIGH # or other thresholds
 ```
 
 ### System Instructions
@@ -472,7 +690,7 @@ providers:
       temperature: 0.7
 
   # For older Gemini versions - preserve 'assistant' role
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       useAssistantRole: true # Preserves 'assistant' role without mapping
       temperature: 0.7
@@ -481,6 +699,23 @@ providers:
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
 ## Model Examples
+
+### Gemini 3 Flash Preview
+
+Gemini 3.0 Flash with frontier intelligence, Pro-grade reasoning, and thinking capabilities:
+
+```yaml
+providers:
+  - id: google:gemini-3-flash-preview
+    config:
+      temperature: 0.7
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM, or HIGH
+```
+
+Thinking levels for Gemini 3 Flash: MINIMAL (fastest), LOW, MEDIUM (balanced), HIGH (most thorough).
 
 ### Gemini 3 Pro Preview
 
@@ -494,9 +729,10 @@ providers:
       maxOutputTokens: 4096
       generationConfig:
         thinkingConfig:
-          thinkingLevel: HIGH # Enhanced extended thinking for complex reasoning
-          # thinkingBudget: 4096 # Alternative: Use budget instead of level
+          thinkingLevel: HIGH # LOW or HIGH (Pro only supports these two levels)
 ```
+
+Thinking levels for Gemini 3 Pro: LOW (faster, simpler tasks), HIGH (deep reasoning, default).
 
 ### Gemini 2.5 Pro
 
@@ -584,7 +820,7 @@ defaultTest:
           temperature: 0.7
       # Override embedding provider for similarity comparisons
       embedding:
-        id: google:embedding:text-embedding-004
+        id: google:embedding:gemini-embedding-001
 ```
 
 2. For individual assertions:
@@ -595,7 +831,7 @@ assert:
     value: Expected response
     threshold: 0.8
     provider:
-      id: google:embedding:text-embedding-004
+      id: google:embedding:gemini-embedding-001
 ```
 
 3. For specific tests:
@@ -609,19 +845,19 @@ tests:
         text:
           id: google:gemini-2.0-flash
         embedding:
-          id: google:embedding:text-embedding-004
+          id: google:embedding:gemini-embedding-001
     assert:
       - type: similar
         value: The answer is 4
 ```
 
-### Function Calling
+### Tool Calling
 
-Enable your model to interact with external systems through defined functions:
+Google models support tool calling via the `tools` and `tool_config` config fields. The model returns tool calls in its response for your application to execute.
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       tools:
         function_declarations:
@@ -652,7 +888,7 @@ You can constrain the model to output structured JSON responses in two ways:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       generationConfig:
         response_mime_type: 'application/json'
@@ -674,7 +910,7 @@ providers:
 
 ```yaml
 providers:
-  - id: google:gemini-1.5-pro
+  - id: google:gemini-2.5-pro
     config:
       # Can be inline schema or file path
       responseSchema: 'file://path/to/schema.json'
@@ -936,7 +1172,7 @@ Try the examples:
 promptfoo init --example google-live
 
 # Function calling and tools example
-promptfoo init --example google-live-tools
+promptfoo init --example google-live
 
 # Audio generation example
 promptfoo init --example google-live-audio

@@ -1,8 +1,6 @@
-import { vi } from 'vitest';
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithRetries } from '../src/util/fetch/index';
-
-const mockedFetch = vi.spyOn(global, 'fetch');
+import { mockGlobal } from './util/utils';
 
 const mockedFetchResponse = (ok: boolean, response: object, headers: object = {}) => {
   const responseText = JSON.stringify(response);
@@ -27,29 +25,33 @@ const mockedSetTimeout = (reqTimeout: number) =>
     return 0 as any;
   });
 
+// Create a mock function that will be used for fetch
+const mockFetch = vi.fn();
+
 describe('fetchWithRetries', () => {
+  let restoreFetch: (() => void) | undefined;
+
   beforeEach(() => {
     vi.useFakeTimers();
+    restoreFetch = mockGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
-    mockedFetch.mockReset();
+    mockFetch.mockReset();
     vi.useRealTimers();
-  });
-
-  afterAll(() => {
-    vi.clearAllMocks();
+    restoreFetch?.();
+    restoreFetch = undefined;
   });
 
   it('should fetch data', async () => {
     const url = 'https://api.example.com/data';
     const response = { data: 'test data' };
 
-    mockedFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
+    mockFetch.mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithRetries(url, {}, 1000);
 
-    expect(mockedFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     await expect(result.json()).resolves.toEqual(response);
   });
 
@@ -62,7 +64,7 @@ describe('fetchWithRetries', () => {
 
     const setTimeoutMock = mockedSetTimeout(timeout);
 
-    mockedFetch
+    mockFetch
       .mockResolvedValueOnce(
         mockedFetchResponse(false, response, {
           'X-RateLimit-Remaining': '0',
@@ -74,7 +76,7 @@ describe('fetchWithRetries', () => {
     const result = await fetchWithRetries(url, {}, timeout);
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(waitTime).toBeGreaterThan(rateLimitReset);
     expect(waitTime).toBeLessThanOrEqual(rateLimitReset + 1000);
     await expect(result.json()).resolves.toEqual(response);
@@ -88,7 +90,7 @@ describe('fetchWithRetries', () => {
 
     const setTimeoutMock = mockedSetTimeout(timeout);
 
-    mockedFetch
+    mockFetch
       .mockResolvedValueOnce(
         mockedFetchResponse(false, response, { 'Retry-After': String(retryAfter) }),
       )
@@ -97,7 +99,7 @@ describe('fetchWithRetries', () => {
     const result = await fetchWithRetries(url, {}, timeout);
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(waitTime).toBe(retryAfter * 1000);
     await expect(result.json()).resolves.toEqual(response);
   });
@@ -109,14 +111,14 @@ describe('fetchWithRetries', () => {
 
     const setTimeoutMock = mockedSetTimeout(timeout);
 
-    mockedFetch
+    mockFetch
       .mockResolvedValueOnce(mockedFetchResponse(false, response))
       .mockResolvedValueOnce(mockedFetchResponse(true, response));
 
     const result = await fetchWithRetries(url, {}, timeout);
     const waitTime = setTimeoutMock.mock.calls[1][1];
 
-    expect(mockedFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(waitTime).toBe(60_000);
     await expect(result.json()).resolves.toEqual(response);
   });
