@@ -239,7 +239,11 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       return null;
     }
 
-    return fetchEvalResultDetail(output.evalId || evalId, output.id);
+    try {
+      return await fetchEvalResultDetail(output.evalId || evalId, output.id);
+    } catch {
+      return null;
+    }
   };
 
   const getFirstOutput = (row: EvaluateTableRow): EvaluateTableOutput | null =>
