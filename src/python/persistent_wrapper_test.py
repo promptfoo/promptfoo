@@ -789,6 +789,28 @@ class TestTracedCall(unittest.TestCase):
         func.assert_called_once()
         self.mock_span.set_attribute.assert_any_call("error.type", "ValueError")
 
+    @patch(
+        "python.persistent_wrapper._use_gen_ai_latest_experimental", return_value=False
+    )
+    def test_tracing_error_after_provider_call_returns_result_without_retry(
+        self, _mock_latest
+    ):
+        """Tracing failures after provider execution should not call the provider twice."""
+        result = {"error": {"code": "rate_limit_exceeded"}}
+        func = MagicMock(return_value=result)
+        ctx = self._make_context()
+
+        def fail_on_error_type(key, _value):
+            if key == "error.type":
+                raise RuntimeError("span write failed")
+
+        self.mock_span.set_attribute.side_effect = fail_on_error_type
+
+        actual = persistent_wrapper._traced_call(func, ["prompt", {}, ctx], "call_api")
+
+        self.assertEqual(actual, result)
+        func.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

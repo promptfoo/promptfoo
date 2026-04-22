@@ -214,6 +214,8 @@ def _traced_call(method_callable, args, function_name):
         return call_method(method_callable, args)
 
     user_error = None
+    method_called = False
+    result = None
 
     try:
         from opentelemetry.propagate import extract
@@ -282,6 +284,7 @@ def _traced_call(method_callable, args, function_name):
             try:
                 # Execute the user's function
                 result = call_method(method_callable, args)
+                method_called = True
 
                 # Set response attributes
                 if isinstance(result, dict):
@@ -351,6 +354,8 @@ def _traced_call(method_callable, args, function_name):
                 return result
 
             except Exception as e:
+                if method_called:
+                    raise
                 user_error = e
                 # Record exception and set error status
                 span.record_exception(e)
@@ -361,6 +366,12 @@ def _traced_call(method_callable, args, function_name):
     except Exception as tracing_error:
         if user_error is not None:
             raise user_error
+        if method_called:
+            print(
+                f"[PythonProvider] Tracing error after provider call (returning result): {tracing_error}",
+                file=sys.stderr,
+            )
+            return result
 
         # If tracing itself fails, log and fall back to untraced call
         print(
