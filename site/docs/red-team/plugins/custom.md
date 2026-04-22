@@ -77,7 +77,7 @@ The custom plugin file is strict: extra fields fail schema validation. Supported
 | `grader`    | Yes      | Nunjucks template used as an `llm-rubric` assertion for every generated test case.               |
 | `threshold` | No       | Minimum score required for the rubric assertion to pass.                                         |
 | `metric`    | No       | Metric name shown in results. Defaults to `custom`.                                              |
-| `id`        | No       | Optional stable identifier for the custom plugin definition.                                     |
+| `id`        | No       | Optional internal identifier for the custom plugin definition.                                   |
 
 The `generator` template receives:
 
@@ -87,6 +87,8 @@ The `generator` template receives:
 - `{{ examples }}`: optional examples from the plugin's config.
 
 The `grader` template receives `{{ purpose }}`. Promptfoo renders it into an `llm-rubric` assertion and applies it to each generated test case.
+
+Generated configs and result metadata keep the configured plugin path, such as `file://./refund-exception-plugin.yaml`, as the plugin ID. Use `metric` for the human-readable score label you want reviewers to see.
 
 ## Output Format
 
@@ -167,7 +169,7 @@ If generation returns zero tests, check that the generator output contains parse
 
 If the config fails before generation, check the plugin file schema. The custom plugin file only accepts `generator`, `grader`, `threshold`, `metric`, and `id`.
 
-If results are hard to interpret, set `metric` to a descriptive name. Without it, custom plugin assertions report under the default `custom` metric.
+If results are hard to interpret, set `metric` to a descriptive name. Without it, custom plugin assertions report under the default `custom` metric, while the plugin itself is still listed by its configured `file://` path.
 
 ## Related Concepts
 
