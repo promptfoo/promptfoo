@@ -39,7 +39,7 @@ import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
-import { AIStudioChatProvider } from './google/ai.studio';
+import { AIStudioChatProvider, AIStudioEmbeddingProvider } from './google/ai.studio';
 import { GeminiImageProvider } from './google/gemini-image';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
@@ -1352,6 +1352,13 @@ export const providerMap: ProviderFactory[] = [
             ...providerOptions,
             id: providerPath,
           });
+        } else if (serviceType === 'embedding' || serviceType === 'embeddings') {
+          if (!modelName) {
+            throw new Error(
+              `Missing model name for ${providerPath}. Use e.g. google:embedding:gemini-embedding-001.`,
+            );
+          }
+          return new AIStudioEmbeddingProvider(modelName, providerOptions);
         }
       }
 
