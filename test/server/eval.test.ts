@@ -1,9 +1,10 @@
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
+import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/server/utils/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -20,6 +21,8 @@ describe('eval routes', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+
     // More robust cleanup with proper error handling
     const cleanupPromises = Array.from(testEvalIds).map(async (evalId) => {
       try {
@@ -38,6 +41,36 @@ describe('eval routes', () => {
     testEvalIds.clear();
   });
 
+  function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
+    const originalStringify = JSON.stringify;
+    let tablePayloadAttempts = 0;
+
+    return vi
+      .spyOn(JSON, 'stringify')
+      .mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
+        const value = args[0];
+        if (value && typeof value === 'object' && 'table' in value && 'totalCount' in value) {
+          tablePayloadAttempts += 1;
+          if (shouldThrow(tablePayloadAttempts)) {
+            throw new RangeError('Invalid string length');
+          }
+        }
+        return originalStringify.apply(JSON, args);
+      });
+  }
+
+  async function setResultPromptRaws(eval_: Eval, raws: string[]) {
+    const results = await eval_.getResults();
+    await Promise.all(
+      raws.map(async (raw, index) => {
+        const result = results[index];
+        invariant(result instanceof EvalResult, 'EvalResult is required');
+        result.prompt = { ...result.prompt, raw };
+        await result.save();
+      }),
+    );
+  }
+
   function createManualRatingPayload(originalResult: any, pass: boolean) {
     const payload = { ...originalResult.gradingResult };
     const score = pass ? 1 : 0;
@@ -54,6 +87,57 @@ describe('eval routes', () => {
   }
 
   describe('post("/:evalId/results/:id/rating")', () => {
+    it('rejects result ratings when the URL eval does not own the result', async () => {
+      const evalA = await EvalFactory.create();
+      const evalB = await EvalFactory.create();
+      testEvalIds.add(evalA.id);
+      testEvalIds.add(evalB.id);
+
+      const resultsB = await evalB.getResults();
+      const resultB = resultsB[0];
+      invariant(resultB.id, 'Result ID is required');
+      const originalResultB = {
+        gradingResult: structuredClone(resultB.gradingResult),
+        score: resultB.score,
+        success: resultB.success,
+      };
+      const originalEvalAMetrics = structuredClone(evalA.prompts[resultB.promptIdx].metrics);
+      const originalEvalBMetrics = structuredClone(evalB.prompts[resultB.promptIdx].metrics);
+
+      const res = await request(app)
+        .post(`/api/eval/${evalA.id}/results/${resultB.id}/rating`)
+        .send(createManualRatingPayload(resultB, false));
+
+      expect(res.status).toBe(404);
+      expect(res.body.error).toBe('Result not found');
+
+      const updatedResultB = await EvalResult.findById(resultB.id);
+      expect(updatedResultB?.gradingResult).toEqual(originalResultB.gradingResult);
+      expect(updatedResultB?.score).toBe(originalResultB.score);
+      expect(updatedResultB?.success).toBe(originalResultB.success);
+
+      const updatedEvalA = await Eval.findById(evalA.id);
+      const updatedEvalB = await Eval.findById(evalB.id);
+      invariant(updatedEvalA, 'Eval A is required');
+      invariant(updatedEvalB, 'Eval B is required');
+      expect(updatedEvalA.prompts[resultB.promptIdx].metrics).toEqual(originalEvalAMetrics);
+      expect(updatedEvalB.prompts[resultB.promptIdx].metrics).toEqual(originalEvalBMetrics);
+    });
+
+    it('returns a JSON 500 response when rating storage fails', async () => {
+      const findByIdSpy = vi
+        .spyOn(EvalResult, 'findById')
+        .mockRejectedValueOnce(new Error('database unavailable'));
+
+      const res = await request(app)
+        .post('/api/eval/eval-1/results/result-1/rating')
+        .send({ pass: true, score: 1 });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: 'Failed to submit rating' });
+      expect(findByIdSpy).toHaveBeenCalledWith('result-1');
+    });
+
     it('Passing test and the user marked it as passing (no change)', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -207,6 +291,86 @@ describe('eval routes', () => {
       expect(updatedEval.prompts[result.promptIdx].metrics?.score).toBe(1);
       expect(updatedEval.prompts[result.promptIdx].metrics?.testPassCount).toBe(1);
       expect(updatedEval.prompts[result.promptIdx].metrics?.testFailCount).toBe(1);
+    });
+  });
+
+  describe('GET /:id/table - large payload handling', () => {
+    it('preserves config tests returned from the table endpoint when saved back', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.config.tests).toHaveLength(2);
+
+      const patchRes = await request(app)
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+
+      expect(patchRes.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.config.tests).toHaveLength(2);
+    });
+
+    it('returns table data with only the largest per-cell prompt stripped when possible', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
+
+      mockTablePayloadRangeError((attempt) => attempt === 1);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('table');
+      expect(res.body.table.body.length).toBeGreaterThan(0);
+      expect(res.body.config.tests).toHaveLength(2);
+
+      const prompts: Array<string | undefined> = res.body.table.body.flatMap(
+        (row: { outputs: Array<{ prompt?: string }> }) =>
+          row.outputs.map((output) => output?.prompt),
+      );
+      expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(1);
+      expect(prompts).toContain('small prompt');
+      expect(prompts).toContain('x'.repeat(50));
+    });
+
+    it('strips per-cell prompts largest first until the response serializes', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 3 });
+      testEvalIds.add(eval_.id);
+      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
+
+      mockTablePayloadRangeError((attempt) => attempt <= 2);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('table');
+      expect(res.body.config.tests).toHaveLength(2);
+
+      const prompts: Array<string | undefined> = res.body.table.body.flatMap(
+        (row: { outputs: Array<{ prompt?: string }> }) =>
+          row.outputs.map((output) => output?.prompt),
+      );
+      expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(2);
+      expect(prompts).toContain('small prompt');
+    });
+
+    it('returns 413 when the table response is still too large after stripping prompts', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      mockTablePayloadRangeError(() => true);
+
+      const res = await request(app).get(`/api/eval/${eval_.id}/table`);
+
+      expect(res.status).toBe(413);
+      expect(res.body).toEqual({
+        error: 'Eval too large to display. Try reducing the page size.',
+      });
     });
   });
 

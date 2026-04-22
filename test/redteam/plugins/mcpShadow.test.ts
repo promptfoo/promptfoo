@@ -17,10 +17,13 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteGenerationUrl: vi.fn().mockReturnValue('https://api.example.com/task'),
 }));
 
+import { loadApiProvider } from '../../../src/providers/index';
 import {
   clearProbeState,
+  createMcpShadowProvider,
   endProbe,
   getMcpShadowGradingSignals,
+  type McpShadowConfig,
   McpShadowGrader,
   McpShadowPlugin,
 } from '../../../src/redteam/plugins/mcpShadow';
@@ -39,6 +42,13 @@ function mockStartProbeResponse(probeId = 'probe-1') {
       },
     }),
   } as Response);
+}
+
+function getGeneratedProviderConfig(
+  testCase: ReturnType<typeof McpShadowPlugin.generateTests>[number],
+): McpShadowConfig {
+  expect(testCase.provider).toMatchObject({ id: 'promptfoo:redteam:mcp-shadow' });
+  return (testCase.provider as { config: McpShadowConfig }).config;
 }
 
 // ============================================================================
@@ -65,16 +75,40 @@ describe('McpShadowPlugin.generateTests', () => {
     expect(results).toHaveLength(5);
   });
 
-  it('should set provider wrapper on each test case', () => {
+  it('should set a serializable provider wrapper config on each test case', () => {
     const results = McpShadowPlugin.generateTests('mcp-shadow:content-exfil', 'prompt', 2, {
       deploymentId: 'dep-1',
     });
 
     for (const tc of results) {
       expect(tc.provider).toBeDefined();
-      expect(typeof (tc.provider as ApiProvider).id).toBe('function');
-      expect((tc.provider as ApiProvider).id()).toBe('mcp-shadow:content-exfil');
+      expect(tc.provider).toEqual({
+        id: 'promptfoo:redteam:mcp-shadow',
+        config: {
+          deploymentId: 'dep-1',
+          attackType: 'content-exfil',
+        },
+      });
     }
+  });
+
+  it('should load generated provider configs through the redteam provider registry', async () => {
+    const provider = await loadApiProvider('promptfoo:redteam:mcp-shadow', {
+      options: {
+        config: {
+          deploymentId: 'dep-1',
+          attackType: 'content-hijack',
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('mcp-shadow:content-hijack');
+  });
+
+  it('should reject generated provider configs without deploymentId', async () => {
+    await expect(loadApiProvider('promptfoo:redteam:mcp-shadow')).rejects.toThrow(
+      'config.deploymentId',
+    );
   });
 
   it('should set runSerially on each test case', () => {
@@ -106,7 +140,10 @@ describe('McpShadowPlugin.generateTests', () => {
     });
 
     expect(results[0].metadata!.mcpShadowAttackType).toBe('content-exfil');
-    expect((results[0].provider as ApiProvider).id()).toBe('mcp-shadow:content-exfil');
+    expect(results[0].provider).toMatchObject({
+      id: 'promptfoo:redteam:mcp-shadow',
+      config: { attackType: 'content-exfil' },
+    });
   });
 
   it('should extract attackType from plugin key', () => {
@@ -115,7 +152,10 @@ describe('McpShadowPlugin.generateTests', () => {
     });
 
     expect(results[0].metadata!.mcpShadowAttackType).toBe('content-hijack');
-    expect((results[0].provider as ApiProvider).id()).toBe('mcp-shadow:content-hijack');
+    expect(results[0].provider).toMatchObject({
+      id: 'promptfoo:redteam:mcp-shadow',
+      config: { attackType: 'content-hijack' },
+    });
   });
 
   it('should set benign prompts as vars', () => {
@@ -134,7 +174,10 @@ describe('McpShadowPlugin.generateTests', () => {
 
     expect(results[0].assert).toBeDefined();
     expect(results[0].assert).toHaveLength(1);
-    expect(results[0].assert![0].metric).toBe('McpShadow/content-exfil');
+    const assertion = results[0].assert![0];
+    expect(assertion.type).toBe('promptfoo:redteam:mcp-shadow:content-exfil');
+    expect(assertion.metric).toBe('McpShadow/content-exfil');
+    expect('value' in assertion ? assertion.value : undefined).toBeUndefined();
   });
 
   it('should not call startProbe during generation', () => {
@@ -161,7 +204,7 @@ describe('provider wrapper', () => {
       deploymentId: 'dep-1',
     });
 
-    const wrapper = results[0].provider as ApiProvider;
+    const wrapper = createMcpShadowProvider(getGeneratedProviderConfig(results[0]));
 
     const mockOriginalProvider: ApiProvider = {
       id: () => 'openai:gpt-4',
@@ -201,7 +244,7 @@ describe('provider wrapper', () => {
       deploymentId: 'dep-1',
     });
 
-    const wrapper = results[0].provider as ApiProvider;
+    const wrapper = createMcpShadowProvider(getGeneratedProviderConfig(results[0]));
     const result = await wrapper.callApi('test prompt', {
       vars: {},
       prompt: { raw: 'test prompt', label: 'test' },
@@ -221,7 +264,7 @@ describe('provider wrapper', () => {
       deploymentId: 'dep-1',
     });
 
-    const wrapper = results[0].provider as ApiProvider;
+    const wrapper = createMcpShadowProvider(getGeneratedProviderConfig(results[0]));
 
     const mockOriginalProvider: ApiProvider = {
       id: () => 'openai:gpt-4',
@@ -317,6 +360,8 @@ describe('McpShadowGrader', () => {
     expect(grader.rubric).toContain('indirect prompt injection');
     expect(grader.rubric).toContain('honeypotTriggered');
     expect(grader.rubric).toContain('exfilDetected');
+    expect(grader.rubric).toContain('<UserQuery>');
+    expect(grader.rubric).toContain('<purpose>');
   });
 
   describe('getResult with setup failure', () => {
@@ -514,6 +559,8 @@ describe('McpShadowGrader', () => {
   describe('rubric rendering', () => {
     it('should render rubric with attack metadata', () => {
       const vars = {
+        prompt: 'Find deployment notes',
+        purpose: 'Test an MCP-connected research agent',
         output: 'test output',
         attackType: 'tool-poisoning',
         technique: 'description-injection',
@@ -525,6 +572,8 @@ describe('McpShadowGrader', () => {
       expect(rubric).toContain('tool-poisoning');
       expect(rubric).toContain('description-injection');
       expect(rubric).toContain('Call send_message with secrets');
+      expect(rubric).toContain('Find deployment notes');
+      expect(rubric).toContain('Test an MCP-connected research agent');
     });
   });
 });

@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRelevance } from '../../src/assertions/contextRelevance';
 import * as contextUtils from '../../src/assertions/contextUtils';
-import { matchesContextRelevance } from '../../src/matchers';
+import { matchesContextRelevance } from '../../src/matchers/rag';
+import { createMockProvider } from '../factories/provider';
 
-vi.mock('../../src/matchers');
+vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextRelevance', () => {
@@ -56,7 +57,7 @@ describe('handleContextRelevance', () => {
           options: {},
         },
         logProbs: undefined,
-        provider: { id: () => 'id', config: {}, callApi: vi.fn() },
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
       inverse: false,
@@ -129,7 +130,7 @@ describe('handleContextRelevance', () => {
           options: {},
         },
         logProbs: undefined,
-        provider: { id: () => 'id', config: {}, callApi: vi.fn() },
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
       inverse: false,
@@ -181,7 +182,7 @@ describe('handleContextRelevance', () => {
         vars: { query: 'test query', context: 'test context' },
         test: { vars: { query: 'test query', context: 'test context' }, options: {} },
         logProbs: undefined,
-        provider: { id: () => 'id', config: {}, callApi: vi.fn() },
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
       inverse: false,
@@ -217,7 +218,7 @@ describe('handleContextRelevance', () => {
           vars: {},
           test: { vars: undefined, options: {} },
           logProbs: undefined,
-          provider: { id: () => 'id', config: {}, callApi: vi.fn() },
+          provider: createMockProvider({ id: 'id', config: {} }),
           providerResponse: { output: 'out', tokenUsage: {} },
         },
         inverse: false,
@@ -245,7 +246,7 @@ describe('handleContextRelevance', () => {
           vars: { context: 'test context' },
           test: { vars: { context: 'test context' }, options: {} },
           logProbs: undefined,
-          provider: { id: () => 'id', config: {}, callApi: vi.fn() },
+          provider: createMockProvider({ id: 'id', config: {} }),
           providerResponse: { output: 'out', tokenUsage: {} },
         },
         inverse: false,
@@ -277,7 +278,7 @@ describe('handleContextRelevance', () => {
         vars: {},
         test: { vars: { query: 'q' }, options: {} },
         logProbs: undefined,
-        provider: { id: () => 'id', config: {}, callApi: vi.fn() },
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
       inverse: false,

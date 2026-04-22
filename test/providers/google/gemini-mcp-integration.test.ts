@@ -9,9 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock MCP client to return tools with problematic schemas (additionalProperties, $schema, etc.)
 const mcpMocks = vi.hoisted(() => {
-  const mockInitialize = vi.fn().mockResolvedValue(undefined);
-  const mockCleanup = vi.fn().mockResolvedValue(undefined);
-  const mockGetAllTools = vi.fn().mockReturnValue([
+  const createMockTools = () => [
     {
       name: 'analyze_prompt',
       description: 'Analyzes a prompt for security vulnerabilities',
@@ -68,7 +66,10 @@ const mcpMocks = vi.hoisted(() => {
         additionalProperties: false,
       },
     },
-  ]);
+  ];
+  const mockInitialize = vi.fn().mockResolvedValue(undefined);
+  const mockCleanup = vi.fn().mockResolvedValue(undefined);
+  const mockGetAllTools = vi.fn().mockReturnValue(createMockTools());
   const mockCallTool = vi.fn().mockResolvedValue({
     content: 'Tool result',
   });
@@ -86,6 +87,7 @@ const mcpMocks = vi.hoisted(() => {
     mockCleanup,
     mockGetAllTools,
     mockCallTool,
+    createMockTools,
   };
 });
 
@@ -132,6 +134,12 @@ describe('Google Providers MCP Integration (GitHub #6902)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mcpMocks.mockInitialize.mockReset().mockResolvedValue(undefined);
+    mcpMocks.mockCleanup.mockReset().mockResolvedValue(undefined);
+    mcpMocks.mockGetAllTools.mockReset().mockReturnValue(mcpMocks.createMockTools());
+    mcpMocks.mockCallTool.mockReset().mockResolvedValue({
+      content: 'Tool result',
+    });
     capturedRequestBody = null;
 
     // Mock the API response and capture request body

@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
+import { mockProcessEnv } from '../../../util/utils';
 
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
 // Mock dependencies
+vi.mock('../../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 vi.mock('../../../../src/providers/elevenlabs/client');
 vi.mock('../../../../src/providers/elevenlabs/cache');
 vi.mock('../../../../src/providers/elevenlabs/cost-tracker', () => {
@@ -22,11 +31,12 @@ vi.mock('../../../../src/providers/elevenlabs/cost-tracker', () => {
 describe('ElevenLabsAgentsProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.ELEVENLABS_API_KEY = 'test-api-key';
+    mockProcessEnv({ ELEVENLABS_API_KEY: 'test-api-key' });
   });
 
   afterEach(() => {
-    delete process.env.ELEVENLABS_API_KEY;
+    mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
+    vi.resetAllMocks();
   });
 
   describe('constructor', () => {
@@ -38,7 +48,7 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should throw error when API key is missing', () => {
-      delete process.env.ELEVENLABS_API_KEY;
+      mockProcessEnv({ ELEVENLABS_API_KEY: undefined });
 
       expect(() => new ElevenLabsAgentsProvider('elevenlabs:agent')).toThrow(
         'ELEVENLABS_API_KEY environment variable is not set',
@@ -61,6 +71,26 @@ describe('ElevenLabsAgentsProvider', () => {
       expect(provider.config.simulatedUser?.prompt).toBe('helpful customer');
     });
 
+    it('should preserve an explicit maxTurns value of 0', () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          maxTurns: 0,
+        },
+      });
+
+      expect(provider.config.maxTurns).toBe(0);
+    });
+
+    it('should preserve explicit zero retries', () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          retries: 0,
+        },
+      });
+
+      expect(provider.config.retries).toBe(0);
+    });
+
     it('should use custom label if provided', () => {
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         label: 'Custom Agent Label',
@@ -70,7 +100,7 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should respect environment variable overrides', () => {
-      process.env.CUSTOM_API_KEY = 'custom-key';
+      mockProcessEnv({ CUSTOM_API_KEY: 'custom-key' });
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
           apiKeyEnvar: 'CUSTOM_API_KEY',
@@ -78,7 +108,7 @@ describe('ElevenLabsAgentsProvider', () => {
       });
 
       expect(provider).toBeDefined();
-      delete process.env.CUSTOM_API_KEY;
+      mockProcessEnv({ CUSTOM_API_KEY: undefined });
     });
   });
 
@@ -287,6 +317,32 @@ describe('ElevenLabsAgentsProvider', () => {
         feedback: 'Information was accurate',
         evidence: undefined,
       });
+    });
+
+    it('should preserve an explicit maxTurns value of 0 in simulation requests', async () => {
+      const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
+        config: {
+          agentId: 'test-agent-123',
+          maxTurns: 0,
+        },
+      });
+
+      const mockApiResponse: AgentSimulationResponse = {
+        conversation_id: 'conv_zero',
+        status: 'completed',
+        simulated_conversation: [],
+      } as unknown as AgentSimulationResponse;
+
+      (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
+
+      await provider.callApi('Hello');
+
+      expect((provider as any).client.post).toHaveBeenCalledWith(
+        '/convai/agents/test-agent-123/simulate-conversation',
+        expect.objectContaining({
+          new_turns_limit: 0,
+        }),
+      );
     });
 
     it('should handle tool mocking configuration', async () => {

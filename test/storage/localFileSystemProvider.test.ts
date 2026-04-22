@@ -1,13 +1,9 @@
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { LocalFileSystemProvider } from '../../src/storage/localFileSystemProvider';
-
-function createTempDir(prefix: string): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+import { createTempDir, removeTempDir } from '../util/utils';
 
 describe('LocalFileSystemProvider', () => {
   let tempDir: string | undefined;
@@ -23,10 +19,8 @@ describe('LocalFileSystemProvider', () => {
     }
     extraFilesToCleanup.length = 0;
 
-    if (tempDir) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-      tempDir = undefined;
-    }
+    removeTempDir(tempDir);
+    tempDir = undefined;
   });
 
   it('prevents path traversal in exists()', async () => {

@@ -33,7 +33,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       vars: result.vars
         ? Object.values(varsForHeader)
             .map((varName) => {
-              const varValue = result.vars?.[varName] || '';
+              const varValue = result.vars?.[varName] ?? '';
               if (typeof varValue === 'string') {
                 return varValue;
               }
@@ -64,10 +64,22 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     }
 
     // Copy sessionId from metadata to vars for display if not already present
-    if (result.metadata?.sessionId && !result.vars?.sessionId) {
-      result.vars = result.vars || {};
-      result.vars.sessionId = result.metadata.sessionId;
-      varsForHeader.add('sessionId');
+    // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
+    // Single-turn strategies store a single sessionId in metadata.sessionId
+    if (!result.vars?.sessionId) {
+      const metadataSessionIds = result.metadata?.sessionIds;
+      if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
+        result.vars = result.vars || {};
+        result.vars.sessionId = metadataSessionIds
+          .filter((id) => id != null && id !== '')
+          .map(String)
+          .join('\n');
+        varsForHeader.add('sessionId');
+      } else if (result.metadata?.sessionId) {
+        result.vars = result.vars || {};
+        result.vars.sessionId = result.metadata.sessionId;
+        varsForHeader.add('sessionId');
+      }
     }
 
     // Copy transformDisplayVars from response metadata to vars for display
@@ -91,11 +103,15 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
     // format text
     let resultText: string | undefined;
 
-    const outputTextDisplay = (
-      typeof result.response?.output === 'object'
-        ? JSON.stringify(result.response.output)
-        : result.response?.output || result.error || ''
-    ) as string;
+    const rawOutput = result.response?.output;
+    let outputTextDisplay: string;
+    if (rawOutput !== null && typeof rawOutput === 'object') {
+      outputTextDisplay = JSON.stringify(rawOutput);
+    } else if (rawOutput == null || rawOutput === '') {
+      outputTextDisplay = result.error || '';
+    } else {
+      outputTextDisplay = String(rawOutput);
+    }
     if (result.testCase.assert) {
       if (result.success) {
         resultText = `${outputTextDisplay || result.error || ''}`;
@@ -147,6 +163,11 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
             resolution: result.response.video.resolution,
           }
         : undefined,
+      images: result.response?.images?.map((img) => ({
+        data: img.data,
+        blobRef: img.blobRef,
+        mimeType: img.mimeType,
+      })),
     };
     invariant(result.promptId, 'Prompt ID is required');
 
@@ -157,7 +178,7 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   const sortedVars = [...varsForHeader].sort();
   for (const row of rows) {
     row.vars = sortedVars.map((varName) => {
-      const varValue = varValuesForRow.get(row.testIdx)?.[varName] || '';
+      const varValue = varValuesForRow.get(row.testIdx)?.[varName] ?? '';
       if (typeof varValue === 'string') {
         return varValue;
       }

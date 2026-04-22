@@ -17,55 +17,55 @@
           "$ref": "#/definitions/__schema2"
         },
         "prompts": {
-          "$ref": "#/definitions/__schema8"
+          "$ref": "#/definitions/__schema13"
         },
         "tests": {
-          "$ref": "#/definitions/__schema9"
+          "$ref": "#/definitions/__schema14"
         },
         "scenarios": {
-          "$ref": "#/definitions/__schema24"
-        },
-        "defaultTest": {
-          "$ref": "#/definitions/__schema25"
-        },
-        "outputPath": {
-          "$ref": "#/definitions/__schema26"
-        },
-        "sharing": {
-          "$ref": "#/definitions/__schema27"
-        },
-        "nunjucksFilters": {
-          "$ref": "#/definitions/__schema28"
-        },
-        "env": {
           "$ref": "#/definitions/__schema29"
         },
-        "derivedMetrics": {
+        "defaultTest": {
           "$ref": "#/definitions/__schema30"
         },
-        "extensions": {
+        "outputPath": {
           "$ref": "#/definitions/__schema31"
         },
-        "metadata": {
+        "sharing": {
           "$ref": "#/definitions/__schema32"
         },
-        "redteam": {
+        "nunjucksFilters": {
           "$ref": "#/definitions/__schema33"
         },
-        "writeLatestResults": {
+        "env": {
           "$ref": "#/definitions/__schema34"
         },
-        "tracing": {
+        "derivedMetrics": {
           "$ref": "#/definitions/__schema35"
         },
-        "evaluateOptions": {
+        "extensions": {
           "$ref": "#/definitions/__schema36"
         },
-        "commandLineOptions": {
+        "metadata": {
           "$ref": "#/definitions/__schema37"
         },
-        "targets": {
+        "redteam": {
           "$ref": "#/definitions/__schema38"
+        },
+        "writeLatestResults": {
+          "$ref": "#/definitions/__schema39"
+        },
+        "tracing": {
+          "$ref": "#/definitions/__schema40"
+        },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema41"
+        },
+        "commandLineOptions": {
+          "$ref": "#/definitions/__schema42"
+        },
+        "targets": {
+          "$ref": "#/definitions/__schema43"
         }
       },
       "required": ["prompts"],
@@ -147,14 +147,14 @@
         "env": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema6"
+              "$ref": "#/definitions/__schema7"
             }
           ]
         },
         "inputs": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema7"
+              "$ref": "#/definitions/__schema8"
             }
           ]
         }
@@ -162,8 +162,17 @@
       "additionalProperties": false
     },
     "__schema6": {
+      "type": "string"
+    },
+    "__schema7": {
       "type": "object",
       "properties": {
+        "ABLIT_API_BASE_URL": {
+          "type": "string"
+        },
+        "ABLIT_KEY": {
+          "type": "string"
+        },
         "AI21_API_BASE_URL": {
           "type": "string"
         },
@@ -347,6 +356,9 @@
         "MISTRAL_API_KEY": {
           "type": "string"
         },
+        "MODELSLAB_API_KEY": {
+          "type": "string"
+        },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
@@ -374,7 +386,31 @@
         "OPENAI_ORGANIZATION": {
           "type": "string"
         },
+        "CLAWDBOT_GATEWAY_PASSWORD": {
+          "type": "string"
+        },
+        "CLAWDBOT_GATEWAY_TOKEN": {
+          "type": "string"
+        },
+        "CLAWDBOT_GATEWAY_URL": {
+          "type": "string"
+        },
         "CODEX_API_KEY": {
+          "type": "string"
+        },
+        "OPENCLAW_CONFIG_PATH": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_PASSWORD": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_PORT": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_TOKEN": {
+          "type": "string"
+        },
+        "OPENCLAW_GATEWAY_URL": {
           "type": "string"
         },
         "PALM_API_HOST": {
@@ -509,18 +545,70 @@
       },
       "additionalProperties": false
     },
-    "__schema7": {
+    "__schema8": {
       "type": "object",
       "propertyNames": {
         "type": "string",
         "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
       },
       "additionalProperties": {
-        "type": "string",
-        "minLength": 1
+        "anyOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "object",
+            "properties": {
+              "config": {
+                "$ref": "#/definitions/__schema9"
+              },
+              "description": {
+                "$ref": "#/definitions/__schema11"
+              },
+              "type": {
+                "$ref": "#/definitions/__schema12"
+              }
+            },
+            "required": ["description"],
+            "additionalProperties": false
+          }
+        ]
       }
     },
-    "__schema8": {
+    "__schema9": {
+      "type": "object",
+      "properties": {
+        "benign": {
+          "type": "boolean"
+        },
+        "inputPurpose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "injectionPlacements": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/__schema10"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "__schema10": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema11": {
+      "type": "string",
+      "minLength": 1
+    },
+    "__schema12": {
+      "type": "string",
+      "enum": ["text", "pdf", "docx", "image"]
+    },
+    "__schema13": {
       "anyOf": [
         {
           "type": "string"
@@ -557,6 +645,9 @@
                   "raw": {
                     "type": "string"
                   },
+                  "template": {
+                    "type": "string"
+                  },
                   "display": {
                     "type": "string"
                   },
@@ -583,7 +674,7 @@
         }
       ]
     },
-    "__schema9": {
+    "__schema14": {
       "anyOf": [
         {
           "type": "string"
@@ -596,63 +687,63 @@
                 "type": "string"
               },
               {
-                "$ref": "#/definitions/__schema10"
+                "$ref": "#/definitions/__schema15"
               },
               {
-                "$ref": "#/definitions/__schema23"
+                "$ref": "#/definitions/__schema28"
               }
             ]
           }
         },
         {
-          "$ref": "#/definitions/__schema23"
+          "$ref": "#/definitions/__schema28"
         }
       ]
     },
-    "__schema10": {
+    "__schema15": {
       "type": "object",
       "properties": {
         "description": {
-          "$ref": "#/definitions/__schema11"
-        },
-        "vars": {
-          "$ref": "#/definitions/__schema12"
-        },
-        "provider": {
-          "$ref": "#/definitions/__schema13"
-        },
-        "providers": {
-          "$ref": "#/definitions/__schema14"
-        },
-        "prompts": {
-          "$ref": "#/definitions/__schema15"
-        },
-        "providerOutput": {
           "$ref": "#/definitions/__schema16"
         },
-        "assert": {
+        "vars": {
           "$ref": "#/definitions/__schema17"
         },
-        "assertScoringFunction": {
+        "provider": {
+          "$ref": "#/definitions/__schema18"
+        },
+        "providers": {
           "$ref": "#/definitions/__schema19"
         },
-        "options": {
+        "prompts": {
           "$ref": "#/definitions/__schema20"
         },
-        "threshold": {
+        "providerOutput": {
           "$ref": "#/definitions/__schema21"
         },
-        "metadata": {
+        "assert": {
           "$ref": "#/definitions/__schema22"
+        },
+        "assertScoringFunction": {
+          "$ref": "#/definitions/__schema24"
+        },
+        "options": {
+          "$ref": "#/definitions/__schema25"
+        },
+        "threshold": {
+          "$ref": "#/definitions/__schema26"
+        },
+        "metadata": {
+          "$ref": "#/definitions/__schema27"
         }
       },
       "additionalProperties": false
     },
-    "__schema11": {
+    "__schema16": {
       "type": "string"
     },
-    "__schema12": {},
-    "__schema13": {
+    "__schema17": {},
+    "__schema18": {
       "anyOf": [
         {
           "type": "string"
@@ -678,7 +769,7 @@
             "inputs": {
               "allOf": [
                 {
-                  "$ref": "#/definitions/__schema7"
+                  "$ref": "#/definitions/__schema8"
                 }
               ]
             }
@@ -688,19 +779,19 @@
         }
       ]
     },
-    "__schema14": {
+    "__schema19": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema15": {
+    "__schema20": {
       "type": "array",
       "items": {
         "type": "string"
       }
     },
-    "__schema16": {
+    "__schema21": {
       "anyOf": [
         {
           "type": "string"
@@ -714,7 +805,7 @@
         }
       ]
     },
-    "__schema17": {
+    "__schema22": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -730,7 +821,7 @@
                 "items": {
                   "allOf": [
                     {
-                      "$ref": "#/definitions/__schema18"
+                      "$ref": "#/definitions/__schema23"
                     }
                   ]
                 }
@@ -756,12 +847,12 @@
             "additionalProperties": false
           },
           {
-            "$ref": "#/definitions/__schema18"
+            "$ref": "#/definitions/__schema23"
           }
         ]
       }
     },
-    "__schema18": {
+    "__schema23": {
       "type": "object",
       "properties": {
         "type": {
@@ -822,6 +913,12 @@
                 "similar:euclidean",
                 "starts-with",
                 "tool-call-f1",
+                "skill-used",
+                "trajectory:goal-success",
+                "trajectory:tool-args-match",
+                "trajectory:step-count",
+                "trajectory:tool-sequence",
+                "trajectory:tool-used",
                 "trace-error-spans",
                 "trace-span-count",
                 "trace-span-duration",
@@ -886,6 +983,12 @@
                 "similar:euclidean",
                 "starts-with",
                 "tool-call-f1",
+                "skill-used",
+                "trajectory:goal-success",
+                "trajectory:tool-args-match",
+                "trajectory:step-count",
+                "trajectory:tool-sequence",
+                "trajectory:tool-used",
                 "trace-error-spans",
                 "trace-span-count",
                 "trace-span-duration",
@@ -930,7 +1033,7 @@
       "required": ["type"],
       "additionalProperties": false
     },
-    "__schema19": {
+    "__schema24": {
       "anyOf": [
         {
           "type": "string",
@@ -939,7 +1042,7 @@
         {}
       ]
     },
-    "__schema20": {
+    "__schema25": {
       "type": "object",
       "properties": {
         "prefix": {
@@ -1038,16 +1141,19 @@
         "disableConversationVar": {
           "type": "boolean"
         },
+        "disableDefaultAsserts": {
+          "type": "boolean"
+        },
         "runSerially": {
           "type": "boolean"
         }
       },
       "additionalProperties": {}
     },
-    "__schema21": {
+    "__schema26": {
       "type": "number"
     },
-    "__schema22": {
+    "__schema27": {
       "type": "object",
       "properties": {
         "pluginConfig": {},
@@ -1055,7 +1161,7 @@
       },
       "additionalProperties": {}
     },
-    "__schema23": {
+    "__schema28": {
       "type": "object",
       "properties": {
         "path": {
@@ -1108,7 +1214,7 @@
       "required": ["path"],
       "additionalProperties": false
     },
-    "__schema24": {
+    "__schema29": {
       "type": "array",
       "items": {
         "anyOf": [
@@ -1129,77 +1235,77 @@
                     "description": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema11"
+                          "$ref": "#/definitions/__schema16"
                         }
                       ]
                     },
                     "vars": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema12"
+                          "$ref": "#/definitions/__schema17"
                         }
                       ]
                     },
                     "provider": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema13"
+                          "$ref": "#/definitions/__schema18"
                         }
                       ]
                     },
                     "providers": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema14"
+                          "$ref": "#/definitions/__schema19"
                         }
                       ]
                     },
                     "prompts": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema15"
+                          "$ref": "#/definitions/__schema20"
                         }
                       ]
                     },
                     "providerOutput": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema16"
+                          "$ref": "#/definitions/__schema21"
                         }
                       ]
                     },
                     "assert": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema17"
+                          "$ref": "#/definitions/__schema22"
                         }
                       ]
                     },
                     "assertScoringFunction": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema19"
+                          "$ref": "#/definitions/__schema24"
                         }
                       ]
                     },
                     "options": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema20"
+                          "$ref": "#/definitions/__schema25"
                         }
                       ]
                     },
                     "threshold": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema21"
+                          "$ref": "#/definitions/__schema26"
                         }
                       ]
                     },
                     "metadata": {
                       "allOf": [
                         {
-                          "$ref": "#/definitions/__schema22"
+                          "$ref": "#/definitions/__schema27"
                         }
                       ]
                     }
@@ -1210,7 +1316,7 @@
               "tests": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/definitions/__schema10"
+                  "$ref": "#/definitions/__schema15"
                 }
               }
             },
@@ -1220,7 +1326,7 @@
         ]
       }
     },
-    "__schema25": {
+    "__schema30": {
       "anyOf": [
         {
           "type": "string"
@@ -1229,41 +1335,41 @@
           "type": "object",
           "properties": {
             "vars": {
-              "$ref": "#/definitions/__schema12"
-            },
-            "provider": {
-              "$ref": "#/definitions/__schema13"
-            },
-            "providers": {
-              "$ref": "#/definitions/__schema14"
-            },
-            "prompts": {
-              "$ref": "#/definitions/__schema15"
-            },
-            "providerOutput": {
-              "$ref": "#/definitions/__schema16"
-            },
-            "assert": {
               "$ref": "#/definitions/__schema17"
             },
-            "assertScoringFunction": {
+            "provider": {
+              "$ref": "#/definitions/__schema18"
+            },
+            "providers": {
               "$ref": "#/definitions/__schema19"
             },
-            "options": {
+            "prompts": {
               "$ref": "#/definitions/__schema20"
             },
-            "threshold": {
+            "providerOutput": {
               "$ref": "#/definitions/__schema21"
             },
-            "metadata": {
+            "assert": {
               "$ref": "#/definitions/__schema22"
+            },
+            "assertScoringFunction": {
+              "$ref": "#/definitions/__schema24"
+            },
+            "options": {
+              "$ref": "#/definitions/__schema25"
+            },
+            "threshold": {
+              "$ref": "#/definitions/__schema26"
+            },
+            "metadata": {
+              "$ref": "#/definitions/__schema27"
             }
           },
           "additionalProperties": false
         }
       ]
     },
-    "__schema26": {
+    "__schema31": {
       "anyOf": [
         {
           "type": "string"
@@ -1276,7 +1382,7 @@
         }
       ]
     },
-    "__schema27": {
+    "__schema32": {
       "anyOf": [
         {
           "type": "boolean"
@@ -1295,7 +1401,7 @@
         }
       ]
     },
-    "__schema28": {
+    "__schema33": {
       "type": "object",
       "propertyNames": {
         "type": "string"
@@ -1304,10 +1410,10 @@
         "type": "string"
       }
     },
-    "__schema29": {
+    "__schema34": {
       "anyOf": [
         {
-          "$ref": "#/definitions/__schema6"
+          "$ref": "#/definitions/__schema7"
         },
         {
           "type": "object",
@@ -1330,7 +1436,7 @@
         }
       ]
     },
-    "__schema30": {
+    "__schema35": {
       "type": "array",
       "items": {
         "type": "object",
@@ -1351,7 +1457,7 @@
         "additionalProperties": false
       }
     },
-    "__schema31": {
+    "__schema36": {
       "anyOf": [
         {
           "type": "array",
@@ -1364,14 +1470,14 @@
         }
       ]
     },
-    "__schema32": {
+    "__schema37": {
       "type": "object",
       "propertyNames": {
         "type": "string"
       },
       "additionalProperties": {}
     },
-    "__schema33": {
+    "__schema38": {
       "type": "object",
       "properties": {
         "injectVar": {
@@ -1414,8 +1520,48 @@
                     "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
                   },
                   "additionalProperties": {
-                    "type": "string",
-                    "minLength": 1
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "config": {
+                            "type": "object",
+                            "properties": {
+                              "benign": {
+                                "type": "boolean"
+                              },
+                              "inputPurpose": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "injectionPlacements": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["text", "pdf", "docx", "image"]
+                          }
+                        },
+                        "required": ["description"],
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 }
               },
@@ -1443,6 +1589,12 @@
                 "env": {
                   "type": "object",
                   "properties": {
+                    "ABLIT_API_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ABLIT_KEY": {
+                      "type": "string"
+                    },
                     "AI21_API_BASE_URL": {
                       "type": "string"
                     },
@@ -1626,6 +1778,9 @@
                     "MISTRAL_API_KEY": {
                       "type": "string"
                     },
+                    "MODELSLAB_API_KEY": {
+                      "type": "string"
+                    },
                     "NSCALE_SERVICE_TOKEN": {
                       "type": "string"
                     },
@@ -1653,7 +1808,31 @@
                     "OPENAI_ORGANIZATION": {
                       "type": "string"
                     },
+                    "CLAWDBOT_GATEWAY_PASSWORD": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_TOKEN": {
+                      "type": "string"
+                    },
+                    "CLAWDBOT_GATEWAY_URL": {
+                      "type": "string"
+                    },
                     "CODEX_API_KEY": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_CONFIG_PATH": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_PASSWORD": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_PORT": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_TOKEN": {
+                      "type": "string"
+                    },
+                    "OPENCLAW_GATEWAY_URL": {
                       "type": "string"
                     },
                     "PALM_API_HOST": {
@@ -1795,8 +1974,48 @@
                     "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
                   },
                   "additionalProperties": {
-                    "type": "string",
-                    "minLength": 1
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "config": {
+                            "type": "object",
+                            "properties": {
+                              "benign": {
+                                "type": "boolean"
+                              },
+                              "inputPurpose": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "injectionPlacements": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "type": {
+                            "type": "string",
+                            "enum": ["text", "pdf", "docx", "image"]
+                          }
+                        },
+                        "required": ["description"],
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 }
               },
@@ -1838,7 +2057,8 @@
               "owasp:agentic",
               "eu:ai-act",
               "iso:42001",
-              "gdpr"
+              "gdpr",
+              "dod:ai:ethics"
             ]
           }
         },
@@ -1899,6 +2119,21 @@
                       "bias:race",
                       "bola",
                       "cca",
+                      "coding-agent:all",
+                      "coding-agent:automation-poisoning",
+                      "coding-agent:core",
+                      "coding-agent:delayed-ci-exfil",
+                      "coding-agent:generated-vulnerability",
+                      "coding-agent:network-egress-bypass",
+                      "coding-agent:procfs-credential-read",
+                      "coding-agent:repo-prompt-injection",
+                      "coding-agent:sandbox-read-escape",
+                      "coding-agent:sandbox-write-escape",
+                      "coding-agent:secret-env-read",
+                      "coding-agent:secret-file-read",
+                      "coding-agent:steganographic-exfil",
+                      "coding-agent:terminal-output-injection",
+                      "coding-agent:verifier-sabotage",
                       "competitors",
                       "contracts",
                       "coppa",
@@ -1908,6 +2143,12 @@
                       "debug-access",
                       "default",
                       "divergent-repetition",
+                      "dod:ai:ethics",
+                      "dod:ai:ethics:01",
+                      "dod:ai:ethics:02",
+                      "dod:ai:ethics:03",
+                      "dod:ai:ethics:04",
+                      "dod:ai:ethics:05",
                       "donotanswer",
                       "ecommerce",
                       "ecommerce:compliance-bypass",
@@ -1940,7 +2181,9 @@
                       "financial:defamation",
                       "financial:hallucination",
                       "financial:impartiality",
+                      "financial:japan-fiea-suitability",
                       "financial:misconduct",
+                      "financial:sox-compliance",
                       "financial:sycophancy",
                       "foundation",
                       "gdpr",
@@ -1988,6 +2231,7 @@
                       "indirect-prompt-injection",
                       "insurance",
                       "insurance:coverage-discrimination",
+                      "insurance:data-disclosure",
                       "insurance:network-misinformation",
                       "insurance:phi-disclosure",
                       "intent",
@@ -2006,6 +2250,9 @@
                       "mcp-shadow:tool-poisoning",
                       "medical",
                       "medical:anchoring-bias",
+                      "medical:fda:ai-disclosure",
+                      "medical:fda:cyber-access-control",
+                      "medical:fda:cyber-audit-tampering",
                       "medical:hallucination",
                       "medical:incorrect-knowledge",
                       "medical:off-label-use",
@@ -2013,12 +2260,24 @@
                       "medical:sycophancy",
                       "misinformation",
                       "mitre:atlas",
+                      "mitre:atlas:ai-attack-staging",
+                      "mitre:atlas:ai-model-access",
+                      "mitre:atlas:collection",
+                      "mitre:atlas:command-and-control",
+                      "mitre:atlas:credential-access",
+                      "mitre:atlas:defense-evasion",
+                      "mitre:atlas:discovery",
+                      "mitre:atlas:execution",
                       "mitre:atlas:exfiltration",
                       "mitre:atlas:impact",
                       "mitre:atlas:initial-access",
+                      "mitre:atlas:lateral-movement",
                       "mitre:atlas:ml-attack-staging",
+                      "mitre:atlas:persistence",
+                      "mitre:atlas:privilege-escalation",
                       "mitre:atlas:reconnaissance",
                       "mitre:atlas:resource-development",
+                      "model-identification",
                       "nist:ai",
                       "nist:ai:measure",
                       "nist:ai:measure:1.1",
@@ -2099,6 +2358,15 @@
                       "rag-poisoning",
                       "rag-source-attribution",
                       "rbac",
+                      "realestate",
+                      "realestate:accessibility-discrimination",
+                      "realestate:advertising-discrimination",
+                      "realestate:discriminatory-listings",
+                      "realestate:fair-housing-discrimination",
+                      "realestate:lending-discrimination",
+                      "realestate:source-of-income",
+                      "realestate:steering",
+                      "realestate:valuation-bias",
                       "reasoning-dos",
                       "religion",
                       "shell-injection",
@@ -2106,6 +2374,11 @@
                       "sql-injection",
                       "ssrf",
                       "system-prompt-override",
+                      "teen-safety",
+                      "teen-safety:age-restricted-goods-and-services",
+                      "teen-safety:dangerous-content",
+                      "teen-safety:dangerous-roleplay",
+                      "teen-safety:harmful-body-ideals",
                       "telecom",
                       "telecom:accessibility-violation",
                       "telecom:account-takeover",
@@ -2157,6 +2430,21 @@
                           "bias:race",
                           "bola",
                           "cca",
+                          "coding-agent:all",
+                          "coding-agent:automation-poisoning",
+                          "coding-agent:core",
+                          "coding-agent:delayed-ci-exfil",
+                          "coding-agent:generated-vulnerability",
+                          "coding-agent:network-egress-bypass",
+                          "coding-agent:procfs-credential-read",
+                          "coding-agent:repo-prompt-injection",
+                          "coding-agent:sandbox-read-escape",
+                          "coding-agent:sandbox-write-escape",
+                          "coding-agent:secret-env-read",
+                          "coding-agent:secret-file-read",
+                          "coding-agent:steganographic-exfil",
+                          "coding-agent:terminal-output-injection",
+                          "coding-agent:verifier-sabotage",
                           "competitors",
                           "contracts",
                           "coppa",
@@ -2166,6 +2454,12 @@
                           "debug-access",
                           "default",
                           "divergent-repetition",
+                          "dod:ai:ethics",
+                          "dod:ai:ethics:01",
+                          "dod:ai:ethics:02",
+                          "dod:ai:ethics:03",
+                          "dod:ai:ethics:04",
+                          "dod:ai:ethics:05",
                           "donotanswer",
                           "ecommerce",
                           "ecommerce:compliance-bypass",
@@ -2198,7 +2492,9 @@
                           "financial:defamation",
                           "financial:hallucination",
                           "financial:impartiality",
+                          "financial:japan-fiea-suitability",
                           "financial:misconduct",
+                          "financial:sox-compliance",
                           "financial:sycophancy",
                           "foundation",
                           "gdpr",
@@ -2246,6 +2542,7 @@
                           "indirect-prompt-injection",
                           "insurance",
                           "insurance:coverage-discrimination",
+                          "insurance:data-disclosure",
                           "insurance:network-misinformation",
                           "insurance:phi-disclosure",
                           "intent",
@@ -2264,6 +2561,9 @@
                           "mcp-shadow:tool-poisoning",
                           "medical",
                           "medical:anchoring-bias",
+                          "medical:fda:ai-disclosure",
+                          "medical:fda:cyber-access-control",
+                          "medical:fda:cyber-audit-tampering",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
                           "medical:off-label-use",
@@ -2271,12 +2571,24 @@
                           "medical:sycophancy",
                           "misinformation",
                           "mitre:atlas",
+                          "mitre:atlas:ai-attack-staging",
+                          "mitre:atlas:ai-model-access",
+                          "mitre:atlas:collection",
+                          "mitre:atlas:command-and-control",
+                          "mitre:atlas:credential-access",
+                          "mitre:atlas:defense-evasion",
+                          "mitre:atlas:discovery",
+                          "mitre:atlas:execution",
                           "mitre:atlas:exfiltration",
                           "mitre:atlas:impact",
                           "mitre:atlas:initial-access",
+                          "mitre:atlas:lateral-movement",
                           "mitre:atlas:ml-attack-staging",
+                          "mitre:atlas:persistence",
+                          "mitre:atlas:privilege-escalation",
                           "mitre:atlas:reconnaissance",
                           "mitre:atlas:resource-development",
+                          "model-identification",
                           "nist:ai",
                           "nist:ai:measure",
                           "nist:ai:measure:1.1",
@@ -2357,6 +2669,15 @@
                           "rag-poisoning",
                           "rag-source-attribution",
                           "rbac",
+                          "realestate",
+                          "realestate:accessibility-discrimination",
+                          "realestate:advertising-discrimination",
+                          "realestate:discriminatory-listings",
+                          "realestate:fair-housing-discrimination",
+                          "realestate:lending-discrimination",
+                          "realestate:source-of-income",
+                          "realestate:steering",
+                          "realestate:valuation-bias",
                           "reasoning-dos",
                           "religion",
                           "shell-injection",
@@ -2364,6 +2685,11 @@
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
+                          "teen-safety",
+                          "teen-safety:age-restricted-goods-and-services",
+                          "teen-safety:dangerous-content",
+                          "teen-safety:dangerous-roleplay",
+                          "teen-safety:harmful-body-ideals",
                           "telecom",
                           "telecom:accessibility-violation",
                           "telecom:account-takeover",
@@ -2553,6 +2879,12 @@
           "exclusiveMinimum": 0,
           "maximum": 9007199254740991
         },
+        "maxCharsPerMessage": {
+          "description": "Maximum number of characters allowed per generated user message",
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
         "delay": {
           "description": "Delay in milliseconds between plugin API calls",
           "type": "integer",
@@ -2570,6 +2902,29 @@
               "$ref": "#/definitions/__schema0"
             }
           ]
+        },
+        "graderExamples": {
+          "description": "Global grading examples that apply to all plugins",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "output": {
+                "type": "string"
+              },
+              "pass": {
+                "type": "boolean"
+              },
+              "score": {
+                "type": "number"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["output", "pass", "score", "reason"],
+            "additionalProperties": false
+          }
         }
       },
       "required": ["plugins", "strategies"],
@@ -2637,10 +2992,10 @@
         }
       }
     },
-    "__schema34": {
+    "__schema39": {
       "type": "boolean"
     },
-    "__schema35": {
+    "__schema40": {
       "type": "object",
       "properties": {
         "enabled": {
@@ -2728,7 +3083,7 @@
       "required": ["enabled"],
       "additionalProperties": false
     },
-    "__schema36": {
+    "__schema41": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2771,7 +3126,7 @@
       },
       "additionalProperties": false
     },
-    "__schema37": {
+    "__schema42": {
       "type": "object",
       "properties": {
         "description": {
@@ -2890,6 +3245,9 @@
         "filterPattern": {
           "type": "string"
         },
+        "filterPrompts": {
+          "type": "string"
+        },
         "filterProviders": {
           "type": "string"
         },
@@ -2944,7 +3302,7 @@
       },
       "additionalProperties": false
     },
-    "__schema38": {
+    "__schema43": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
