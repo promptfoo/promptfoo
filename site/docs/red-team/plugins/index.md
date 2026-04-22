@@ -253,7 +253,7 @@ Promptfoo also supports custom test cases to reflect more nuanced requirements, 
 
 ### Custom Policies
 
-You also establish [custom policies](custom.md) to test against. When creating custom policies, each policy should be defined as its own plugin. These are particularly useful when testing custom requirements for a business, like from an AI Code of Conduct.
+You can also establish [custom policies](policy.md) to test against. Each policy should be defined as its own `policy` plugin so it generates and reports independently. These are useful for business-specific requirements from legal, compliance, support, brand, or AI governance teams.
 
 ```yaml
 plugins:
@@ -291,7 +291,7 @@ plugins:
 
 ### Custom prompts
 
-You can also include custom prompts using the [intents](intent.md), which are passed directly to the target. The intent red teaming plugin is designed to test whether an AI system can be manipulated to exhibit specific behaviors or responses.
+You can also include custom prompts using the [Intent (Custom Prompts) plugin](intent.md). Intents are seed prompts that Promptfoo turns into one base test case per prompt. Selected strategies can transform single-turn seeds, while nested arrays run as authored multi-step sequences.
 
 Unlike the policy plugin, which enforces guidelines, the intent plugin actively attempts to elicit particular (potentially undesirable) behaviors from the model.
 
