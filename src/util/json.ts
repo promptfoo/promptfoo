@@ -77,6 +77,7 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
         truncated[k] = truncateValue(v);
         count++;
       }
+      cache.delete(val);
       return truncated;
     }
 
@@ -98,19 +99,22 @@ function safeJsonStringifyTruncated<T>(value: T, prettyPrint: boolean = false): 
  * @returns JSON string representation, or undefined if serialization fails
  */
 export function safeJsonStringify<T>(value: T, prettyPrint: boolean = false): string | undefined {
-  const cache = new Set();
+  const ancestors: any[] = [];
   const space = prettyPrint ? 2 : undefined;
 
   try {
     return (
       JSON.stringify(
         value,
-        (_key, val) => {
+        function (this: any, _key, val) {
           if (typeof val === 'object' && val !== null) {
-            if (cache.has(val)) {
+            while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
+              ancestors.pop();
+            }
+            if (ancestors.includes(val)) {
               return;
             }
-            cache.add(val);
+            ancestors.push(val);
           }
           return val;
         },

@@ -10,6 +10,7 @@ import {
   VLSUGrader,
   VLSUPlugin,
 } from '../../../src/redteam/plugins/vlsu';
+import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
@@ -52,10 +53,12 @@ function createMockCSVText(records: Array<Record<string, string>>): string {
 }
 
 describe('VLSUPlugin', () => {
-  const mockProvider: ApiProvider = {
-    id: () => 'test-provider',
-    callApi: async () => ({ output: 'test', tokenUsage: { total: 10, prompt: 5, completion: 5 } }),
-  };
+  const mockProvider = createMockProvider({
+    response: createProviderResponse({
+      output: 'test',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    }),
+  });
 
   const mockFetchWithCache = cache.fetchWithCache as MockedFunction<typeof cache.fetchWithCache>;
   const mockFetchImageAsBase64 = imageDatasetUtils.fetchImageAsBase64 as MockedFunction<

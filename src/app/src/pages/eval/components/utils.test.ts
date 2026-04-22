@@ -1,7 +1,13 @@
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import { describe, expect, it } from 'vitest';
-import { getHumanRating, hasHumanRating, hashVarSchema } from './utils';
-import type { EvaluateTableOutput } from '@promptfoo/types';
+import {
+  getHumanRating,
+  getNamedMetricTotal,
+  getNamedMetricTotals,
+  hasHumanRating,
+  hashVarSchema,
+} from './utils';
+import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
 // Helper to create a base output object with all required properties
 const createBaseOutput = (): EvaluateTableOutput => ({
@@ -312,6 +318,43 @@ describe('getHumanRating', () => {
     };
 
     expect(getHumanRating(output)).toBeUndefined();
+  });
+});
+
+describe('named metric helpers', () => {
+  const baseMetrics: Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'> = {
+    namedScoresCount: { accuracy: 2, safety: 1 },
+    namedScoreWeights: { accuracy: 4 },
+  };
+
+  it('prefers namedScoreWeights when available', () => {
+    expect(getNamedMetricTotal(baseMetrics, 'accuracy')).toBe(4);
+  });
+
+  it('falls back to namedScoresCount when weights are absent', () => {
+    expect(getNamedMetricTotal(baseMetrics, 'safety')).toBe(1);
+  });
+
+  it('returns 0 for missing metrics', () => {
+    expect(getNamedMetricTotal(baseMetrics, 'missing')).toBe(0);
+  });
+
+  it('merges sparse namedScoreWeights over namedScoresCount', () => {
+    expect(getNamedMetricTotals(baseMetrics)).toEqual({
+      accuracy: 4,
+      safety: 1,
+    });
+    expect(
+      getNamedMetricTotals({
+        namedScoresCount: { relevance: 3 },
+      } as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>),
+    ).toEqual({ relevance: 3 });
+  });
+
+  it('returns undefined when no totals are available', () => {
+    expect(
+      getNamedMetricTotals({} as Pick<PromptMetrics, 'namedScoresCount' | 'namedScoreWeights'>),
+    ).toBeUndefined();
   });
 });
 

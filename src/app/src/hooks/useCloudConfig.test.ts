@@ -1,9 +1,18 @@
+import {
+  createMockResponse,
+  getCallApiMock,
+  mockCallApiResponse,
+  mockCallApiResponseOnce,
+  rejectCallApi,
+  rejectCallApiOnce,
+  resetCallApiMock,
+} from '@app/tests/apiMocks';
+import { callApi } from '@app/utils/api';
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
-import { callApi } from '../utils/api';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import useCloudConfig from './useCloudConfig';
 
-vi.mock('../utils/api', () => ({
+vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
@@ -12,20 +21,13 @@ vi.mock('../utils/api', () => ({
 
 describe('useCloudConfig', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    resetCallApiMock();
     // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
     // Only use fake timers in specific tests that need timer control
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   it('should initialize with isLoading=true, data=null, and error=null', () => {
-    (callApi as Mock).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue({ appUrl: 'https://app.promptfoo.com', isEnabled: true }),
-    });
+    mockCallApiResponse({ appUrl: 'https://app.promptfoo.com', isEnabled: true });
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -40,10 +42,7 @@ describe('useCloudConfig', () => {
       isEnabled: true,
     };
 
-    (callApi as Mock).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue(mockCloudConfig),
-    });
+    mockCallApiResponse(mockCloudConfig);
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -58,10 +57,7 @@ describe('useCloudConfig', () => {
   });
 
   it('should set error and isLoading=false when API returns ok=false', async () => {
-    (callApi as Mock).mockResolvedValue({
-      ok: false,
-      json: vi.fn().mockResolvedValue({}),
-    });
+    mockCallApiResponse({}, { ok: false });
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -77,7 +73,7 @@ describe('useCloudConfig', () => {
 
   it('should handle network errors gracefully', async () => {
     const networkError = new Error('Network error');
-    (callApi as Mock).mockRejectedValue(networkError);
+    rejectCallApi(networkError);
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -92,7 +88,7 @@ describe('useCloudConfig', () => {
   });
 
   it('should handle non-Error exceptions', async () => {
-    (callApi as Mock).mockRejectedValue('String error');
+    rejectCallApi('String error');
 
     const { result } = renderHook(() => useCloudConfig());
 
@@ -111,10 +107,7 @@ describe('useCloudConfig', () => {
       isEnabled: false,
     };
 
-    (callApi as Mock).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue(mockCloudConfig),
-    });
+    mockCallApiResponse(mockCloudConfig);
 
     renderHook(() => useCloudConfig());
 
@@ -137,10 +130,7 @@ describe('useCloudConfig', () => {
         isEnabled: false,
       };
 
-      (callApi as Mock).mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue(initialConfig),
-      });
+      mockCallApiResponseOnce(initialConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -152,10 +142,7 @@ describe('useCloudConfig', () => {
       expect(callApi).toHaveBeenCalledTimes(1);
 
       // Setup mock for refetch
-      (callApi as Mock).mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue(updatedConfig),
-      });
+      mockCallApiResponseOnce(updatedConfig);
 
       // Call refetch
       await act(async () => {
@@ -177,16 +164,13 @@ describe('useCloudConfig', () => {
         isEnabled: true,
       };
 
-      let resolveFetch: any;
-      const delayedPromise = new Promise((resolve) => {
+      let resolveFetch!: (response: Response) => void;
+      const delayedPromise = new Promise<Response>((resolve) => {
         resolveFetch = resolve;
       });
 
       // First call resolves immediately
-      (callApi as Mock).mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue(mockCloudConfig),
-      });
+      mockCallApiResponseOnce(mockCloudConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -196,7 +180,7 @@ describe('useCloudConfig', () => {
       });
 
       // Second call will be delayed so we can check loading state
-      (callApi as Mock).mockImplementationOnce(() => delayedPromise);
+      getCallApiMock().mockImplementationOnce(() => delayedPromise);
 
       // Start refetch
       act(() => {
@@ -207,10 +191,7 @@ describe('useCloudConfig', () => {
       expect(result.current.isLoading).toBe(true);
 
       // Resolve the delayed promise
-      resolveFetch({
-        ok: true,
-        json: vi.fn().mockResolvedValue(mockCloudConfig),
-      });
+      resolveFetch(createMockResponse(mockCloudConfig));
 
       // Wait for loading to become false
       await waitFor(() => {
@@ -225,10 +206,7 @@ describe('useCloudConfig', () => {
       };
 
       // Initial successful fetch
-      (callApi as Mock).mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue(mockCloudConfig),
-      });
+      mockCallApiResponseOnce(mockCloudConfig);
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -240,7 +218,7 @@ describe('useCloudConfig', () => {
       expect(result.current.error).toBeNull();
 
       // Setup error for refetch
-      (callApi as Mock).mockRejectedValueOnce(new Error('Refetch failed'));
+      rejectCallApiOnce(new Error('Refetch failed'));
 
       // Call refetch
       await act(async () => {
@@ -259,7 +237,7 @@ describe('useCloudConfig', () => {
 
     it('should clear previous error on successful refetch', async () => {
       // Initial failed fetch
-      (callApi as Mock).mockRejectedValueOnce(new Error('Initial fetch failed'));
+      rejectCallApiOnce(new Error('Initial fetch failed'));
 
       const { result } = renderHook(() => useCloudConfig());
 
@@ -276,10 +254,7 @@ describe('useCloudConfig', () => {
       };
 
       // Setup successful refetch
-      (callApi as Mock).mockResolvedValueOnce({
-        ok: true,
-        json: vi.fn().mockResolvedValue(mockCloudConfig),
-      });
+      mockCallApiResponseOnce(mockCloudConfig);
 
       // Call refetch
       await act(async () => {
@@ -302,10 +277,7 @@ describe('useCloudConfig', () => {
       isEnabled: true,
     };
 
-    (callApi as Mock).mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue(mockCloudConfig),
-    });
+    mockCallApiResponseOnce(mockCloudConfig);
 
     const { result, rerender } = renderHook(() => useCloudConfig());
 
