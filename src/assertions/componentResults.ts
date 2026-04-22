@@ -31,11 +31,8 @@ export function collectCountableComponentResults(
   return collectComponentResults(componentResults, true);
 }
 
-/**
- * Counts countable component results that contribute to the assertPass/assertFail
- * totals, skipping metric-only results (e.g. thresholdless cost/latency) that only
- * record raw named metrics.
- */
+// Metric-only results (thresholdless cost/latency) record raw named metrics and must
+// not contribute to assertPass/assertFail totals.
 export function countAssertionPassFail(componentResults: GradingResult[] | undefined): {
   passCount: number;
   failCount: number;

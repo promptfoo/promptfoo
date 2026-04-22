@@ -729,9 +729,7 @@ export const AssertionSchema = z
     // Extract context from the output using a transform
     contextTransform: StringOrFunctionSchema.optional(),
   })
-  .superRefine((assertion, ctx) => {
-    validateMetricOnlyNumericAssertion(assertion, ctx);
-  });
+  .superRefine(validateMetricOnlyNumericAssertion);
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 

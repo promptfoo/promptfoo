@@ -93,9 +93,9 @@ export class AssertionsResult {
     metric?: string;
     weight?: number;
   }) {
-    // Metric-only results (e.g. thresholdless cost/latency) record raw named metrics
-    // but must not influence the aggregate pass/fail score. Named-score accumulation
-    // still runs at weight 1 so the normalized metric reflects the raw value.
+    // Metric-only results (thresholdless cost/latency) must not influence the
+    // aggregate pass/fail score, but still accumulate at weight 1 so the normalized
+    // named metric reflects the raw value.
     const isMetricOnly = result.metadata?.isMetricOnly === true;
     const aggregateWeight = isMetricOnly ? 0 : weight;
     const namedScoreWeight = isMetricOnly ? 1 : weight;
@@ -153,8 +153,12 @@ export class AssertionsResult {
       return this.result;
     }
 
-    const score =
-      this.totalWeight > 0 ? this.totalScore / this.totalWeight : this.failedReason ? 0 : 1;
+    let score: number;
+    if (this.totalWeight > 0) {
+      score = this.totalScore / this.totalWeight;
+    } else {
+      score = this.failedReason ? 0 : 1;
+    }
 
     let pass = !this.failedReason;
     let reason = this.failedReason ? this.failedReason : 'All assertions passed';

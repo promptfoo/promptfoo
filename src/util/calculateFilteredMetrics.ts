@@ -294,8 +294,8 @@ async function aggregateAssertions(
 ): Promise<void> {
   const db = getDb();
 
-  // SQLite query to count assertions from nested JSON
-  // This is complex but avoids fetching all results into memory
+  // Walk only the componentResults axis so nested `pass` keys inside
+  // assertion.value or metadata cannot be mistaken for real results.
   const query = sql`
     SELECT
       prompt_idx,
@@ -303,15 +303,27 @@ async function aggregateAssertions(
         CASE
           WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
             (
-              SELECT COUNT(*)
-              FROM json_tree(grading_result, '$.componentResults') AS component
-              WHERE component.type = 'object'
-                AND COALESCE(CAST(json_extract(component.value, '$.metadata.isMetricOnly') AS INTEGER), 0) != 1
+              WITH RECURSIVE walker(value) AS (
+                SELECT entry.value
+                FROM json_each(json_extract(grading_result, '$.componentResults')) AS entry
+                UNION ALL
+                SELECT entry.value
+                FROM walker,
+                  json_each(
+                    CASE
+                      WHEN json_type(walker.value, '$.componentResults') = 'array'
+                      THEN json_extract(walker.value, '$.componentResults')
+                      ELSE '[]'
+                    END
+                  ) AS entry
+              )
+              SELECT COUNT(*) FROM walker
+              WHERE COALESCE(CAST(json_extract(walker.value, '$.metadata.isMetricOnly') AS INTEGER), 0) != 1
                 AND (
-                  json_type(component.value, '$.assertion') = 'object'
-                  OR COALESCE(json_array_length(component.value, '$.componentResults'), 0) = 0
+                  json_type(walker.value, '$.assertion') = 'object'
+                  OR COALESCE(json_array_length(walker.value, '$.componentResults'), 0) = 0
                 )
-                AND CAST(json_extract(component.value, '$.pass') AS INTEGER) = 1
+                AND CAST(json_extract(walker.value, '$.pass') AS INTEGER) = 1
             )
           ELSE 0
         END
@@ -320,15 +332,27 @@ async function aggregateAssertions(
         CASE
           WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
             (
-              SELECT COUNT(*)
-              FROM json_tree(grading_result, '$.componentResults') AS component
-              WHERE component.type = 'object'
-                AND COALESCE(CAST(json_extract(component.value, '$.metadata.isMetricOnly') AS INTEGER), 0) != 1
+              WITH RECURSIVE walker(value) AS (
+                SELECT entry.value
+                FROM json_each(json_extract(grading_result, '$.componentResults')) AS entry
+                UNION ALL
+                SELECT entry.value
+                FROM walker,
+                  json_each(
+                    CASE
+                      WHEN json_type(walker.value, '$.componentResults') = 'array'
+                      THEN json_extract(walker.value, '$.componentResults')
+                      ELSE '[]'
+                    END
+                  ) AS entry
+              )
+              SELECT COUNT(*) FROM walker
+              WHERE COALESCE(CAST(json_extract(walker.value, '$.metadata.isMetricOnly') AS INTEGER), 0) != 1
                 AND (
-                  json_type(component.value, '$.assertion') = 'object'
-                  OR COALESCE(json_array_length(component.value, '$.componentResults'), 0) = 0
+                  json_type(walker.value, '$.assertion') = 'object'
+                  OR COALESCE(json_array_length(walker.value, '$.componentResults'), 0) = 0
                 )
-                AND CAST(json_extract(component.value, '$.pass') AS INTEGER) = 0
+                AND CAST(json_extract(walker.value, '$.pass') AS INTEGER) = 0
             )
           ELSE 0
         END

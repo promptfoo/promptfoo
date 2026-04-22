@@ -88,29 +88,21 @@ function collectMetricKindsFromConfig(
       ? (config.defaultTest?.assert as Assertion[] | undefined)
       : undefined;
 
-  let appliedDefaultAssertWithTestVars = false;
+  const tests = Array.isArray(config.tests)
+    ? config.tests.filter((test): test is object => typeof test === 'object' && test !== null)
+    : [];
 
-  if (Array.isArray(config.tests)) {
-    for (const test of config.tests) {
-      if (typeof test !== 'object' || test === null) {
-        continue;
-      }
-
-      const vars = getTestVars(test);
-
-      if (defaultAssert) {
-        collectMetricKinds(defaultAssert, vars, metricKinds);
-        appliedDefaultAssertWithTestVars = true;
-      }
-
-      if ('assert' in test) {
-        collectMetricKinds(test.assert as Assertion[] | undefined, vars, metricKinds);
-      }
-    }
+  if (tests.length === 0) {
+    collectMetricKinds(defaultAssert, {}, metricKinds);
+    return;
   }
 
-  if (!appliedDefaultAssertWithTestVars) {
-    collectMetricKinds(defaultAssert, {}, metricKinds);
+  for (const test of tests) {
+    const vars = getTestVars(test);
+    collectMetricKinds(defaultAssert, vars, metricKinds);
+    if ('assert' in test) {
+      collectMetricKinds(test.assert as Assertion[] | undefined, vars, metricKinds);
+    }
   }
 }
 
