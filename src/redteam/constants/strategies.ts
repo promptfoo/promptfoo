@@ -8,6 +8,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'eu:ai-act',
   'iso:42001',
   'gdpr',
+  'dod:ai:ethics',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 
@@ -131,6 +132,7 @@ export const CONFIGURABLE_STRATEGIES = [
   'crescendo',
   'indirect-web-pwn',
   'jailbreak',
+  'jailbreak:composite',
   'jailbreak:hydra',
   'jailbreak:meta',
   'jailbreak:tree',
@@ -170,18 +172,6 @@ export const ENCODING_STRATEGIES = new Set([
  */
 export function isEncodingStrategy(strategyId: string | undefined): boolean {
   return strategyId ? ENCODING_STRATEGIES.has(strategyId) : false;
-}
-
-/**
- * Strategies that should not have language configuration applied to them.
- */
-export const LANGUAGE_DISALLOWED_STRATEGIES = new Set(['audio', 'video', 'image', 'math-prompt']);
-
-/**
- * Determines if a strategy should not use language configuration
- */
-export function isLanguageDisallowedStrategy(strategyId: string | undefined): boolean {
-  return strategyId ? LANGUAGE_DISALLOWED_STRATEGIES.has(strategyId) : false;
 }
 
 /**

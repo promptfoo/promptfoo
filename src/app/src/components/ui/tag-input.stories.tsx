@@ -111,7 +111,7 @@ export const PluginSelection: Story = {
           aria-label="Red team plugins"
         />
         <p className="text-sm text-muted-foreground">
-          {plugins.length} plugin{plugins.length !== 1 ? 's' : ''} selected
+          {plugins.length} plugin{plugins.length === 1 ? '' : 's'} selected
         </p>
       </div>
     );

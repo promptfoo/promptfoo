@@ -83,11 +83,6 @@ def _init_tracing():
         _tracer = trace.get_tracer("promptfoo.python.provider")
         _tracing_enabled = True
 
-        print(
-            f"[PythonProvider] OpenTelemetry tracing enabled, endpoint: {endpoint}",
-            file=sys.stderr,
-            flush=True,
-        )
     except ImportError:
         print(
             "[PythonProvider] OpenTelemetry packages not installed, tracing disabled. "

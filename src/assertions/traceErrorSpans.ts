@@ -11,6 +11,10 @@ interface TraceErrorSpansValue {
 
 function isErrorSpan(span: TraceSpan): boolean {
   // Check various ways a span might indicate an error
+  if (span.statusCode === 2) {
+    return true;
+  }
+
   if (span.statusCode && span.statusCode >= 400) {
     return true;
   }

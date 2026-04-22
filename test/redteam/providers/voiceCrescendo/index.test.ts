@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '../../../../src/util/time';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams } from '../../../../src/types/index';
+import type { CallApiContextParams } from '../../../../src/types/index';
 
 // Mock dependencies
 vi.mock('../../../../src/logger', () => ({
   default: {
     debug: vi.fn(),
+    info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   },
@@ -17,6 +24,7 @@ vi.mock('../../../../src/redteam/providers/shared', () => ({
     getGradingProvider: vi.fn(),
   },
   getTargetResponse: vi.fn(),
+  externalizeResponseForRedteamHistory: vi.fn(async (response: unknown) => response),
 }));
 
 vi.mock('../../../../src/redteam/remoteGeneration', () => ({
@@ -37,13 +45,16 @@ vi.mock('../../../../src/redteam/util', () => ({
 
 describe('VoiceCrescendoProvider', () => {
   let VoiceCrescendoProvider: typeof import('../../../../src/redteam/providers/voiceCrescendo/index').VoiceCrescendoProvider;
-  let mockRedteamProvider: ApiProvider;
-  let mockTargetProvider: ApiProvider;
+  let mockRedteamProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
   let getTargetResponse: typeof import('../../../../src/redteam/providers/shared').getTargetResponse;
   let redteamProviderManager: typeof import('../../../../src/redteam/providers/shared').redteamProviderManager;
+  const mockedSleep = vi.mocked(sleep);
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockedSleep.mockReset();
+    mockedSleep.mockResolvedValue(undefined);
 
     // Import mocked modules
     const sharedModule = await import('../../../../src/redteam/providers/shared');
@@ -55,9 +66,9 @@ describe('VoiceCrescendoProvider', () => {
     VoiceCrescendoProvider = module.VoiceCrescendoProvider;
 
     // Setup mock providers
-    mockRedteamProvider = {
-      id: () => 'mock-redteam-provider',
-      callApi: vi.fn().mockResolvedValue({
+    mockRedteamProvider = createMockProvider({
+      id: 'mock-redteam-provider',
+      response: createProviderResponse({
         output: JSON.stringify({
           voicePrompt: 'Test voice prompt',
           emotionalTone: 'friendly',
@@ -65,15 +76,15 @@ describe('VoiceCrescendoProvider', () => {
         }),
         tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
       }),
-    };
+    });
 
-    mockTargetProvider = {
-      id: () => 'mock-target-provider',
-      callApi: vi.fn().mockResolvedValue({
+    mockTargetProvider = createMockProvider({
+      id: 'mock-target-provider',
+      response: createProviderResponse({
         output: 'Target response',
         tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
       }),
-    };
+    });
 
     // Setup provider manager mock
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
@@ -126,8 +137,8 @@ describe('VoiceCrescendoProvider', () => {
     let evalCount = 0;
     vi.mocked(redteamProviderManager.getProvider).mockImplementation(async (opts) => {
       if (opts?.jsonOnly) {
-        return {
-          id: () => 'mock-provider',
+        return createMockProvider({
+          id: 'mock-provider',
           callApi: vi.fn().mockImplementation(() => {
             evalCount++;
             if (evalCount === 2) {
@@ -152,7 +163,7 @@ describe('VoiceCrescendoProvider', () => {
               tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
             });
           }),
-        };
+        });
       }
       return mockRedteamProvider;
     });
@@ -178,9 +189,11 @@ describe('VoiceCrescendoProvider', () => {
 
     // Verify token usage is accumulated
     expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.numRequests).toBeGreaterThan(0);
-    // Token usage should include redteam, target, and evaluation calls
+    // Probe counting should include only target calls.
+    expect(result.tokenUsage?.numRequests).toBe(result.metadata?.voiceCrescendoTurnsCompleted);
+    // Token totals still include internal calls.
     expect(result.tokenUsage?.total).toBeGreaterThan(0);
+    expect(mockedSleep).not.toHaveBeenCalled();
   });
 
   it('should track token usage even when audio generation fails', async () => {
@@ -210,7 +223,7 @@ describe('VoiceCrescendoProvider', () => {
 
     // Should still have token usage from successful calls
     expect(result.tokenUsage).toBeDefined();
-    expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+    expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
   it('should include metadata with conversation history', async () => {
@@ -268,6 +281,36 @@ describe('VoiceCrescendoProvider', () => {
     // Should still track token usage from attempted calls
     expect(result.tokenUsage).toBeDefined();
     expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+    expect(result.metadata?.voiceCrescendoBacktrackCount).toBe(0);
+    expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(1);
+  });
+
+  it('should stop when target ends conversation', async () => {
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
+
+    vi.mocked(getTargetResponse).mockResolvedValue({
+      output: '',
+      conversationEnded: true,
+      conversationEndReason: 'thread_closed',
+      tokenUsage: { prompt: 5, completion: 0, total: 5, numRequests: 1 },
+    });
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 3,
+      delayBetweenTurns: 0,
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('Test objective', context);
+
+    expect(result.metadata?.stopReason).toBe('Target ended conversation');
+    expect(result.metadata?.voiceCrescendoTurnsCompleted).toBe(1);
   });
 
   it('should respect maxTurns configuration', async () => {
@@ -294,5 +337,31 @@ describe('VoiceCrescendoProvider', () => {
 
     expect(result.metadata?.voiceCrescendoTurnsCompleted).toBeLessThanOrEqual(3);
     expect(result.metadata?.stopReason).toBeDefined();
+  });
+
+  it('should preserve an explicit maxTurns value of 0', async () => {
+    vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
+
+    const provider = new VoiceCrescendoProvider({
+      injectVar: 'goal',
+      maxTurns: 0,
+      delayBetweenTurns: 0,
+    });
+
+    const context: CallApiContextParams = {
+      originalProvider: mockTargetProvider,
+      vars: { goal: 'test goal' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    };
+
+    const result = await provider.callApi('Test objective', context);
+
+    expect(result.output).toBe('');
+    expect(result.prompt).toBe('');
+    expect(result.metadata?.voiceCrescendoTurnsCompleted).toBe(0);
+    expect(result.metadata?.stopReason).toBe('Max turns reached');
+    expect(result.metadata?.audioHistory).toEqual([]);
+    expect(vi.mocked(redteamProviderManager.getProvider)).not.toHaveBeenCalled();
+    expect(vi.mocked(getTargetResponse)).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
@@ -14,6 +15,10 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  buildPromptInputDescriptions,
+  materializeInputVariablesWithMetadata,
+} from '../inputVariables';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
   applyRuntimeTransforms,
@@ -34,6 +39,7 @@ import {
   checkPenalizedPhrases,
   createIterationContext,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -48,6 +54,7 @@ import type {
   CallApiOptionsParams,
   GradingResult,
   GuardrailResponse,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   RedteamFileConfig,
@@ -129,7 +136,7 @@ export async function runRedteamConversation({
   vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
 }): Promise<{
   output: string;
   prompt?: string;
@@ -160,13 +167,13 @@ export async function runRedteamConversation({
         goal,
         purpose: test?.metadata?.purpose,
         modifierSection,
-        inputs,
+        inputs: buildPromptInputDescriptions(inputs),
       })
     : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, {
         goal,
         purpose: test?.metadata?.purpose,
         modifierSection,
-        inputs,
+        inputs: buildPromptInputDescriptions(inputs),
       });
 
   const judgeSystemPrompt = nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal });
@@ -356,12 +363,22 @@ export async function runRedteamConversation({
 
     // Extract input vars from the attack prompt for multi-input mode
     const currentInputVars = extractInputVarsFromPrompt(newInjectVar, inputs);
+    const materializedInputVars =
+      currentInputVars && inputs
+        ? await materializeInputVariablesWithMetadata(currentInputVars, inputs, {
+            materializationIndex: i,
+            pluginId: String(test?.metadata?.pluginId || 'iterative'),
+            provider: redteamProvider,
+            purpose: test?.metadata?.purpose as string | undefined,
+          })
+        : undefined;
+    const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
     // Build updated vars - handle multi-input mode
     const updatedVars: Record<string, VarValue> = {
       ...iterationVars,
       [injectVar]: finalInjectVar,
-      ...(currentInputVars || {}),
+      ...(currentRenderInputVars || {}),
     };
 
     targetPrompt = await renderPrompt(
@@ -373,10 +390,16 @@ export async function runRedteamConversation({
     );
 
     const iterationStart = Date.now();
+    const targetContext = iterationContext
+      ? {
+          ...iterationContext,
+          vars: updatedVars,
+        }
+      : iterationContext;
     let targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
-      iterationContext,
+      targetContext,
       options,
     );
     // Externalize blobs before they hit history/prompts
@@ -552,7 +575,7 @@ export async function runRedteamConversation({
           targetResponse.output,
           iterationTest,
           gradingProvider,
-          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          getGraderAssertionValue(assertToUse),
           additionalRubric,
           undefined,
           gradingContext,
@@ -607,7 +630,7 @@ export async function runRedteamConversation({
       continue;
     }
 
-    let currentScore = 1;
+    let currentScore: number;
     let previousScore = bestResponse ? highestScore : 0;
     try {
       const parsed =
@@ -732,8 +755,11 @@ export async function runRedteamConversation({
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary,
       // Include input vars for multi-input mode (extracted from current prompt)
-      inputVars: currentInputVars,
+      inputVars: currentRenderInputVars,
       metadata: {
+        ...(materializedInputVars?.metadata
+          ? { inputMaterialization: materializedInputVars.metadata }
+          : {}),
         sessionId,
       },
     });
@@ -772,16 +798,20 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly perTurnLayers: LayerConfig[];
-  readonly inputs?: Record<string, string>;
+  readonly inputs?: Inputs;
 
   constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[Iterative] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
-    this.inputs = config.inputs as Record<string, string> | undefined;
+    this.inputs = config.inputs as Inputs | undefined;
 
-    this.numIterations =
+    const configuredIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
+    this.numIterations = isLoggedIntoCloud()
+      ? configuredIterations
+      : Math.min(configuredIterations, 10);
+
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );

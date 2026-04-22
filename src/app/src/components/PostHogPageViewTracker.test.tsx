@@ -1,6 +1,7 @@
+import { mockWindowLocation } from '@app/tests/browserMocks';
 import { render } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePostHog } from './PostHogContext';
 import { PostHogPageViewTracker } from './PostHogPageViewTracker';
 
@@ -24,26 +25,13 @@ describe('PostHogPageViewTracker', () => {
     capture: vi.fn(),
   };
 
-  const originalWindowLocation = window.location;
-
   beforeEach(() => {
     vi.clearAllMocks();
-
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: { ...originalWindowLocation, href: '' },
-    });
+    mockWindowLocation({ pathname: '/', search: '', hash: '' });
 
     mockedUsePostHog.mockReturnValue({
       posthog: mockPostHog as any,
       isInitialized: true,
-    });
-  });
-
-  afterEach(() => {
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalWindowLocation,
     });
   });
 
@@ -54,15 +42,20 @@ describe('PostHogPageViewTracker', () => {
       hash: '#overview',
       state: null,
       key: 'initialKey',
+      unstable_mask: undefined,
     };
     mockedUseLocation.mockReturnValue(initialLocation);
-    window.location.href = `http://localhost${initialLocation.pathname}${initialLocation.search}${initialLocation.hash}`;
+    mockWindowLocation({
+      pathname: initialLocation.pathname,
+      search: initialLocation.search,
+      hash: initialLocation.hash,
+    });
 
     const { rerender } = render(<PostHogPageViewTracker />, { wrapper: MemoryRouter });
 
     expect(mockPostHog.capture).toHaveBeenCalledTimes(1);
     expect(mockPostHog.capture).toHaveBeenCalledWith('$pageview', {
-      $current_url: 'http://localhost/dashboard?filter=active#overview',
+      $current_url: `${window.location.origin}/dashboard?filter=active#overview`,
       pathname: '/dashboard',
       search: '?filter=active',
       hash: '#overview',
@@ -74,15 +67,20 @@ describe('PostHogPageViewTracker', () => {
       hash: '',
       state: null,
       key: 'newKey',
+      unstable_mask: undefined,
     };
     mockedUseLocation.mockReturnValue(newLocation);
-    window.location.href = `http://localhost${newLocation.pathname}`;
+    mockWindowLocation({
+      pathname: newLocation.pathname,
+      search: newLocation.search,
+      hash: newLocation.hash,
+    });
 
     rerender(<PostHogPageViewTracker />);
 
     expect(mockPostHog.capture).toHaveBeenCalledTimes(2);
     expect(mockPostHog.capture).toHaveBeenLastCalledWith('$pageview', {
-      $current_url: 'http://localhost/settings',
+      $current_url: `${window.location.origin}/settings`,
       pathname: '/settings',
       search: '',
       hash: '',

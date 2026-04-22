@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { getOpenAiMissingApiKeyMessage } from '../providers/openai/shared';
 
 // Path to the built CLI binary
 const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
@@ -97,6 +98,93 @@ describe('Provider Smoke Tests', () => {
       // Exec provider should have executed the echo command
       expect(result.response.output).toContain('Echo from exec');
     });
+
+    // Regression for #8686: exec provider must close the child's stdin so that
+    // scripts reading from stdin (e.g. opencode) do not hang forever.
+    it('3.1.3 - exec provider closes stdin on child process', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/exec-provider-stdin.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'exec-provider-stdin-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.success).toBe(true);
+      expect(result.response.output).toContain('stdin closed');
+    });
+  });
+
+  describe('3.3 OpenAI Providers', () => {
+    it('3.3.1 - passes tools and tool_choice to providers', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/normalized-tools.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'normalized-tools-output.json');
+
+      // Run from configs directory so relative script paths work
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: path.join(FIXTURES_DIR, 'configs'),
+      });
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+
+      // Should have results for all 3 providers
+      expect(parsed.results.results.length).toBe(3);
+
+      // All results should be successful
+      parsed.results.results.forEach((result: { success: boolean }) => {
+        expect(result.success).toBe(true);
+      });
+
+      // Verify tool_choice modes are passed correctly to each provider
+      const results = parsed.results.results;
+
+      const autoResult = results.find(
+        (r: { provider: { label: string } }) => r.provider.label === 'Auto tool choice',
+      );
+      const autoOutput = JSON.parse(autoResult.response.output);
+      expect(autoOutput.tool_choice).toBe('auto');
+
+      const requiredResult = results.find(
+        (r: { provider: { label: string } }) => r.provider.label === 'Required tool choice',
+      );
+      const requiredOutput = JSON.parse(requiredResult.response.output);
+      expect(requiredOutput.tool_choice).toBe('required');
+
+      const specificResult = results.find(
+        (r: { provider: { label: string } }) => r.provider.label === 'Specific tool choice',
+      );
+      const specificOutput = JSON.parse(specificResult.response.output);
+      expect(specificOutput.tool_choice.type).toBe('function');
+      expect(specificOutput.tool_choice.function.name).toBe('get_weather');
+    });
+
+    it('3.3.2 - surfaces custom apiKeyEnvar in missing API key errors', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/openai-custom-api-key-envar.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'openai-custom-api-key-envar-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        env: {
+          OPENAI_API_KEY: '',
+          CUSTOM_ASSISTANT_KEY: '',
+        },
+      });
+
+      expect(exitCode).toBe(100);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain(getOpenAiMissingApiKeyMessage('CUSTOM_ASSISTANT_KEY'));
+      expect(result.error).not.toContain(getOpenAiMissingApiKeyMessage());
+    });
   });
 
   describe('3.4 Python Providers', () => {
@@ -115,7 +203,6 @@ describe('Provider Smoke Tests', () => {
       if (exitCode !== 0) {
         const output = stdout + stderr;
         if (output.includes('python') || output.includes('Python')) {
-          console.warn('Skipping Python provider test - Python not available');
           return;
         }
       }

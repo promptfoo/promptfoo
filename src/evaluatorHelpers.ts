@@ -26,7 +26,8 @@ import {
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import { renderVarsInObject } from './util/index';
 import invariant from './util/invariant';
-import { getNunjucksEngine } from './util/templates';
+import { filterFiniteScores } from './util/numeric';
+import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 import type winston from 'winston';
 
@@ -51,15 +52,23 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-export function resolveVariables(variables: Record<string, VarValue>): Record<string, VarValue> {
-  let resolved = true;
+export function resolveVariables(
+  variables: Record<string, VarValue>,
+  skipResolveVars?: string[],
+  varsResolvedFromSkipped?: Set<string>,
+): Record<string, VarValue> {
+  let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
     resolved = true;
     for (const key of Object.keys(variables)) {
-      if (typeof variables[key] !== 'string') {
+      if (
+        skipResolveVars?.includes(key) ||
+        varsResolvedFromSkipped?.has(key) ||
+        typeof variables[key] !== 'string'
+      ) {
         continue;
       }
       const value = variables[key] as string;
@@ -71,6 +80,9 @@ export function resolveVariables(variables: Record<string, VarValue>): Record<st
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
           variables[key] = value.replace(placeholder, variables[varName] as string);
+          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
+            varsResolvedFromSkipped?.add(key);
+          }
           resolved = false; // Indicate that we've made a replacement and should check again
         }
       }
@@ -91,6 +103,15 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
     return `{% raw %}${prompt}{% endraw %}`;
   }
   return prompt;
+}
+
+function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
+  return extractVariablesFromTemplate(template).some((variableName) => {
+    const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
+    return Boolean(
+      rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
+    );
+  });
 }
 
 /**
@@ -212,10 +233,10 @@ function detectMimeFromBase64(base64Data: string): string | null {
  * @param vars - Variables to substitute into the template
  * @param nunjucksFilters - Optional custom Nunjucks filters
  * @param provider - Optional API provider for context
- * @param skipRenderVars - Optional array of variable names to skip template rendering for.
- *                         This is critical for red team testing where injection variables
- *                         contain attack payloads (e.g., SSTI, XSS) that should NOT be
- *                         evaluated by Promptfoo's template engine before reaching the target.
+ * @param skipRenderVars - Optional array of variable names to skip special loading and template
+ *                         rendering for. This is critical for red team testing where injection
+ *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
+ *                         evaluated by Promptfoo before reaching the target.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -231,6 +252,10 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
+    if (skipRenderVars?.includes(varName)) {
+      continue;
+    }
+
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
@@ -337,9 +362,14 @@ export async function renderPrompt(
       }
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
-      const javascriptOutput = (await (
-        await loadFromPackage(value, basePath)
-      )(varName, basePrompt, vars, provider)) as {
+      const requiredModule = await loadFromPackage(value, basePath);
+      if (typeof requiredModule !== 'function') {
+        throw new Error(
+          `Variable source malformed: ${value} must export a function. Received: ${typeof requiredModule}`,
+        );
+      }
+
+      const javascriptOutput = (await requiredModule(varName, basePrompt, vars, provider)) as {
         output?: string;
         error?: string;
       };
@@ -384,12 +414,13 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string') {
+    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
-  resolveVariables(vars);
+  const varsResolvedFromSkipped = new Set<string>();
+  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -479,12 +510,21 @@ export async function renderPrompt(
   } catch {
     // Vars values can be template strings, so we need to render them first:
     const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => [
-        key,
-        typeof value === 'string' && !skipRenderVars?.includes(key)
-          ? nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)
-          : value,
-      ]),
+      Object.entries(vars).map(([key, value]) => {
+        if (
+          typeof value !== 'string' ||
+          skipRenderVars?.includes(key) ||
+          varsResolvedFromSkipped.has(key)
+        ) {
+          return [key, value];
+        }
+
+        if (referencesUndefinedVariables(value, vars)) {
+          return [key, value];
+        }
+
+        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
+      }),
     );
 
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
@@ -525,11 +565,15 @@ export type BeforeEachExtensionHookContext = {
 /**
  * Context passed to afterEach extension hooks.
  * Called after each test case is evaluated.
+ *
+ * When the hook returns the modified context, `result.namedScores`,
+ * `result.metadata`, and `result.response.metadata` will be shallow-merged
+ * into the evaluation result and persisted.
  */
 export type AfterEachExtensionHookContext = {
   /** The test case that was evaluated */
   test: TestCase;
-  /** The result of the evaluation */
+  /** The result of the evaluation (namedScores, metadata, and response.metadata are mutable) */
   result: EvaluateResult;
   /** Logger instance for debugging and logging within hooks */
   logger: winston.Logger;
@@ -627,6 +671,20 @@ export function getExtensionHookName(extension: string): string | undefined {
   return undefined;
 }
 
+type LoggerInjectedHookContext<HookName extends keyof ExtensionHookContextMap> =
+  ExtensionHookContextMap[HookName] & { __inject_logger__?: true };
+
+function stripInjectedLoggerFromHookContext<HookName extends keyof ExtensionHookContextMap>(
+  context: LoggerInjectedHookContext<HookName>,
+): ExtensionHookInputContextMap[HookName] {
+  const {
+    logger: _logger,
+    __inject_logger__: _injectLogger,
+    ...contextWithoutInjectedFields
+  } = context as LoggerInjectedHookContext<HookName> & Record<string, unknown>;
+  return contextWithoutInjectedFields as unknown as ExtensionHookInputContextMap[HookName];
+}
+
 export async function runExtensionHook<HookName extends keyof ExtensionHookContextMap>(
   extensions: string[] | null | undefined,
   hookName: HookName,
@@ -687,7 +745,7 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
       ...updatedContext,
       logger,
       __inject_logger__: true,
-    } as unknown as ExtensionHookContextMap[HookName];
+    } as unknown as LoggerInjectedHookContext<HookName>;
 
     let extensionReturnValue;
     try {
@@ -709,32 +767,71 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
 
     // If the extension hook returns a value, update the context with the value's mutable fields.
     // This also provides backwards compatibility for extension hooks that do not return a value.
-    if (extensionReturnValue) {
-      switch (hookName) {
-        case 'beforeAll': {
-          (updatedContext as ExtensionHookInputContextMap['beforeAll']) = {
-            suite: {
-              ...(updatedContext as ExtensionHookInputContextMap['beforeAll']).suite,
-              // Mutable properties:
-              prompts: extensionReturnValue.suite.prompts,
-              providerPromptMap: extensionReturnValue.suite.providerPromptMap,
-              tests: extensionReturnValue.suite.tests,
-              scenarios: extensionReturnValue.suite.scenarios,
-              defaultTest: extensionReturnValue.suite.defaultTest,
-              nunjucksFilters: extensionReturnValue.suite.nunjucksFilters,
-              derivedMetrics: extensionReturnValue.suite.derivedMetrics,
-              redteam: extensionReturnValue.suite.redteam,
+    if (!extensionReturnValue) {
+      updatedContext = stripInjectedLoggerFromHookContext(contextWithLogger);
+      continue;
+    }
+
+    switch (hookName) {
+      case 'beforeAll': {
+        (updatedContext as ExtensionHookInputContextMap['beforeAll']) = {
+          suite: {
+            ...(updatedContext as ExtensionHookInputContextMap['beforeAll']).suite,
+            // Mutable properties:
+            prompts: extensionReturnValue.suite.prompts,
+            providerPromptMap: extensionReturnValue.suite.providerPromptMap,
+            tests: extensionReturnValue.suite.tests,
+            scenarios: extensionReturnValue.suite.scenarios,
+            defaultTest: extensionReturnValue.suite.defaultTest,
+            nunjucksFilters: extensionReturnValue.suite.nunjucksFilters,
+            derivedMetrics: extensionReturnValue.suite.derivedMetrics,
+            redteam: extensionReturnValue.suite.redteam,
+          },
+        };
+        break;
+      }
+      case 'beforeEach': {
+        (updatedContext as ExtensionHookInputContextMap['beforeEach']) = {
+          test: extensionReturnValue.test,
+        };
+        break;
+      }
+      case 'afterEach': {
+        if (extensionReturnValue.result) {
+          const currentResult = (updatedContext as ExtensionHookInputContextMap['afterEach'])
+            .result;
+          const mergedResponse =
+            currentResult.response && extensionReturnValue.result.response?.metadata
+              ? {
+                  ...currentResult.response,
+                  metadata: {
+                    ...currentResult.response.metadata,
+                    ...extensionReturnValue.result.response.metadata,
+                  },
+                }
+              : currentResult.response;
+          const validScores = filterFiniteScores(extensionReturnValue.result.namedScores || {});
+          (updatedContext as ExtensionHookInputContextMap['afterEach']) = {
+            test: (updatedContext as ExtensionHookInputContextMap['afterEach']).test,
+            result: {
+              ...currentResult,
+              namedScores: {
+                ...currentResult.namedScores,
+                ...validScores,
+              },
+              metadata: {
+                ...currentResult.metadata,
+                ...(extensionReturnValue.result.metadata || {}),
+              },
+              response: mergedResponse,
             },
           };
-          break;
         }
-        case 'beforeEach': {
-          (updatedContext as ExtensionHookInputContextMap['beforeEach']) = {
-            test: extensionReturnValue.test,
-          };
-          break;
-        }
+        break;
       }
+      // No case for 'afterAll': it runs after results are persisted and is
+      // intended for side effects (monitoring, cleanup). Return values are
+      // intentionally ignored since there is no downstream consumer.
     }
   }
 
