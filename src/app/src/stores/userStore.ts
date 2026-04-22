@@ -25,12 +25,10 @@ export const useUserStore = create<UserState>((set, getState) => ({
       return;
     }
     try {
-      const response = await callApi('/user/email');
+      const response = await callApi('/user/email', { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         set({ email: data.email, isLoading: false });
-      } else if (response.status === 404) {
-        set({ email: null, isLoading: false });
       } else {
         throw new Error('Failed to fetch user email');
       }

@@ -1,7 +1,7 @@
 import { getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import { fetchWithTimeout } from './fetch';
+import { fetchWithTimeout } from './fetch/index';
 
 interface HealthResponse {
   status: string;
@@ -79,8 +79,22 @@ export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
     // Type guard for Error objects
     const error = err instanceof Error ? err : new Error(String(err));
 
-    // If it's a timeout error, return a softer message
-    if (error.name === 'TimeoutError') {
+    const errorCause = (error as { cause?: unknown }).cause;
+    if (
+      typeof errorCause === 'object' &&
+      errorCause !== null &&
+      'code' in errorCause &&
+      (errorCause as { code?: string }).code === 'ECONNREFUSED'
+    ) {
+      return {
+        status: 'ERROR',
+        message: 'API is not reachable',
+      };
+    }
+
+    // If it's a timeout error, proceed anyway - a slow health check
+    // doesn't necessarily mean the generation endpoint is broken.
+    if (error.message.includes('timed out')) {
       return {
         status: 'OK',
         message: 'API health check timed out, proceeding anyway',

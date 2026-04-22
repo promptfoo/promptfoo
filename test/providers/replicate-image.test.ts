@@ -1,15 +1,16 @@
-import { ReplicateImageProvider } from '../../src/providers/replicate';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
+import { ReplicateImageProvider } from '../../src/providers/replicate';
 
-jest.mock('../../src/cache');
+vi.mock('../../src/cache');
 
-const mockedFetchWithCache = jest.mocked(fetchWithCache);
+const mockedFetchWithCache = vi.mocked(fetchWithCache);
 
 describe('ReplicateImageProvider Demonstration', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('demonstrates FLUX 1.1 Pro Ultra image generation', async () => {

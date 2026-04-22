@@ -1,20 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { Spinner } from '@app/components/ui/spinner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
+import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
+
+import { useToast } from '@app/hooks/useToast';
+import logger from '../../../../../logger';
+import { useFilterMode } from './FilterModeProvider';
 
 interface EvalOptions {
   /**
@@ -26,10 +30,12 @@ interface EvalOptions {
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { showToast } = useToast();
 
   const {
     table,
+    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
@@ -37,10 +43,10 @@ export default function Eval({ fetchId }: EvalOptions) {
     setEvalId,
     setAuthor,
     fetchEvalData,
-    resetFilters,
-    addFilter,
     setIsStreaming,
   } = useTableStore();
+
+  const { filterMode } = useFilterMode();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -75,6 +81,7 @@ export default function Eval({ fetchId }: EvalOptions) {
    * @param {boolean} isBackgroundUpdate - Whether this is a background update (e.g., from socket) that shouldn't show loading state
    * @returns {Boolean} Whether the eval was loaded successfully.
    */
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const loadEvalById = useCallback(
     async (id: string, isBackgroundUpdate = false) => {
       try {
@@ -85,6 +92,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
+          filterMode,
           filters: Object.values(filters.values).filter((filter) =>
             filter.type === 'metadata'
               ? Boolean(filter.value && filter.field)
@@ -103,7 +111,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId],
+    [fetchEvalData, setFailed, setEvalId, filterMode],
   );
 
   /**
@@ -112,7 +120,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
       navigate({
-        pathname: `/eval/${encodeURIComponent(id)}`,
+        pathname: EVAL_ROUTES.DETAIL(id),
         search: searchParams.toString(),
       });
     },
@@ -123,94 +131,155 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Effects
   // ================================
 
+  /**
+   * Listens for changes to the filters state. Updates the URL query string with the new filters.
+   */
   useEffect(() => {
-    // Reset filters when navigating to a different eval; necessary because Zustand
-    // is a global store.
-    resetFilters();
+    const unsubscribe = useTableStore.subscribe(
+      (state) => state.filters,
+      (_filters) => {
+        // Read the search params from the URL. Does not use the hook to avoid re-running when the search params change.
+        const _searchParams = new URLSearchParams(window.location.search);
 
-    // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
-    // enables the "View Logs" functionality in Vulnerability reports.
-    const pluginParams = searchParams.getAll('plugin');
+        // Do search params need to be removed?
+        if (_filters.appliedCount === 0) {
+          // clear the search params
+          setSearchParams(
+            (prev) => {
+              prev.delete('filter');
+              return prev;
+            },
+            { replace: true },
+          );
+        } else if (_filters.appliedCount > 0) {
+          // Serialize the filters to a JSON string
+          const serializedFilters = JSON.stringify(Object.values(_filters.values));
+          // Check whether the serialized filters are already in the search params
+          if (_searchParams.get('filter') !== serializedFilters) {
+            // Add each filter to the search params
+            setSearchParams(
+              (prev) => {
+                prev.set('filter', serializedFilters);
+                return prev;
+              },
+              { replace: true },
+            );
+          }
+        }
+      },
+    );
+    return () => unsubscribe();
+  }, [setSearchParams]);
 
-    // Check for >=1 metric params in the URL.
-    const metricParams = searchParams.getAll('metric');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  useEffect(() => {
+    const _searchParams = new URLSearchParams(window.location.search);
 
-    if (pluginParams.length > 0) {
-      pluginParams.forEach((pluginParam) => {
-        addFilter({
-          type: 'plugin',
-          operator: 'equals',
-          value: pluginParam,
-          logicOperator: 'or',
-        });
-      });
-    }
+    // Use getState() to avoid adding functions to dependencies
+    const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
 
-    if (metricParams.length > 0) {
-      metricParams.forEach((metricParam) => {
-        addFilter({
-          type: 'metric',
-          operator: 'equals',
-          value: metricParam,
-          logicOperator: 'or',
-        });
+    doResetFilters();
+
+    // Read search params
+    const filtersParam = _searchParams.get('filter');
+
+    if (filtersParam) {
+      let filters: ResultsFilter[] = [];
+      try {
+        filters = JSON.parse(filtersParam) as ResultsFilter[];
+      } catch {
+        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
+        return;
+      }
+      filters.forEach((filter: ResultsFilter) => {
+        doAddFilter(filter);
       });
     }
 
     if (fetchId) {
-      console.log('Eval init: Fetching eval by id', { fetchId });
+      logger.debug('[Eval] Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
         if (success) {
-          setLoaded(true);
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals();
+          // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
       run();
     } else if (IS_RUNNING_LOCALLY) {
-      console.log('Eval init: Using local server websocket');
+      logger.debug('[Eval] Using local server websocket', {});
 
-      const socket = SocketIOClient(apiBaseUrl || '');
+      // Determine socket path based on deployment configuration:
+      // - If apiBaseUrl points to a different origin, use default /socket.io (remote server manages its own)
+      // - If apiBaseUrl has a path component on same origin, derive socket path from it
+      // - If no apiBaseUrl, use VITE_PUBLIC_BASENAME for same-origin reverse proxy deployments
+      let socketPath = '/socket.io';
+      let socketUrl = '';
+
+      if (apiBaseUrl) {
+        try {
+          const url = new URL(apiBaseUrl, window.location.origin);
+          const isSameOrigin = url.origin === window.location.origin;
+          if (isSameOrigin && url.pathname !== '/') {
+            // Same origin with path prefix - derive socket path from API base
+            socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
+          }
+          // For different origins, use default /socket.io and connect to that host
+          socketUrl = isSameOrigin ? '' : apiBaseUrl;
+        } catch {
+          // Invalid URL, fall back to defaults
+        }
+      } else {
+        // No apiBaseUrl - use build-time base path for same-origin deployment
+        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+        if (basePath) {
+          socketPath = `${basePath}/socket.io`;
+        }
+      }
+
+      const socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
-       * Populates the table store with the most recent eval result.
+       * Populates the table store with the most recent eval result by fetching the data by eval ID
        */
-      const handleResultsFile = async (data: ResultsFile, isInit: boolean = false) => {
-        // Set streaming state when we start receiving data
+      const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
+        if (!data) {
+          logger.debug('[Eval] No eval data available', {});
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
+          return;
+        }
+
         setIsStreaming(true);
 
-        // Populate values which do not change while the eval results are being streamed.
-        if (isInit) {
-          setTableFromResultsFile(data);
-          setConfig(data.config);
-          setAuthor(data.author ?? null);
-        }
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const newId = newRecentEvals[0].evalId;
           setDefaultEvalId(newId);
           setEvalId(newId);
-          await loadEvalById(newId, true); // Pass true for isBackgroundUpdate since this is from socket
+          await loadEvalById(newId, true);
         }
 
-        // Clear streaming state after update is complete
         setIsStreaming(false);
       };
 
       socket
         .on('init', async (data) => {
-          console.log('Initialized socket connection', data);
-          await handleResultsFile(data, true);
+          logger.debug('[Eval] Initialized socket connection', { data });
+          await handleResultsFile(data);
         })
         /**
          * The user has run `promptfoo eval` and a new latest eval
          * result has been received.
          */
         .on('update', async (data) => {
-          console.log('Received data update', data);
-          await handleResultsFile(data, false);
+          logger.debug('[Eval] Received data update', { data });
+          await handleResultsFile(data);
         });
 
       return () => {
@@ -218,7 +287,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         setIsStreaming(false);
       };
     } else {
-      console.log('Eval init: Fetching eval via recent');
+      logger.debug('[Eval] Fetching eval via recent', {});
       // Fetch from server
       const run = async () => {
         const evals = await fetchRecentFileEvals();
@@ -226,20 +295,21 @@ export default function Eval({ fetchId }: EvalOptions) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
           if (success) {
-            setLoaded(true);
             setDefaultEvalId(defaultEvalId);
+            // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
         } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
+          // No evals exist - clear stale state and show empty state
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
         }
       };
       run();
     }
-    console.log('Eval init: Resetting comparison mode');
+    logger.debug('[Eval] Resetting comparison mode', {});
     setInComparisonMode(false);
     setComparisonEvalIds([]);
   }, [
@@ -253,8 +323,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
-    resetFilters,
     setIsStreaming,
+    // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
   usePageMeta({
@@ -283,18 +353,18 @@ export default function Eval({ fetchId }: EvalOptions) {
     return <div className="notice">404 Eval not found</div>;
   }
 
-  if (!loaded || !table) {
+  if (!loaded) {
     return (
       <div className="notice">
         <div>
-          <CircularProgress size={22} />
+          <Spinner className="size-5" />
         </div>
         <div>Waiting for eval data</div>
       </div>
     );
   }
 
-  if (loaded && !table) {
+  if (!table) {
     return <EmptyState />;
   }
 
@@ -303,11 +373,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   return (
     <ShiftKeyProvider>
-      {isRedteam && evalId && (
-        <Box sx={{ mb: 2, mt: 2, mx: 2 }}>
-          <EnterpriseBanner evalId={evalId} />
-        </Box>
-      )}
+      {isRedteam && evalId && <EnterpriseBanner evalId={evalId} className="mb-4 mt-4 mx-4" />}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}

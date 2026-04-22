@@ -74,6 +74,40 @@ providers:
         # Any other Ollama API fields
 ```
 
+## Function Calling
+
+Ollama chat models that support function calling (like Llama 3.1, Llama 3.3, Qwen, and others) can use tools with the `tools` config:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'What is the weather like in {{city}}?'
+
+providers:
+  - id: ollama:chat:llama3.3
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_current_weather
+            description: Get the current weather in a given location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: City and state, e.g. San Francisco, CA
+                unit:
+                  type: string
+                  enum: [celsius, fahrenheit]
+              required: [location]
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-valid-openai-tools-call
+```
+
 ## Using Ollama as a Local Grading Provider
 
 ### Using Ollama for Model-Graded Assertions
@@ -113,6 +147,8 @@ tests:
         value: 'Paris is the capital city of France'
         threshold: 0.85
 ```
+
+When running with `--max-concurrency 1` and no per-eval timeout, Promptfoo groups eligible model-graded assertion calls by grading provider ID to reduce local model switching. This is not request batching; each assertion call still runs separately, and report row order is unchanged.
 
 ### Using Ollama Embedding Models for Similarity Assertions
 
@@ -164,6 +200,26 @@ Popular Ollama embedding models include:
 - `ollama:embeddings:nomic-embed-text` - General purpose embeddings
 - `ollama:embeddings:mxbai-embed-large` - High-quality embeddings
 - `ollama:embeddings:all-minilm` - Lightweight, fast embeddings
+
+## Using a Remote Ollama Server
+
+To connect to Ollama running on another machine (e.g., a more powerful server on your local network), set `OLLAMA_BASE_URL` to the remote address:
+
+```bash
+export OLLAMA_BASE_URL="http://192.168.1.100:11434"
+```
+
+Or in a `.env` file:
+
+```
+OLLAMA_BASE_URL=http://192.168.1.100:11434
+```
+
+```bash
+promptfoo eval -c promptfooconfig.yaml --env-file .env
+```
+
+Make sure the Ollama server is listening on `0.0.0.0` so it accepts remote connections. For Docker Compose, this is typically the default. If running Ollama directly, set `OLLAMA_HOST=0.0.0.0:11434` before starting the server.
 
 ## `localhost` and IPv4 vs IPv6
 

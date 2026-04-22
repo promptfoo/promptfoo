@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing quoted comma parsing across all contains assertion types
+description: 'Smoke test - quoted comma parsing in contains assertions'
+
+providers:
+  - echo
+
+prompts:
+  - 'hello, world and foo bar'
+
+tests:
+  # contains-any with quoted comma value (string format)
+  - assert:
+      - type: contains-any
+        value: '"hello, world",universe'
+
+  # contains-all with quoted comma values (string format)
+  - assert:
+      - type: contains-all
+        value: '"hello, world","foo"'
+
+  # icontains-any with quoted comma value
+  - assert:
+      - type: icontains-any
+        value: '"HELLO, WORLD",universe'
+
+  # icontains-all with quoted comma values
+  - assert:
+      - type: icontains-all
+        value: '"HELLO, WORLD","FOO"'

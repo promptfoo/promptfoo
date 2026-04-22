@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { handleLevenshtein } from '../../src/assertions/levenshtein';
 
 describe('handleLevenshtein', () => {
@@ -12,7 +13,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -40,7 +41,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -67,7 +68,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -94,7 +95,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -122,7 +123,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -150,7 +151,7 @@ describe('handleLevenshtein', () => {
           tokenUsage: {},
         },
         baseType: 'contains' as any,
-        context: {
+        assertionValueContext: {
           prompt: '',
           vars: {},
           test: {},
@@ -175,7 +176,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},
@@ -202,7 +203,7 @@ describe('handleLevenshtein', () => {
         tokenUsage: {},
       },
       baseType: 'contains' as any,
-      context: {
+      assertionValueContext: {
         prompt: '',
         vars: {},
         test: {},

@@ -1,6 +1,6 @@
-import { act } from '@testing-library/react';
 import { callApi, fetchUserId } from '@app/utils/api';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { act } from '@testing-library/react';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useUserStore } from './userStore';
 
 vi.mock('@app/utils/api', () => ({
@@ -28,7 +28,7 @@ describe('useUserStore', () => {
 
   const verifyEmailApiCall = () => {
     expect(mockedCallApi).toHaveBeenCalledTimes(1);
-    expect(mockedCallApi).toHaveBeenCalledWith('/user/email');
+    expect(mockedCallApi).toHaveBeenCalledWith('/user/email', { cache: 'no-store' });
   };
 
   const verifyEmailState = (expectedEmail: string | null) => {
@@ -53,17 +53,7 @@ describe('useUserStore', () => {
         },
       },
       {
-        name: '404 response',
-        mockSetup: () => {
-          mockedCallApi.mockResolvedValue({
-            ok: false,
-            status: 404,
-          });
-          return { expectedEmail: null };
-        },
-      },
-      {
-        name: 'status code other than 200 or 404',
+        name: 'non-200 status code (e.g. 500)',
         mockSetup: () => {
           mockedCallApi.mockResolvedValue({
             ok: false,

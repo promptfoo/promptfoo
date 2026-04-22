@@ -1,46 +1,45 @@
-import { useCallback, useState } from 'react';
-
 import { callApi } from '@app/utils/api';
-import { useDebounce } from 'use-debounce';
+import { useQuery } from '@tanstack/react-query';
 
-export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'loading' | 'disabled';
+export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled';
 
 interface HealthResponse {
   status: string;
   message: string;
 }
 
+export type ApiHealthResult = {
+  status: ApiHealthStatus;
+  message: string;
+};
+
+/**
+ * Checks the health of the connection to Promptfoo Cloud.
+ */
 export function useApiHealth() {
-  const [status, setStatus] = useState<ApiHealthStatus>('unknown');
-  const [message, setMessage] = useState<string | null>(null);
-  const [isChecking, setIsChecking] = useState(false);
-
-  const performHealthCheck = useCallback(async () => {
-    try {
-      const response = await callApi('/remote-health');
-      const data = (await response.json()) as HealthResponse;
-
-      if (data.status === 'DISABLED') {
-        setStatus('disabled');
-      } else {
-        setStatus(data.status === 'OK' ? 'connected' : 'blocked');
+  return useQuery<ApiHealthResult, Error>({
+    queryKey: ['apiHealth'],
+    queryFn: async () => {
+      try {
+        const response = await callApi('/remote-health', { cache: 'no-store' });
+        const { status, message } = (await response.json()) as HealthResponse;
+        return {
+          status: status === 'DISABLED' ? 'disabled' : status === 'OK' ? 'connected' : 'blocked',
+          message,
+        };
+      } catch {
+        return {
+          status: 'blocked',
+          message: 'Network error: Unable to check API health',
+        };
       }
-      setMessage(data.message);
-    } catch {
-      setStatus('blocked');
-      setMessage('Network error: Unable to check API health');
-    } finally {
-      setIsChecking(false);
-    }
-  }, []);
-
-  const [debouncedHealthCheck] = useDebounce(performHealthCheck, 300);
-
-  const checkHealth = useCallback(async () => {
-    setIsChecking(true);
-    setStatus('loading');
-    await debouncedHealthCheck();
-  }, [debouncedHealthCheck]);
-
-  return { status, message, checkHealth, isChecking };
+    },
+    refetchInterval: 3000, // Poll every 3 seconds
+    retry: false, // Failed queries will not be retried until the next poll
+    staleTime: 2000, // Data is fresh for 2 seconds
+    initialData: {
+      status: 'unknown',
+      message: '',
+    },
+  });
 }

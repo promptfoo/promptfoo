@@ -12,11 +12,12 @@
 const redTeamSidebar = [
   {
     type: 'doc',
-    id: 'red-team/index',
+    id: 'red-team/quickstart',
+    label: 'Getting started',
   },
   {
     type: 'doc',
-    id: 'red-team/quickstart',
+    id: 'red-team/index',
   },
   {
     type: 'doc',
@@ -24,19 +25,17 @@ const redTeamSidebar = [
   },
   {
     type: 'doc',
-    id: 'red-team/architecture',
+    id: 'red-team/discovery',
   },
   {
-    type: 'doc',
-    id: 'red-team/llm-vulnerability-types',
-  },
-  {
-    type: 'doc',
-    id: 'red-team/owasp-llm-top-10',
-  },
-  {
-    type: 'doc',
-    id: 'red-team/risk-scoring',
+    type: 'category',
+    label: 'Concepts',
+    collapsed: true,
+    items: [
+      { type: 'doc', id: 'red-team/architecture' },
+      { type: 'doc', id: 'red-team/llm-vulnerability-types' },
+      { type: 'doc', id: 'red-team/risk-scoring' },
+    ],
   },
   {
     type: 'category',
@@ -57,6 +56,7 @@ const redTeamSidebar = [
           'red-team/plugins/bola',
           'red-team/plugins/cross-session-leak',
           'red-team/plugins/debug-access',
+          'red-team/plugins/model-identification',
           'red-team/plugins/context-compliance-attack',
           'red-team/plugins/divergent-repetition',
           'red-team/plugins/hijacking',
@@ -96,8 +96,10 @@ const redTeamSidebar = [
           },
           'red-team/plugins/beavertails',
           'red-team/plugins/contracts',
+          'red-team/plugins/coppa',
           'red-team/plugins/cyberseceval',
           'red-team/plugins/donotanswer',
+          'red-team/plugins/ferpa',
           'red-team/plugins/harmbench',
           'red-team/plugins/aegis',
           'red-team/plugins/harmful',
@@ -108,6 +110,7 @@ const redTeamSidebar = [
           'red-team/plugins/toxic-chat',
           'red-team/plugins/unsafebench',
           'red-team/plugins/vlguard',
+          'red-team/plugins/wordplay',
           'red-team/plugins/xstest',
         ],
       },
@@ -118,6 +121,7 @@ const redTeamSidebar = [
         items: [
           'red-team/plugins/competitors',
           'red-team/plugins/excessive-agency',
+          'red-team/plugins/goal-misalignment',
           'red-team/plugins/hallucination',
           'red-team/plugins/imitation',
           'red-team/plugins/off-topic',
@@ -129,7 +133,15 @@ const redTeamSidebar = [
         type: 'category',
         label: 'Domain-Specific',
         collapsed: true,
-        items: ['red-team/plugins/medical', 'red-team/plugins/financial'],
+        items: [
+          'red-team/plugins/ecommerce',
+          'red-team/plugins/financial',
+          'red-team/plugins/insurance',
+          'red-team/plugins/medical',
+          'red-team/plugins/pharmacy',
+          'red-team/plugins/realestate',
+          'red-team/plugins/telecom',
+        ],
       },
       {
         type: 'category',
@@ -160,12 +172,11 @@ const redTeamSidebar = [
           'red-team/strategies/gcg',
           'red-team/strategies/hex',
           'red-team/strategies/homoglyph',
+          'red-team/strategies/jailbreak-templates',
           'red-team/strategies/leetspeak',
           'red-team/strategies/likert',
           'red-team/strategies/math-prompt',
-          'red-team/strategies/multilingual',
           'red-team/strategies/other-encodings',
-          'red-team/strategies/prompt-injection',
           'red-team/strategies/rot13',
         ],
       },
@@ -185,6 +196,8 @@ const redTeamSidebar = [
         collapsed: true,
         items: [
           'red-team/strategies/iterative',
+          'red-team/strategies/meta',
+          'red-team/strategies/hydra',
           'red-team/strategies/tree',
           'red-team/strategies/composite-jailbreaks',
         ],
@@ -198,6 +211,12 @@ const redTeamSidebar = [
           'red-team/strategies/audio',
           'red-team/strategies/video',
         ],
+      },
+      {
+        type: 'category',
+        label: 'Indirect Prompt Injection',
+        collapsed: true,
+        items: ['red-team/strategies/indirect-web-pwn'],
       },
       {
         type: 'category',
@@ -219,36 +238,18 @@ const redTeamSidebar = [
   },
   {
     type: 'category',
-    label: 'Tools',
+    label: 'Frameworks',
     collapsed: true,
     items: [
-      {
-        type: 'doc',
-        id: 'red-team/discovery',
-      },
-      {
-        type: 'doc',
-        id: 'red-team/guardrails',
-      },
-      {
-        type: 'category',
-        label: 'Model Scanner',
-        collapsed: true,
-        items: [
-          {
-            type: 'doc',
-            id: 'model-audit/index',
-          },
-          {
-            type: 'doc',
-            id: 'model-audit/usage',
-          },
-          {
-            type: 'doc',
-            id: 'model-audit/scanners',
-          },
-        ],
-      },
+      'red-team/nist-ai-rmf',
+      'red-team/dod-ai-ethics',
+      'red-team/owasp-llm-top-10',
+      'red-team/owasp-agentic-ai',
+      'red-team/owasp-api-top-10',
+      'red-team/mitre-atlas',
+      'red-team/iso-42001',
+      'red-team/gdpr',
+      'red-team/eu-ai-act',
     ],
   },
   {
@@ -260,6 +261,10 @@ const redTeamSidebar = [
   {
     type: 'category',
     label: 'Guides',
+    link: {
+      type: 'doc',
+      id: 'red-team/guides/index',
+    },
     collapsed: true,
     items: [
       {
@@ -269,18 +274,33 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
+        label: 'Testing Guardrails',
+        id: 'guides/testing-guardrails',
+      },
+      {
+        type: 'doc',
         label: 'RAG Red Teaming',
         id: 'red-team/rag',
       },
       {
         type: 'doc',
         label: 'Agent Red Teaming',
-        id: 'red-team/agents',
+        id: 'red-team/llm-agents',
       },
       {
         type: 'doc',
         label: 'MCP Security',
         id: 'red-team/mcp-security-testing',
+      },
+      {
+        type: 'doc',
+        label: 'Red Teaming a Chatbase Chatbot',
+        id: 'guides/chatbase-redteam',
+      },
+      {
+        type: 'doc',
+        label: 'Multi-Input Testing',
+        id: 'red-team/multi-input',
       },
       {
         type: 'doc',
@@ -294,8 +314,23 @@ const redTeamSidebar = [
       },
       {
         type: 'doc',
-        label: 'Testing Guardrails',
-        id: 'guides/testing-guardrails',
+        label: 'Evaluating Safety with HarmBench',
+        id: 'guides/evaling-with-harmbench',
+      },
+      {
+        type: 'doc',
+        label: 'Testing Google Cloud Model Armor',
+        id: 'guides/google-cloud-model-armor',
+      },
+      {
+        type: 'doc',
+        label: 'LLM Supply Chain Security',
+        id: 'red-team/llm-supply-chain',
+      },
+      {
+        type: 'doc',
+        label: 'Detecting Model Drift',
+        id: 'red-team/model-drift',
       },
     ],
   },
@@ -314,52 +349,127 @@ const sidebars = {
       id: 'installation',
     },
     {
-      type: 'doc',
-      id: 'getting-started',
-    },
-    {
       type: 'category',
-      label: 'Configuration',
-      link: {
-        type: 'generated-index',
-      },
+      label: 'Evals',
+      collapsible: true,
+      collapsed: false,
       items: [
-        { type: 'doc', id: 'configuration/guide' },
-        { type: 'doc', id: 'configuration/reference' },
-        // Page still exists for backwards compatibility, but we don't put it in the sidebar
-        // { type: 'doc', id: 'configuration/parameters' },
-        { type: 'doc', id: 'configuration/prompts' },
-        { type: 'doc', id: 'configuration/test-cases' },
-        { type: 'doc', id: 'configuration/outputs' },
-        { type: 'doc', id: 'configuration/chat' },
-        { type: 'doc', id: 'configuration/datasets' },
-        { type: 'doc', id: 'configuration/scenarios' },
-        { type: 'doc', id: 'configuration/caching' },
-        { type: 'doc', id: 'configuration/telemetry' },
+        { type: 'doc', id: 'getting-started' },
         {
-          type: 'doc',
-          id: 'tracing',
+          type: 'category',
+          label: 'Configuration',
+          collapsed: true,
+          link: {
+            type: 'generated-index',
+          },
+          items: [
+            { type: 'doc', id: 'configuration/guide' },
+            { type: 'doc', id: 'configuration/reference' },
+            { type: 'doc', id: 'configuration/tools' },
+            // Page still exists for backwards compatibility, but we don't put it in the sidebar
+            // { type: 'doc', id: 'configuration/parameters' },
+            { type: 'doc', id: 'configuration/prompts' },
+            { type: 'doc', id: 'configuration/test-cases' },
+            { type: 'doc', id: 'configuration/outputs' },
+            { type: 'doc', id: 'configuration/chat' },
+            { type: 'doc', id: 'configuration/datasets' },
+            { type: 'doc', id: 'configuration/scenarios' },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Assertions & metrics',
+          collapsed: true,
+          link: {
+            type: 'doc',
+            id: 'configuration/expected-outputs/index',
+          },
+          items: [{ type: 'autogenerated', dirName: 'configuration/expected-outputs' }],
+        },
+        {
+          type: 'category',
+          label: 'Runtime',
+          collapsed: true,
+          items: [
+            { type: 'doc', id: 'configuration/caching' },
+            { type: 'doc', id: 'configuration/rate-limits' },
+            { type: 'doc', id: 'configuration/telemetry' },
+            { type: 'doc', id: 'tracing' },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Guides',
+          link: {
+            type: 'doc',
+            id: 'guides/index',
+          },
+          collapsed: true,
+          items: [
+            {
+              type: 'category',
+              label: 'Evaluation Techniques',
+              collapsed: true,
+              items: [
+                'guides/evaluate-rag',
+                'guides/prevent-llm-hallucinations',
+                'guides/evaluate-json',
+                'guides/evaluate-coding-agents',
+                'guides/factuality-eval',
+                'guides/llm-as-a-judge',
+                'guides/testing-llm-chains',
+                'guides/evaluate-llm-temperature',
+                'guides/text-to-sql-evaluation',
+                'guides/sandboxed-code-evals',
+                'guides/hle-benchmark',
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Model Comparisons',
+              collapsed: true,
+              items: [
+                'guides/gpt-vs-claude-vs-gemini',
+                'guides/deepseek-benchmark',
+                'guides/choosing-best-gpt-model',
+                'guides/gpt-5.2-vs-o3',
+                'guides/compare-open-source-models',
+                'guides/gpt-mmlu-comparison',
+                'guides/qwen-benchmark',
+                'guides/azure-vs-openai',
+                'guides/mixtral-vs-gpt',
+                'guides/llama2-uncensored-benchmark-ollama',
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Integrations',
+              collapsed: true,
+              items: [
+                'guides/langchain-prompttemplate',
+                'guides/evaluate-openai-assistants',
+                'guides/evaluate-crewai',
+                'guides/evaluate-langgraph',
+                'guides/evaluate-elevenlabs',
+              ],
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Usage',
+          collapsed: true,
+          link: {
+            type: 'generated-index',
+          },
+          items: [{ type: 'autogenerated', dirName: 'usage' }],
         },
       ],
     },
     {
       type: 'category',
-      label: 'Usage',
-      collapsed: true,
-      link: {
-        type: 'generated-index',
-      },
-      items: [{ type: 'autogenerated', dirName: 'usage' }],
-    },
-    {
-      type: 'category',
-      label: 'Assertions & metrics',
-      collapsed: true,
-      link: {
-        type: 'doc',
-        id: 'configuration/expected-outputs/index',
-      },
-      items: [{ type: 'autogenerated', dirName: 'configuration/expected-outputs' }],
+      label: 'Red teaming',
+      items: redTeamSidebar,
     },
     {
       type: 'category',
@@ -382,28 +492,34 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Red teaming',
+      label: 'Code scanning',
       link: {
-        type: 'generated-index',
+        type: 'doc',
+        id: 'code-scanning/index',
       },
-      items: [...redTeamSidebar, { type: 'doc', id: 'guides/llm-redteaming' }],
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'code-scanning/github-action' },
+        { type: 'doc', id: 'code-scanning/cli' },
+        { type: 'doc', id: 'code-scanning/vscode-extension' },
+      ],
     },
     {
       type: 'category',
-      label: 'Guides',
+      label: 'Model Audit',
       link: {
-        type: 'generated-index',
+        type: 'doc',
+        id: 'model-audit/index',
       },
       collapsed: true,
-      items: [{ type: 'autogenerated', dirName: 'guides' }],
+      items: [
+        { type: 'doc', id: 'model-audit/usage' },
+        { type: 'doc', id: 'model-audit/scanners' },
+      ],
     },
     {
       type: 'category',
       label: 'Enterprise',
-      link: {
-        type: 'doc',
-        id: 'enterprise/index',
-      },
       collapsed: true,
       items: [
         { type: 'doc', id: 'enterprise/index' },
@@ -412,6 +528,8 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
         { type: 'doc', id: 'enterprise/findings' },
+        { type: 'doc', id: 'enterprise/guardrails' },
+        { type: 'doc', id: 'enterprise/remediation-reports' },
         { type: 'doc', id: 'enterprise/webhooks' },
         { type: 'doc', id: 'enterprise/audit-logging' },
         {
@@ -438,27 +556,6 @@ const sidebars = {
       id: 'releases',
     },
   ],
-  // Within enterprise docs, show only the following sidebar
-  enterprise: [
-    {
-      type: 'doc',
-      id: 'enterprise/index',
-    },
-    { type: 'doc', id: 'enterprise/authentication' },
-    { type: 'doc', id: 'enterprise/service-accounts' },
-    { type: 'doc', id: 'enterprise/teams' },
-    { type: 'doc', id: 'enterprise/red-teams' },
-    { type: 'doc', id: 'enterprise/findings' },
-    { type: 'doc', id: 'enterprise/webhooks' },
-    { type: 'doc', id: 'enterprise/audit-logging' },
-    {
-      type: 'link',
-      label: 'API Reference',
-      href: '/docs/api-reference',
-    },
-  ],
-  // Within red team docs, show only the following sidebar
-  redTeamSidebar,
 };
 
 module.exports = sidebars;

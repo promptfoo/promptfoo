@@ -1,9 +1,10 @@
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
 import ScanStatistics from './ScanStatistics';
+
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 const createMockScanResults = ({
   issues = [],
@@ -29,16 +30,15 @@ const renderScanStatistics = (
   onSeverityClick = vi.fn(),
   onFilesClick = vi.fn(),
 ) => {
-  const theme = createTheme();
   return render(
-    <ThemeProvider theme={theme}>
+    <TooltipProvider delayDuration={0}>
       <ScanStatistics
         scanResults={scanResults}
         selectedSeverity={selectedSeverity}
         onSeverityClick={onSeverityClick}
         onFilesClick={onFilesClick}
       />
-    </ThemeProvider>,
+    </TooltipProvider>,
   );
 };
 
@@ -61,33 +61,35 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
+    const criticalCard = screen.getByText('Critical').closest('button');
     expect(criticalCard).toHaveTextContent('2');
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
+    const warningsCard = screen.getByText('Warnings').closest('button');
     expect(warningsCard).toHaveTextContent('1');
 
-    const informationCard = screen.getByText('Information').closest('div');
+    const informationCard = screen.getByText('Information').closest('button');
     expect(informationCard).toHaveTextContent('3');
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
     expect(filesScannedCard).toHaveTextContent('125');
   });
 
-  it('should call onSeverityClick with the correct severity value when a severity StatCard is clicked', () => {
+  it('should call onSeverityClick with the correct severity value when a severity StatCard is clicked', async () => {
+    const user = userEvent.setup();
     const mockScanResults = createMockScanResults({
       issues: [{ severity: 'error', message: 'Critical issue' } as ScanIssue],
     });
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
-    fireEvent.click(criticalCard as HTMLElement);
+    const criticalCard = screen.getByText('Critical').closest('button');
+    await user.click(criticalCard as HTMLElement);
 
     expect(mockOnSeverityClick).toHaveBeenCalledWith('error');
   });
 
-  it('should call onSeverityClick with null when the currently selected severity StatCard is clicked again', () => {
+  it('should call onSeverityClick with null when the currently selected severity StatCard is clicked again', async () => {
+    const user = userEvent.setup();
     const mockScanResults = createMockScanResults({
       issues: [{ severity: 'warning', message: 'Warning issue 1' } as ScanIssue],
       scannedFiles: 100,
@@ -96,21 +98,22 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, selectedSeverity, mockOnSeverityClick, mockOnFilesClick);
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
-    fireEvent.click(warningsCard as Element);
+    const warningsCard = screen.getByText('Warnings').closest('button');
+    await user.click(warningsCard as Element);
 
     expect(mockOnSeverityClick).toHaveBeenCalledWith(null);
   });
 
-  it('should call onFilesClick when the Files Scanned StatCard is clicked', () => {
+  it('should call onFilesClick when the Files Scanned StatCard is clicked', async () => {
+    const user = userEvent.setup();
     const mockScanResults = createMockScanResults({
       scannedFiles: 125,
     });
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
-    fireEvent.click(filesScannedCard as Element);
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
+    await user.click(filesScannedCard as Element);
 
     expect(mockOnFilesClick).toHaveBeenCalled();
   });
@@ -127,16 +130,16 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
+    const criticalCard = screen.getByText('Critical').closest('button');
     expect(criticalCard).toHaveTextContent('1');
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
+    const warningsCard = screen.getByText('Warnings').closest('button');
     expect(warningsCard).toHaveTextContent('1');
 
-    const informationCard = screen.getByText('Information').closest('div');
+    const informationCard = screen.getByText('Information').closest('button');
     expect(informationCard).toHaveTextContent('1');
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
     expect(filesScannedCard).toHaveTextContent('10');
   });
 });

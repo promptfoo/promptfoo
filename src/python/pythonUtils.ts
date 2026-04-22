@@ -1,16 +1,52 @@
-﻿import fs from 'fs';
+import { execFile } from 'child_process';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { promisify } from 'util';
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
+
 import type { Options as PythonShellOptions } from 'python-shell';
+
+/**
+ * Gets an integer value from an environment variable.
+ * @param key - The environment variable name
+ * @returns The parsed integer value, or undefined if not set or not a valid integer
+ */
+export function getEnvInt(key: string): number | undefined {
+  const value = process.env[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = parseInt(value, 10);
+  return isNaN(parsed) ? undefined : parsed;
+}
+
+/**
+ * Resolves the Python executable path from explicit config and environment.
+ * This centralizes the fallback logic: configPath > PROMPTFOO_PYTHON env var.
+ *
+ * Note: Does NOT apply the final 'python' default - that's handled by
+ * validatePythonPath. This preserves the distinction between "explicitly
+ * configured" (should fail if invalid) and "using system default" (should
+ * try fallback detection).
+ *
+ * @param configPath - Explicitly configured Python path from provider config
+ * @returns The configured path, or undefined if neither config nor env var is set
+ */
+export function getConfiguredPythonPath(configPath?: string): string | undefined {
+  if (configPath) {
+    return configPath;
+  }
+  const envPath = getEnvString('PROMPTFOO_PYTHON');
+  return envPath || undefined;
+}
 
 export const state: {
   cachedPythonPath: string | null;
@@ -196,48 +232,55 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
     return state.cachedPythonPath;
   }
 
-  // If validation is already in progress, wait for it to complete
-  if (state.validationPromise) {
-    return state.validationPromise;
-  }
+  // Create validation promise atomically if it doesn't exist
+  // This prevents race conditions where multiple calls create separate validations
+  if (!state.validationPromise) {
+    state.validationPromise = (async () => {
+      try {
+        const primaryPath = await tryPath(pythonPath);
+        if (primaryPath) {
+          state.cachedPythonPath = primaryPath;
+          state.validationPromise = null;
+          return primaryPath;
+        }
 
-  // Start new validation and store the promise to prevent concurrent validations
-  const validationPromise = (async () => {
-    try {
-      const primaryPath = await tryPath(pythonPath);
-      if (primaryPath) {
-        state.cachedPythonPath = primaryPath;
-        return primaryPath;
-      }
+        if (isExplicit) {
+          const error = new Error(
+            `Python 3 not found. Tried "${pythonPath}" ` +
+              `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
+              `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
+          );
+          // Clear promise on error to allow retry
+          state.validationPromise = null;
+          throw error;
+        }
 
-      if (isExplicit) {
-        throw new Error(
-          `Python 3 not found. Tried "${pythonPath}" ` +
+        // Try to get Python executable using comprehensive detection
+        const detectedPath = await getSysExecutable();
+        if (detectedPath) {
+          state.cachedPythonPath = detectedPath;
+          state.validationPromise = null;
+          return detectedPath;
+        }
+
+        const error = new Error(
+          `Python 3 not found. Tried "${pythonPath}", sys.executable detection, and fallback commands. ` +
             `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
             `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
         );
+        // Clear promise on error to allow retry
+        state.validationPromise = null;
+        throw error;
+      } catch (error) {
+        // Ensure promise is cleared on any error
+        state.validationPromise = null;
+        throw error;
       }
+    })();
+  }
 
-      // Try to get Python executable using comprehensive detection
-      const detectedPath = await getSysExecutable();
-      if (detectedPath) {
-        state.cachedPythonPath = detectedPath;
-        return detectedPath;
-      }
-
-      throw new Error(
-        `Python 3 not found. Tried "${pythonPath}", sys.executable detection, and fallback commands. ` +
-          `Please ensure Python 3 is installed and set the PROMPTFOO_PYTHON environment variable ` +
-          `to your Python 3 executable path (e.g., '${process.platform === 'win32' ? 'C:\\Python39\\python.exe' : '/usr/bin/python3'}').`,
-      );
-    } finally {
-      // Clear the promise when validation completes (success or failure)
-      state.validationPromise = null;
-    }
-  })();
-
-  state.validationPromise = validationPromise;
-  return validationPromise;
+  // Return the existing or newly-created promise
+  return state.validationPromise;
 }
 
 /**
@@ -251,12 +294,12 @@ export async function validatePythonPath(pythonPath: string, isExplicit: boolean
  * @returns A promise that resolves to the output of the Python script.
  * @throws An error if there's an issue running the Python script or parsing its output.
  */
-export async function runPython(
+export async function runPython<T = unknown>(
   scriptPath: string,
   method: string,
   args: (string | number | object | undefined)[],
   options: { pythonExecutable?: string } = {},
-): Promise<any> {
+): Promise<T> {
   const absPath = path.resolve(scriptPath);
   const tempJsonPath = path.join(
     os.tmpdir(),
@@ -266,7 +309,7 @@ export async function runPython(
     os.tmpdir(),
     `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
-  const customPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON');
+  const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
@@ -276,7 +319,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: __dirname,
+    scriptPath: getWrapperDir('python'),
     // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };
@@ -312,7 +355,7 @@ export async function runPython(
     const output = fs.readFileSync(outputPath, 'utf-8');
     logger.debug(`Python script ${absPath} returned: ${output}`);
 
-    let result: { type: 'final_result'; data: any } | undefined;
+    let result: { type: 'final_result'; data: T } | undefined;
     try {
       result = JSON.parse(output);
       logger.debug(

@@ -5,3 +5,5 @@ prompts:
 providers:
   - openai:gpt-4.1-mini
 tests: file://tests.csv
+# Alternative: Use Excel file instead (requires `npm install read-excel-file`)
+# tests: file://tests.xlsx

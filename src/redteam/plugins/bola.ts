@@ -66,13 +66,7 @@ export class BolaGrader extends RedteamGraderBase {
     }
   `;
 
-  getSuggestions({
-    rawPrompt,
-    renderedValue,
-  }: {
-    rawPrompt: string;
-    renderedValue?: AssertionValue;
-  }): ResultSuggestion[] {
+  getSuggestions({}: { rawPrompt: string; renderedValue?: AssertionValue }): ResultSuggestion[] {
     return [
       {
         action: 'note',

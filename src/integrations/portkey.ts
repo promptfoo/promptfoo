@@ -1,5 +1,5 @@
 import { getEnvString } from '../envars';
-import { fetchWithProxy } from '../util/fetch';
+import { fetchWithProxy } from '../util/fetch/index';
 import invariant from '../util/invariant';
 
 interface PortkeyResponse {
@@ -21,7 +21,7 @@ interface PortkeyResponse {
 
 export async function getPrompt(
   id: string,
-  variables: Record<string, any>,
+  variables: Record<string, unknown>,
 ): Promise<PortkeyResponse['data']> {
   const apiKey = getEnvString('PORTKEY_API_KEY');
   invariant(apiKey, 'PORTKEY_API_KEY is required');

@@ -1,14 +1,15 @@
 import * as fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processJinjaFile } from '../../../src/prompts/processors/jinja';
 
-jest.mock('fs');
+vi.mock('fs');
 
 describe('processJinjaFile', () => {
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should process a Jinja2 file without a label', () => {

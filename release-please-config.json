@@ -1,0 +1,26 @@
+{
+  "include-commit-authors": true,
+  "include-component-in-tag": false,
+  "include-v-in-tag": false,
+  "include-v-in-release-name": false,
+  "separate-pull-requests": true,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "promptfoo",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": ["package.json"],
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true
+    },
+    "code-scan-action": {
+      "release-type": "node",
+      "component": "code-scan-action",
+      "package-name": "@promptfoo/code-scan-action",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": true,
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true
+    }
+  }
+}

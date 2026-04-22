@@ -1,64 +1,60 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
+import {
+  mockMatchMedia as installMatchMedia,
+  mockBrowserProperty,
+  restoreBrowserMocks,
+} from '@app/tests/browserMocks';
+import { useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LauncherPage from './page';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { Mock } from 'vitest';
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
 
 const mockLocalStorage = {
   getItem: vi.fn(),
+  removeItem: vi.fn(),
   setItem: vi.fn(),
 };
-Object.defineProperty(window, 'localStorage', {
-  value: mockLocalStorage,
-});
 
-const mockMatchMedia = vi.fn();
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: mockMatchMedia,
-});
-
-mockMatchMedia.mockImplementation((query) => ({
-  matches: false,
-  media: query,
-  onchange: null,
-  addListener: vi.fn(),
-  removeListener: vi.fn(),
-  addEventListener: vi.fn(),
-  removeEventListener: vi.fn(),
-  dispatchEvent: vi.fn(),
-}));
+let mockMatchMedia: ReturnType<typeof installMatchMedia>;
 
 const renderLauncher = () => {
   return render(
-    <MemoryRouter>
-      <LauncherPage />
-    </MemoryRouter>,
+    <TooltipProvider delayDuration={0}>
+      <MemoryRouter>
+        <LauncherPage />
+      </MemoryRouter>
+    </TooltipProvider>,
   );
 };
+
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: vi.fn().mockReturnValue({
+    data: { status: 'unknown', message: null },
+    refetch: vi.fn(),
+    isLoading: false,
+  } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>),
+}));
 
 describe('LauncherPage', () => {
   beforeEach(() => {
     mockFetch.mockReset();
     mockLocalStorage.getItem.mockReset();
+    mockLocalStorage.removeItem.mockReset();
     mockLocalStorage.setItem.mockReset();
-    mockMatchMedia.mockReset();
-    mockMatchMedia.mockImplementation((query) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }));
+    mockBrowserProperty(globalThis, 'fetch', mockFetch as typeof fetch);
+    mockBrowserProperty(window, 'localStorage', mockLocalStorage as unknown as Storage);
+    mockMatchMedia = installMatchMedia();
   });
 
   afterEach(() => {
+    restoreBrowserMocks();
     vi.clearAllMocks();
   });
 
@@ -86,13 +82,17 @@ describe('LauncherPage', () => {
     });
   });
 
-  it('toggles dark mode when button is clicked', async () => {
-    mockLocalStorage.getItem.mockReturnValue('false');
+  it('sets dark mode from the theme selector', async () => {
+    mockLocalStorage.getItem.mockReturnValue(null);
+    document.documentElement.removeAttribute('data-theme'); // Ensure light mode at start
     renderLauncher();
 
-    const darkModeButton = await screen.findByRole('button', { name: /Switch to dark mode/i });
     await act(async () => {
-      await userEvent.click(darkModeButton);
+      await userEvent.click(
+        screen.getByRole('button', {
+          name: 'Theme preference: System theme (light). Switch to Dark theme.',
+        }),
+      );
     });
 
     expect(mockLocalStorage.setItem).toHaveBeenCalledWith('darkMode', 'true');
@@ -151,5 +151,27 @@ describe('LauncherPage', () => {
     await waitFor(() => {
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     });
+  });
+
+  it('should call checkHealth every 2 seconds after the initial 3-second delay', async () => {
+    const timers = useTestTimers();
+
+    const checkHealthMock = vi.fn();
+    (useApiHealth as Mock).mockReturnValue({
+      data: { status: 'unknown', message: null },
+      refetch: checkHealthMock,
+      isLoading: false,
+    } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+    renderLauncher();
+
+    timers.advanceBy(3000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(1);
+
+    timers.advanceBy(2000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(2);
+
+    timers.advanceBy(2000);
+    expect(checkHealthMock).toHaveBeenCalledTimes(3);
   });
 });

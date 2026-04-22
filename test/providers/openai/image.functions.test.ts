@@ -1,22 +1,28 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
+  buildStructuredImageOutputs,
   calculateImageCost,
   callOpenAiImageApi,
   DALLE2_COSTS,
   DALLE3_COSTS,
   formatOutput,
+  GPT_IMAGE2_COSTS,
   prepareRequestBody,
   processApiResponse,
   validateSizeForModel,
 } from '../../../src/providers/openai/image';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
 describe('OpenAI Image Provider Functions', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('validateSizeForModel', () => {
@@ -46,6 +52,28 @@ describe('OpenAI Image Provider Functions', () => {
 
     it('should validate any size for unknown models', () => {
       expect(validateSizeForModel('any-size', 'unknown-model')).toEqual({ valid: true });
+    });
+
+    it('should validate GPT Image 2 sizes using dimensional constraints', () => {
+      expect(validateSizeForModel('auto', 'gpt-image-2')).toEqual({ valid: true });
+      expect(validateSizeForModel('1024x1024', 'gpt-image-2')).toEqual({ valid: true });
+      expect(validateSizeForModel('2048x1152', 'gpt-image-2')).toEqual({ valid: true });
+      expect(validateSizeForModel('3840x2160', 'gpt-image-2')).toEqual({ valid: true });
+    });
+
+    it('should invalidate GPT Image 2 sizes that violate constraints', () => {
+      expect(validateSizeForModel('512x512', 'gpt-image-2')).toMatchObject({
+        valid: false,
+      });
+      expect(validateSizeForModel('1024x1000', 'gpt-image-2')).toMatchObject({
+        valid: false,
+      });
+      expect(validateSizeForModel('3840x1024', 'gpt-image-2')).toMatchObject({
+        valid: false,
+      });
+      expect(validateSizeForModel('4096x2048', 'gpt-image-2').message).toContain(
+        'Invalid size "4096x2048" for GPT Image 2',
+      );
     });
   });
 
@@ -77,7 +105,16 @@ describe('OpenAI Image Provider Functions', () => {
       };
       const result = formatOutput(mockData, 'prompt', 'b64_json');
       expect(typeof result).toBe('string');
-      expect(result).toBe(JSON.stringify(mockData));
+      expect(result).toBe('data:image/png;base64,base64encodeddata');
+    });
+
+    it('should honor output format when formatting base64 output', () => {
+      const mockData = {
+        data: [{ b64_json: 'base64encodeddata' }],
+      };
+      const result = formatOutput(mockData, 'prompt', 'b64_json', 'jpeg');
+      expect(typeof result).toBe('string');
+      expect(result).toBe('data:image/jpeg;base64,base64encodeddata');
     });
 
     it('should return error when URL is missing', () => {
@@ -120,6 +157,12 @@ describe('OpenAI Image Provider Functions', () => {
       expect(body.n).toBe(2);
     });
 
+    it('should include user parameter from config', () => {
+      const config = { user: 'promptfoo-user-123' };
+      const body = prepareRequestBody('gpt-image-2', 'prompt', '1024x1024', 'b64_json', config);
+      expect(body.user).toBe('promptfoo-user-123');
+    });
+
     it('should include DALL-E 3 specific parameters', () => {
       const config = {
         quality: 'hd',
@@ -147,6 +190,29 @@ describe('OpenAI Image Provider Functions', () => {
 
       expect(body).not.toHaveProperty('quality');
       expect(body).not.toHaveProperty('style');
+    });
+
+    it('should prepare GPT Image 2 request body without response_format', () => {
+      const config = {
+        quality: 'high',
+        background: 'opaque',
+        output_format: 'webp',
+        output_compression: 90,
+        moderation: 'low',
+      };
+      const body = prepareRequestBody('gpt-image-2', 'prompt', '2048x1152', 'url', config);
+
+      expect(body).toEqual({
+        model: 'gpt-image-2',
+        prompt: 'prompt',
+        size: '2048x1152',
+        n: 1,
+        quality: 'high',
+        background: 'opaque',
+        output_format: 'webp',
+        output_compression: 90,
+        moderation: 'low',
+      });
     });
   });
 
@@ -192,6 +258,24 @@ describe('OpenAI Image Provider Functions', () => {
       );
     });
 
+    it('should calculate correct cost for GPT Image 2 common sizes', () => {
+      expect(calculateImageCost('gpt-image-2', '1024x1024', 'low')).toBe(
+        GPT_IMAGE2_COSTS['low_1024x1024'],
+      );
+      expect(calculateImageCost('gpt-image-2', '1024x1536', 'medium')).toBe(
+        GPT_IMAGE2_COSTS['medium_1024x1536'],
+      );
+      expect(calculateImageCost('gpt-image-2', '1536x1024', 'high', 2)).toBe(
+        GPT_IMAGE2_COSTS['high_1536x1024'] * 2,
+      );
+    });
+
+    it('should not invent GPT Image 2 cost for auto quality or custom sizes', () => {
+      expect(calculateImageCost('gpt-image-2', '1024x1024')).toBeUndefined();
+      expect(calculateImageCost('gpt-image-2', '1024x1024', 'auto')).toBeUndefined();
+      expect(calculateImageCost('gpt-image-2', '2048x1152', 'high')).toBeUndefined();
+    });
+
     it('should use default cost for models other than DALL-E 2 or 3', () => {
       expect(calculateImageCost('gpt-4', '1024x1024')).toBe(0.04);
       expect(calculateImageCost('', '1024x1024')).toBe(0.04);
@@ -207,7 +291,7 @@ describe('OpenAI Image Provider Functions', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const url = 'https://api.openai.com/v1/images/generations';
       const body = { model: 'dall-e-3', prompt: 'test' };
@@ -231,13 +315,21 @@ describe('OpenAI Image Provider Functions', () => {
 
   describe('processApiResponse', () => {
     it('should handle error in data', async () => {
-      const mockDeleteFromCache = jest.fn();
+      const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
         deleteFromCache: mockDeleteFromCache,
       };
 
-      const result = await processApiResponse(data, 'prompt', 'url', false, 'dall-e-2', '512x512');
+      const result = await processApiResponse(
+        data,
+        'prompt',
+        'url',
+        false,
+        'dall-e-2',
+        '512x512',
+        undefined,
+      );
 
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
       expect(result).toHaveProperty('error');
@@ -256,6 +348,7 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
+        undefined,
       );
 
       expect(result).toHaveProperty('output');
@@ -275,11 +368,36 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-3',
         '1024x1024',
+        undefined,
         'standard',
       );
 
       expect(result).toHaveProperty('isBase64', true);
       expect(result).toHaveProperty('format', 'json');
+    });
+
+    it('should use output_format when building structured base64 images', async () => {
+      const data = {
+        data: [{ b64_json: 'base64data' }],
+      };
+
+      const result = await processApiResponse(
+        data,
+        'test prompt',
+        'b64_json',
+        false,
+        'gpt-image-1',
+        '1024x1024',
+        undefined,
+        'low',
+        1,
+        'webp',
+      );
+
+      expect(result).toMatchObject({
+        output: 'data:image/webp;base64,base64data',
+        images: [{ data: 'data:image/webp;base64,base64data', mimeType: 'image/webp' }],
+      });
     });
 
     it('should set cost to 0 for cached responses', async () => {
@@ -294,13 +412,49 @@ describe('OpenAI Image Provider Functions', () => {
         true,
         'dall-e-2',
         '512x512',
+        undefined,
       );
 
       expect(result.cost).toBe(0);
     });
 
+    it('should map image API usage to token usage and metadata', async () => {
+      const data = {
+        data: [{ b64_json: 'base64data' }],
+        usage: {
+          total_tokens: 30,
+          input_tokens: 10,
+          output_tokens: 20,
+          input_tokens_details: { text_tokens: 10, image_tokens: 0 },
+        },
+      };
+
+      const result = await processApiResponse(
+        data,
+        'test prompt',
+        'b64_json',
+        false,
+        'gpt-image-2',
+        '1024x1024',
+        undefined,
+      );
+
+      expect(result).toMatchObject({
+        tokenUsage: {
+          prompt: 10,
+          completion: 20,
+          total: 30,
+          numRequests: 1,
+        },
+        metadata: {
+          usage: data.usage,
+        },
+      });
+      expect(result).not.toHaveProperty('cost');
+    });
+
     it('should handle errors during output formatting', async () => {
-      const mockDeleteFromCache = jest.fn();
+      const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
         deleteFromCache: mockDeleteFromCache,
@@ -313,6 +467,7 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
+        undefined,
       );
 
       expect(result).toHaveProperty('error');
@@ -322,7 +477,7 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should handle a specific error case with malformed response', async () => {
-      const mockDeleteFromCache = jest.fn();
+      const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
         deleteFromCache: mockDeleteFromCache,
@@ -335,11 +490,30 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
+        undefined,
       );
 
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('API error:');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
+    });
+  });
+
+  describe('buildStructuredImageOutputs', () => {
+    it('should infer mime type from URL extensions', () => {
+      expect(
+        buildStructuredImageOutputs({
+          data: [{ url: 'https://example.com/image.jpg?size=large' }],
+        }),
+      ).toEqual([{ data: 'https://example.com/image.jpg?size=large', mimeType: 'image/jpeg' }]);
+    });
+
+    it('should omit mime type when URL extension is unknown', () => {
+      expect(
+        buildStructuredImageOutputs({
+          data: [{ url: 'https://example.com/generated-image' }],
+        }),
+      ).toEqual([{ data: 'https://example.com/generated-image' }]);
     });
   });
 });

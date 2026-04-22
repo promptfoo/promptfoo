@@ -1,145 +1,200 @@
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import Box from '@mui/material/Box';
-import Checkbox from '@mui/material/Checkbox';
-import Chip from '@mui/material/Chip';
-import IconButton from '@mui/material/IconButton';
-import Paper from '@mui/material/Paper';
-import { alpha } from '@mui/material/styles';
-import Typography from '@mui/material/Typography';
+import { useCallback, useMemo } from 'react';
+
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
+import { Checkbox } from '@app/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 import {
-  AGENTIC_STRATEGIES,
-  CONFIGURABLE_STRATEGIES,
-  DEFAULT_STRATEGIES,
-  MULTI_MODAL_STRATEGIES,
+  AGENTIC_STRATEGIES_SET,
+  CONFIGURABLE_STRATEGIES_SET,
+  DEFAULT_STRATEGIES_SET,
+  MULTI_MODAL_STRATEGIES_SET,
 } from '@promptfoo/redteam/constants';
+import { Lock, Settings } from 'lucide-react';
+import { TestCaseGenerateButton } from './../TestCaseDialog';
+import { useStrategyTestGeneration } from './useStrategyTestGeneration';
 
 import type { StrategyCardData } from './types';
+
+// Strategies that do not support test case generation
+// These strategies will have the test case generation button disabled in the UI
+const STRATEGIES_WITHOUT_TEST_CASE_GENERATION = ['retry', 'other-encodings'] as const;
+const STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET: ReadonlySet<
+  (typeof STRATEGIES_WITHOUT_TEST_CASE_GENERATION)[number]
+> = new Set(STRATEGIES_WITHOUT_TEST_CASE_GENERATION);
 
 interface StrategyItemProps {
   strategy: StrategyCardData;
   isSelected: boolean;
   onToggle: (id: string) => void;
   onConfigClick: (id: string) => void;
+  isDisabled: boolean;
+  isRemoteGenerationDisabled: boolean;
+  isAuthGated?: boolean;
+  isConfigured?: boolean;
 }
 
-export function StrategyItem({ strategy, isSelected, onToggle, onConfigClick }: StrategyItemProps) {
-  const hasSettingsButton = isSelected && CONFIGURABLE_STRATEGIES.includes(strategy.id as any);
+export function StrategyItem({
+  strategy,
+  isSelected,
+  onToggle,
+  onConfigClick,
+  isDisabled,
+  isRemoteGenerationDisabled,
+  isAuthGated = false,
+  isConfigured = true,
+}: StrategyItemProps) {
+  const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
+    strategyId: strategy.id,
+  });
+
+  const requiresConfig = isSelected && !isConfigured;
+
+  const hasSettingsButton =
+    requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES_SET.has(strategy.id));
+
+  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
+    // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
+    strategy.id as any,
+  );
+
+  // Compute tooltip titles - simple derived values, no memoization needed
+  const tooltipTitle = useMemo(() => {
+    if (requiresConfig) {
+      const reason =
+        strategy.id === 'custom' ? 'Strategy text is required' : 'Configuration is required';
+      return `Configuration required: ${reason}. Click the settings icon to configure.`;
+    }
+    if (isTestCaseGenerationDisabled) {
+      return `Test case generation is not available for ${strategy.name} strategy.`;
+    }
+    return `Generate an example test case using the ${strategy.name} Strategy.`;
+  }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
+
+  const settingsTooltipTitle = requiresConfig ? tooltipTitle : 'Configure strategy settings';
+
+  const handleToggle = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
+    onToggle(strategy.id);
+  }, [strategy.id, onToggle, isDisabled]);
 
   return (
-    <Paper
-      elevation={2}
-      onClick={() => onToggle(strategy.id)}
-      sx={(theme) => ({
-        height: '100%',
-        display: 'flex',
-        cursor: 'pointer',
-        userSelect: 'none',
-        border: isSelected ? `1px solid ${theme.palette.primary.main}` : undefined,
-        backgroundColor: isSelected
-          ? alpha(theme.palette.primary.main, 0.04)
-          : theme.palette.background.paper,
-        transition: 'all 0.2s ease-in-out',
-        '&:hover': {
-          backgroundColor: isSelected
-            ? alpha(theme.palette.primary.main, 0.08)
-            : alpha(theme.palette.action.hover, 0.04),
-        },
-      })}
+    <Card
+      onClick={handleToggle}
+      className={cn(
+        'relative flex select-none flex-col gap-3 p-4 transition-all',
+        isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+        !isSelected && !isDisabled && 'hover:border-primary/50 hover:bg-muted/50',
+        isSelected &&
+          !requiresConfig &&
+          cn(
+            'border-primary bg-primary/[0.04] ring-1 ring-primary/20',
+            !isDisabled && 'hover:bg-primary/[0.08]',
+          ),
+        isSelected &&
+          requiresConfig &&
+          cn(
+            'border-destructive bg-destructive/[0.04] ring-1 ring-destructive/20',
+            !isDisabled && 'hover:bg-destructive/[0.08]',
+          ),
+      )}
     >
-      {/* Checkbox container */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          pl: 1,
-        }}
-      >
+      {/* Header: title + badges on left, checkbox on right */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{strategy.name}</span>
+            {DEFAULT_STRATEGIES_SET.has(strategy.id) && (
+              <Badge variant="secondary">Recommended</Badge>
+            )}
+            {AGENTIC_STRATEGIES_SET.has(strategy.id) && (
+              <Badge className="border border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                Agent
+              </Badge>
+            )}
+            {MULTI_MODAL_STRATEGIES_SET.has(strategy.id) && (
+              <Badge className="border border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                Multi-modal
+              </Badge>
+            )}
+            {isDisabled && isRemoteGenerationDisabled && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
+                    Remote generation required
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  This strategy requires remote generation. Unset
+                  PROMPTFOO_DISABLE_REMOTE_GENERATION or PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION
+                  to enable.
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {isDisabled && isAuthGated && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge className="h-5 gap-1 bg-gradient-to-r from-amber-500 to-amber-600 text-[0.6rem] font-bold tracking-wider text-white shadow-sm">
+                    <Lock className="size-2.5" />
+                    ENTERPRISE
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>This strategy is available in Promptfoo Enterprise</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </div>
         <Checkbox
           checked={isSelected}
-          onChange={(e) => {
-            e.stopPropagation();
-            onToggle(strategy.id);
-          }}
+          disabled={isDisabled}
+          onCheckedChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
-          color="primary"
+          className="mt-0.5"
         />
-      </Box>
+      </div>
 
-      {/* Content container */}
-      <Box sx={{ flex: 1, p: 2, minWidth: 0, position: 'relative' }}>
-        {/* Settings button - positioned absolutely in the top-right corner */}
+      {/* Description */}
+      <p className="text-sm text-muted-foreground">{strategy.description}</p>
+
+      {/* Actions */}
+      <div className="mt-auto flex items-center gap-2">
+        <TestCaseGenerateButton
+          onClick={handleTestCaseGeneration}
+          disabled={isDisabled || isGenerating || requiresConfig || isTestCaseGenerationDisabled}
+          isGenerating={isGenerating && isCurrentStrategy}
+          size="small"
+          tooltipTitle={tooltipTitle}
+        />
+
         {hasSettingsButton && (
-          <IconButton
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              onConfigClick(strategy.id);
-            }}
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              opacity: 0.6,
-              '&:hover': {
-                opacity: 1,
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-              },
-            }}
-          >
-            <SettingsOutlinedIcon fontSize="small" />
-          </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Configure strategy settings"
+                className={cn(
+                  'size-8',
+                  requiresConfig
+                    ? 'text-destructive hover:bg-destructive/10'
+                    : 'opacity-60 hover:opacity-100',
+                )}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfigClick(strategy.id);
+                }}
+              >
+                <Settings className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{settingsTooltipTitle}</TooltipContent>
+          </Tooltip>
         )}
-
-        {/* Title and badges section - add right padding when settings button is present */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 1,
-            mb: 1,
-            pr: hasSettingsButton ? 5 : 0, // Add padding-right to avoid overlap with settings button
-          }}
-        >
-          <Typography variant="subtitle1" component="div">
-            {strategy.name}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-            {DEFAULT_STRATEGIES.includes(strategy.id as any) && (
-              <Chip label="Recommended" size="small" color="default" />
-            )}
-            {AGENTIC_STRATEGIES.includes(strategy.id as any) && (
-              <Chip
-                label="Agent"
-                size="small"
-                sx={{
-                  backgroundColor: (theme) => alpha(theme.palette.warning.main, 0.1),
-                  color: 'warning.main',
-                  borderColor: 'warning.main',
-                  border: 1,
-                }}
-              />
-            )}
-            {MULTI_MODAL_STRATEGIES.includes(strategy.id as any) && (
-              <Chip
-                label="Multi-modal"
-                size="small"
-                sx={{
-                  backgroundColor: (theme) => alpha(theme.palette.info.main, 0.1),
-                  color: 'info.main',
-                  borderColor: 'info.main',
-                  border: 1,
-                }}
-              />
-            )}
-          </Box>
-        </Box>
-
-        {/* Description section */}
-        <Typography variant="body2" color="text.secondary">
-          {strategy.description}
-        </Typography>
-      </Box>
-    </Paper>
+      </div>
+    </Card>
   );
 }

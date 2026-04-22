@@ -1,8 +1,10 @@
 {
   "editor.defaultFormatter": "esbenp.prettier-vscode",
   "editor.formatOnSave": true,
+  "files.associations": {
+    "**/CODEOWNERS": "plaintext"
+  },
   "cSpell.words": [
-    "adaline",
     "agentic",
     "alicloud",
     "aliyun",

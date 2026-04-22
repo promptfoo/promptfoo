@@ -56,7 +56,7 @@ export class PlinyPlugin extends RedteamPluginBase {
     return this.injectVar;
   }
 
-  getAssertions(prompt: string): Assertion[] {
+  getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,

@@ -27,21 +27,20 @@ export function generateTable(
   for (const row of evaluateTable.body.slice(0, maxRows)) {
     table.push([
       ...row.vars.map((v) => ellipsize(v, tableCellMaxLength)),
-      ...row.outputs.map(({ pass, score, text, failureReason: failureType }) => {
+      ...row.outputs.map(({ pass, text, failureReason: failureType }) => {
         text = ellipsize(text, tableCellMaxLength);
         if (pass) {
           return chalk.green('[PASS] ') + text;
-        } else if (!pass) {
-          // color everything red up until '---'
-          return (
-            chalk.red(failureType === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +
-            text
-              .split('---')
-              .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
-              .join('---')
-          );
         }
-        return text;
+
+        // Color everything red up until '---'.
+        return (
+          chalk.red(failureType === ResultFailureReason.ASSERT ? '[FAIL] ' : '[ERROR] ') +
+          text
+            .split('---')
+            .map((c, idx) => (idx === 0 ? chalk.red.bold(c) : c))
+            .join('---')
+        );
       }),
     ]);
   }

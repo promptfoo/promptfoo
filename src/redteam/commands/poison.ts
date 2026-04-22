@@ -6,7 +6,7 @@ import yaml from 'js-yaml';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
-import { fetchWithProxy } from '../../util/fetch';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { setupEnv } from '../../util/index';
 import { getRemoteGenerationUrl } from '../remoteGeneration';
 import type { Command } from 'commander';
@@ -187,9 +187,7 @@ export function poisonCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (documents: DocumentLike[], opts: Omit<PoisonOptions, 'documents'>) => {
       setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam poison',
-      });
+      telemetry.record('redteam poison', {});
 
       try {
         await doPoisonDocuments({
@@ -198,7 +196,7 @@ export function poisonCommand(program: Command) {
         });
       } catch (error) {
         logger.error(`An unexpected error occurred: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }

@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "outDir": "../../dist/src/app",
+    "rootDir": "..",
     "paths": {
       "@app/*": ["./src/*"],
       "@promptfoo/*": ["../*"]
@@ -18,10 +19,11 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    "types": ["vitest/globals", "@testing-library/jest-dom", "vite/client", "node"],
 
     /* Linting */
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["./src", "./src/types/globals.d.ts"]
+  "include": ["./src", "../types/optional-deps.d.ts"]
 }

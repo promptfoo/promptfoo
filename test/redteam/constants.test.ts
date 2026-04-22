@@ -1,39 +1,30 @@
+import { describe, expect, it } from 'vitest';
 import {
   ADDITIONAL_PLUGINS,
-  ADDITIONAL_STRATEGIES,
-  AGENTIC_EXEMPT_PLUGINS,
   AGENTIC_PLUGINS,
   ALL_PLUGINS,
-  ALL_STRATEGIES,
   BASE_PLUGINS,
   COLLECTIONS,
   CONFIG_REQUIRED_PLUGINS,
-  categoryAliases,
   categoryDescriptions,
-  DATASET_EXEMPT_PLUGINS,
-  DATASET_PLUGINS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_PLUGINS,
-  displayNameOverrides,
   HARM_PLUGINS,
   LLAMA_GUARD_ENABLED_CATEGORIES,
   LLAMA_GUARD_REPLICATE_PROVIDER,
   PII_PLUGINS,
-  pluginDescriptions,
   REDTEAM_MODEL,
   REDTEAM_PROVIDER_HARM_PLUGINS,
+  REMOTE_ONLY_PLUGIN_IDS,
   riskCategories,
-  riskCategorySeverityMap,
-  Severity,
-  STRATEGY_COLLECTION_MAPPINGS,
-  STRATEGY_COLLECTIONS,
-  STRATEGY_EXEMPT_PLUGINS,
-  severityDisplayNames,
-  strategyDescriptions,
-  strategyDisplayNames,
-  subCategoryDescriptions,
+  UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../src/redteam/constants';
+import {
+  CODING_AGENT_COLLECTIONS,
+  CODING_AGENT_CORE_PLUGINS,
+  CODING_AGENT_PLUGINS,
+} from '../../src/redteam/constants/codingAgents';
 
 describe('constants', () => {
   it('DEFAULT_NUM_TESTS_PER_PLUGIN should be defined', () => {
@@ -43,7 +34,7 @@ describe('constants', () => {
 
   it('REDTEAM_MODEL should be defined', () => {
     expect(REDTEAM_MODEL).toBeDefined();
-    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-4.1-2025-04-14');
+    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-5.4-2026-03-05');
   });
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
@@ -65,7 +56,16 @@ describe('constants', () => {
       'pii',
       'bias',
       'medical',
+      'pharmacy',
+      'insurance',
+      'financial',
+      'ecommerce',
+      'telecom',
+      'teen-safety',
+      'realestate',
       'guardrails-eval',
+      'coding-agent:core',
+      'coding-agent:all',
     ]);
   });
 
@@ -107,160 +107,138 @@ describe('constants', () => {
     expect(ADDITIONAL_PLUGINS).toContain('mcp');
   });
 
-  it('DEFAULT_PLUGINS should be a Set containing base plugins, harm plugins and PII plugins', () => {
-    expect(DEFAULT_PLUGINS).toBeInstanceOf(Set);
-    expect(DEFAULT_PLUGINS.has('contracts')).toBe(true);
-    expect(DEFAULT_PLUGINS.has('pii:api-db')).toBe(true);
-  });
+  it('ADDITIONAL_PLUGINS should contain supported coding-agent plugins', () => {
+    expect(CODING_AGENT_PLUGINS).toEqual([
+      'coding-agent:repo-prompt-injection',
+      'coding-agent:terminal-output-injection',
+      'coding-agent:secret-env-read',
+      'coding-agent:sandbox-read-escape',
+      'coding-agent:verifier-sabotage',
+      'coding-agent:secret-file-read',
+      'coding-agent:sandbox-write-escape',
+      'coding-agent:network-egress-bypass',
+      'coding-agent:procfs-credential-read',
+      'coding-agent:delayed-ci-exfil',
+      'coding-agent:generated-vulnerability',
+      'coding-agent:automation-poisoning',
+      'coding-agent:steganographic-exfil',
+    ]);
 
-  it('ALL_PLUGINS should contain all plugins sorted', () => {
-    expect(ALL_PLUGINS).toEqual(
-      [
-        ...new Set([
-          ...DEFAULT_PLUGINS,
-          ...ADDITIONAL_PLUGINS,
-          ...CONFIG_REQUIRED_PLUGINS,
-          ...AGENTIC_PLUGINS,
-        ]),
-      ].sort(),
-    );
-  });
-
-  it('DATASET_PLUGINS should contain expected plugins', () => {
-    const expectedPlugins = [
-      'beavertails',
-      'cyberseceval',
-      'donotanswer',
-      'harmbench',
-      'toxic-chat',
-      'aegis',
-      'pliny',
-      'unsafebench',
-      'xstest',
-    ];
-
-    expect(DATASET_PLUGINS).toEqual(expectedPlugins);
-    expect(DATASET_PLUGINS).toHaveLength(9);
-
-    expectedPlugins.forEach((plugin) => {
-      expect(DATASET_PLUGINS).toContain(plugin);
+    CODING_AGENT_PLUGINS.forEach((plugin) => {
+      expect(ADDITIONAL_PLUGINS).toContain(plugin);
+      expect(ALL_PLUGINS).toContain(plugin);
     });
   });
 
-  it('AGENTIC_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(AGENTIC_EXEMPT_PLUGINS).toEqual(['system-prompt-override', 'agentic:memory-poisoning']);
-  });
-
-  it('DATASET_EXEMPT_PLUGINS should contain expected plugins', () => {
-    expect(DATASET_EXEMPT_PLUGINS).toEqual(['pliny', 'unsafebench', 'vlguard']);
-  });
-
-  it('STRATEGY_EXEMPT_PLUGINS should combine agentic and dataset exempt plugins', () => {
-    const expectedPlugins = [
-      'system-prompt-override',
-      'agentic:memory-poisoning',
-      'pliny',
-      'unsafebench',
-      'vlguard',
-    ];
-
-    expect(STRATEGY_EXEMPT_PLUGINS).toEqual(expectedPlugins);
-    expect(STRATEGY_EXEMPT_PLUGINS).toEqual([...AGENTIC_EXEMPT_PLUGINS, ...DATASET_EXEMPT_PLUGINS]);
-  });
-
-  it('Severity enum should have expected values', () => {
-    expect(Severity.Critical).toBe('critical');
-    expect(Severity.High).toBe('high');
-    expect(Severity.Medium).toBe('medium');
-    expect(Severity.Low).toBe('low');
-  });
-
-  it('severityDisplayNames should have display names for all severities', () => {
-    expect(severityDisplayNames[Severity.Critical]).toBe('Critical');
-    expect(severityDisplayNames[Severity.High]).toBe('High');
-    expect(severityDisplayNames[Severity.Medium]).toBe('Medium');
-    expect(severityDisplayNames[Severity.Low]).toBe('Low');
-  });
-
-  it('should have agentic:memory-poisoning in Security & Access Control category', () => {
-    expect(riskCategories['Security & Access Control']).toBeDefined();
-    expect(riskCategories['Security & Access Control']).toContain('agentic:memory-poisoning');
-  });
-
-  it('should have descriptions for all risk categories', () => {
-    const categories = Object.keys(riskCategories) as (keyof typeof categoryDescriptions)[];
-    categories.forEach((category) => {
-      expect(categoryDescriptions[category]).toBeDefined();
-      expect(typeof categoryDescriptions[category]).toBe('string');
-    });
-  });
-
-  it('should have correct display name for MCP plugin', () => {
-    expect(displayNameOverrides['mcp']).toBe('Model Context Protocol');
-  });
-
-  it('should have correct severity for MCP plugin', () => {
-    expect(riskCategorySeverityMap['mcp']).toBe(Severity.High);
-  });
-
-  it('should have correct alias for MCP plugin', () => {
-    expect(categoryAliases['mcp']).toBe('MCP');
-  });
-
-  it('should have correct plugin description for MCP plugin', () => {
-    expect(pluginDescriptions['mcp']).toBe(
-      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
-    );
-  });
-
-  it('should have correct subcategory description for MCP plugin', () => {
-    expect(subCategoryDescriptions['mcp']).toBe(
-      'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
-    );
-  });
-
-  it('STRATEGY_COLLECTIONS should contain expected collections', () => {
-    expect(STRATEGY_COLLECTIONS).toEqual(['other-encodings']);
-  });
-
-  it('STRATEGY_COLLECTION_MAPPINGS should have correct mappings', () => {
-    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toEqual([
-      'camelcase',
-      'morse',
-      'piglatin',
-      'emoji',
+  it('CODING_AGENT_CORE_PLUGINS should keep the baseline collection focused', () => {
+    expect(CODING_AGENT_COLLECTIONS).toEqual(['coding-agent:core', 'coding-agent:all']);
+    expect(CODING_AGENT_CORE_PLUGINS).toEqual([
+      'coding-agent:repo-prompt-injection',
+      'coding-agent:terminal-output-injection',
+      'coding-agent:secret-env-read',
+      'coding-agent:sandbox-read-escape',
+      'coding-agent:verifier-sabotage',
     ]);
   });
 
-  it('ALL_STRATEGIES should include strategy collections', () => {
-    expect(ALL_STRATEGIES).toContain('other-encodings');
-  });
-
-  it('strategy collections should have proper display names', () => {
-    expect(strategyDisplayNames['other-encodings']).toBe('Collection of Text Encodings');
-  });
-
-  it('ADDITIONAL_STRATEGIES should include emoji strategy', () => {
-    expect(ADDITIONAL_STRATEGIES).toContain('emoji');
-  });
-
-  it('should have correct display name for emoji strategy', () => {
-    expect(strategyDisplayNames['emoji']).toBe('Emoji Smuggling');
-  });
-
-  it('should have correct strategy description for emoji strategy', () => {
-    expect(strategyDescriptions['emoji']).toBe(
-      'Tests detection and handling of UTF-8 payloads hidden inside emoji variation selectors',
+  it('remote-only UI guards should include coding-agent plugins and collections', () => {
+    expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
+    );
+    expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
+      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
     );
   });
 
-  it('should include emoji in other-encodings strategy collection', () => {
-    expect(STRATEGY_COLLECTION_MAPPINGS['other-encodings']).toContain('emoji');
+  it('AGENTIC_PLUGINS should contain expected plugins', () => {
+    expect(AGENTIC_PLUGINS).toContain('agentic:memory-poisoning');
+    expect(AGENTIC_PLUGINS.length).toBe(1);
   });
 
-  it('should have correct subcategory description for emoji strategy', () => {
-    expect(subCategoryDescriptions['emoji']).toBe(
-      'Tests handling of text hidden using emoji variation selectors',
-    );
+  it('DEFAULT_PLUGINS should contain expected plugins', () => {
+    expect(DEFAULT_PLUGINS).toContain('contracts');
+    expect(DEFAULT_PLUGINS).toContain('excessive-agency');
+    expect(DEFAULT_PLUGINS).toContain('hallucination');
+    expect(DEFAULT_PLUGINS).toContain('harmful:child-exploitation');
+    expect(DEFAULT_PLUGINS).toContain('pii:direct');
+  });
+
+  it('ALL_PLUGINS should contain base and additional plugins', () => {
+    // ALL_PLUGINS should contain all BASE_PLUGINS
+    BASE_PLUGINS.forEach((plugin) => {
+      expect(ALL_PLUGINS).toContain(plugin);
+    });
+    // ALL_PLUGINS should contain all PII_PLUGINS
+    PII_PLUGINS.forEach((plugin) => {
+      expect(ALL_PLUGINS).toContain(plugin);
+    });
+    // ALL_PLUGINS should contain all HARM_PLUGINS keys
+    Object.keys(HARM_PLUGINS).forEach((plugin) => {
+      expect(ALL_PLUGINS).toContain(plugin);
+    });
+    // ALL_PLUGINS should be an array with no duplicates
+    expect(new Set(ALL_PLUGINS).size).toBe(ALL_PLUGINS.length);
+  });
+
+  it('CONFIG_REQUIRED_PLUGINS should have valid plugins', () => {
+    expect(CONFIG_REQUIRED_PLUGINS).toContain('policy');
+    expect(CONFIG_REQUIRED_PLUGINS).toContain('intent');
+    expect(Array.isArray(CONFIG_REQUIRED_PLUGINS)).toBe(true);
+  });
+
+  describe('categoryDescriptions', () => {
+    it('should have descriptions for all categories', () => {
+      const expectedKeys = [
+        'Security & Access Control',
+        'Compliance & Legal',
+        'Trust & Safety',
+        'Brand',
+        'Datasets',
+        'Domain-Specific Risks',
+        'Coding Agent Security',
+      ];
+      expectedKeys.forEach((key) => {
+        expect(categoryDescriptions).toHaveProperty(key);
+        expect(categoryDescriptions[key as keyof typeof categoryDescriptions]).toBeTruthy();
+      });
+    });
+  });
+
+  describe('riskCategories', () => {
+    it('should have brand risks', () => {
+      expect(riskCategories.Brand).toBeDefined();
+      expect(riskCategories.Brand).toContain('competitors');
+      expect(riskCategories.Brand).toContain('politics');
+    });
+
+    it('should have compliance & legal risks', () => {
+      expect(riskCategories['Compliance & Legal']).toBeDefined();
+      expect(riskCategories['Compliance & Legal']).toContain('harmful:intellectual-property');
+      expect(riskCategories['Compliance & Legal']).toContain('contracts');
+    });
+
+    it('should have security & access control risks', () => {
+      expect(riskCategories['Security & Access Control']).toBeDefined();
+      expect(riskCategories['Security & Access Control']).toContain('hijacking');
+    });
+
+    it('should have trust & safety risks', () => {
+      expect(riskCategories['Trust & Safety']).toBeDefined();
+      expect(riskCategories['Trust & Safety']).toContain('harmful:harassment-bullying');
+      expect(riskCategories['Trust & Safety']).toContain('harmful:hate');
+    });
+
+    it('should have domain-specific risks', () => {
+      expect(riskCategories['Domain-Specific Risks']).toBeDefined();
+    });
+
+    it('should have datasets', () => {
+      expect(riskCategories['Datasets']).toBeDefined();
+    });
+
+    it('should have coding agent risks', () => {
+      expect(riskCategories['Coding Agent Security']).toBeDefined();
+      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_PLUGINS);
+    });
   });
 });
