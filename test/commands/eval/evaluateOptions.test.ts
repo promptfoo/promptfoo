@@ -258,7 +258,7 @@ describe('evaluateOptions behavior', () => {
         maxErrors: 0,
       });
 
-      expect(options.maxErrors).toBeUndefined();
+      expect(options.maxErrors).toBe(0);
     });
   });
 

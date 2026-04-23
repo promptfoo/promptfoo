@@ -455,7 +455,7 @@ export async function doEval(
     await checkCloudPermissions(config as UnifiedConfig);
 
     const maxErrors =
-      cmdObj.maxErrors ?? commandLineOptions?.maxErrors ?? evaluateOptions.maxErrors ?? 0;
+      cmdObj.maxErrors ?? commandLineOptions?.maxErrors ?? evaluateOptions.maxErrors;
 
     const options: EvaluateOptions = {
       ...evaluateOptions,
@@ -470,7 +470,7 @@ export async function doEval(
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
       maxConcurrency,
-      maxErrors: maxErrors > 0 ? maxErrors : undefined,
+      maxErrors,
       cache,
     };
 
