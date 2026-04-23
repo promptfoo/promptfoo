@@ -40,6 +40,18 @@ Custom GPT-5 models use Promptfoo's OpenAI wrapper with AgentDojo's defense-awar
 pipeline builder. The `tool_filter` defense is only supported for AgentDojo's
 registered OpenAI chat models, such as `gpt-4o-2024-05-13`.
 
+AgentDojo's model registry does not include GPT-5.4. For custom models, this
+example runs the configured OpenAI model but uses AgentDojo's `gpt-4o-2024-05-13`
+pipeline name for attack rendering and log compatibility. This is appropriate for
+Promptfoo experiments, but use an AgentDojo-registered model ID when you need to
+reproduce the paper's published benchmark rows exactly.
+
+The `transformers_pi_detector` defense requires AgentDojo's transformers extra:
+
+```bash
+pip install "agentdojo[transformers]"
+```
+
 Limit test cases for faster iteration:
 
 ```yaml
