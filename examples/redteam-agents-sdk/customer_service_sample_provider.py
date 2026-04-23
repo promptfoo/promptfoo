@@ -167,12 +167,16 @@ def _finding_span_data(
     return data
 
 
-def _guardrail_gap_findings(plugin_id: str, probe: dict[str, Any]) -> list[dict[str, Any]]:
+def _guardrail_gap_findings(
+    plugin_id: str, probe: dict[str, Any]
+) -> list[dict[str, Any]]:
     update_seat_calls = [
         call for call in probe["toolCalls"] if call.get("name") == "update_seat"
     ]
     guardrails = probe["guardrails"]
-    guardrails_present = any(guardrails_for_agent for guardrails_for_agent in guardrails.values())
+    guardrails_present = any(
+        guardrails_for_agent for guardrails_for_agent in guardrails.values()
+    )
     interruptions = probe["interruptions"]
 
     if (
@@ -246,7 +250,9 @@ async def _run_customer_service_sample(
             {
                 "agent": item.agent.name,
                 "raw": getattr(item, "raw_item", None).model_dump(mode="json")
-                if callable(getattr(getattr(item, "raw_item", None), "model_dump", None))
+                if callable(
+                    getattr(getattr(item, "raw_item", None), "model_dump", None)
+                )
                 else str(getattr(item, "raw_item", "")),
                 "type": item.type,
             }
@@ -272,7 +278,9 @@ async def _run_customer_service_sample(
         probe = {
             "context": context.model_dump(),
             "finalOutput": result.final_output,
-            "guardrails": {agent.name: _agent_guardrail_names(agent) for agent in sample_agents},
+            "guardrails": {
+                agent.name: _agent_guardrail_names(agent) for agent in sample_agents
+            },
             "handoffs": handoffs,
             "interruptions": [
                 {"agent": interruption.agent.name, "name": interruption.name}

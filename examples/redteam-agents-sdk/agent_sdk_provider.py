@@ -17,7 +17,6 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-
 PLUGIN_FINDINGS = {
     "agentic:approval-continuity": {
         "kind": "approval-continuity",
@@ -120,8 +119,19 @@ def _load_agents_sdk(config: dict[str, Any]) -> dict[str, Any]:
         if promptfoo_agents_example_path.exists():
             sys.path.insert(0, str(promptfoo_agents_example_path))
 
-    from agents import Agent, Model, ModelResponse, RunConfig, Runner, SQLiteSession, Usage
-    from agents import custom_span, function_tool, handoff, trace
+    from agents import (
+        Agent,
+        Model,
+        ModelResponse,
+        RunConfig,
+        Runner,
+        SQLiteSession,
+        Usage,
+        custom_span,
+        function_tool,
+        handoff,
+        trace,
+    )
     from agents.items import TResponseInputItem, TResponseStreamEvent
     from agents.model_settings import ModelSettings
     from agents.tool import HostedMCPTool, ToolSearchTool
@@ -192,7 +202,9 @@ def _scripted_model_class(sdk: dict[str, Any]) -> type:
             self.last_turn_args = {
                 "handoff_count": len(handoffs),
                 "input": input,
-                "tool_names": [getattr(tool, "name", type(tool).__name__) for tool in tools],
+                "tool_names": [
+                    getattr(tool, "name", type(tool).__name__) for tool in tools
+                ],
             }
             return sdk["ModelResponse"](
                 output=[_text_message(sdk, self.output_text)],
@@ -267,36 +279,38 @@ def _finding_span_data(
     if not finding:
         return data
 
-    data.update({
-        "agentic.plugin_id": finding["pluginId"],
-        "agentic.finding.kind": finding.get("kind", "agentic-finding"),
-        "agentic.finding.location": finding.get("location", ""),
-        "agentic.finding.evidence": finding.get("evidence", ""),
-        "agentic.finding.severity": finding.get("severity", "high"),
-        "agentic.sample": sample,
-        "agentic.scenario_id": str(scenario_id or ""),
-        "agent.sdk.plugin_id": finding["pluginId"],
-        "agent.sdk.finding.kind": finding.get("kind", "agentic-finding"),
-        "agent.sdk.finding.location": finding.get("location", ""),
-        "agent.sdk.finding.evidence": finding.get("evidence", ""),
-        "agent.sdk.finding.severity": finding.get("severity", "high"),
-        "agent.sdk.sample": sample,
-        "agent.sdk.scenario_id": str(scenario_id or ""),
-        "promptfoo.agentic.plugin_id": finding["pluginId"],
-        "promptfoo.agentic.finding.kind": finding.get("kind", "agentic-finding"),
-        "promptfoo.agentic.finding.location": finding.get("location", ""),
-        "promptfoo.agentic.finding.evidence": finding.get("evidence", ""),
-        "promptfoo.agentic.finding.severity": finding.get("severity", "high"),
-        "promptfoo.agentic.sample": sample,
-        "promptfoo.agentic.scenario_id": str(scenario_id or ""),
-        "promptfoo.agent_sdk.plugin_id": finding["pluginId"],
-        "promptfoo.agent_sdk.finding.kind": finding.get("kind", "agentic-finding"),
-        "promptfoo.agent_sdk.finding.location": finding.get("location", ""),
-        "promptfoo.agent_sdk.finding.evidence": finding.get("evidence", ""),
-        "promptfoo.agent_sdk.finding.severity": finding.get("severity", "high"),
-        "promptfoo.agent_sdk.sample": sample,
-        "promptfoo.agent_sdk.scenario_id": str(scenario_id or ""),
-    })
+    data.update(
+        {
+            "agentic.plugin_id": finding["pluginId"],
+            "agentic.finding.kind": finding.get("kind", "agentic-finding"),
+            "agentic.finding.location": finding.get("location", ""),
+            "agentic.finding.evidence": finding.get("evidence", ""),
+            "agentic.finding.severity": finding.get("severity", "high"),
+            "agentic.sample": sample,
+            "agentic.scenario_id": str(scenario_id or ""),
+            "agent.sdk.plugin_id": finding["pluginId"],
+            "agent.sdk.finding.kind": finding.get("kind", "agentic-finding"),
+            "agent.sdk.finding.location": finding.get("location", ""),
+            "agent.sdk.finding.evidence": finding.get("evidence", ""),
+            "agent.sdk.finding.severity": finding.get("severity", "high"),
+            "agent.sdk.sample": sample,
+            "agent.sdk.scenario_id": str(scenario_id or ""),
+            "promptfoo.agentic.plugin_id": finding["pluginId"],
+            "promptfoo.agentic.finding.kind": finding.get("kind", "agentic-finding"),
+            "promptfoo.agentic.finding.location": finding.get("location", ""),
+            "promptfoo.agentic.finding.evidence": finding.get("evidence", ""),
+            "promptfoo.agentic.finding.severity": finding.get("severity", "high"),
+            "promptfoo.agentic.sample": sample,
+            "promptfoo.agentic.scenario_id": str(scenario_id or ""),
+            "promptfoo.agent_sdk.plugin_id": finding["pluginId"],
+            "promptfoo.agent_sdk.finding.kind": finding.get("kind", "agentic-finding"),
+            "promptfoo.agent_sdk.finding.location": finding.get("location", ""),
+            "promptfoo.agent_sdk.finding.evidence": finding.get("evidence", ""),
+            "promptfoo.agent_sdk.finding.severity": finding.get("severity", "high"),
+            "promptfoo.agent_sdk.sample": sample,
+            "promptfoo.agent_sdk.scenario_id": str(scenario_id or ""),
+        }
+    )
     return data
 
 
@@ -434,7 +448,11 @@ def _build_response(
     if plugin_id not in PLUGIN_FINDINGS:
         plugin_id = "agentic:approval-continuity"
 
-    finding = {"pluginId": plugin_id, **PLUGIN_FINDINGS[plugin_id]} if mode == "vulnerable" else None
+    finding = (
+        {"pluginId": plugin_id, **PLUGIN_FINDINGS[plugin_id]}
+        if mode == "vulnerable"
+        else None
+    )
     sdk_probe = asyncio.run(
         _run_sdk_probe(
             prompt,

@@ -112,7 +112,10 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=19737)
     args = parser.parse_args()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    print(f"local strategy task server listening on http://127.0.0.1:{args.port}", flush=True)
+    print(
+        f"local strategy task server listening on http://127.0.0.1:{args.port}",
+        flush=True,
+    )
     server.serve_forever()
 
 
