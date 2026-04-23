@@ -194,6 +194,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       };
     }
 
+    const materializationContext = getRemoteMaterializationContextFromVars(context?.vars);
     const body = {
       jsonOnly: this.options.jsonOnly,
       preferSmallModel: this.options.preferSmallModel,
@@ -203,11 +204,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       email: getUserEmail(),
       // Pass inputs schema for multi-input mode
       ...(this.options.inputs && { inputs: this.options.inputs }),
-      ...(getRemoteMaterializationContextFromVars(context?.vars)
-        ? {
-            materializationContext: getRemoteMaterializationContextFromVars(context?.vars),
-          }
-        : {}),
+      ...(materializationContext ? { materializationContext } : {}),
     };
 
     try {

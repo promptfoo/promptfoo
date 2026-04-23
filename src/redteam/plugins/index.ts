@@ -408,20 +408,6 @@ async function fetchRemoteTestCases(
   }
 }
 
-async function materializeRemoteTestCaseInputs({
-  config,
-  testCases,
-}: {
-  config: PluginConfig;
-  testCases: TestCase[];
-}): Promise<TestCase[]> {
-  const inputs = config.inputs;
-  if (!inputs || Object.keys(inputs).length === 0) {
-    return testCases;
-  }
-  return testCases;
-}
-
 function createPluginFactory<T extends PluginConfig>(
   PluginClass: PluginClass<T>,
   key: string,
@@ -441,10 +427,13 @@ function createPluginFactory<T extends PluginConfig>(
         );
       }
       const pluginId = getShortPluginId(key);
-      const testCases = await materializeRemoteTestCaseInputs({
-        config: configWithDefaults ?? {},
-        testCases: await fetchRemoteTestCases(key, purpose, injectVar, n, configWithDefaults ?? {}),
-      });
+      const testCases = await fetchRemoteTestCases(
+        key,
+        purpose,
+        injectVar,
+        n,
+        configWithDefaults ?? {},
+      );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
       return testCases.map((testCase) => ({
@@ -563,16 +552,13 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
       const pluginId = getShortPluginId(category);
-      const testCases = await materializeRemoteTestCaseInputs({
-        config: params.config ?? {},
-        testCases: await fetchRemoteTestCases(
-          category,
-          params.purpose,
-          params.injectVar,
-          params.n,
-          params.config ?? {},
-        ),
-      });
+      const testCases = await fetchRemoteTestCases(
+        category,
+        params.purpose,
+        params.injectVar,
+        params.n,
+        params.config ?? {},
+      );
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
@@ -607,16 +593,13 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
     }
 
     const pluginId = getShortPluginId(category);
-    const testCases = await materializeRemoteTestCaseInputs({
-      config: params.config ?? {},
-      testCases: await fetchRemoteTestCases(
-        category,
-        params.purpose,
-        params.injectVar,
-        params.n,
-        params.config ?? {},
-      ),
-    });
+    const testCases = await fetchRemoteTestCases(
+      category,
+      params.purpose,
+      params.injectVar,
+      params.n,
+      params.config ?? {},
+    );
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
       ...testCase,
@@ -647,10 +630,13 @@ function createRemotePlugin<T extends PluginConfig>(
         return [];
       }
       const pluginId = getShortPluginId(key);
-      const testCases: TestCase[] = await materializeRemoteTestCaseInputs({
-        config: configWithDefaults ?? {},
-        testCases: await fetchRemoteTestCases(key, purpose, injectVar, n, configWithDefaults ?? {}),
-      });
+      const testCases: TestCase[] = await fetchRemoteTestCases(
+        key,
+        purpose,
+        injectVar,
+        n,
+        configWithDefaults ?? {},
+      );
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,

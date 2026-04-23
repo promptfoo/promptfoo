@@ -725,7 +725,18 @@ async function runRedteamConversation({
         // If inputs is defined, extract individual keys from the attack prompt JSON
         if (inputs && Object.keys(inputs).length > 0) {
           if (shouldGenerateRemote()) {
-            Object.assign(updatedVars, materializedVars ?? {});
+            try {
+              const parsed = JSON.parse(newInjectVar);
+              Object.assign(
+                updatedVars,
+                buildRemoteMaterializedInputVariables(
+                  { inputMaterialization, materializationHandled, materializedVars },
+                  parsed,
+                ).vars,
+              );
+            } catch {
+              // If parsing fails, it's plain text - keep original vars
+            }
           } else {
             try {
               // Use the original newInjectVar (before escaping) for parsing
@@ -1136,14 +1147,12 @@ async function runRedteamConversation({
           ),
           materializedVars: bestNode.materializedVars,
         };
-        assertRemoteMaterializationHandled(
-          remoteBestNodeMaterialization,
-          'Iterative Tree final multi-input prompt',
-        );
-        Object.assign(
-          finalUpdatedVars,
-          buildRemoteMaterializedInputVariables(remoteBestNodeMaterialization, parsed).vars,
-        );
+        if (remoteBestNodeMaterialization.materializationHandled) {
+          Object.assign(
+            finalUpdatedVars,
+            buildRemoteMaterializedInputVariables(remoteBestNodeMaterialization, parsed).vars,
+          );
+        }
       } else {
         const { vars: materializedVars } = await extractMaterializedVariablesFromJsonWithMetadata(
           parsed,
