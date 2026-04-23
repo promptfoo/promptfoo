@@ -1,4 +1,5 @@
 import React, { useContext } from 'react';
+
 import { UserContext } from '@app/contexts/UserContextDef';
 
 declare global {
@@ -14,7 +15,7 @@ declare global {
         account_external_id?: string;
       };
     };
-    Pylon?: any;
+    Pylon?: unknown;
   }
 }
 

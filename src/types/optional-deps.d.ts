@@ -1,3 +1,13 @@
+// istextorbinary has types but exports field doesn't support bundler resolution
+declare module 'istextorbinary' {
+  export function isText(filename?: string | null, buffer?: Buffer | null): boolean | null;
+  export function isBinary(filename?: string | null, buffer?: Buffer | null): boolean | null;
+  export function getEncoding(
+    buffer: Buffer,
+    opts?: { chunkLength?: number; chunkBegin?: number },
+  ): 'utf8' | 'binary' | null;
+}
+
 declare module '@ibm-cloud/watsonx-ai' {
   export interface WatsonXAI {
     newInstance(config: any): any;
@@ -16,3 +26,6 @@ declare module 'ibm-cloud-sdk-core' {
     constructor(config: { bearerToken: string });
   }
 }
+
+// Optional dependency used by transformers providers through dynamic imports.
+declare module '@huggingface/transformers';

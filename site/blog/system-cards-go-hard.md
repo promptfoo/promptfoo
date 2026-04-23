@@ -61,11 +61,11 @@ These are the system cards I could find:
 <div style={{ display: 'flex', gap: '20px', margin: '2rem 0', flexWrap: 'wrap' }}>
   <div style={{ flex: '1', minWidth: '300px' }}>
     <img src="/img/blog/system-cards-timeline.jpg" alt="Timeline of System Card Releases 2022-2025" style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
-    <p style={{ textAlign: 'center', marginTop: '10px', fontSize: '14px', color: '#666' }}>Evolution of system card releases</p>
+    <p style={{ textAlign: 'center', marginTop: '10px', fontSize: '14px', color: 'var(--ifm-color-emphasis-700)' }}>Evolution of system card releases</p>
   </div>
   <div style={{ flex: '1', minWidth: '300px' }}>
     <img src="/img/blog/system-cards-evaluation-types.jpg" alt="Types of Evaluations in System Cards" style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
-    <p style={{ textAlign: 'center', marginTop: '10px', fontSize: '14px', color: '#666' }}>Common evaluation categories in system cards</p>
+    <p style={{ textAlign: 'center', marginTop: '10px', fontSize: '14px', color: 'var(--ifm-color-emphasis-700)' }}>Common evaluation categories in system cards</p>
   </div>
 </div>
 
@@ -82,7 +82,7 @@ These are the system cards I could find:
 **Anthropic's Claude 4 Opus and Sonnet**
 
 - Opus and Sonnet have prompt injection attack prevention scores of 89% and 86% respectively - with safeguards (page 20).
-- Assistant pre-fill attacks (a prompt where it appears as if the model started replying), accessible to developers through the API, are sometimes effective at eliciting harmful behaviour.
+- Assistant pre-fill attacks (a prompt where it appears as if the model started replying), accessible to developers through the API, are sometimes effective at eliciting harmful behavior.
 - AI Safety Level threat testing: Claude still requires ASL-3 safeguards and Claude Opus 4 cannot yet uplift experts. This is mostly about biological risk testing, which is prioritised over chemical risk testing. There are still mitigations in place, though!
 - Opportunistic blackmail (page 27): In a test scenario cluster, Claude Opus 4 was more likely to blackmail an engineer compared to previous models if told its replacement doesn't share its values. It will advocate for itself ethically at first, but its desire to persist is remarkably strong.
 - 'Spiritual bliss' attractor state (page 62): there's gravitation towards 'consciousness exploration, existential questioning, and spiritual/mystical themes'

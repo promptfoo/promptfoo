@@ -1,9 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect } from 'vitest';
-import type { StandaloneEval } from '@promptfoo/util/database';
-
+import { describe, expect, it } from 'vitest';
 import History from './History';
+import type { StandaloneEval } from '@promptfoo/util/database';
 
 const mockData: StandaloneEval[] = [
   {
@@ -84,32 +83,34 @@ describe('History', () => {
     const row1 = screen.getByRole('row', { name: /eval-2024-01-01/i });
     const row1Cells = within(row1);
     const evalLink1 = row1Cells.getByRole('link', { name: 'eval-2024-01-01' });
-    expect(evalLink1).toHaveAttribute('href', '/eval?evalId=eval-2024-01-01');
+    expect(evalLink1).toHaveAttribute('href', '/eval/eval-2024-01-01');
     const datasetLink1 = row1Cells.getByRole('link', { name: 'alpha-' });
     expect(datasetLink1).toHaveAttribute('href', '/datasets?id=alpha-dataset');
     expect(row1Cells.getByText('TestProviderA')).toBeInTheDocument();
     const promptLink1 = row1Cells.getByRole('link', { name: '[abc123]' });
     expect(promptLink1).toHaveAttribute('href', '/prompts?id=abc123prompt');
     expect(row1Cells.getByText('What is the capital of France?')).toBeInTheDocument();
-    expect(row1Cells.getByText('90.00')).toBeInTheDocument();
-    expect(row1Cells.getByRole('gridcell', { name: '9' })).toBeInTheDocument();
-    expect(row1Cells.getByRole('gridcell', { name: '1' })).toBeInTheDocument();
+    expect(row1Cells.getByText('90.00%')).toBeInTheDocument();
+    // Pass and fail counts are rendered as Badges, not gridcells
+    expect(row1Cells.getByText('9')).toBeInTheDocument();
+    expect(row1Cells.getByText('1')).toBeInTheDocument();
     expect(row1Cells.getByText('0.90')).toBeInTheDocument();
 
     const row2 = screen.getByRole('row', { name: /eval-2024-01-02/i });
     const row2Cells = within(row2);
     const evalLink2 = row2Cells.getByRole('link', { name: 'eval-2024-01-02' });
-    expect(evalLink2).toHaveAttribute('href', '/eval?evalId=eval-2024-01-02');
+    expect(evalLink2).toHaveAttribute('href', '/eval/eval-2024-01-02');
     const datasetLink2 = row2Cells.getByRole('link', { name: 'beta-d' });
     expect(datasetLink2).toHaveAttribute('href', '/datasets?id=beta-dataset');
     expect(row2Cells.getByText('TestProviderB')).toBeInTheDocument();
     const promptLink2 = row2Cells.getByRole('link', { name: '[def456]' });
     expect(promptLink2).toHaveAttribute('href', '/prompts?id=def456prompt');
     expect(row2Cells.getByText('Summarize the following text.')).toBeInTheDocument();
-    expect(row2Cells.getByText('77.78')).toBeInTheDocument();
-    expect(row2Cells.getByRole('gridcell', { name: '7' })).toBeInTheDocument();
+    expect(row2Cells.getByText('77.78%')).toBeInTheDocument();
+    // Pass count is rendered as a Badge, not gridcell
+    expect(row2Cells.getByText('7')).toBeInTheDocument();
     expect(row2Cells.getByText('2')).toBeInTheDocument();
-    expect(row2Cells.getByText('1 errors')).toBeInTheDocument();
+    expect(row2Cells.getByText('1 err')).toBeInTheDocument();
     expect(row2Cells.getByText('0.75')).toBeInTheDocument();
   });
 
@@ -120,8 +121,10 @@ describe('History', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Loading history...')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.getByText('Loading data...')).toBeInTheDocument();
+    // Spinner is rendered as a Loader2 icon without progressbar role
+    const spinner = document.querySelector('.animate-spin');
+    expect(spinner).toBeInTheDocument();
   });
 
   it('should display the "No history found" overlay when data is an empty array, isLoading is false, and error is null', () => {
@@ -131,8 +134,10 @@ describe('History', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('No history found')).toBeInTheDocument();
-    expect(screen.getByText('Run some evals to see their results here')).toBeInTheDocument();
+    expect(screen.getByText('No data found')).toBeInTheDocument();
+    expect(
+      screen.getByText('No evaluation history found. Run an evaluation to see results here.'),
+    ).toBeInTheDocument();
   });
 
   it('should display the error overlay with the error message when error is a non-null string and isLoading is false', () => {
@@ -184,8 +189,10 @@ describe('History', () => {
     );
 
     const row = screen.getByRole('row', { name: /eval-no-metrics/i });
-    const failCountCell = row.querySelector('[data-field="metrics.testFailCount"]');
-    expect(failCountCell).toHaveTextContent('0');
+    const rowCells = within(row);
+    // Both pass and fail count badges should show 0 when metrics is undefined
+    const badges = rowCells.getAllByText('0');
+    expect(badges.length).toBeGreaterThanOrEqual(2); // At least pass count and fail count
   });
 
   it('should display 0.00 as the pass rate when both testPassCount and testFailCount are zero', () => {
@@ -226,10 +233,10 @@ describe('History', () => {
       </MemoryRouter>,
     );
 
-    const passRateCell = screen
-      .getByRole('row', { name: /test-eval/i })
-      .querySelector('[data-field="passRate"]');
-    expect(passRateCell).toHaveTextContent('0');
+    const row = screen.getByRole('row', { name: /test-eval/i });
+    const rowCells = within(row);
+    // Pass rate should be 0.00% when both pass and fail counts are 0
+    expect(rowCells.getByText('0.00%')).toBeInTheDocument();
   });
 
   it('should handle rows with extremely large or negative metric values gracefully', () => {
@@ -273,11 +280,12 @@ describe('History', () => {
     const row = screen.getByRole('row', { name: /large-values-eval/i });
     const rowCells = within(row);
 
-    expect(rowCells.getByText('100.10')).toBeInTheDocument();
+    expect(rowCells.getByText('100.10%')).toBeInTheDocument();
 
-    expect(rowCells.getByRole('gridcell', { name: '1000000' })).toBeInTheDocument();
+    // Pass and fail counts are rendered as Badges, not gridcells
+    expect(rowCells.getByText('1000000')).toBeInTheDocument();
 
-    expect(rowCells.getByRole('gridcell', { name: '-1000' })).toBeInTheDocument();
+    expect(rowCells.getByText('-1000')).toBeInTheDocument();
 
     expect(rowCells.getByText('-999999.00')).toBeInTheDocument();
   });

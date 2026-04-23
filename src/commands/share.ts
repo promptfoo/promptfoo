@@ -16,7 +16,6 @@ import {
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../share';
-import telemetry from '../telemetry';
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
 
@@ -38,7 +37,7 @@ export async function createAndDisplayShareableUrl(
   evalRecord: Eval,
   showAuth: boolean,
 ): Promise<string | null> {
-  const url = await createShareableUrl(evalRecord, showAuth);
+  const url = await createShareableUrl(evalRecord, { showAuth });
 
   if (url) {
     logger.info(`View results: ${chalk.greenBright.bold(url)}`);
@@ -90,10 +89,6 @@ export function shareCommand(program: Command) {
           showAuth: boolean;
         } & Command,
       ) => {
-        telemetry.record('command_used', {
-          name: 'share',
-        });
-
         let isEval = false;
         let eval_: Eval | undefined | null = null;
         let audit: ModelAudit | undefined | null = null;

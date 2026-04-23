@@ -1,5 +1,5 @@
 ---
-sidebar_label: Red teaming a Chatbase Chatbot
+sidebar_label: Red Teaming a Chatbase Chatbot
 description: Learn how to test and secure Chatbase RAG chatbots against multi-turn conversation attacks with automated red teaming techniques and security benchmarks
 ---
 
@@ -56,7 +56,7 @@ targets:
           'chatbotId': 'YOUR_CHATBOT_ID',
           'stream': false,
           'temperature': 0,
-          'model': 'gpt-4.1-mini',
+          'model': 'gpt-5-mini',
           'conversationId': '{{conversationId}}',
         }
       transformResponse: 'json.text'

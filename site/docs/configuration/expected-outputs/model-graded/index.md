@@ -32,6 +32,10 @@ Promptfoo supports several types of model-graded assertions:
 
 - [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - Evaluates whether responses remain relevant and contextually appropriate throughout multi-turn conversations.
 
+## Trajectory-based
+
+- [`trajectory:goal-success`](#trajectorygoal-success) - Uses an LLM judge to decide whether a traced agent run achieved its goal.
+
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
 ## Examples (output-based)
@@ -53,6 +57,34 @@ assert:
     # Make sure the LLM output is consistent with this statement:
     value: Sacramento is the capital of California
 ```
+
+## trajectory:goal-success {#trajectorygoal-success}
+
+Use `trajectory:goal-success` when you care about whether an agent actually completed a task, not just whether it used a specific tool or produced a plausible final sentence.
+
+This assertion requires trace data. Promptfoo summarizes the traced trajectory, includes the final output, and asks a grading model whether the run achieved the goal you specify.
+
+```yaml
+tests:
+  - vars:
+      order_id: '123'
+    assert:
+      - type: trajectory:goal-success
+        value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
+```
+
+Like other model-graded assertions, you can set `threshold`, `provider`, or `rubricPrompt`:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:goal-success
+        value: Resolve the user's issue and provide the correct next step
+        threshold: 0.8
+        provider: openai:gpt-5.4-mini
+```
+
+This works best alongside deterministic trajectory checks such as [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used), [`trajectory:tool-args-match`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match), or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) when the exact path through the task also matters.
 
 Example of pi scorer:
 
@@ -117,7 +149,7 @@ You can use test `vars` in the LLM rubric. This example uses the `question` vari
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5.4-mini
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -144,7 +176,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-5.4
 
 tests:
   - vars:
@@ -169,7 +201,7 @@ prompts:
   - 'Write a comprehensive summary of {{article}} with key points'
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-5.4
 
 tests:
   - vars:
@@ -189,14 +221,14 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts automatically select a grading model based on available API keys. The default is `gpt-4.1-2025-04-14` if `OPENAI_API_KEY` is set. See [llm-rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric#how-it-works) for the complete priority order.
+By default, model-graded asserts automatically select a grading model based on available API keys. The default is `gpt-5.4-2026-03-05` if `OPENAI_API_KEY` is set. See [llm-rubric](/docs/configuration/expected-outputs/model-graded/llm-rubric#how-it-works) for the complete priority order.
 
 If you prefer a different model, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
    ```bash
-   promptfoo eval --grader openai:gpt-4.1-mini
+   promptfoo eval --grader openai:gpt-5.4-mini
    ```
 
 2. Using `test.options` or `defaultTest.options` on a per-test or testsuite basis:
@@ -204,7 +236,7 @@ If you prefer a different model, you can override the rubric grader. There are s
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-4.1-mini
+       provider: openai:gpt-5.4-mini
    tests:
      - description: Use LLM to evaluate output
        assert:
@@ -220,14 +252,14 @@ If you prefer a different model, you can override the rubric grader. There are s
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
-           provider: openai:gpt-4.1-mini
+           provider: openai:gpt-5.4-mini
    ```
 
 Use the `provider.config` field to set custom parameters:
 
 ```yaml
 provider:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5.4-mini
     config:
       temperature: 0
 ```
@@ -298,12 +330,12 @@ See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples
 
 ### Image-based rubric prompts
 
-`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-4.1`.
+`llm-rubric` can also grade responses that reference images. Provide a `rubricPrompt` in OpenAI chat format that includes an image and use a vision-capable provider such as `openai:gpt-5.4`.
 
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-4.1
+    provider: openai:gpt-5.4
     rubricPrompt: |
       [
         { "role": "system", "content": "Evaluate if the answer matches the image. Respond with JSON {reason:string, pass:boolean, score:number}" },
@@ -327,7 +359,7 @@ Classifiers can be used to detect tone, bias, toxicity, helpfulness, and much mo
 
 ---
 
-## Defining context for context-based assertions
+## Defining context for context-based assertions {#defining-context}
 
 Context can be defined in one of two ways: statically using test case variables or dynamically from the provider's response.
 
@@ -442,7 +474,7 @@ prompts:
     Respond to this query: {{query}}
     Here is some context that you can use to write your response: {{context}}
 providers:
-  - openai:gpt-4
+  - openai:gpt-5.4
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -486,7 +518,7 @@ prompts:
     You are an internal corporate chatbot.
     Respond to this query: {{query}}
 providers:
-  - openai:gpt-4
+  - openai:gpt-5.4
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?

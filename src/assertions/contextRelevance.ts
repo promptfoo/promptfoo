@@ -1,4 +1,4 @@
-import { matchesContextRelevance } from '../matchers';
+import { matchesContextRelevance } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
 
@@ -40,7 +40,7 @@ export const handleContextRelevance = async ({
   const result = await matchesContextRelevance(
     test.vars.query,
     context,
-    assertion.threshold ?? 0,
+    (assertion.threshold as number) ?? 0,
     test.options,
     providerCallContext,
   );

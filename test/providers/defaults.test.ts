@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
@@ -6,12 +6,13 @@ import {
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
 import {
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
+  DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
 } from '../../src/providers/google/ai.studio';
+import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
 import { DefaultEmbeddingProvider as VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
   DefaultEmbeddingProvider as MistralEmbeddingProvider,
@@ -21,15 +22,30 @@ import {
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from '../../src/providers/mistral/defaults';
 import {
-  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
+  clearCodexDefaultProvidersForTesting,
+  hasCodexDefaultCredentials,
+} from '../../src/providers/openai/codexDefaults';
+import {
   DefaultModerationProvider,
+  DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
+  DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
+  DefaultGradingProvider as OpenAiGradingProvider,
+  DefaultSuggestionsProvider as OpenAiSuggestionsProvider,
 } from '../../src/providers/openai/defaults';
+import { providerRegistry } from '../../src/providers/providerRegistry';
+import { mockProcessEnv } from '../util/utils';
 
-import type { ApiProvider } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
+import type { ApiProvider } from '../../src/types/index';
 
-jest.mock('../../src/providers/google/util', () => ({
-  hasGoogleDefaultCredentials: jest.fn().mockResolvedValue(false),
+vi.mock('../../src/providers/google/util', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/google/util')>()),
+  hasGoogleDefaultCredentials: vi.fn().mockResolvedValue(false),
+}));
+
+vi.mock('../../src/providers/openai/codexDefaults', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/openai/codexDefaults')>()),
+  hasCodexDefaultCredentials: vi.fn().mockReturnValue(false),
 }));
 
 class MockProvider implements ApiProvider {
@@ -49,45 +65,45 @@ class MockProvider implements ApiProvider {
 }
 
 describe('Provider override tests', () => {
-  const originalEnv = process.env;
+  const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
+    mockProcessEnv({ ...originalEnv }, { clear: true });
     setDefaultCompletionProviders(undefined as any);
     setDefaultEmbeddingProviders(undefined as any);
-    // Reset Google ADC mock to default (false)
-    const mockHasGoogleDefaultCredentials = jest.requireMock(
-      '../../src/providers/google/util',
-    ).hasGoogleDefaultCredentials;
-    mockHasGoogleDefaultCredentials.mockResolvedValue(false);
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(false);
+    clearCodexDefaultProvidersForTesting();
     // Clear all credential env vars
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.MISTRAL_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.PALM_API_KEY;
-    delete process.env.AWS_ACCESS_KEY_ID;
-    delete process.env.AWS_SECRET_ACCESS_KEY;
-    delete process.env.AWS_PROFILE;
-    delete process.env.XAI_API_KEY;
-    delete process.env.DEEPSEEK_API_KEY;
-    delete process.env.GITHUB_TOKEN;
-    delete process.env.VOYAGE_API_KEY;
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    mockProcessEnv({ MISTRAL_API_KEY: undefined });
+    mockProcessEnv({ GEMINI_API_KEY: undefined });
+    mockProcessEnv({ GOOGLE_API_KEY: undefined });
+    mockProcessEnv({ PALM_API_KEY: undefined });
+    mockProcessEnv({ AWS_ACCESS_KEY_ID: undefined });
+    mockProcessEnv({ AWS_SECRET_ACCESS_KEY: undefined });
+    mockProcessEnv({ AWS_PROFILE: undefined });
+    mockProcessEnv({ XAI_API_KEY: undefined });
+    mockProcessEnv({ DEEPSEEK_API_KEY: undefined });
+    mockProcessEnv({ GITHUB_TOKEN: undefined });
+    mockProcessEnv({ VOYAGE_API_KEY: undefined });
     // Clear Azure env vars
-    delete process.env.AZURE_OPENAI_API_KEY;
-    delete process.env.AZURE_API_KEY;
-    delete process.env.AZURE_CLIENT_ID;
-    delete process.env.AZURE_CLIENT_SECRET;
-    delete process.env.AZURE_TENANT_ID;
-    delete process.env.AZURE_OPENAI_DEPLOYMENT_NAME;
-    delete process.env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME;
-    delete process.env.AZURE_CONTENT_SAFETY_ENDPOINT;
+    mockProcessEnv({ AZURE_OPENAI_API_KEY: undefined });
+    mockProcessEnv({ AZURE_API_KEY: undefined });
+    mockProcessEnv({ AZURE_CLIENT_ID: undefined });
+    mockProcessEnv({ AZURE_CLIENT_SECRET: undefined });
+    mockProcessEnv({ AZURE_TENANT_ID: undefined });
+    mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: undefined });
+    mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: undefined });
+    mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: undefined });
   });
 
-  afterEach(() => {
-    process.env = originalEnv;
-    jest.clearAllMocks();
+  afterEach(async () => {
+    mockProcessEnv(originalEnv, { clear: true });
+    clearCodexDefaultProvidersForTesting();
+    await providerRegistry.shutdownAll();
+    vi.resetAllMocks();
   });
 
   it('should override all completion providers when setDefaultCompletionProviders is called', async () => {
@@ -136,7 +152,7 @@ describe('Provider override tests', () => {
   });
 
   it('should use AzureModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is set', async () => {
-    process.env.AZURE_CONTENT_SAFETY_ENDPOINT = 'https://test-endpoint.com';
+    mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test-endpoint.com' });
 
     const providers = await getDefaultProviders();
 
@@ -147,7 +163,7 @@ describe('Provider override tests', () => {
   });
 
   it('should use DefaultModerationProvider when AZURE_CONTENT_SAFETY_ENDPOINT is not set', async () => {
-    delete process.env.AZURE_CONTENT_SAFETY_ENDPOINT;
+    mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: undefined });
 
     const providers = await getDefaultProviders();
     expect(providers.moderationProvider).toBe(DefaultModerationProvider);
@@ -183,7 +199,7 @@ describe('Provider override tests', () => {
   });
 
   it('should use Mistral providers when MISTRAL_API_KEY is set', async () => {
-    process.env.MISTRAL_API_KEY = 'test-key';
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
 
     const providers = await getDefaultProviders();
 
@@ -192,6 +208,73 @@ describe('Provider override tests', () => {
     expect(providers.gradingProvider).toBe(MistralGradingProvider);
     expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
     expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+  });
+
+  it('should use Codex SDK providers when Codex credentials exist without explicit API provider keys', async () => {
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.gradingJsonProvider.id()).toBe('openai:codex-sdk');
+    expect(providers.gradingProvider.id()).toBe('openai:codex-sdk');
+    expect(providers.llmRubricProvider?.id()).toBe('openai:codex-sdk');
+    expect(providers.suggestionsProvider.id()).toBe('openai:codex-sdk');
+    expect(providers.synthesizeProvider.id()).toBe('openai:codex-sdk');
+    expect(providers.webSearchProvider?.id()).toBe('openai:codex-sdk');
+    expect(providers.webSearchProvider?.config?.web_search_mode).toBe('live');
+    expect(providers.embeddingProvider.id()).toBe('openai:text-embedding-3-large');
+    expect(providers.moderationProvider).toBe(DefaultModerationProvider);
+  });
+
+  it('should prefer OpenAI API defaults over Codex SDK defaults when OPENAI_API_KEY exists', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'test-openai-key' });
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.gradingJsonProvider).toBe(OpenAiGradingJsonProvider);
+    expect(providers.gradingProvider).toBe(OpenAiGradingProvider);
+    expect(providers.suggestionsProvider).toBe(OpenAiSuggestionsProvider);
+    expect(providers.synthesizeProvider).toBe(OpenAiGradingJsonProvider);
+  });
+
+  it('should prefer Mistral defaults over Codex SDK defaults when MISTRAL_API_KEY exists', async () => {
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral-key' });
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.gradingJsonProvider).toBe(MistralGradingJsonProvider);
+    expect(providers.gradingProvider).toBe(MistralGradingProvider);
+    expect(providers.suggestionsProvider).toBe(MistralSuggestionsProvider);
+    expect(providers.synthesizeProvider).toBe(MistralSynthesizeProvider);
+  });
+
+  it('should prefer Codex SDK defaults over generic ambient credentials', async () => {
+    mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' });
+    mockProcessEnv({ GITHUB_TOKEN: 'test-github' });
+    vi.mocked(hasCodexDefaultCredentials).mockReturnValue(true);
+
+    const providers = await getDefaultProviders();
+
+    expect(providers.gradingProvider.id()).toBe('openai:codex-sdk');
+  });
+
+  it('should probe Google default credentials once when no higher-priority provider matches', async () => {
+    vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(false);
+
+    await getDefaultProviders();
+
+    expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not probe Google default credentials when Azure is preferred', async () => {
+    mockProcessEnv({ AZURE_OPENAI_API_KEY: 'azure-key' });
+    mockProcessEnv({ AZURE_DEPLOYMENT_NAME: 'azure-chat' });
+
+    await getDefaultProviders();
+
+    expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
   });
 
   it('should use Mistral providers when provided via env overrides', async () => {
@@ -209,8 +292,8 @@ describe('Provider override tests', () => {
   });
 
   it('should not use Mistral providers when OpenAI credentials exist', async () => {
-    process.env.MISTRAL_API_KEY = 'test-key';
-    process.env.OPENAI_API_KEY = 'test-key';
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
+    mockProcessEnv({ OPENAI_API_KEY: 'test-key' });
 
     const providers = await getDefaultProviders();
 
@@ -222,8 +305,8 @@ describe('Provider override tests', () => {
   });
 
   it('should not use Mistral COMPLETION providers when Anthropic credentials exist', async () => {
-    process.env.MISTRAL_API_KEY = 'test-key';
-    process.env.ANTHROPIC_API_KEY = 'test-key';
+    mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
+    mockProcessEnv({ ANTHROPIC_API_KEY: 'test-key' });
 
     const providers = await getDefaultProviders();
 
@@ -240,7 +323,7 @@ describe('Provider override tests', () => {
 
   describe('Google AI Studio provider selection', () => {
     it('should use Google AI Studio providers when GEMINI_API_KEY is set', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -249,11 +332,11 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
-      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider); // Falls back to OpenAI
+      expect(providers.embeddingProvider.id()).toBe('google:embedding:gemini-embedding-001');
     });
 
     it('should use Google AI Studio providers when GOOGLE_API_KEY is set', async () => {
-      process.env.GOOGLE_API_KEY = 'test-key';
+      mockProcessEnv({ GOOGLE_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -262,11 +345,11 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
-      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider); // Falls back to OpenAI
+      expect(providers.embeddingProvider.id()).toBe('google:embedding:gemini-embedding-001');
     });
 
     it('should use Google AI Studio providers when PALM_API_KEY is set', async () => {
-      process.env.PALM_API_KEY = 'test-key';
+      mockProcessEnv({ PALM_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -275,7 +358,7 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
-      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider); // Falls back to OpenAI
+      expect(providers.embeddingProvider.id()).toBe('google:embedding:gemini-embedding-001');
     });
 
     it('should use Google AI Studio providers when provided via env overrides', async () => {
@@ -290,12 +373,12 @@ describe('Provider override tests', () => {
       expect(providers.llmRubricProvider).toBe(GoogleAiStudioLlmRubricProvider);
       expect(providers.suggestionsProvider).toBe(GoogleAiStudioSuggestionsProvider);
       expect(providers.synthesizeProvider).toBe(GoogleAiStudioSynthesizeProvider);
-      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider); // Falls back to OpenAI
+      expect(providers.embeddingProvider.id()).toBe('google:embedding:gemini-embedding-001');
     });
 
     it('should not use Google AI Studio providers when OpenAI credentials exist', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
-      process.env.OPENAI_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+      mockProcessEnv({ OPENAI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -306,8 +389,8 @@ describe('Provider override tests', () => {
     });
 
     it('should not use Google AI Studio providers when Anthropic credentials exist', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
-      process.env.ANTHROPIC_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -318,7 +401,7 @@ describe('Provider override tests', () => {
     });
 
     it('should prefer Google AI Studio over Vertex when both credentials are available', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
       // hasGoogleDefaultCredentials is mocked to return false, but in practice
       // AI Studio should be preferred over Vertex in the provider selection order
 
@@ -331,8 +414,8 @@ describe('Provider override tests', () => {
     });
 
     it('should prefer Google AI Studio over Mistral when both credentials are available', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
-      process.env.MISTRAL_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -347,8 +430,8 @@ describe('Provider override tests', () => {
 
   describe('AWS Bedrock provider selection', () => {
     it('should use Bedrock providers when AWS_ACCESS_KEY_ID is set', async () => {
-      process.env.AWS_ACCESS_KEY_ID = 'test-key';
-      process.env.AWS_SECRET_ACCESS_KEY = 'test-secret';
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-key' });
+      mockProcessEnv({ AWS_SECRET_ACCESS_KEY: 'test-secret' });
 
       const providers = await getDefaultProviders();
 
@@ -356,7 +439,7 @@ describe('Provider override tests', () => {
     });
 
     it('should use Bedrock providers when AWS_PROFILE is set', async () => {
-      process.env.AWS_PROFILE = 'test-profile';
+      mockProcessEnv({ AWS_PROFILE: 'test-profile' });
 
       const providers = await getDefaultProviders();
 
@@ -364,9 +447,9 @@ describe('Provider override tests', () => {
     });
 
     it('should not use Bedrock providers when OpenAI credentials exist', async () => {
-      process.env.AWS_ACCESS_KEY_ID = 'test-key';
-      process.env.AWS_SECRET_ACCESS_KEY = 'test-secret';
-      process.env.OPENAI_API_KEY = 'test-key';
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-key' });
+      mockProcessEnv({ AWS_SECRET_ACCESS_KEY: 'test-secret' });
+      mockProcessEnv({ OPENAI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -376,7 +459,7 @@ describe('Provider override tests', () => {
 
   describe('xAI provider selection', () => {
     it('should use xAI providers when XAI_API_KEY is set', async () => {
-      process.env.XAI_API_KEY = 'test-key';
+      mockProcessEnv({ XAI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -384,8 +467,8 @@ describe('Provider override tests', () => {
     });
 
     it('should not use xAI providers when higher priority credentials exist', async () => {
-      process.env.XAI_API_KEY = 'test-key';
-      process.env.GEMINI_API_KEY = 'test-key';
+      mockProcessEnv({ XAI_API_KEY: 'test-key' });
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -395,7 +478,7 @@ describe('Provider override tests', () => {
 
   describe('DeepSeek provider selection', () => {
     it('should use DeepSeek providers when DEEPSEEK_API_KEY is set', async () => {
-      process.env.DEEPSEEK_API_KEY = 'test-key';
+      mockProcessEnv({ DEEPSEEK_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -403,8 +486,8 @@ describe('Provider override tests', () => {
     });
 
     it('should not use DeepSeek providers when xAI credentials exist', async () => {
-      process.env.DEEPSEEK_API_KEY = 'test-key';
-      process.env.XAI_API_KEY = 'test-key';
+      mockProcessEnv({ DEEPSEEK_API_KEY: 'test-key' });
+      mockProcessEnv({ XAI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -414,7 +497,7 @@ describe('Provider override tests', () => {
 
   describe('GitHub Models provider selection', () => {
     it('should use GitHub providers when GITHUB_TOKEN is set and no other credentials', async () => {
-      process.env.GITHUB_TOKEN = 'ghp_test-token';
+      mockProcessEnv({ GITHUB_TOKEN: 'ghp_test-token' });
 
       const providers = await getDefaultProviders();
 
@@ -422,8 +505,8 @@ describe('Provider override tests', () => {
     });
 
     it('should not use GitHub providers when explicit credentials exist', async () => {
-      process.env.GITHUB_TOKEN = 'ghp_test-token';
-      process.env.MISTRAL_API_KEY = 'test-key';
+      mockProcessEnv({ GITHUB_TOKEN: 'ghp_test-token' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -443,28 +526,28 @@ describe('Provider override tests', () => {
 
   describe('Provider priority - complete chain', () => {
     it('should use OpenAI when all credentials are set (highest priority)', async () => {
-      process.env.OPENAI_API_KEY = 'test-openai';
-      process.env.ANTHROPIC_API_KEY = 'test-anthropic';
-      process.env.GEMINI_API_KEY = 'test-gemini';
-      process.env.XAI_API_KEY = 'test-xai';
-      process.env.DEEPSEEK_API_KEY = 'test-deepseek';
-      process.env.MISTRAL_API_KEY = 'test-mistral';
-      process.env.AWS_ACCESS_KEY_ID = 'test-aws';
-      process.env.GITHUB_TOKEN = 'test-github';
+      mockProcessEnv({ OPENAI_API_KEY: 'test-openai' });
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-anthropic' });
+      mockProcessEnv({ GEMINI_API_KEY: 'test-gemini' });
+      mockProcessEnv({ XAI_API_KEY: 'test-xai' });
+      mockProcessEnv({ DEEPSEEK_API_KEY: 'test-deepseek' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral' });
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' });
+      mockProcessEnv({ GITHUB_TOKEN: 'test-github' });
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
     });
 
     it('should use Anthropic when OpenAI is missing but all others are set', async () => {
-      process.env.ANTHROPIC_API_KEY = 'test-anthropic';
-      process.env.GEMINI_API_KEY = 'test-gemini';
-      process.env.XAI_API_KEY = 'test-xai';
-      process.env.DEEPSEEK_API_KEY = 'test-deepseek';
-      process.env.MISTRAL_API_KEY = 'test-mistral';
-      process.env.AWS_ACCESS_KEY_ID = 'test-aws';
-      process.env.GITHUB_TOKEN = 'test-github';
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-anthropic' });
+      mockProcessEnv({ GEMINI_API_KEY: 'test-gemini' });
+      mockProcessEnv({ XAI_API_KEY: 'test-xai' });
+      mockProcessEnv({ DEEPSEEK_API_KEY: 'test-deepseek' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral' });
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' });
+      mockProcessEnv({ GITHUB_TOKEN: 'test-github' });
 
       const providers = await getDefaultProviders();
 
@@ -473,8 +556,8 @@ describe('Provider override tests', () => {
 
     it('should prefer explicit credentials over ambient credentials', async () => {
       // Only ambient credentials
-      process.env.AWS_ACCESS_KEY_ID = 'test-aws';
-      process.env.GITHUB_TOKEN = 'test-github';
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' });
+      mockProcessEnv({ GITHUB_TOKEN: 'test-github' });
 
       const providers = await getDefaultProviders();
 
@@ -487,17 +570,17 @@ describe('Provider override tests', () => {
     it('should fallback to OpenAI when no credentials are set', async () => {
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
       expect(providers.embeddingProvider.id()).toContain('text-embedding');
     });
 
     it('should fallback to OpenAI when only invalid/unrecognized credentials are set', async () => {
       // Set credentials for providers we don't check
-      process.env.SOME_RANDOM_API_KEY = 'test-key';
+      mockProcessEnv({ SOME_RANDOM_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
     });
   });
 
@@ -514,7 +597,7 @@ describe('Provider override tests', () => {
     });
 
     it('should have llmRubricProvider undefined for providers that do not support it', async () => {
-      process.env.MISTRAL_API_KEY = 'test-key';
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -522,7 +605,7 @@ describe('Provider override tests', () => {
     });
 
     it('should have llmRubricProvider defined for providers that support it', async () => {
-      process.env.GEMINI_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
@@ -540,13 +623,13 @@ describe('Provider override tests', () => {
 
       for (const envVars of testCases) {
         // Clear all
-        delete process.env.OPENAI_API_KEY;
-        delete process.env.ANTHROPIC_API_KEY;
-        delete process.env.GEMINI_API_KEY;
-        delete process.env.MISTRAL_API_KEY;
+        mockProcessEnv({ OPENAI_API_KEY: undefined });
+        mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+        mockProcessEnv({ GEMINI_API_KEY: undefined });
+        mockProcessEnv({ MISTRAL_API_KEY: undefined });
 
         // Set specific one
-        Object.assign(process.env, envVars);
+        mockProcessEnv(envVars);
 
         const providers = await getDefaultProviders();
         expect(providers.moderationProvider).toBe(DefaultModerationProvider);
@@ -556,8 +639,8 @@ describe('Provider override tests', () => {
 
   describe('Credential detection edge cases', () => {
     it('should treat empty string credentials as falsy', async () => {
-      process.env.OPENAI_API_KEY = '';
-      process.env.MISTRAL_API_KEY = 'valid-key';
+      mockProcessEnv({ OPENAI_API_KEY: '' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'valid-key' });
 
       const providers = await getDefaultProviders();
 
@@ -566,7 +649,7 @@ describe('Provider override tests', () => {
     });
 
     it('should prefer env overrides over process.env for the same key', async () => {
-      process.env.GEMINI_API_KEY = 'process-env-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'process-env-key' });
 
       const envOverrides: EnvOverrides = {
         OPENAI_API_KEY: 'override-key',
@@ -575,7 +658,7 @@ describe('Provider override tests', () => {
       const providers = await getDefaultProviders(envOverrides);
 
       // OpenAI should win because it's in overrides and has higher priority
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
     });
 
     it('should work with env overrides when process.env is empty', async () => {
@@ -589,7 +672,7 @@ describe('Provider override tests', () => {
     });
 
     it('should check both process.env and overrides for credential presence', async () => {
-      process.env.DEEPSEEK_API_KEY = 'env-key';
+      mockProcessEnv({ DEEPSEEK_API_KEY: 'env-key' });
 
       const envOverrides: EnvOverrides = {
         XAI_API_KEY: 'override-key',
@@ -604,8 +687,8 @@ describe('Provider override tests', () => {
 
   describe('Azure OpenAI provider selection', () => {
     it('should use Azure when API key and deployment name are set', async () => {
-      process.env.AZURE_OPENAI_API_KEY = 'test-key';
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'my-deployment';
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-key' });
+      mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'my-deployment' });
 
       const providers = await getDefaultProviders();
 
@@ -613,8 +696,8 @@ describe('Provider override tests', () => {
     });
 
     it('should use Azure when API key and AZURE_DEPLOYMENT_NAME (without OPENAI prefix) are set', async () => {
-      process.env.AZURE_OPENAI_API_KEY = 'test-key';
-      process.env.AZURE_DEPLOYMENT_NAME = 'my-deployment';
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-key' });
+      mockProcessEnv({ AZURE_DEPLOYMENT_NAME: 'my-deployment' });
       // Note: NOT setting AZURE_OPENAI_DEPLOYMENT_NAME - testing fallback
 
       const providers = await getDefaultProviders();
@@ -623,30 +706,30 @@ describe('Provider override tests', () => {
     });
 
     it('should NOT use Azure when only API key is set (no deployment name)', async () => {
-      process.env.AZURE_OPENAI_API_KEY = 'test-key';
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-key' });
       // No AZURE_OPENAI_DEPLOYMENT_NAME
 
       const providers = await getDefaultProviders();
 
       // Should fallback to OpenAI
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
     });
 
     it('should NOT use Azure when only deployment name is set (no credentials)', async () => {
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'my-deployment';
+      mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'my-deployment' });
       // No AZURE_OPENAI_API_KEY
 
       const providers = await getDefaultProviders();
 
       // Should fallback to OpenAI
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
     });
 
     it('should use Azure with client credentials (service principal)', async () => {
-      process.env.AZURE_CLIENT_ID = 'test-client-id';
-      process.env.AZURE_CLIENT_SECRET = 'test-client-secret';
-      process.env.AZURE_TENANT_ID = 'test-tenant-id';
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'my-deployment';
+      mockProcessEnv({ AZURE_CLIENT_ID: 'test-client-id' });
+      mockProcessEnv({ AZURE_CLIENT_SECRET: 'test-client-secret' });
+      mockProcessEnv({ AZURE_TENANT_ID: 'test-tenant-id' });
+      mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'my-deployment' });
 
       const providers = await getDefaultProviders();
 
@@ -654,20 +737,20 @@ describe('Provider override tests', () => {
     });
 
     it('should NOT use Azure with incomplete client credentials', async () => {
-      process.env.AZURE_CLIENT_ID = 'test-client-id';
+      mockProcessEnv({ AZURE_CLIENT_ID: 'test-client-id' });
       // Missing AZURE_CLIENT_SECRET and AZURE_TENANT_ID
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'my-deployment';
+      mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'my-deployment' });
 
       const providers = await getDefaultProviders();
 
       // Should fallback to OpenAI
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
     });
 
     it('should use embedding deployment name when specified', async () => {
-      process.env.AZURE_OPENAI_API_KEY = 'test-key';
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'chat-deployment';
-      process.env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME = 'embedding-deployment';
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-key' });
+      mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'chat-deployment' });
+      mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'embedding-deployment' });
 
       const providers = await getDefaultProviders();
 
@@ -676,8 +759,8 @@ describe('Provider override tests', () => {
     });
 
     it('should fallback embedding to chat deployment when not specified', async () => {
-      process.env.AZURE_OPENAI_API_KEY = 'test-key';
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'my-deployment';
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-key' });
+      mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'my-deployment' });
       // No AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME
 
       const providers = await getDefaultProviders();
@@ -687,20 +770,20 @@ describe('Provider override tests', () => {
     });
 
     it('should prefer OpenAI over Azure when both are set', async () => {
-      process.env.OPENAI_API_KEY = 'test-openai';
-      process.env.AZURE_OPENAI_API_KEY = 'test-azure';
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'my-deployment';
+      mockProcessEnv({ OPENAI_API_KEY: 'test-openai' });
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-azure' });
+      mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'my-deployment' });
 
       const providers = await getDefaultProviders();
 
       // OpenAI has priority 1, Azure has priority 3
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
     });
 
     it('should prefer Anthropic over Azure when both are set', async () => {
-      process.env.ANTHROPIC_API_KEY = 'test-anthropic';
-      process.env.AZURE_OPENAI_API_KEY = 'test-azure';
-      process.env.AZURE_OPENAI_DEPLOYMENT_NAME = 'my-deployment';
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-anthropic' });
+      mockProcessEnv({ AZURE_OPENAI_API_KEY: 'test-azure' });
+      mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'my-deployment' });
 
       const providers = await getDefaultProviders();
 
@@ -721,7 +804,7 @@ describe('Provider override tests', () => {
       setDefaultCompletionProviders(undefined);
 
       providers = await getDefaultProviders();
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
     });
 
     it('should clear embedding override when set to undefined', async () => {
@@ -744,7 +827,7 @@ describe('Provider override tests', () => {
 
       setDefaultCompletionProviders(mockCompletionProvider);
       setDefaultEmbeddingProviders(mockEmbeddingProvider);
-      process.env.AZURE_CONTENT_SAFETY_ENDPOINT = 'https://test.com';
+      mockProcessEnv({ AZURE_CONTENT_SAFETY_ENDPOINT: 'https://test.com' });
 
       const providers = await getDefaultProviders();
 
@@ -758,21 +841,21 @@ describe('Provider override tests', () => {
       setDefaultCompletionProviders(mockProvider);
 
       // Set various credentials - override should still apply
-      process.env.GEMINI_API_KEY = 'test-key';
+      mockProcessEnv({ GEMINI_API_KEY: 'test-key' });
 
       const providers = await getDefaultProviders();
 
       // Even though Gemini is detected, override takes precedence
       expect(providers.gradingProvider.id()).toBe('override-provider');
-      // But embedding should still be OpenAI (from Gemini selection fallback)
-      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+      // Embedding selection remains independent and should still use Google AI Studio.
+      expect(providers.embeddingProvider.id()).toBe('google:embedding:gemini-embedding-001');
     });
   });
 
   describe('Edge cases for ambient credentials', () => {
     it('should use Bedrock over GitHub when both ambient credentials are set', async () => {
-      process.env.AWS_ACCESS_KEY_ID = 'test-aws';
-      process.env.GITHUB_TOKEN = 'test-github';
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' });
+      mockProcessEnv({ GITHUB_TOKEN: 'test-github' });
 
       const providers = await getDefaultProviders();
 
@@ -781,9 +864,9 @@ describe('Provider override tests', () => {
     });
 
     it('should skip ambient credentials when explicit credentials exist', async () => {
-      process.env.MISTRAL_API_KEY = 'test-mistral'; // explicit, priority 7
-      process.env.AWS_ACCESS_KEY_ID = 'test-aws'; // ambient, priority 9
-      process.env.GITHUB_TOKEN = 'test-github'; // ambient, priority 10
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral' }); // explicit, priority 7
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' }); // ambient, priority 9
+      mockProcessEnv({ GITHUB_TOKEN: 'test-github' }); // ambient, priority 10
 
       const providers = await getDefaultProviders();
 
@@ -795,8 +878,8 @@ describe('Provider override tests', () => {
     it('should select embedding provider independently from completion provider', async () => {
       // xAI for completions (doesn't support embeddings)
       // Mistral for embeddings (has embedding support)
-      process.env.XAI_API_KEY = 'test-xai';
-      process.env.MISTRAL_API_KEY = 'test-mistral';
+      mockProcessEnv({ XAI_API_KEY: 'test-xai' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral' });
 
       const providers = await getDefaultProviders();
 
@@ -810,13 +893,10 @@ describe('Provider override tests', () => {
     it('should use Vertex for embeddings when Google ADC is available', async () => {
       // DeepSeek for completions (doesn't support embeddings)
       // Mock Vertex credentials
-      process.env.DEEPSEEK_API_KEY = 'test-deepseek';
+      mockProcessEnv({ DEEPSEEK_API_KEY: 'test-deepseek' });
 
       // Enable Google ADC mock
-      const mockHasGoogleDefaultCredentials = jest.requireMock(
-        '../../src/providers/google/util',
-      ).hasGoogleDefaultCredentials;
-      mockHasGoogleDefaultCredentials.mockResolvedValue(true);
+      vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(true);
 
       const providers = await getDefaultProviders();
 
@@ -830,7 +910,7 @@ describe('Provider override tests', () => {
     it('should fall back to OpenAI for embeddings when no embedding provider has credentials', async () => {
       // GitHub for completions (doesn't support embeddings)
       // No embedding-capable provider has credentials
-      process.env.GITHUB_TOKEN = 'test-github';
+      mockProcessEnv({ GITHUB_TOKEN: 'test-github' });
 
       const providers = await getDefaultProviders();
 
@@ -844,8 +924,8 @@ describe('Provider override tests', () => {
     it('should use different providers for completion and embedding based on credentials', async () => {
       // Anthropic for completions (doesn't support embeddings)
       // Mistral for embeddings
-      process.env.ANTHROPIC_API_KEY = 'test-anthropic';
-      process.env.MISTRAL_API_KEY = 'test-mistral';
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-anthropic' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral' });
 
       const providers = await getDefaultProviders();
 
@@ -859,8 +939,8 @@ describe('Provider override tests', () => {
     it('should select embedding from different provider than completion when optimal', async () => {
       // Bedrock for completions (doesn't support embeddings in our chain)
       // Mistral for embeddings
-      process.env.AWS_ACCESS_KEY_ID = 'test-aws';
-      process.env.MISTRAL_API_KEY = 'test-mistral';
+      mockProcessEnv({ AWS_ACCESS_KEY_ID: 'test-aws' });
+      mockProcessEnv({ MISTRAL_API_KEY: 'test-mistral' });
 
       const providers = await getDefaultProviders();
 
@@ -874,8 +954,8 @@ describe('Provider override tests', () => {
     it('should use Voyage for embeddings when VOYAGE_API_KEY is set (Anthropic recommended)', async () => {
       // Anthropic for completions (doesn't support embeddings)
       // Voyage for embeddings (Anthropic's recommended embedding provider)
-      process.env.ANTHROPIC_API_KEY = 'test-anthropic';
-      process.env.VOYAGE_API_KEY = 'test-voyage';
+      mockProcessEnv({ ANTHROPIC_API_KEY: 'test-anthropic' });
+      mockProcessEnv({ VOYAGE_API_KEY: 'test-voyage' });
 
       const providers = await getDefaultProviders();
 
@@ -888,21 +968,21 @@ describe('Provider override tests', () => {
 
     it('should prefer OpenAI over Voyage for embeddings when both keys exist', async () => {
       // When both OpenAI and Voyage keys exist, OpenAI has higher priority
-      process.env.OPENAI_API_KEY = 'test-openai';
-      process.env.VOYAGE_API_KEY = 'test-voyage';
+      mockProcessEnv({ OPENAI_API_KEY: 'test-openai' });
+      mockProcessEnv({ VOYAGE_API_KEY: 'test-voyage' });
 
       const providers = await getDefaultProviders();
 
       // OpenAI should win for both completion and embedding
-      expect(providers.gradingProvider.id()).toContain('gpt-4.1');
+      expect(providers.gradingProvider.id()).toContain('gpt-5.4');
       expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
     });
 
     it('should use Voyage for embeddings with any non-embedding completion provider', async () => {
       // xAI for completions (doesn't support embeddings)
       // Voyage for embeddings
-      process.env.XAI_API_KEY = 'test-xai';
-      process.env.VOYAGE_API_KEY = 'test-voyage';
+      mockProcessEnv({ XAI_API_KEY: 'test-xai' });
+      mockProcessEnv({ VOYAGE_API_KEY: 'test-voyage' });
 
       const providers = await getDefaultProviders();
 

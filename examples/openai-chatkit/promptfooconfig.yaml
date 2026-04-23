@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate ChatKit workflows from OpenAI Agent Builder
+
+prompts:
+  - '{{message}}'
+
+providers:
+  # Replace with your workflow ID from Agent Builder
+  - id: openai:chatkit:wf_YOUR_WORKFLOW_ID_HERE
+    label: my-workflow
+    config:
+      timeout: 120000
+      poolSize: 4
+
+tests:
+  - description: Basic greeting
+    vars:
+      message: Hello, how can you help me today?
+    assert:
+      - type: llm-rubric
+        value: Response is helpful and relevant
+
+  - description: Task request
+    vars:
+      message: I need help planning a project
+    assert:
+      - type: contains-any
+        value: ['help', 'plan', 'project', 'assist']
+
+  - description: Question handling
+    vars:
+      message: What information do you need from me?
+    assert:
+      - type: llm-rubric
+        value: Response asks clarifying questions or explains capabilities

@@ -145,6 +145,7 @@ export class PromptfooModelProvider implements ApiProvider {
           total: modelResponse.usage?.total_tokens || 0,
           prompt: modelResponse.usage?.prompt_tokens || 0,
           completion: modelResponse.usage?.completion_tokens || 0,
+          numRequests: 1,
         },
       };
     } catch (error) {

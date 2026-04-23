@@ -11,6 +11,7 @@ export const TelemetryEventSchema = z.object({
   event: z.enum([
     'assertion_used',
     'command_used',
+    'eval setup',
     'eval_ran',
     'feature_used',
     'funnel',
@@ -25,8 +26,11 @@ export const TelemetryEventSchema = z.object({
     'webui_api',
     'webui_page_view',
   ]),
-  packageVersion: z.string().optional().default(VERSION),
-  properties: z.record(z.union([z.string(), z.number(), z.boolean(), z.array(z.string())])),
+  packageVersion: z.string().optional().prefault(VERSION),
+  properties: z.record(
+    z.string(),
+    z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
+  ),
 });
 type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type TelemetryEventTypes = TelemetryEvent['event'];
@@ -69,9 +73,7 @@ export class Telemetry {
   constructor() {
     this.id = getUserId();
     this.email = getUserEmail();
-    this.identify().then(() => {
-      // Intentionally empty - fire and forget
-    });
+    void this.identify();
   }
 
   async identify() {
@@ -210,8 +212,8 @@ export class Telemetry {
 
 const telemetry = new Telemetry();
 
-// Use Symbol.for to ensure the same symbol across module reloads (e.g., in Jest tests).
-// This prevents MaxListenersExceededWarning when tests use jest.resetModules().
+// Use Symbol.for to ensure the same symbol across module reloads (e.g., in tests).
+// This prevents MaxListenersExceededWarning when tests use vi.resetModules().
 const TELEMETRY_INSTANCE_KEY = Symbol.for('promptfoo.telemetry.instance');
 const SHUTDOWN_HANDLER_KEY = Symbol.for('promptfoo.telemetry.shutdownHandler');
 

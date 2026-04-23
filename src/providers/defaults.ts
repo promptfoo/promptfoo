@@ -5,25 +5,26 @@ import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureModerationProvider } from './azure/moderation';
 import {
-  DefaultGradingProvider as BedrockGradingProvider,
   DefaultGradingJsonProvider as BedrockGradingJsonProvider,
+  DefaultGradingProvider as BedrockGradingProvider,
   DefaultSuggestionsProvider as BedrockSuggestionsProvider,
   DefaultSynthesizeProvider as BedrockSynthesizeProvider,
 } from './bedrock/defaults';
 import {
-  DefaultGradingProvider as DeepSeekGradingProvider,
   DefaultGradingJsonProvider as DeepSeekGradingJsonProvider,
+  DefaultGradingProvider as DeepSeekGradingProvider,
   DefaultSuggestionsProvider as DeepSeekSuggestionsProvider,
   DefaultSynthesizeProvider as DeepSeekSynthesizeProvider,
 } from './deepseek/defaults';
 import {
-  DefaultGitHubGradingProvider as GitHubGradingProvider,
   DefaultGitHubGradingJsonProvider as GitHubGradingJsonProvider,
+  DefaultGitHubGradingProvider as GitHubGradingProvider,
   DefaultGitHubSuggestionsProvider as GitHubSuggestionsProvider,
 } from './github/defaults';
 import {
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
+  AIStudioEmbeddingProvider,
   DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
+  DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
@@ -40,6 +41,7 @@ import {
   DefaultSuggestionsProvider as MistralSuggestionsProvider,
   DefaultSynthesizeProvider as MistralSynthesizeProvider,
 } from './mistral/defaults';
+import { getCodexDefaultProviders, hasCodexDefaultCredentials } from './openai/codexDefaults';
 import {
   DefaultEmbeddingProvider as OpenAiEmbeddingProvider,
   DefaultGradingJsonProvider as OpenAiGradingJsonProvider,
@@ -50,14 +52,14 @@ import {
 } from './openai/defaults';
 import { VoyageEmbeddingProvider } from './voyage';
 import {
-  DefaultGradingProvider as XAIGradingProvider,
   DefaultGradingJsonProvider as XAIGradingJsonProvider,
+  DefaultGradingProvider as XAIGradingProvider,
   DefaultSuggestionsProvider as XAISuggestionsProvider,
   DefaultSynthesizeProvider as XAISynthesizeProvider,
 } from './xai/defaults';
 
-import type { ApiProvider, DefaultProviders } from '../types/index';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, DefaultProviders } from '../types/index';
 
 // =============================================================================
 // Types
@@ -88,7 +90,10 @@ interface CompletionProviderCandidate {
   /** Human-readable name for logging */
   name: string;
   /** Credential check - can be sync or async */
-  check: (env?: EnvOverrides) => boolean | Promise<boolean>;
+  check: (
+    env: EnvOverrides | undefined,
+    context: ProviderSelectionContext,
+  ) => boolean | Promise<boolean>;
   /** Factory function to create the provider set */
   create: (env?: EnvOverrides) => Omit<DefaultProviders, 'embeddingProvider'>;
 }
@@ -101,9 +106,16 @@ interface EmbeddingProviderCandidate {
   /** Human-readable name for logging */
   name: string;
   /** Credential check - can be sync or async */
-  check: (env?: EnvOverrides) => boolean | Promise<boolean>;
+  check: (
+    env: EnvOverrides | undefined,
+    context: ProviderSelectionContext,
+  ) => boolean | Promise<boolean>;
   /** Factory function to create the embedding provider */
   create: (env?: EnvOverrides) => ApiProvider;
+}
+
+interface ProviderSelectionContext {
+  hasGoogleDefaultCredentials?: boolean;
 }
 
 // =============================================================================
@@ -161,6 +173,15 @@ function hasAzureCredentials(env?: EnvOverrides): boolean {
   );
 
   return (hasApiKey || hasClientCreds) && hasDeployment;
+}
+
+async function hasGoogleDefaultCredentialsForSelection(
+  context: ProviderSelectionContext,
+): Promise<boolean> {
+  if (context.hasGoogleDefaultCredentials === undefined) {
+    context.hasGoogleDefaultCredentials = await hasGoogleDefaultCredentials();
+  }
+  return context.hasGoogleDefaultCredentials;
 }
 
 // =============================================================================
@@ -252,7 +273,7 @@ function createAzureEmbeddingProvider(env?: EnvOverrides): ApiProvider {
  *
  * Order rationale:
  *   1-7: Explicit API keys (user intentionally set these)
- *   8-10: Ambient credentials (may exist for other purposes)
+ *   8-11: Ambient credentials (may exist for other purposes)
  *
  * Within explicit keys, ordered by popularity/capability.
  * Ambient credentials are last because they may be set for other tools
@@ -331,10 +352,18 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
       }),
   },
 
-  // --- Ambient Credentials (Priority 8-10) ---
+  // --- Ambient Credentials (Priority 8-11) ---
+  {
+    name: 'Codex SDK',
+    check: (env) => hasCodexDefaultCredentials(env),
+    create: (env) => ({
+      moderationProvider: OpenAiModerationProvider,
+      ...getCodexDefaultProviders(env),
+    }),
+  },
   {
     name: 'Google Vertex',
-    check: () => hasGoogleDefaultCredentials(),
+    check: (_env, context) => hasGoogleDefaultCredentialsForSelection(context),
     create: () =>
       createCompletionProviderSet({
         grading: VertexGradingProvider,
@@ -372,6 +401,9 @@ const COMPLETION_PROVIDER_PRIORITY: CompletionProviderCandidate[] = [
  */
 // Default Voyage embedding model - voyage-3.5 offers balanced performance
 // Anthropic recommends Voyage for embeddings: https://docs.anthropic.com/en/docs/build-with-claude/embeddings
+const GoogleAiStudioDefaultEmbeddingProvider = new AIStudioEmbeddingProvider(
+  'gemini-embedding-001',
+);
 const VoyageDefaultEmbeddingProvider = new VoyageEmbeddingProvider('voyage-3.5');
 
 const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
@@ -384,6 +416,11 @@ const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
     name: 'Azure OpenAI',
     check: (env) => hasAzureCredentials(env),
     create: (env) => createAzureEmbeddingProvider(env),
+  },
+  {
+    name: 'Google AI Studio',
+    check: (env) => hasAnyCredential(['GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PALM_API_KEY'], env),
+    create: () => GoogleAiStudioDefaultEmbeddingProvider,
   },
   {
     // Voyage AI - Anthropic's recommended embedding provider
@@ -399,7 +436,7 @@ const EMBEDDING_PROVIDER_PRIORITY: EmbeddingProviderCandidate[] = [
   },
   {
     name: 'Google Vertex',
-    check: () => hasGoogleDefaultCredentials(),
+    check: (_env, context) => hasGoogleDefaultCredentialsForSelection(context),
     create: () => VertexEmbeddingProvider,
   },
   // Note: Anthropic, xAI, DeepSeek, Bedrock, GitHub don't support embeddings
@@ -437,23 +474,27 @@ export function setDefaultEmbeddingProviders(provider: ApiProvider | undefined):
  *  5. xAI         - XAI_API_KEY
  *  6. DeepSeek    - DEEPSEEK_API_KEY
  *  7. Mistral     - MISTRAL_API_KEY
- *  8. Vertex      - Google ADC (ambient)
- *  9. Bedrock     - AWS credentials (ambient)
- * 10. GitHub      - GITHUB_TOKEN (ambient)
- * 11. OpenAI      - Fallback (may fail without key)
+ *  8. Codex SDK   - Codex/ChatGPT auth + installed Codex SDK (ambient)
+ *  9. Vertex      - Google ADC (ambient)
+ * 10. Bedrock     - AWS credentials (ambient)
+ * 11. GitHub      - GITHUB_TOKEN (ambient)
+ * 12. OpenAI      - Fallback (may fail without key)
  *
  * Embedding Priority (only providers with embedding support):
  *  1. OpenAI      - OPENAI_API_KEY
  *  2. Azure       - AZURE_OPENAI_API_KEY + embedding deployment
- *  3. Voyage      - VOYAGE_API_KEY (Anthropic's recommended embedding provider)
- *  4. Mistral     - MISTRAL_API_KEY
- *  5. Vertex      - Google ADC (ambient)
- *  6. OpenAI      - Fallback (may fail without key)
+ *  3. Google AI   - GEMINI_API_KEY / GOOGLE_API_KEY / PALM_API_KEY
+ *  4. Voyage      - VOYAGE_API_KEY (Anthropic's recommended embedding provider)
+ *  5. Mistral     - MISTRAL_API_KEY
+ *  6. Vertex      - Google ADC (ambient)
+ *  7. OpenAI      - Fallback (may fail without key)
  */
 export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultProviders> {
+  const context: ProviderSelectionContext = {};
+
   // Select completion and embedding providers independently
-  const completionProviders = await selectCompletionProviders(env);
-  const embeddingProvider = await selectEmbeddingProvider(env);
+  const completionProviders = await selectCompletionProviders(env, context);
+  const embeddingProvider = await selectEmbeddingProvider(env, context);
 
   const providers: DefaultProviders = {
     ...completionProviders,
@@ -473,9 +514,10 @@ export async function getDefaultProviders(env?: EnvOverrides): Promise<DefaultPr
  */
 async function selectCompletionProviders(
   env?: EnvOverrides,
+  context: ProviderSelectionContext = {},
 ): Promise<Omit<DefaultProviders, 'embeddingProvider'>> {
   for (const candidate of COMPLETION_PROVIDER_PRIORITY) {
-    const hasCredentials = await candidate.check(env);
+    const hasCredentials = await candidate.check(env, context);
     if (hasCredentials) {
       logger.debug(`Using ${candidate.name} completion providers`);
       return candidate.create(env);
@@ -495,9 +537,12 @@ async function selectCompletionProviders(
  * - Many providers (Anthropic, xAI, DeepSeek, etc.) don't support embeddings
  * - Users may want to use different providers for completions vs embeddings
  */
-async function selectEmbeddingProvider(env?: EnvOverrides): Promise<ApiProvider> {
+async function selectEmbeddingProvider(
+  env?: EnvOverrides,
+  context: ProviderSelectionContext = {},
+): Promise<ApiProvider> {
   for (const candidate of EMBEDDING_PROVIDER_PRIORITY) {
-    const hasCredentials = await candidate.check(env);
+    const hasCredentials = await candidate.check(env, context);
     if (hasCredentials) {
       logger.debug(`Using ${candidate.name} embedding provider`);
       return candidate.create(env);

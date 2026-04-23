@@ -1,11 +1,19 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
+
+vi.mock('../src/logger', () => ({
+  default: {
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 import type { Assertion, CsvRow, TestCase } from '../src/types/index';
 
 describe('testCaseFromCsvRow', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should create a TestCase with assertions and options from a CSV row', () => {
@@ -314,7 +322,7 @@ describe('testCaseFromCsvRow', () => {
 
 describe('assertionFromString', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should create an equality assertion', () => {

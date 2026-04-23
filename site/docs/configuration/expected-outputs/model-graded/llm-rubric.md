@@ -26,20 +26,23 @@ This assertion will use a language model to grade the output based on the specif
 
 Under the hood, `llm-rubric` uses a model to evaluate the output based on the criteria you provide. By default, it uses different models depending on which API keys are available, checked in priority order:
 
-| Priority | Provider         | Model                        | Environment Variable                                    |
-| -------- | ---------------- | ---------------------------- | ------------------------------------------------------- |
-| 1        | OpenAI           | `gpt-4.1-2025-04-14`         | `OPENAI_API_KEY`                                        |
-| 2        | Anthropic        | `claude-sonnet-4-5-20250929` | `ANTHROPIC_API_KEY`                                     |
-| 3        | Azure OpenAI     | Your deployment              | `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_DEPLOYMENT_NAME` |
-| 4        | Google AI Studio | `gemini-3-pro-preview`       | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `PALM_API_KEY`   |
-| 5        | xAI              | `grok-4-1-fast-reasoning`    | `XAI_API_KEY`                                           |
-| 6        | DeepSeek         | `deepseek-chat`              | `DEEPSEEK_API_KEY`                                      |
-| 7        | Mistral          | `mistral-large-latest`       | `MISTRAL_API_KEY`                                       |
-| 8        | Google Vertex    | `gemini-3-pro-preview`       | Google ADC (ambient credentials)                        |
-| 9        | AWS Bedrock      | `amazon.nova-pro-v1:0`       | `AWS_ACCESS_KEY_ID` or `AWS_PROFILE` (ambient)          |
-| 10       | GitHub Models    | `openai/gpt-5.1`             | `GITHUB_TOKEN` (ambient)                                |
+| Priority | Provider         | Model                     | Environment Variable                                                                                  |
+| -------- | ---------------- | ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 1        | OpenAI           | `gpt-5.4-2026-03-05`      | `OPENAI_API_KEY`                                                                                      |
+| 2        | Anthropic        | `claude-sonnet-4-6`       | `ANTHROPIC_API_KEY`                                                                                   |
+| 3        | Azure OpenAI     | Your deployment           | `AZURE_OPENAI_API_KEY` or `AZURE_API_KEY` + `AZURE_OPENAI_DEPLOYMENT_NAME` or `AZURE_DEPLOYMENT_NAME` |
+| 4        | Google AI Studio | `gemini-3-pro-preview`    | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, or `PALM_API_KEY`                                                 |
+| 5        | xAI              | `grok-4-1-fast-reasoning` | `XAI_API_KEY`                                                                                         |
+| 6        | DeepSeek         | `deepseek-chat`           | `DEEPSEEK_API_KEY`                                                                                    |
+| 7        | Mistral          | `mistral-large-latest`    | `MISTRAL_API_KEY`                                                                                     |
+| 8        | Codex SDK        | `openai:codex-sdk`        | Codex/ChatGPT credentials and the installed Codex SDK, when no explicit API provider key is set       |
+| 9        | Google Vertex    | `gemini-3-pro-preview`    | Google ADC (ambient credentials)                                                                      |
+| 10       | AWS Bedrock      | `amazon.nova-pro-v1:0`    | `AWS_ACCESS_KEY_ID` or `AWS_PROFILE` (ambient)                                                        |
+| 11       | GitHub Models    | `openai/gpt-5.1`          | `GITHUB_TOKEN` (ambient)                                                                              |
 
 You can override this by setting the `provider` option (see below).
+
+Codex/ChatGPT login fallback is text-only. Assertions that need embeddings or moderation still require an API-key-backed provider override.
 
 It asks the model to output a JSON object that looks like this:
 
@@ -71,7 +74,7 @@ You can incorporate test variables into your LLM rubric. This is particularly us
 
 ```yaml
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5.4
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
@@ -88,12 +91,12 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override this in several ways:
+By default, `llm-rubric` uses `gpt-5.4-2026-03-05` for grading when `OPENAI_API_KEY` is set. You can override this in several ways:
 
 1. Using the `--grader` CLI option:
 
    ```sh
-   promptfoo eval --grader openai:gpt-4.1-mini
+   promptfoo eval --grader openai:gpt-5.4-mini
    ```
 
 2. Using `test.options` or `defaultTest.options`:
@@ -102,7 +105,7 @@ By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override
    defaultTest:
      // highlight-start
      options:
-       provider: openai:gpt-4.1-mini
+       provider: openai:gpt-5.4-mini
      // highlight-end
      assert:
        - description: Evaluate output using LLM
@@ -120,9 +123,30 @@ By default, `llm-rubric` uses `gpt-4.1-2025-04-14` for grading. You can override
          - type: llm-rubric
            value: Is written in a professional tone
            // highlight-start
-           provider: openai:gpt-4.1-mini
+           provider: openai:gpt-5.4-mini
            // highlight-end
    ```
+
+### Setting grader parameters (temperature, etc.)
+
+Use a `provider` object with `id` and `config` when you need to set grader parameters such as `temperature`, `max_tokens`, or a custom API host:
+
+```yaml
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Is not apologetic and provides a clear, concise answer
+        provider:
+          id: openai:gpt-5.4-mini
+          config:
+            temperature: 0
+```
+
+This works at every level where a grader can be set: per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
+
+:::note
+The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. GPT-5 series reasoning models ignore `temperature` entirely.
+:::
 
 ## Customizing the rubric prompt
 

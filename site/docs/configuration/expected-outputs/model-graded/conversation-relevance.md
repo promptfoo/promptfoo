@@ -42,6 +42,10 @@ tests:
         threshold: 0.8
 ```
 
+:::note
+`_conversation` message content is treated as literal runtime data and is not rendered as a Nunjucks template. Template syntax such as `{{ vars.value }}` or `{{ env.API_KEY }}` is preserved verbatim for security.
+:::
+
 ## Configuration options
 
 ### Window size
@@ -81,7 +85,7 @@ prompts:
   - 'Explain {{topic}}'
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -162,7 +166,7 @@ Like other model-graded assertions, you can override the default grading provide
 assert:
   - type: conversation-relevance
     threshold: 0.8
-    provider: openai:gpt-4o-mini
+    provider: openai:gpt-5-mini
 ```
 
 Or set it globally:

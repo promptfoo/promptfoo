@@ -55,20 +55,31 @@ const providerWithOptions = await loadApiProvider('azure:chat:test', {
 
 ### Assertion functions
 
-An `Assertion` can take an `AssertionFunction` as its `value`. `AssertionFunction` parameters:
+An `Assertion` can take an `AssertionValueFunction` as its `value`. The function receives:
 
-- `output`: the LLM output
-- `testCase`: the test case
-- `assertion`: the assertion object
+- `output`: the LLM output string
+- `context`: execution context, including `prompt`, `vars`, `test`, `logProbs`, `config`, `provider`, `providerResponse`, and optional `trace` data for debugging
 
 <details>
 <summary>Type definition</summary>
 ```typescript
-type AssertionFunction = (
+type AssertionValueFunction = (
   output: string,
-  testCase: AtomicTestCase,
-  assertion: Assertion,
-) => Promise<GradingResult>;
+  context: AssertionValueFunctionContext,
+) => AssertionValueFunctionResult | Promise<AssertionValueFunctionResult>;
+
+interface AssertionValueFunctionContext {
+prompt: string | undefined;
+vars: Record<string, unknown>;
+test: AtomicTestCase;
+logProbs: number[] | undefined;
+config?: Record<string, any>;
+provider: ApiProvider | undefined;
+providerResponse: ProviderResponse | undefined;
+trace?: TraceData;
+}
+
+type AssertionValueFunctionResult = boolean | number | GradingResult;
 
 interface GradingResult {
 // Whether the test passed or failed
@@ -83,6 +94,9 @@ reason: string;
 // Map of labeled metrics to values
 namedScores?: Record<string, number>;
 
+// Weighted denominator for namedScores when assertion weights are used
+namedScoreWeights?: Record<string, number>;
+
 // Record of tokens usage for this assertion
 tokensUsed?: Partial<{
 total: number;
@@ -91,17 +105,70 @@ completion: number;
 cached?: number;
 }>;
 
+// Additional matcher/provider metadata
+metadata?: Record<string, unknown>;
+
 // List of results for each component of the assertion
 componentResults?: GradingResult[];
 
 // The assertion that was evaluated
-assertion: Assertion | null;
+assertion?: Assertion;
 }
 
 ````
 </details>
 
 For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
+
+### Transform functions
+
+When using the node package, you can pass JavaScript functions directly as `transform`, `transformVars`, or `contextTransform` values — instead of string expressions or `file://` references.
+
+This enables better IDE support, type checking, and debugging:
+
+```ts
+import promptfoo from 'promptfoo';
+
+const results = await promptfoo.evaluate({
+  prompts: ['What tools did you use to answer: {{question}}'],
+  providers: ['openai:gpt-5-mini'],
+  tests: [
+    {
+      vars: { question: 'What is 2+2?' },
+      options: {
+        // Transform the output before assertions
+        transform: (output, context) => {
+          return output.toUpperCase();
+        },
+      },
+      assert: [
+        {
+          type: 'contains',
+          value: 'calculator',
+          // Transform just for this assertion
+          transform: (output, context) => {
+            const tools = context.metadata?.toolCalls ?? [];
+            return tools.map((t) => t.name).join(', ');
+          },
+        },
+      ],
+    },
+  ],
+});
+```
+
+Transform functions receive:
+
+- `output`: the LLM output (string or object)
+- `context`: an object containing `vars`, `prompt`, and optionally `metadata` from the provider response
+
+:::note
+
+Function transforms are not serializable. If you use `writeLatestResults: true`, function transforms will not be persisted in the stored config. Use string expressions or `file://` references if you need results to be fully reproducible from the stored eval.
+
+:::
+
+For more on transforms, see [Transforming Outputs](/docs/configuration/guide#transforming-outputs).
 
 ## Example
 
@@ -113,7 +180,7 @@ import promptfoo from 'promptfoo';
 const results = await promptfoo.evaluate(
   {
     prompts: ['Rephrase this in French: {{body}}', 'Rephrase this like a pirate: {{body}}'],
-    providers: ['openai:gpt-4.1-mini'],
+    providers: ['openai:gpt-5-mini'],
     tests: [
       {
         vars: {
@@ -152,7 +219,7 @@ import promptfoo from 'promptfoo';
       },
     ],
     providers: [
-      'openai:gpt-4.1-mini',
+      'openai:gpt-5-mini',
       (prompt, context) => {
         // Call LLM here...
         console.log(`Prompt: ${prompt}, vars: ${JSON.stringify(context.vars)}`);
@@ -192,7 +259,7 @@ import promptfoo from 'promptfoo';
 })();
 ```
 
-There's a full example on Github [here](https://github.com/promptfoo/promptfoo/tree/main/examples/node-package).
+There's a full example on Github [here](https://github.com/promptfoo/promptfoo/tree/main/examples/config-node-package).
 
 Here's the example output in JSON format:
 
@@ -255,3 +322,21 @@ Here's the example output in JSON format:
   ]
 }
 ```
+
+## Sharing Results
+
+To get a shareable URL, set `sharing: true` along with `writeLatestResults: true`:
+
+```js
+const results = await promptfoo.evaluate({
+  prompts: ['Your prompt here'],
+  providers: ['openai:gpt-5-mini'],
+  tests: [{ vars: { input: 'test' } }],
+  writeLatestResults: true,
+  sharing: true,
+});
+
+console.log(results.shareableUrl); // https://app.promptfoo.dev/eval/abc123
+```
+
+Requires a [Promptfoo Cloud](/docs/enterprise) account or self-hosted server. For self-hosted, pass `sharing: { apiBaseUrl, appBaseUrl }` instead of `true`.

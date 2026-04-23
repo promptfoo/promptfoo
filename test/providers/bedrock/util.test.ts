@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { novaOutputFromMessage, novaParseMessages } from '../../../src/providers/bedrock/util';
 
 describe('novaOutputFromMessage', () => {

@@ -1,15 +1,17 @@
 import fs from 'fs';
 
 import dedent from 'ts-dedent';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processCsvPrompts } from '../../../src/prompts/processors/csv';
+import { mockProcessEnv } from '../../util/utils';
 
 import type { Prompt } from '../../../src/types/index';
 
-jest.mock('fs');
+vi.mock('fs');
 
 describe('processCsvPrompts', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should process a single column CSV with header', async () => {
@@ -20,7 +22,7 @@ describe('processCsvPrompts', () => {
       Write a poem about {{topic}}
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -48,7 +50,7 @@ describe('processCsvPrompts', () => {
       Write a poem about {{topic}}
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -77,7 +79,7 @@ describe('processCsvPrompts', () => {
       Write a poem about {{topic}},Poetry Generator
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -104,7 +106,7 @@ describe('processCsvPrompts', () => {
       This is a very long prompt that should be truncated for the label
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -123,7 +125,7 @@ describe('processCsvPrompts', () => {
       Tell me about {{topic}}
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const basePrompt: Partial<Prompt> = {
       label: 'Base Label',
@@ -150,7 +152,7 @@ describe('processCsvPrompts', () => {
       Write a poem about {{topic}},Poetry Generator
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -174,28 +176,29 @@ describe('processCsvPrompts', () => {
       Explain {{topic}} in simple terms;Simple Explanation
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
-    process.env.PROMPTFOO_CSV_DELIMITER = ';';
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_CSV_DELIMITER: ';' });
+    try {
+      const result = await processCsvPrompts('prompts.csv', {});
 
-    const result = await processCsvPrompts('prompts.csv', {});
-
-    expect(result).toHaveLength(2);
-    expect(result).toEqual([
-      {
-        raw: 'Tell me about {{topic}}',
-        label: 'Basic Query',
-      },
-      {
-        raw: 'Explain {{topic}} in simple terms',
-        label: 'Simple Explanation',
-      },
-    ]);
-
-    delete process.env.PROMPTFOO_CSV_DELIMITER;
+      expect(result).toHaveLength(2);
+      expect(result).toEqual([
+        {
+          raw: 'Tell me about {{topic}}',
+          label: 'Basic Query',
+        },
+        {
+          raw: 'Explain {{topic}} in simple terms',
+          label: 'Simple Explanation',
+        },
+      ]);
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('should handle empty files', async () => {
-    jest.mocked(fs.readFileSync).mockReturnValue('');
+    vi.mocked(fs.readFileSync).mockReturnValue('');
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -210,7 +213,7 @@ describe('processCsvPrompts', () => {
       "Another line
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 
@@ -228,7 +231,7 @@ describe('processCsvPrompts', () => {
       Another prompt line
     `;
 
-    jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
     const result = await processCsvPrompts('prompts.csv', {});
 

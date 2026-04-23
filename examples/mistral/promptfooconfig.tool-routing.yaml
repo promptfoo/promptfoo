@@ -1,0 +1,104 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Mistral tool routing and output shape QA'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: mistral:mistral-large-latest
+    label: tool-any-inline
+    config:
+      temperature: 0
+      max_tokens: 128
+      tool_choice: any
+      parallel_tool_calls: false
+      tools:
+        - type: function
+          function:
+            name: calculate
+            description: Perform basic mathematical calculations
+            parameters:
+              type: object
+              properties:
+                operation:
+                  type: string
+                  enum: ['add', 'subtract', 'multiply', 'divide']
+                a:
+                  type: number
+                b:
+                  type: number
+              required: ['operation', 'a', 'b']
+  - id: mistral:mistral-large-latest
+    label: tool-any-file
+    config:
+      temperature: 0
+      max_tokens: 128
+      tool_choice: any
+      parallel_tool_calls: false
+      tools: 'file://tools/calculate.yaml'
+  - id: mistral:mistral-large-latest
+    label: tool-auto-file
+    config:
+      temperature: 0
+      max_tokens: 128
+      tool_choice: auto
+      parallel_tool_calls: false
+      tools: 'file://tools/calculate.yaml'
+  - id: mistral:mistral-large-latest
+    label: plain-chat
+    config:
+      temperature: 0
+      max_tokens: 64
+
+tests:
+  - description: Tool-only response with inline tools
+    providers:
+      - tool-any-inline
+    vars:
+      prompt: 'You must call the calculate tool for this task. Do not answer in natural language. Compute 15 multiplied by 8.'
+    assert:
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'calculate'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).operation === 'multiply'
+
+  - description: Tool-only response with file-based tools
+    providers:
+      - tool-any-file
+    vars:
+      prompt: 'Use the calculate tool to divide 100 by 4. Return only the tool call.'
+    assert:
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'calculate'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).operation === 'divide'
+
+  - description: Mixed content and tool calls
+    providers:
+      - tool-auto-file
+    vars:
+      prompt: 'Before calling the calculate tool, include the exact sentence "Let me calculate that." in your assistant message. In the same assistant message, call the calculate tool for 15 multiplied by 8. Do not provide the final numeric answer.'
+    assert:
+      - type: javascript
+        value: |
+          return (
+            output &&
+            typeof output === 'object' &&
+            !Array.isArray(output) &&
+            typeof output.content === 'string' &&
+            output.content.includes('Let me calculate that.') &&
+            Array.isArray(output.tool_calls) &&
+            output.tool_calls.length > 0 &&
+            output.tool_calls[0].function?.name === 'calculate'
+          );
+
+  - description: Plain chat still returns a string
+    providers:
+      - plain-chat
+    vars:
+      prompt: 'Respond with the single word: ok'
+    assert:
+      - type: javascript
+        value: "typeof output === 'string' && output.trim().toLowerCase() === 'ok'"

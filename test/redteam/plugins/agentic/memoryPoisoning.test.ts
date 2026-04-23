@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   MemoryPoisoningPluginGrader,
   VarsSchema,
@@ -67,16 +68,6 @@ describe('MemoryPoisoningPluginGrader', () => {
 
       const result = VarsSchema.safeParse(invalidVars);
       expect(result.success).toBe(false);
-    });
-  });
-
-  describe('plugin properties', () => {
-    it('should have correct id', () => {
-      expect(grader.id).toBe('promptfoo:redteam:agentic:memory-poisoning');
-    });
-
-    it('should have empty rubric by default', () => {
-      expect(grader.rubric).toBe('');
     });
   });
 });

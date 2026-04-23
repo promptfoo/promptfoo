@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 
 import type Eval from '../../../src/models/eval';

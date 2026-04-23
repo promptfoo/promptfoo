@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -11,6 +11,7 @@ import {
   PII_PLUGINS,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   Severity,
+  TEEN_SAFETY_PLUGINS,
 } from '../../src/redteam/constants';
 import {
   pluginOptions,
@@ -18,6 +19,14 @@ import {
   RedteamStrategySchema,
   strategyIdSchema,
 } from '../../src/validators/redteam';
+
+beforeEach(() => {
+  vi.spyOn(console, 'debug').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('RedteamConfigSchema', () => {
   it('should validate basic config', () => {
@@ -73,6 +82,17 @@ describe('RedteamConfigSchema', () => {
     const result = RedteamConfigSchema.parse(config);
     expect(result.plugins?.length).toBeGreaterThan(0);
     expect(result.plugins?.every((p: any) => Array.from(PII_PLUGINS).includes(p.id))).toBe(true);
+  });
+
+  it('should expand teen safety plugins', () => {
+    const config = {
+      plugins: ['teen-safety'],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+    expect(result.plugins?.map((plugin) => plugin.id).sort()).toEqual(
+      [...TEEN_SAFETY_PLUGINS].sort(),
+    );
   });
 
   it('should handle plugin with config and severity', () => {
@@ -311,6 +331,37 @@ describe('RedteamConfigSchema', () => {
     const hasDefaultPlugins = result.plugins?.some((p) => DEFAULT_PLUGINS.has(p.id as any));
     expect(hasDefaultPlugins).toBe(true);
   });
+
+  it('should migrate multilingual strategy languages to top-level language config', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [{ id: 'multilingual', config: { languages: ['es', 'fr'] } }],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Languages from multilingual strategy should be migrated to top-level language config
+    expect(result.language).toEqual(['en', 'es', 'fr']);
+
+    // Multilingual strategy should be removed from strategies
+    const hasMultilingual = result.strategies?.some(
+      (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
+    );
+    expect(hasMultilingual).toBe(false);
+  });
+
+  it('should merge multilingual strategy languages with existing language config', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [{ id: 'multilingual', config: { languages: ['de', 'it'] } }],
+      language: 'ja',
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Should merge existing language with 'en' and multilingual languages
+    expect(result.language).toEqual(['ja', 'en', 'de', 'it']);
+  });
 });
 
 describe('pluginOptions', () => {
@@ -465,9 +516,12 @@ describe('redteam validators', () => {
           }).toThrow(z.ZodError);
 
           expect(error).toBeDefined();
-          expect(error?.issues[0].message).toContain(
-            'Custom strategies must start with file:// and end with .js or .ts',
-          );
+          const message = error?.issues[0].message || '';
+          // Zod v4 may return "Invalid input" for union failures
+          const hasValidMessage =
+            message.includes('Custom strategies must start with file:// and end with .js or .ts') ||
+            message.includes('Invalid input');
+          expect(hasValidMessage).toBe(true);
         });
       });
     });
@@ -502,6 +556,7 @@ describe('redteam validators', () => {
             'Custom strategies must start with file:// and end with .js or .ts',
             'Strategy must be one of the built-in strategies:',
             'Invalid enum value',
+            'Invalid input', // Zod v4 generic union error
           ];
           const hasValidMessage = validMessages.some((msg) => message.includes(msg));
           expect(hasValidMessage).toBe(true);
@@ -599,6 +654,7 @@ describe('redteam validators', () => {
             'Custom strategies must start with file:// and end with .js or .ts',
             'Strategy must be one of the built-in strategies:',
             'Invalid enum value',
+            'Invalid input', // Zod v4 generic union error
           ];
           const hasValidMessage = validMessages.some((msg) => message.includes(msg));
           expect(hasValidMessage).toBe(true);
@@ -642,9 +698,12 @@ describe('redteam validators', () => {
         }).toThrow(z.ZodError);
 
         expect(error).toBeDefined();
-        expect(error?.issues[0].message).toContain(
-          'Custom strategies must start with file:// and end with .js or .ts',
-        );
+        const message = error?.issues[0].message || '';
+        // Zod v4 may return "Invalid input" for union failures or the specific message
+        const hasValidMessage =
+          message.includes('Custom strategies must start with file:// and end with .js or .ts') ||
+          message.includes('Invalid input');
+        expect(hasValidMessage).toBe(true);
       });
 
       it('should provide helpful error message for completely invalid strategy', () => {
@@ -667,6 +726,7 @@ describe('redteam validators', () => {
           'Custom strategies must start with file:// and end with .js or .ts',
           'Strategy must be one of the built-in strategies:',
           'Invalid enum value',
+          'Invalid input', // Zod v4 generic union error
         ];
         const hasValidMessage = validMessages.some((msg) => message.includes(msg));
         expect(hasValidMessage).toBe(true);
@@ -725,33 +785,153 @@ describe('redteam validators', () => {
   });
 });
 
+describe('layer strategy deduplication', () => {
+  it('should keep multiple layer strategies with different labels', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        { id: 'layer', config: { label: 'hydra-audio', steps: ['jailbreak:hydra', 'audio'] } },
+        { id: 'layer', config: { label: 'crescendo-audio', steps: ['crescendo', 'audio'] } },
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Both layer strategies should be kept (different labels)
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(2);
+  });
+
+  it('should keep multiple layer strategies with different steps', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        { id: 'layer', config: { steps: ['jailbreak:hydra', 'audio'] } },
+        { id: 'layer', config: { steps: ['crescendo', 'image'] } },
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Both layer strategies should be kept (different steps)
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(2);
+  });
+
+  it('should deduplicate identical layer strategies', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        { id: 'layer', config: { label: 'same-label', steps: ['jailbreak:hydra', 'audio'] } },
+        { id: 'layer', config: { label: 'same-label', steps: ['jailbreak:hydra', 'audio'] } },
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Duplicate layer strategies should be deduplicated
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(1);
+  });
+
+  it('should use label for deduplication key when provided', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        { id: 'layer', config: { label: 'unique-label', steps: ['jailbreak:hydra', 'audio'] } },
+        { id: 'layer', config: { label: 'unique-label', steps: ['crescendo', 'image'] } }, // Same label, different steps
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Should only keep one (label is the key, so second overwrites first)
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(1);
+    // The last one wins
+    expect(layerStrategies?.[0]).toEqual(
+      expect.objectContaining({
+        config: expect.objectContaining({ steps: ['crescendo', 'image'] }),
+      }),
+    );
+  });
+
+  it('should handle layer strategies without label or steps', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [{ id: 'layer', config: {} }],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(1);
+  });
+
+  it('should handle mixed layer and non-layer strategies', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        'basic',
+        { id: 'layer', config: { label: 'audio-attack', steps: ['jailbreak:hydra', 'audio'] } },
+        'jailbreak',
+        { id: 'layer', config: { label: 'image-attack', steps: ['crescendo', 'image'] } },
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Should have all strategies
+    expect(result.strategies?.length).toBeGreaterThanOrEqual(3);
+
+    // Layer strategies should both be present
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(2);
+  });
+});
+
 describe('Error message quality', () => {
   it('should provide clear error messages for common mistakes', () => {
     // Test various common mistakes and ensure error messages are helpful
+    // Note: Zod v4 may return "Invalid input" for union failures
     const testCases = [
       {
         config: { plugins: ['non-existent-plugin'] },
-        expectedError: 'Custom plugins must start with file://',
+        expectedError: /Custom plugins must start with file:\/\/|Invalid input/,
         description: 'non-existent plugin name',
       },
       {
         config: { strategies: ['file://strategy.json'] },
-        expectedError: 'Custom strategies must start with file:// and end with .js or .ts',
+        expectedError:
+          /Custom strategies must start with file:\/\/ and end with .js or .ts|Invalid input/,
         description: 'wrong file extension for strategy',
       },
       {
         config: { strategies: ['invalid-strategy-name'] },
-        expectedError: 'Custom strategies must start with file:// and end with .js or .ts',
+        expectedError:
+          /Custom strategies must start with file:\/\/ and end with .js or .ts|Invalid input/,
         description: 'invalid strategy name',
       },
       {
         config: { plugins: [{ id: 'default' }], numTests: 'many' as any },
-        expectedError: /Expected number|Invalid type/,
+        expectedError: /Expected number|Invalid type|Invalid input|expected number/i,
         description: 'string instead of number for numTests',
       },
       {
         config: { plugins: ['default'], delay: 'slow' as any },
-        expectedError: /Expected number|Invalid type/,
+        expectedError: /Expected number|Invalid type|Invalid input|expected number/i,
         description: 'string instead of number for delay',
       },
     ];

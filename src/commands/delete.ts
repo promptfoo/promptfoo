@@ -2,8 +2,8 @@ import confirm from '@inquirer/confirm';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { setupEnv } from '../util/index';
 import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
+import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
 export async function handleEvalDelete(evalId: string, _envPath?: string) {
@@ -12,7 +12,7 @@ export async function handleEvalDelete(evalId: string, _envPath?: string) {
     logger.info(`Evaluation with ID ${evalId} has been successfully deleted.`);
   } catch (error) {
     logger.error(`Could not delete evaluation with ID ${evalId}:\n${error}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 

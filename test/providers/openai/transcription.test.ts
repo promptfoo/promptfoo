@@ -1,22 +1,36 @@
 import fs from 'fs';
+
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
+import { mockGlobal, mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
-jest.mock('../../../src/cache');
-jest.mock('../../../src/logger');
-jest.mock('fs');
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+vi.mock('fs');
 
-// Mock native File API
-global.File = class MockFile {
+class MockFile {
   constructor(
     public parts: any[],
     public name: string,
     public options?: FilePropertyBag,
   ) {}
-} as any;
+}
 
-// Mock native FormData
-global.FormData = class MockFormData {
+class MockFormData {
   private data: Map<string, any> = new Map();
 
   append(key: string, value: any) {
@@ -30,7 +44,15 @@ global.FormData = class MockFormData {
   has(key: string) {
     return this.data.has(key);
   }
-} as any;
+}
+
+const restoreFile = mockGlobal('File', MockFile as unknown as typeof File);
+const restoreFormData = mockGlobal('FormData', MockFormData as unknown as typeof FormData);
+
+afterAll(() => {
+  restoreFormData();
+  restoreFile();
+});
 
 describe('OpenAiTranscriptionProvider', () => {
   const mockTranscriptionResponse = {
@@ -98,10 +120,14 @@ describe('OpenAiTranscriptionProvider', () => {
   };
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(Buffer.from('mock audio data'));
-    jest.mocked(fetchWithCache).mockResolvedValue(mockTranscriptionResponse);
+    vi.resetAllMocks();
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return Buffer.from('mock audio data');
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue(mockTranscriptionResponse);
   });
 
   describe('Basic functionality', () => {
@@ -147,7 +173,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         ...mockTranscriptionResponse,
         cached: true,
       });
@@ -172,6 +198,16 @@ describe('OpenAiTranscriptionProvider', () => {
 
     it('should calculate cost correctly for gpt-4o-mini-transcribe', async () => {
       const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('/path/to/audio.mp3');
+
+      expect(result.cost).toBe(0.006); // 2 minutes * $0.003/min
+    });
+
+    it('should calculate cost correctly for gpt-4o-mini-transcribe-2025-12-15', async () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-mini-transcribe-2025-12-15', {
         config: { apiKey: 'test-key' },
       });
 
@@ -207,18 +243,50 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(provider.id()).toBe('openai:transcription:gpt-4o-transcribe');
     });
 
+    it('should generate correct default ID for dated diarization snapshots', () => {
+      const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe-diarize-2025-10-15', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(provider.id()).toBe('openai:transcription:gpt-4o-transcribe-diarize-2025-10-15');
+    });
+
     it('should throw an error if API key is not set', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe');
 
         await expect(provider.callApi('/path/to/audio.mp3')).rejects.toThrow(
-          'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
+          getOpenAiMissingApiKeyMessage(),
         );
       } finally {
-        process.env.OPENAI_API_KEY = originalEnv;
+        restoreEnv();
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+      });
+
+      try {
+        const provider = new OpenAiTranscriptionProvider('gpt-4o-transcribe', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_TRANSCRIPTION_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_TRANSCRIPTION_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('/path/to/audio.mp3')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_TRANSCRIPTION_API_KEY'),
+        );
+      } finally {
+        restoreEnv();
       }
     });
   });
@@ -229,7 +297,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockDiarizedResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockDiarizedResponse);
 
       const result = await provider.callApi('/path/to/audio.mp3');
 
@@ -258,7 +326,7 @@ describe('OpenAiTranscriptionProvider', () => {
         },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockDiarizedResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockDiarizedResponse);
 
       await provider.callApi('/path/to/audio.mp3');
 
@@ -275,7 +343,7 @@ describe('OpenAiTranscriptionProvider', () => {
         },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockDiarizedResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockDiarizedResponse);
 
       await provider.callApi('/path/to/audio.mp3');
 
@@ -289,7 +357,9 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fs.existsSync).mockImplementation(function () {
+        return false;
+      });
 
       const result = await provider.callApi('/path/to/missing.mp3');
 
@@ -310,7 +380,7 @@ describe('OpenAiTranscriptionProvider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(errorResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(errorResponse);
 
       const result = await provider.callApi('/path/to/audio.mp3');
 
@@ -323,7 +393,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: 'Error message',
         cached: false,
         status: 500,
@@ -341,7 +411,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
       const result = await provider.callApi('/path/to/audio.mp3');
 
@@ -354,7 +424,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: { duration: 120 },
         cached: false,
         status: 200,
@@ -372,7 +442,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockImplementation(() => {
+      vi.mocked(fetchWithCache).mockImplementation(function () {
         throw new Error('Unexpected error');
       });
 
@@ -549,7 +619,9 @@ describe('OpenAiTranscriptionProvider', () => {
       const models = [
         'gpt-4o-transcribe',
         'gpt-4o-mini-transcribe',
+        'gpt-4o-mini-transcribe-2025-12-15',
         'gpt-4o-transcribe-diarize',
+        'gpt-4o-transcribe-diarize-2025-10-15',
         'whisper-1',
       ];
 
@@ -576,7 +648,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
           text: 'Test',
           duration: 0,
@@ -597,7 +669,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
           text: 'Test',
           language: 'en',
@@ -618,7 +690,7 @@ describe('OpenAiTranscriptionProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
           duration: 60,
           language: 'en',

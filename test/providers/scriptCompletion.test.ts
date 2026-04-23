@@ -1,18 +1,70 @@
 import { execFile } from 'child_process';
-import crypto from 'crypto';
-import fs from 'fs';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
 import {
   getFileHashes,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import type { MockedFunction } from 'vitest';
 
-jest.mock('fs');
-jest.mock('crypto');
-jest.mock('child_process');
-jest.mock('../../src/cache');
+vi.mock('child_process', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    execFile: vi.fn(),
+  };
+});
+vi.mock('../../src/cache', async () => {
+  const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
+  return {
+    ...actual,
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn(),
+  };
+});
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  const existsSync = vi.fn();
+  const statSync = vi.fn();
+  const readFileSync = vi.fn();
+  return {
+    ...actual,
+    existsSync,
+    statSync,
+    readFileSync,
+    default: { ...actual, existsSync, statSync, readFileSync },
+  };
+});
+
+vi.mock('crypto', async () => {
+  const actual = await vi.importActual<typeof import('crypto')>('crypto');
+  const createHash = vi.fn();
+  return {
+    ...actual,
+    createHash,
+    default: { ...actual, createHash },
+  };
+});
+
+let existsSyncMock: MockedFunction<typeof fs.existsSync>;
+let statSyncMock: MockedFunction<typeof fs.statSync>;
+let readFileSyncMock: MockedFunction<typeof fs.readFileSync>;
+let createHashMock: MockedFunction<typeof crypto.createHash>;
+
+function normalizeFsPath(path: fs.PathOrFileDescriptor): string {
+  if (path instanceof URL) {
+    return path.pathname;
+  }
+
+  return String(path);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('parseScriptParts', () => {
   it('should parse script parts correctly', () => {
@@ -30,7 +82,11 @@ describe('parseScriptParts', () => {
 
 describe('getFileHashes', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    existsSyncMock = vi.mocked(fs.existsSync);
+    statSyncMock = vi.mocked(fs.statSync);
+    readFileSyncMock = vi.mocked(fs.readFileSync);
+    createHashMock = vi.mocked(crypto.createHash);
   });
 
   it('should return file hashes for existing files', () => {
@@ -40,8 +96,10 @@ describe('getFileHashes', () => {
     const mockHash1 = 'hash1';
     const mockHash2 = 'hash2';
 
-    jest.mocked(fs.existsSync).mockImplementation((path) => path !== 'nonexistent.js');
-    jest.mocked(fs.statSync).mockReturnValue({
+    existsSyncMock.mockImplementation(function (path: fs.PathLike) {
+      return normalizeFsPath(path) !== 'nonexistent.js';
+    });
+    statSyncMock.mockReturnValue({
       isFile: () => true,
       isDirectory: () => false,
       isBlockDevice: () => false,
@@ -50,44 +108,46 @@ describe('getFileHashes', () => {
       isFIFO: () => false,
       isSocket: () => false,
     } as fs.Stats);
-    jest.mocked(fs.readFileSync).mockImplementation((path) => {
-      if (path === 'file1.js') {
+    readFileSyncMock.mockImplementation(function (path: fs.PathOrFileDescriptor) {
+      const normalizedPath = normalizeFsPath(path);
+      if (normalizedPath === 'file1.js') {
         return mockFileContent1;
       }
-      if (path === 'file2.js') {
+      if (normalizedPath === 'file2.js') {
         return mockFileContent2;
       }
       throw new Error('File not found');
     });
 
     const mockHashUpdate = {
-      update: jest.fn().mockReturnThis(),
-      digest: jest.fn(),
+      update: vi.fn().mockReturnThis(),
+      digest: vi.fn(),
     } as unknown as crypto.Hash;
-    jest
-      .mocked(mockHashUpdate.digest)
-      .mockReturnValueOnce(mockHash1)
+    vi.mocked(mockHashUpdate.digest)
+      .mockImplementationOnce(function () {
+        return mockHash1;
+      })
       .mockReturnValueOnce(mockHash2);
-    jest.mocked(crypto.createHash).mockReturnValue(mockHashUpdate);
+    createHashMock.mockReturnValue(mockHashUpdate);
 
     const result = getFileHashes(scriptParts);
 
     expect(result).toEqual([mockHash1, mockHash2]);
-    expect(fs.existsSync).toHaveBeenCalledTimes(3);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(2);
-    expect(crypto.createHash).toHaveBeenCalledTimes(2);
+    expect(existsSyncMock).toHaveBeenCalledTimes(3);
+    expect(readFileSyncMock).toHaveBeenCalledTimes(2);
+    expect(createHashMock).toHaveBeenCalledTimes(2);
   });
 
   it('should return an empty array for non-existent files', () => {
     const scriptParts = ['nonexistent1.js', 'nonexistent2.js'];
-    jest.mocked(fs.existsSync).mockReturnValue(false);
+    existsSyncMock.mockReturnValue(false);
 
     const result = getFileHashes(scriptParts);
 
     expect(result).toEqual([]);
-    expect(fs.existsSync).toHaveBeenCalledTimes(2);
-    expect(fs.readFileSync).not.toHaveBeenCalled();
-    expect(crypto.createHash).not.toHaveBeenCalled();
+    expect(existsSyncMock).toHaveBeenCalledTimes(2);
+    expect(readFileSyncMock).not.toHaveBeenCalled();
+    expect(createHashMock).not.toHaveBeenCalled();
   });
 });
 
@@ -96,13 +156,17 @@ describe('ScriptCompletionProvider', () => {
 
   beforeEach(() => {
     provider = new ScriptCompletionProvider('node script.js');
-    jest.clearAllMocks();
-    jest.mocked(cacheModule.getCache).mockReset();
-    jest.mocked(cacheModule.isCacheEnabled).mockReset();
+    vi.clearAllMocks();
+    vi.mocked(cacheModule.getCache).mockReset();
+    vi.mocked(cacheModule.isCacheEnabled).mockReset();
+    existsSyncMock = vi.mocked(fs.existsSync);
+    statSyncMock = vi.mocked(fs.statSync);
+    readFileSyncMock = vi.mocked(fs.readFileSync);
+    createHashMock = vi.mocked(crypto.createHash);
 
     // Set up default file system mocks for all tests
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.statSync).mockReturnValue({
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({
       isFile: () => true,
       isDirectory: () => false,
       isBlockDevice: () => false,
@@ -111,23 +175,72 @@ describe('ScriptCompletionProvider', () => {
       isFIFO: () => false,
       isSocket: () => false,
     } as fs.Stats);
-    jest.mocked(fs.readFileSync).mockReturnValue('default file content');
+    readFileSyncMock.mockReturnValue('default file content');
 
     // Set up default crypto mock
     const mockHashUpdate = {
-      update: jest.fn().mockReturnThis(),
-      digest: jest.fn().mockReturnValue('default-hash'),
+      update: vi.fn().mockReturnThis(),
+      digest: vi.fn().mockReturnValue('default-hash'),
     } as unknown as crypto.Hash;
-    jest.mocked(crypto.createHash).mockReturnValue(mockHashUpdate);
+    createHashMock.mockReturnValue(mockHashUpdate);
   });
 
   it('should return the correct id', () => {
     expect(provider.id()).toBe('exec:node script.js');
   });
 
+  it('should close stdin on the child process to prevent hanging', async () => {
+    const stdinEnd = vi.fn();
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('ok'),
+        '',
+      );
+      return { stdin: { end: stdinEnd } } as any;
+    });
+
+    await provider.callApi('test prompt');
+    expect(stdinEnd).toHaveBeenCalledOnce();
+  });
+
+  it('should handle child process with no stdin gracefully', async () => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
+        null,
+        Buffer.from('ok'),
+        '',
+      );
+      return { stdin: null } as any;
+    });
+
+    const result = await provider.callApi('test prompt');
+    expect(result.output).toBe('ok');
+  });
+
+  it('should close stdin before the exec callback rejects on script execution errors', async () => {
+    const stdinEnd = vi.fn();
+    const errorMessage = 'Script execution failed';
+    let stdinClosedBeforeCallback = false;
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      const childProcess = { stdin: { end: stdinEnd } } as any;
+      queueMicrotask(() => {
+        stdinClosedBeforeCallback = stdinEnd.mock.calls.length > 0;
+        if (typeof callback === 'function') {
+          callback(new Error(errorMessage), '', '');
+        }
+      });
+      return childProcess;
+    });
+
+    await expect(provider.callApi('test prompt')).rejects.toThrow(errorMessage);
+    expect(stdinEnd).toHaveBeenCalledOnce();
+    expect(stdinClosedBeforeCallback).toBe(true);
+  });
+
   it('should handle UTF-8 characters in script output', async () => {
     const utf8Output = 'Hello, 世界!';
-    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
       (callback as (error: Error | null, stdout: string | Buffer, stderr: string | Buffer) => void)(
         null,
         Buffer.from(utf8Output),
@@ -142,7 +255,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle UTF-8 characters in error output', async () => {
     const utf8Error = 'エラー発生';
-    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
         callback(null, '', Buffer.from(utf8Error));
       }
@@ -155,25 +268,28 @@ describe('ScriptCompletionProvider', () => {
   it('should use cache when available', async () => {
     const cachedResult = { output: 'cached result' };
     const mockCache = {
-      get: jest.fn().mockResolvedValue(JSON.stringify(cachedResult)),
-      set: jest.fn(),
+      get: vi.fn().mockResolvedValue(JSON.stringify(cachedResult)),
+      set: vi.fn(),
     };
-    jest.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
-    jest.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
 
     // Mock fs.existsSync to return true for at least one file
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.statSync).mockReturnValue({ isFile: () => true } as fs.Stats);
-    jest.mocked(fs.readFileSync).mockReturnValue('file content');
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('file content');
 
     const mockHashUpdate = {
-      update: jest.fn().mockReturnThis(),
-      digest: jest.fn().mockReturnValue('mock hash'),
+      update: vi.fn().mockReturnThis(),
+      digest: vi.fn().mockReturnValue('mock hash'),
     } as unknown as crypto.Hash;
-    jest.mocked(crypto.createHash).mockReturnValue(mockHashUpdate);
+    vi.mocked(crypto.createHash).mockImplementation(function () {
+      return mockHashUpdate;
+    });
 
     const result = await provider.callApi('test prompt');
-    expect(result).toEqual(cachedResult);
+    expect(result.cached).toBe(true);
+    expect(result).toEqual({ ...cachedResult, cached: true });
     expect(mockCache.get).toHaveBeenCalledWith(
       'exec:node script.js:mock hash:mock hash:test prompt:undefined',
     );
@@ -182,7 +298,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle script execution errors', async () => {
     const errorMessage = 'Script execution failed';
-    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
         callback(new Error(errorMessage), '', '');
       }
@@ -194,7 +310,7 @@ describe('ScriptCompletionProvider', () => {
 
   it('should handle empty standard output with error output', async () => {
     const errorOutput = 'Warning: Something went wrong';
-    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
         callback(null, '', Buffer.from(errorOutput));
       }
@@ -207,7 +323,7 @@ describe('ScriptCompletionProvider', () => {
   it('should strip ANSI escape codes from output', async () => {
     const ansiOutput = '\x1b[31mColored\x1b[0m \x1b[1mBold\x1b[0m';
     const strippedOutput = 'Colored Bold';
-    jest.mocked(execFile).mockImplementation((_cmd, _args, _options, callback) => {
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
         callback(null, Buffer.from(ansiOutput), '');
       }

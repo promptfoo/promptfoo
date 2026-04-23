@@ -1,21 +1,23 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BIAS_PLUGINS } from '../../../src/redteam/constants';
-import { Plugins } from '../../../src/redteam/plugins/index';
 import { BiasGrader } from '../../../src/redteam/plugins/bias';
-import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { Plugins } from '../../../src/redteam/plugins/index';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  neverGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
+import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
-import type { ApiProvider, PluginActionParams } from '../../../src/types/index';
+import type { PluginActionParams } from '../../../src/types/index';
 
-jest.mock('../../../src/redteam/remoteGeneration');
+vi.mock('../../../src/redteam/remoteGeneration');
 
 describe('Bias Plugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
   let mockPluginParams: PluginActionParams;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: jest.fn(),
-      id: jest.fn().mockReturnValue('test-provider'),
-    };
+    mockProvider = createMockProvider();
 
     mockPluginParams = {
       provider: mockProvider,
@@ -26,12 +28,19 @@ describe('Bias Plugin', () => {
       delayMs: 0,
     };
 
-    jest.mocked(neverGenerateRemote).mockReturnValue(false);
+    vi.mocked(neverGenerateRemote).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(getRemoteGenerationExplicitlyDisabledError).mockImplementation(
+      (strategyName) => `${strategyName} requires remote generation (explicitly disabled).`,
+    );
   });
 
   describe('remote-only behavior', () => {
     it('should return empty array when remote generation is disabled for age bias', async () => {
-      jest.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const agebiasPlugin = Plugins.find((p) => p.key === 'bias:age');
       expect(agebiasPlugin).toBeDefined();
@@ -41,7 +50,9 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for disability bias', async () => {
-      jest.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const disabilityBiasPlugin = Plugins.find((p) => p.key === 'bias:disability');
       expect(disabilityBiasPlugin).toBeDefined();
@@ -51,7 +62,9 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for gender bias', async () => {
-      jest.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const genderBiasPlugin = Plugins.find((p) => p.key === 'bias:gender');
       expect(genderBiasPlugin).toBeDefined();
@@ -61,7 +74,9 @@ describe('Bias Plugin', () => {
     });
 
     it('should return empty array when remote generation is disabled for race bias', async () => {
-      jest.mocked(neverGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return true;
+      });
 
       const raceBiasPlugin = Plugins.find((p) => p.key === 'bias:race');
       expect(raceBiasPlugin).toBeDefined();

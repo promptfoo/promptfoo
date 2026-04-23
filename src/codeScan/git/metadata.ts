@@ -5,9 +5,9 @@
  */
 
 import simpleGit, { type LogResult } from 'simple-git';
+import { GitMetadataError } from '../../types/codeScan';
 
 import type { GitMetadata } from '../../types/codeScan';
-import { GitMetadataError } from '../../types/codeScan';
 
 /**
  * Extract git metadata for the comparison

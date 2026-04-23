@@ -1,75 +1,108 @@
 import fs from 'fs';
 import path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
-import { parsePathOrGlob } from '../../src/util/index';
 import { processConfigFileReferences } from '../../src/util/fileReference';
+import { parsePathOrGlob } from '../../src/util/index';
 import type { Logger } from 'winston';
 
-jest.mock('fs');
-jest.mock('path');
-jest.mock('../../src/util/file');
-jest.mock('../../src/logger');
-jest.mock('../../src/esm');
-jest.mock('../../src/util');
+vi.mock('fs');
+vi.mock('path');
+vi.mock('../../src/util/file');
+vi.mock('../../src/logger');
+vi.mock('../../src/util');
 
-jest.mock('../../src/util/fileReference', () => ({
-  loadFileReference: jest.fn(),
-  processConfigFileReferences: jest.fn(),
-}));
+vi.mock('../../src/util/fileReference', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    loadFileReference: vi.fn(),
+    processConfigFileReferences: vi.fn(),
+  };
+});
 
-// Mock the worker pool
-const mockPoolInstance = {
-  initialize: jest.fn().mockResolvedValue(undefined),
-  execute: jest.fn().mockResolvedValue({ output: 'Test output' }),
-  shutdown: jest.fn().mockResolvedValue(undefined),
-  getWorkerCount: jest.fn().mockReturnValue(1),
-};
+const mocks = vi.hoisted(() => {
+  const mockPoolInstance = {
+    initialize: vi.fn().mockResolvedValue(undefined),
+    execute: vi.fn().mockResolvedValue({ output: 'Test output' }),
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    getWorkerCount: vi.fn().mockReturnValue(1),
+  };
+  const PythonWorkerPoolMock = vi.fn(function () {
+    return mockPoolInstance as any;
+  });
+  const importModuleMock = vi.fn();
+  const isEsmModuleMock = vi.fn();
 
-jest.mock('../../src/python/workerPool', () => ({
-  PythonWorkerPool: jest.fn(() => mockPoolInstance),
-}));
+  return { mockPoolInstance, PythonWorkerPoolMock, importModuleMock, isEsmModuleMock };
+});
+
+vi.mock('../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: mocks.importModuleMock,
+    isEsmModule: mocks.isEsmModuleMock,
+  };
+});
+
+vi.mock('../../src/python/workerPool', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    PythonWorkerPool: mocks.PythonWorkerPoolMock,
+  };
+});
 
 describe('PythonProvider with file references', () => {
+  const mockPoolInstance = mocks.mockPoolInstance;
   const providers: PythonProvider[] = [];
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset mock pool
+    mocks.PythonWorkerPoolMock.mockClear();
+    mockPoolInstance.initialize.mockReset();
     mockPoolInstance.initialize.mockResolvedValue(undefined);
+    mockPoolInstance.execute.mockReset();
     mockPoolInstance.execute.mockResolvedValue({ output: 'Test output' });
+    mockPoolInstance.shutdown.mockReset();
     mockPoolInstance.shutdown.mockResolvedValue(undefined);
+    mockPoolInstance.getWorkerCount.mockReset();
+    mockPoolInstance.getWorkerCount.mockReturnValue(1);
     // Reset Python state to avoid test interference
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
 
-    jest.mocked(logger.debug).mockImplementation(
-      () =>
-        ({
-          debug: jest.fn(),
-          info: jest.fn(),
-          warn: jest.fn(),
-          error: jest.fn(),
-        }) as unknown as Logger,
-    );
+    vi.mocked(logger.debug).mockImplementation(function () {
+      return {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as Logger;
+    });
 
-    jest.mocked(logger.error).mockImplementation(
-      () =>
-        ({
-          debug: jest.fn(),
-          info: jest.fn(),
-          warn: jest.fn(),
-          error: jest.fn(),
-        }) as unknown as Logger,
-    );
+    vi.mocked(logger.error).mockImplementation(function () {
+      return {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as Logger;
+    });
 
-    jest.mocked(path.resolve).mockImplementation((...parts) => parts.join('/'));
-    jest.mocked(path.relative).mockReturnValue('relative/path');
-    jest.mocked(path.join).mockImplementation((...parts) => parts.join('/'));
+    vi.mocked(path.resolve).mockImplementation(function (...parts) {
+      return parts.join('/');
+    });
+    vi.mocked(path.relative).mockImplementation(function () {
+      return 'relative/path';
+    });
+    vi.mocked(path.join).mockImplementation(function (...parts) {
+      return parts.join('/');
+    });
 
-    jest.mocked(parsePathOrGlob).mockImplementation((_basePath, runPath) => {
+    vi.mocked(parsePathOrGlob).mockImplementation(function (_basePath, runPath) {
       if (runPath.includes(':')) {
         const [filePath, functionName] = runPath.split(':');
         return {
@@ -88,7 +121,9 @@ describe('PythonProvider with file references', () => {
       };
     });
 
-    jest.mocked(fs.readFileSync).mockReturnValue('mock file content');
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return 'mock file content';
+    });
   });
 
   afterEach(async () => {
@@ -108,7 +143,7 @@ describe('PythonProvider with file references', () => {
       templates: [{ prompt: 'Template 1' }, 'Template 2 content'],
     };
 
-    jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
+    vi.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
 
     const provider = new PythonProvider('test.py', {
       id: 'test',
@@ -135,7 +170,7 @@ describe('PythonProvider with file references', () => {
     };
 
     const mockError = new Error('Failed to load file');
-    jest.mocked(processConfigFileReferences).mockRejectedValue(mockError);
+    vi.mocked(processConfigFileReferences).mockRejectedValue(mockError);
 
     const provider = new PythonProvider('test.py', {
       id: 'test',
@@ -161,7 +196,7 @@ describe('PythonProvider with file references', () => {
       settings: { model: 'gpt-4' },
     };
 
-    jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
+    vi.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
 
     const provider = new PythonProvider('test.py', {
       id: 'test',
@@ -186,7 +221,7 @@ describe('PythonProvider with file references', () => {
       settings: 'file://settings.json',
     };
 
-    jest.mocked(processConfigFileReferences).mockResolvedValue({
+    vi.mocked(processConfigFileReferences).mockResolvedValue({
       settings: { processed: true },
     });
 
@@ -217,7 +252,7 @@ describe('PythonProvider with file references', () => {
       settings: { temperature: 0.8 },
     };
 
-    jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
+    vi.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
 
     const provider = new PythonProvider('test.py', {
       id: 'test',
@@ -243,7 +278,7 @@ describe('PythonProvider with file references', () => {
       pythonExecutable: '/custom/python',
     };
 
-    jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
+    vi.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
 
     const provider = new PythonProvider('test.py', {
       id: 'test',
@@ -253,16 +288,16 @@ describe('PythonProvider with file references', () => {
     });
     providers.push(provider);
 
-    jest.spyOn(provider, 'callApi').mockResolvedValue({
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
       output: 'API result',
       cached: false,
     });
 
-    jest.spyOn(provider, 'callEmbeddingApi').mockResolvedValue({
+    vi.spyOn(provider, 'callEmbeddingApi').mockResolvedValue({
       embedding: [0.1, 0.2, 0.3],
     });
 
-    jest.spyOn(provider, 'callClassificationApi').mockResolvedValue({
+    vi.spyOn(provider, 'callClassificationApi').mockResolvedValue({
       classification: { label: 0, score: 0.9 },
     });
 
@@ -286,7 +321,7 @@ describe('PythonProvider with file references', () => {
       formats: { outputFormat: 'json', includeTokens: true },
     };
 
-    jest.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
+    vi.mocked(processConfigFileReferences).mockResolvedValue(mockProcessedConfig);
 
     const provider = new PythonProvider('test.py', {
       id: 'test',

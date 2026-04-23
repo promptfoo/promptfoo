@@ -1,3 +1,5 @@
+import { matchesPattern } from './traceUtils';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
@@ -5,17 +7,6 @@ interface TraceSpanCountValue {
   pattern: string;
   min?: number;
   max?: number;
-}
-
-function matchesPattern(spanName: string, pattern: string): boolean {
-  // Convert glob-like pattern to regex
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-    .replace(/\*/g, '.*') // Convert * to .*
-    .replace(/\?/g, '.'); // Convert ? to .
-
-  const regex = new RegExp(`^${regexPattern}$`, 'i');
-  return regex.test(spanName);
 }
 
 export const handleTraceSpanCount = ({

@@ -1,12 +1,10 @@
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import SettingsIcon from '@mui/icons-material/Settings';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { PlayArrowIcon, SettingsIcon } from '@app/components/ui/icons';
+import { Spinner } from '@app/components/ui/spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
+import InstallationGuide from './InstallationGuide';
 import PathSelector from './PathSelector';
 
 import type { ScanPath } from '../ModelAudit.types';
@@ -24,7 +22,9 @@ interface ConfigurationTabProps {
   installationStatus?: {
     checking: boolean;
     installed: boolean | null;
+    error?: string | null;
   };
+  onRetryInstallationCheck?: () => void;
 }
 
 export default function ConfigurationTab({
@@ -38,10 +38,12 @@ export default function ConfigurationTab({
   onClearError,
   currentWorkingDir,
   installationStatus,
+  onRetryInstallationCheck,
 }: ConfigurationTabProps) {
   const isCheckingInstallation = installationStatus?.checking ?? false;
   const isNotInstalled = installationStatus?.installed === false;
   const installationUnknown = installationStatus?.installed === null;
+  const installationError = installationStatus?.error ?? null;
 
   const scanButtonDisabled = isScanning || paths.length === 0 || isCheckingInstallation;
 
@@ -77,16 +79,26 @@ export default function ConfigurationTab({
     return '';
   };
 
+  const scanButtonTooltip = getScanButtonTooltip();
+
   return (
-    <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={600}>
-          Select Models
-        </Typography>
-        <Button variant="outlined" startIcon={<SettingsIcon />} onClick={onShowOptions}>
+    <div className="space-y-6">
+      {/* Installation Warning - Show prominently if not installed */}
+      {isNotInstalled && onRetryInstallationCheck && (
+        <InstallationGuide
+          onRetryCheck={onRetryInstallationCheck}
+          isChecking={isCheckingInstallation}
+          error={installationError}
+        />
+      )}
+
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold tracking-tight">Select Models</h2>
+        <Button variant="outline" onClick={onShowOptions}>
+          <SettingsIcon className="size-4 mr-2" />
           Advanced Options
         </Button>
-      </Stack>
+      </div>
 
       <PathSelector
         paths={paths}
@@ -95,36 +107,48 @@ export default function ConfigurationTab({
         currentWorkingDir={currentWorkingDir}
       />
 
-      <Box sx={{ mt: 4 }}>
-        <Tooltip title={getScanButtonTooltip()} placement="top">
-          <span>
-            <Button
-              variant="contained"
-              size="large"
-              fullWidth
-              onClick={onScan}
-              disabled={scanButtonDisabled}
-              color={isNotInstalled ? 'error' : 'primary'}
-              startIcon={
-                isScanning || isCheckingInstallation ? (
-                  <CircularProgress size={20} />
+      <div className="mt-8">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Button
+                size="lg"
+                className={cn(
+                  'w-full py-6 text-lg font-semibold',
+                  isNotInstalled && 'bg-destructive hover:bg-destructive/90',
+                )}
+                onClick={onScan}
+                disabled={scanButtonDisabled}
+              >
+                {isScanning || isCheckingInstallation ? (
+                  <Spinner size="sm" className="mr-2" />
                 ) : (
-                  <PlayArrowIcon />
-                )
-              }
-              sx={{ py: 1.5 }}
-            >
-              {getScanButtonText()}
-            </Button>
-          </span>
+                  <PlayArrowIcon className="size-5 mr-2" />
+                )}
+                {getScanButtonText()}
+              </Button>
+            </div>
+          </TooltipTrigger>
+          {scanButtonTooltip && (
+            <TooltipContent side="top">
+              <p>{scanButtonTooltip}</p>
+            </TooltipContent>
+          )}
         </Tooltip>
 
         {error && (
-          <Alert severity="error" onClose={onClearError} sx={{ mt: 2 }}>
-            {error}
+          <Alert variant="destructive" className="mt-4">
+            <AlertContent>
+              <AlertDescription className="flex items-center justify-between">
+                <span>{error}</span>
+                <Button type="button" variant="destructive" onClick={onClearError}>
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

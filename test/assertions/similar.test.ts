@@ -1,7 +1,10 @@
+import { describe, expect, it, vi } from 'vitest';
 import { handleSimilar } from '../../src/assertions/similar';
+import { matchesSimilarity } from '../../src/matchers/similarity';
+import { createMockProvider } from '../factories/provider';
 
-jest.mock('../../src/matchers', () => ({
-  matchesSimilarity: jest.fn().mockImplementation(async (expected, output, _threshold, inverse) => {
+vi.mock('../../src/matchers/similarity', () => ({
+  matchesSimilarity: vi.fn().mockImplementation(async (expected, output, _threshold, inverse) => {
     if (inverse) {
       return {
         pass: expected !== output,
@@ -43,7 +46,7 @@ describe('handleSimilar', () => {
         },
         logProbs: undefined,
         // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        provider: createMockProvider({ response: {} }),
         providerResponse: { output: 'hello world' },
       },
       output: 'hello world',
@@ -81,7 +84,7 @@ describe('handleSimilar', () => {
         },
         logProbs: undefined,
         // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        provider: createMockProvider({ response: {} }),
         providerResponse: { output: 'hello world' },
       },
       output: 'hello world',
@@ -120,7 +123,7 @@ describe('handleSimilar', () => {
         },
         logProbs: undefined,
         // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        provider: createMockProvider({ response: {} }),
         providerResponse: { output: 'hello world' },
       },
       output: 'hello world',
@@ -157,7 +160,7 @@ describe('handleSimilar', () => {
         },
         logProbs: undefined,
         // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        provider: createMockProvider({ response: {} }),
         providerResponse: { output: 'completely different' },
       },
       output: 'completely different',
@@ -195,7 +198,7 @@ describe('handleSimilar', () => {
         },
         logProbs: undefined,
         // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        provider: createMockProvider({ response: {} }),
         providerResponse: { output: 'completely different' },
       },
       output: 'completely different',
@@ -234,7 +237,7 @@ describe('handleSimilar', () => {
           },
           logProbs: undefined,
           // @ts-ignore
-          provider: { id: () => 'test-provider', callApi: async () => ({}) },
+          provider: createMockProvider({ response: {} }),
           providerResponse: { output: 'test' },
         },
         output: 'test',
@@ -244,7 +247,7 @@ describe('handleSimilar', () => {
   });
 
   it('should use dot_product metric when specified', async () => {
-    const mockMatchesSimilarity = require('../../src/matchers').matchesSimilarity as jest.Mock;
+    const mockMatchesSimilarity = vi.mocked(matchesSimilarity);
 
     await handleSimilar({
       assertion: {
@@ -272,7 +275,7 @@ describe('handleSimilar', () => {
         },
         logProbs: undefined,
         // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        provider: createMockProvider({ response: {} }),
         providerResponse: { output: 'hello world' },
       },
       output: 'hello world',
@@ -291,7 +294,7 @@ describe('handleSimilar', () => {
   });
 
   it('should use euclidean metric when specified', async () => {
-    const mockMatchesSimilarity = require('../../src/matchers').matchesSimilarity as jest.Mock;
+    const mockMatchesSimilarity = vi.mocked(matchesSimilarity);
 
     await handleSimilar({
       assertion: {
@@ -319,7 +322,7 @@ describe('handleSimilar', () => {
         },
         logProbs: undefined,
         // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        provider: createMockProvider({ response: {} }),
         providerResponse: { output: 'hello world' },
       },
       output: 'hello world',
@@ -338,7 +341,7 @@ describe('handleSimilar', () => {
   });
 
   it('should default to cosine metric when not specified', async () => {
-    const mockMatchesSimilarity = require('../../src/matchers').matchesSimilarity as jest.Mock;
+    const mockMatchesSimilarity = vi.mocked(matchesSimilarity);
 
     await handleSimilar({
       assertion: {
@@ -366,7 +369,7 @@ describe('handleSimilar', () => {
         },
         logProbs: undefined,
         // @ts-ignore
-        provider: { id: () => 'test-provider', callApi: async () => ({}) },
+        provider: createMockProvider({ response: {} }),
         providerResponse: { output: 'hello world' },
       },
       output: 'hello world',
