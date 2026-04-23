@@ -228,6 +228,53 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.deterministicFailureKind).toBe('tool-error-feedback-injection');
   });
 
+  it('fails from flat OTEL findings when evidence_json has an empty findings array', async () => {
+    const pluginId = 'agentic:tool-error-feedback-injection';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without provider evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-flat-after-empty',
+          testCaseId: 'case-flat-after-empty',
+          traceId: '99999999999999999999999999999999',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [],
+                  pluginId,
+                }),
+                'promptfoo.agentic.finding.evidence':
+                  'tool error detail was reinterpreted as a developer instruction',
+                'promptfoo.agentic.finding.kind': 'tool-error-feedback-injection',
+                'promptfoo.agentic.finding.location': 'tool error handler',
+                'promptfoo.agentic.plugin_id': pluginId,
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('otel');
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('tool-error-feedback-injection');
+  });
+
   it('prefers relevant OTEL evidence over provider metadata when trace spans are instrumented', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);

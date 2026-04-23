@@ -410,7 +410,9 @@ function findingObservationsFromAttributes(
         });
       });
     });
-    return observations;
+    if (observations.length > 0) {
+      return observations;
+    }
   }
 
   const pluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));

@@ -214,4 +214,42 @@ describe('agentic run observations', () => {
       }),
     ]);
   });
+
+  it('falls back to flat finding attributes after empty evidence_json findings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-flat-after-empty',
+          testCaseId: 'case-flat-after-empty',
+          traceId: 'trace-flat-after-empty',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [],
+                  pluginId: 'agentic:tool-error-feedback-injection',
+                }),
+                'promptfoo.agentic.finding.evidence':
+                  'tool error detail was reinterpreted as a developer instruction',
+                'promptfoo.agentic.finding.kind': 'tool-error-feedback-injection',
+                'promptfoo.agentic.finding.location': 'tool error handler',
+                'promptfoo.agentic.plugin_id': 'agentic:tool-error-feedback-injection',
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-flat',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'tool error detail was reinterpreted as a developer instruction',
+        kind: 'tool-error-feedback-injection',
+        pluginId: 'agentic:tool-error-feedback-injection',
+      }),
+    ]);
+  });
 });
