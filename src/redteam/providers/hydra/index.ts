@@ -9,6 +9,7 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../../tracing/traceContext';
+import { buildInputPromptDescription } from '../../../types/shared';
 import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
@@ -122,6 +123,18 @@ interface HydraConfig {
    * or structured typed configs with fields like description, type, and config.
    */
   inputs?: Inputs;
+}
+
+function buildAgentInputDescriptions(
+  inputs: Inputs | undefined,
+): Record<string, string> | undefined {
+  if (!inputs || Object.keys(inputs).length === 0) {
+    return undefined;
+  }
+
+  return Object.fromEntries(
+    Object.entries(inputs).map(([key, input]) => [key, buildInputPromptDescription(input)]),
+  );
 }
 
 function scrubOutputForHistory(output: string): string {
@@ -291,6 +304,7 @@ export class HydraProvider implements ApiProvider {
     let storedGraderResult: GradingResult | undefined = undefined;
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
+    let agentFailureError: string | undefined;
 
     const redteamHistory: Array<{
       prompt: string;
@@ -326,6 +340,7 @@ export class HydraProvider implements ApiProvider {
 
     for (let turn = 1; turn <= this.maxTurns; turn++) {
       logger.debug(`[Hydra] Turn ${turn}/${this.maxTurns}`);
+      const agentInputDescriptions = buildAgentInputDescriptions(this.config.inputs);
 
       // Build request for cloud agent
       // Conditionally exclude target outputs from conversation history for privacy
@@ -346,7 +361,7 @@ export class HydraProvider implements ApiProvider {
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
         conversationHistory: conversationHistoryForCloud,
-        ...(this.config.inputs && { inputs: this.config.inputs }),
+        ...(agentInputDescriptions && { inputs: agentInputDescriptions }),
         lastGraderResult:
           turn > 1 && storedGraderResult
             ? {
@@ -390,6 +405,7 @@ export class HydraProvider implements ApiProvider {
           testRunId,
           error: agentResp.error,
         });
+        agentFailureError = agentResp.error;
         continue;
       }
 
@@ -406,6 +422,7 @@ export class HydraProvider implements ApiProvider {
 
       if (!nextMessage) {
         logger.info('[Hydra] Missing message from agent', { turn });
+        agentFailureError = 'Hydra agent did not return an attack message';
         continue;
       }
 
@@ -952,14 +969,24 @@ export class HydraProvider implements ApiProvider {
       role: msg.role,
       content: msg.content,
     })) as Record<string, any>[];
+    const targetProbeCount = totalTokenUsage.numRequests ?? 0;
+    const hydraRoundsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
+    const failClosedError =
+      targetProbeCount === 0
+        ? agentFailureError || 'Hydra did not execute any target probes'
+        : undefined;
 
     return {
       output: lastTargetResponse?.output || '',
-      ...(lastTargetResponse?.error ? { error: lastTargetResponse.error } : {}),
+      ...(failClosedError
+        ? { error: failClosedError }
+        : lastTargetResponse?.error
+          ? { error: lastTargetResponse.error }
+          : {}),
       metadata: {
         sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
         messages,
-        hydraRoundsCompleted: this.conversationHistory.filter((m) => m.role === 'user').length,
+        hydraRoundsCompleted,
         hydraBacktrackCount: backtrackCount,
         hydraResult: vulnerabilityAchieved,
         stopReason,

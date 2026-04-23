@@ -19,6 +19,7 @@ import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 import {
   assertRemoteMaterializationHandled,
+  buildRemoteMaterializedInputVariables,
   isRemoteMaterializationUpgradeError,
 } from '../remoteMaterialization';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -425,10 +426,11 @@ export default class GoatProvider implements ApiProvider {
           | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
           | undefined;
         if (currentInputVars && this.config.inputs) {
-          materializedInputVars = {
-            ...(data.inputMaterialization ? { metadata: data.inputMaterialization } : {}),
-            vars: data.materializedVars ?? currentInputVars,
-          };
+          materializedInputVars = buildRemoteMaterializedInputVariables(
+            data,
+            currentInputVars,
+            this.config.inputs,
+          );
         }
         const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 

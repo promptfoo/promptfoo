@@ -170,6 +170,7 @@ export async function runMetaAgentRedteam({
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
+  let failClosedError: string | undefined;
 
   // Track the previous iteration's trace summary for attack generation
   let previousTraceSummary: string | undefined;
@@ -361,16 +362,28 @@ export async function runMetaAgentRedteam({
     let materializedInputVars:
       | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
       | undefined;
-    if (currentInputVars && inputs) {
+    if (inputs && shouldGenerateRemote() && !currentInputVars && !agentResp.materializedVars) {
+      failClosedError =
+        'Iterative Meta remote multi-input generation returned an invalid prompt format';
+      logger.warn(
+        '[IterativeMeta] Remote multi-input generation returned an invalid prompt format',
+        {
+          iteration: i + 1,
+          attackPromptPreview: attackPrompt.slice(0, 200),
+        },
+      );
+      break;
+    }
+    if ((currentInputVars || agentResp.materializedVars) && inputs) {
       if (shouldGenerateRemote()) {
         materializedInputVars = buildRemoteMaterializedInputVariables(
           agentResp,
-          currentInputVars,
+          currentInputVars ?? {},
           inputs,
         );
       } else {
         materializedInputVars = await materializeInputVariablesWithMetadata(
-          currentInputVars,
+          currentInputVars!,
           inputs,
           {
             materializationIndex: i,
@@ -637,7 +650,11 @@ export async function runMetaAgentRedteam({
   return {
     output: bestResponse || lastResponse?.output || '',
     prompt: bestPrompt,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(failClosedError
+      ? { error: failClosedError }
+      : lastResponse?.error
+        ? { error: lastResponse.error }
+        : {}),
     metadata: {
       finalIteration,
       vulnerabilityAchieved,

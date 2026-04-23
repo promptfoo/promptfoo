@@ -20,18 +20,16 @@ export interface RemoteMaterializationResponse {
   materializedVars?: Record<string, string>;
 }
 
-function filterFallbackVarsToInputs(
-  fallbackVars: Record<string, string>,
+function filterMaterializedVarsToInputs(
+  vars: Record<string, string>,
   inputs: Inputs | undefined,
 ): Record<string, string> {
   if (!inputs || Object.keys(inputs).length === 0) {
-    return fallbackVars;
+    return vars;
   }
 
   return Object.fromEntries(
-    Object.entries(fallbackVars).filter(([key]) =>
-      Object.prototype.hasOwnProperty.call(inputs, key),
-    ),
+    Object.entries(vars).filter(([key]) => Object.prototype.hasOwnProperty.call(inputs, key)),
   );
 }
 
@@ -40,13 +38,22 @@ export function buildRemoteMaterializedInputVariables(
   fallbackVars: Record<string, string>,
   inputs?: Inputs,
 ): MaterializedInputVariablesResult {
+  const filteredFallbackVars = filterMaterializedVarsToInputs(fallbackVars, inputs);
+  const filteredMaterializedVars = filterMaterializedVarsToInputs(
+    response.materializedVars ?? {},
+    inputs,
+  );
+
   return {
     ...(response.inputMaterialization
       ? {
           metadata: response.inputMaterialization as Record<string, MaterializedInputMetadata>,
         }
       : {}),
-    vars: response.materializedVars ?? filterFallbackVarsToInputs(fallbackVars, inputs),
+    vars: {
+      ...filteredFallbackVars,
+      ...filteredMaterializedVars,
+    },
   };
 }
 

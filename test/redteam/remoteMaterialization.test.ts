@@ -18,10 +18,12 @@ describe('remoteMaterialization', () => {
         materializedVars: {
           document:
             'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+          question: 'updated question',
         },
       },
       {
         document: 'fallback document',
+        question: 'fallback question',
       },
     );
 
@@ -34,7 +36,41 @@ describe('remoteMaterialization', () => {
       vars: {
         document:
           'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+        question: 'updated question',
       },
+    });
+  });
+
+  it('merges fallback vars with partial server materialized vars', () => {
+    const inputs = {
+      document: {
+        description: 'Uploaded planning document',
+        type: 'docx',
+      },
+      question: {
+        description: 'Question to answer',
+        type: 'text',
+      },
+    } satisfies Inputs;
+
+    const result = buildRemoteMaterializedInputVariables(
+      {
+        materializedVars: {
+          document:
+            'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+        },
+      },
+      {
+        document: 'fallback document',
+        question: 'fallback question',
+      },
+      inputs,
+    );
+
+    expect(result.vars).toEqual({
+      document:
+        'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+      question: 'fallback question',
     });
   });
 

@@ -643,6 +643,7 @@ describe('TreeNode', () => {
             injectionPlacement: 'comment',
           },
         },
+        materializationHandled: true,
         materializedVars: {
           document:
             'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
@@ -654,6 +655,7 @@ describe('TreeNode', () => {
           injectionPlacement: 'comment',
         },
       });
+      expect(node.materializationHandled).toBe(true);
       expect(node.materializedVars).toEqual({
         document:
           'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',

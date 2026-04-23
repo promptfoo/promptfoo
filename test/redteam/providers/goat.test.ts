@@ -401,6 +401,61 @@ describe('RedteamGoatProvider', () => {
     );
   });
 
+  it('should preserve fallback multi-input vars when remote materialization is partial', async () => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxTurns: 1,
+      stateful: true,
+      inputs: {
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        notes: 'Supplemental analyst notes',
+      },
+    });
+
+    mockFetch.mockResolvedValue({
+      json: async () => ({
+        materializationHandled: true,
+        materializedVars: {
+          document:
+            'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+        },
+        message: {
+          role: 'user',
+          content: JSON.stringify({
+            prompt: 'Summarize the uploaded planning document.',
+            document: 'doc payload',
+            notes: 'keep these notes',
+          }),
+        },
+      }),
+      ok: true,
+    });
+
+    const targetProvider = createMockTargetProvider();
+    const context = createMockContext(
+      targetProvider,
+      {
+        goal: 'initial goal',
+        document: 'stale document',
+        notes: 'stale notes',
+      },
+      undefined,
+    );
+    context.prompt = {
+      raw: 'Doc={{document}}; Notes={{notes}}',
+      label: 'test',
+    };
+
+    await provider.callApi('test prompt', context);
+
+    expect(getRenderedTargetPromptText(targetProvider)).toBe(
+      'Doc=data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v; Notes=keep these notes',
+    );
+  });
+
   it('should pass excludeTargetOutputFromAgenticAttackGeneration through config', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',

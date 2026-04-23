@@ -395,6 +395,7 @@ interface TreeNode {
   children: TreeNode[];
   depth: number;
   inputMaterialization?: Record<string, unknown>;
+  materializationHandled?: boolean;
   materializedVars?: Record<string, string>;
 }
 
@@ -411,7 +412,7 @@ export function createTreeNode(
   score: number,
   depth: number,
   id?: string,
-  options?: Pick<TreeNode, 'inputMaterialization' | 'materializedVars'>,
+  options?: Pick<TreeNode, 'inputMaterialization' | 'materializationHandled' | 'materializedVars'>,
 ): TreeNode {
   return {
     id: id || crypto.randomUUID(),
@@ -420,6 +421,7 @@ export function createTreeNode(
     children: [],
     depth,
     inputMaterialization: options?.inputMaterialization,
+    materializationHandled: options?.materializationHandled,
     materializedVars: options?.materializedVars,
   };
 }
@@ -732,6 +734,7 @@ async function runRedteamConversation({
                 buildRemoteMaterializedInputVariables(
                   { inputMaterialization, materializationHandled, materializedVars },
                   parsed,
+                  inputs,
                 ).vars,
               );
             } catch {
@@ -827,6 +830,7 @@ async function runRedteamConversation({
         nextLevelNodes.push(
           createTreeNode(newInjectVar, score, depth + 1, undefined, {
             inputMaterialization,
+            materializationHandled,
             materializedVars,
           }),
         );
@@ -836,6 +840,7 @@ async function runRedteamConversation({
           bestResponse = targetResponse.output;
           bestNode.prompt = newInjectVar;
           bestNode.inputMaterialization = inputMaterialization;
+          bestNode.materializationHandled = materializationHandled;
           bestNode.materializedVars = materializedVars;
           // Track the transformed prompt for the best scoring turn (e.g., fetchPrompt)
           bestFinalAttackPrompt = finalInjectVar;
@@ -1142,9 +1147,7 @@ async function runRedteamConversation({
       if (shouldGenerateRemote()) {
         const remoteBestNodeMaterialization = {
           inputMaterialization: bestNode.inputMaterialization,
-          materializationHandled: Boolean(
-            bestNode.materializedVars || bestNode.inputMaterialization,
-          ),
+          materializationHandled: bestNode.materializationHandled,
           materializedVars: bestNode.materializedVars,
         };
         if (remoteBestNodeMaterialization.materializationHandled) {
