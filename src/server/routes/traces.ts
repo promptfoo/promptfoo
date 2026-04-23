@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
+import { TracesSchemas } from '../../types/api/traces';
 import { sanitizeObject } from '../../util/sanitizer';
 import type { Request, Response } from 'express';
 
@@ -37,15 +39,24 @@ function sanitizeTracePayload<T extends { spans?: unknown; metadata?: unknown }>
 
 // Get traces for a specific evaluation
 tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response) => {
+  const paramsResult = TracesSchemas.GetByEval.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
   try {
-    const evaluationId = req.params.evaluationId as string;
+    const { evaluationId } = paramsResult.data;
     logger.debug(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
     const traceStore = getTraceStore();
-    const traces = await traceStore.getTracesByEvaluation(evaluationId);
+    const sanitize = shouldSanitizeTraces(req);
+    const traces = await traceStore.getTracesByEvaluation(evaluationId, {
+      sanitizeAttributes: false,
+    });
 
     logger.debug(`[TracesRoute] Found ${traces.length} traces for evaluation ${evaluationId}`);
-    if (shouldSanitizeTraces(req)) {
+    if (sanitize) {
       res.json({ traces: traces.map((t) => sanitizeTracePayload(t)) });
       return;
     }
@@ -58,12 +69,21 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
 
 // Get a specific trace by ID
 tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
+  const paramsResult = TracesSchemas.Get.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    return;
+  }
+
   try {
-    const traceId = req.params.traceId as string;
+    const { traceId } = paramsResult.data;
     logger.debug(`[TracesRoute] Fetching trace ${traceId}`);
 
     const traceStore = getTraceStore();
-    const trace = await traceStore.getTrace(traceId);
+    const sanitize = shouldSanitizeTraces(req);
+    const trace = await traceStore.getTrace(traceId, {
+      sanitizeAttributes: false,
+    });
 
     if (!trace) {
       res.status(404).json({ error: 'Trace not found' });
@@ -71,7 +91,7 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
     }
 
     logger.debug(`[TracesRoute] Found trace ${traceId} with ${trace.spans?.length || 0} spans`);
-    if (shouldSanitizeTraces(req)) {
+    if (sanitize) {
       res.json({ trace: sanitizeTracePayload(trace) });
       return;
     }

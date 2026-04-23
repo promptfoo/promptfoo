@@ -437,6 +437,29 @@ html {
   box-shadow: 0 4px 12px rgba(229, 58, 58, 0.2);
 }
 
+.copyButton {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(229, 58, 58, 0.5);
+  display: flex;
+  align-items: center;
+  transition: color 0.2s ease;
+}
+
+.codeBox:hover .copyButton {
+  color: rgba(229, 58, 58, 0.8);
+}
+
+[data-theme='dark'] .copyButton {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+[data-theme='dark'] .codeBox:hover .copyButton {
+  color: rgba(255, 255, 255, 0.7);
+}
+
 /* Mobile-specific enhancements for tab active state */
 @media (hover: none) and (pointer: coarse) {
   .walkthroughTab:active {

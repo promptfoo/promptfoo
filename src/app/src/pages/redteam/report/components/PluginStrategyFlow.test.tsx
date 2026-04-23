@@ -13,15 +13,17 @@ vi.mock('recharts', () => ({
     <div data-testid="sankey-chart">
       {props.data.nodes.map((node: any, index: number) => (
         <div key={index}>
-          {React.cloneElement(props.node, {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
-            index,
-            payload: node,
-            containerWidth: 500,
-          })}
+          <svg>
+            {React.cloneElement(props.node, {
+              x: 0,
+              y: 0,
+              width: 10,
+              height: 10,
+              index,
+              payload: node,
+              containerWidth: 500,
+            })}
+          </svg>
         </div>
       ))}
       {props.data.links.map((_link: any, index: number) => (
@@ -34,7 +36,12 @@ vi.mock('recharts', () => ({
     <div data-testid="tooltip">
       {props.content && typeof props.content === 'function'
         ? props.content({
-            payload: [{ source: { name: 'PluginA' }, target: { name: 'StrategyX' }, value: 1 }],
+            payload: [
+              {
+                value: 1,
+                payload: { source: { name: 'PluginA' }, target: { name: 'StrategyX' }, value: 1 },
+              },
+            ],
           })
         : 'Tooltip Content'}
     </div>

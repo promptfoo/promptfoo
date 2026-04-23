@@ -67,6 +67,10 @@ describe('TraceView', () => {
 
     const alert = screen.getByRole('alert');
     expect(alert).toHaveTextContent(/traces were created but no spans were recorded/i);
+    expect(screen.getByText('No spans recorded')).toBeInTheDocument();
+    expect(screen.getByText('PROMPTFOO_OTEL_LOCAL_EXPORT')).toBeInTheDocument();
+    expect(screen.getByText('traceparent')).toBeInTheDocument();
+    expect(screen.getByText('http://localhost:4318/v1/traces')).toBeInTheDocument();
   });
 
   it('should handle traces with non-array spans property gracefully', () => {

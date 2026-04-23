@@ -109,12 +109,21 @@ export interface Tool {
   // google_search?: object;
 }
 
+export interface ClaudeThinkingConfig {
+  type: 'enabled' | 'disabled';
+  budget_tokens?: number;
+}
+
 export interface CompletionOptions {
   apiKey?: string;
   apiHost?: string;
   apiBaseUrl?: string;
-  /** Custom per-token cost override for cost calculation. */
+  /** Custom per-token cost override for both input and output tokens. */
   cost?: number;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
   headers?: { [key: string]: string }; // Custom headers for the request
   projectId?: string;
   region?: string;
@@ -134,7 +143,7 @@ export interface CompletionOptions {
   // https://ai.google.dev/api/rest/v1beta/models/streamGenerateContent#request-body
   context?: string;
   examples?: { input: string; output: string }[];
-  safetySettings?: { category: string; probability: string }[];
+  safetySettings?: { category: string; threshold?: string; probability?: string }[];
   stopSequences?: string[];
   temperature?: number;
   maxOutputTokens?: number;
@@ -143,6 +152,8 @@ export interface CompletionOptions {
   top_p?: number; // Alternative format for Claude models
   topK?: number;
   top_k?: number; // Alternative format for Claude models
+  thinking?: ClaudeThinkingConfig; // Extended thinking for Claude models
+  showThinking?: boolean; // Whether to include thinking output for Claude models
 
   // Imagen image generation options
   n?: number; // Number of images to generate
@@ -160,16 +171,20 @@ export interface CompletionOptions {
   // Gemini native image generation options
   imageAspectRatio?:
     | '1:1'
+    | '1:4'
+    | '1:8'
     | '2:3'
     | '3:2'
     | '3:4'
+    | '4:1'
     | '4:3'
     | '4:5'
     | '5:4'
+    | '8:1'
     | '9:16'
     | '16:9'
     | '21:9';
-  imageSize?: '1K' | '2K' | '4K';
+  imageSize?: '512px' | '1K' | '2K' | '4K';
 
   // Live API websocket timeout
   timeoutMs?: number;
@@ -384,12 +399,20 @@ export interface GoogleProviderConfig extends CompletionOptions {
 }
 
 // Claude API interfaces
+interface ClaudeContentBlock {
+  type: string;
+  text?: string;
+  source?: {
+    type: string;
+    media_type?: string;
+    data?: string;
+  };
+  [key: string]: unknown;
+}
+
 interface ClaudeMessage {
   role: string;
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
+  content: ClaudeContentBlock[];
 }
 
 export interface ClaudeRequest {
@@ -399,6 +422,8 @@ export interface ClaudeRequest {
   temperature?: number;
   top_p?: number;
   top_k?: number;
+  system?: Array<{ type: string; text: string }>;
+  thinking?: ClaudeThinkingConfig;
   messages: ClaudeMessage[];
 }
 
@@ -407,10 +432,7 @@ export interface ClaudeResponse {
   type: string;
   role: string;
   model: string;
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
+  content: ClaudeContentBlock[];
   stop_reason: string;
   stop_sequence: string | null;
   usage: {
@@ -474,6 +496,10 @@ export interface GoogleVideoOptions {
   // Model selection
   model?: GoogleVideoModel;
 
+  // Authentication / transport mode
+  apiKey?: string;
+  vertexai?: boolean;
+
   // Video parameters
   aspectRatio?: GoogleVideoAspectRatio;
   resolution?: GoogleVideoResolution;
@@ -496,7 +522,7 @@ export interface GoogleVideoOptions {
 
   // Video extension (Veo 3.1 only)
   extendVideoId?: string; // Operation ID from previous Veo generation
-  sourceVideo?: string; // Alias for extendVideoId (must be Veo operation ID, not file path)
+  sourceVideo?: string; // Base64/file:// video for AI Studio, or Veo operation ID in Vertex flows
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;

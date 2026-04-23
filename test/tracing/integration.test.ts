@@ -1,4 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sleep } from '../../src/util/time';
+import { mockProcessEnv } from '../util/utils';
 
 import type { EvaluateTestSuite } from '../../src/types/index';
 
@@ -11,6 +13,11 @@ vi.mock('../../src/tracing/store', () => ({
     getTrace: vi.fn().mockResolvedValue(null),
   })),
   TraceStore: vi.fn(),
+}));
+
+vi.mock('../../src/util/time', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/time')>()),
+  sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Define the mock provider class
@@ -27,6 +34,7 @@ class MockTracedProviderInstance {
           traceparent: context.traceparent,
           evaluationId: context.evaluationId,
           testCaseId: context.testCaseId,
+          otelExporterOtlpEndpoint: context.otelExporterOtlpEndpoint,
         },
       };
     }
@@ -73,6 +81,7 @@ describe('OpenTelemetry Tracing Integration', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -120,6 +129,35 @@ describe('OpenTelemetry Tracing Integration', () => {
     );
     expect(firstResult.response?.metadata?.evaluationId).toBeDefined();
     expect(firstResult.response?.metadata?.testCaseId).toBeDefined();
+    expect(firstResult.response?.metadata?.otelExporterOtlpEndpoint).toBe('http://127.0.0.1:4318');
+  });
+
+  it('should pass configured local OTLP endpoint to providers when tracing is enabled', async () => {
+    const config: Partial<EvaluateTestSuite> = {
+      providers: ['mock-traced-provider'],
+      prompts: ['Test prompt'],
+      tests: [{ vars: { topic: 'testing' } }],
+      tracing: {
+        enabled: true,
+        otlp: {
+          http: {
+            enabled: true,
+            port: 44329,
+            host: '0.0.0.0',
+            acceptFormats: ['json'],
+          },
+        },
+      },
+    };
+
+    const results = await evaluate(config as EvaluateTestSuite, {
+      cache: false,
+      maxConcurrency: 1,
+    });
+
+    expect(results.results[0].response?.metadata?.otelExporterOtlpEndpoint).toBe(
+      'http://127.0.0.1:44329',
+    );
   });
 
   it('should not pass trace context when tracing is disabled', async () => {
@@ -180,27 +218,26 @@ describe('OpenTelemetry Tracing Integration', () => {
   });
 
   it('should respect environment variable for enabling tracing', async () => {
-    // Set environment variable
-    process.env.PROMPTFOO_OTEL_ENABLED = 'true';
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_OTEL_ENABLED: 'true' });
+    try {
+      const config: Partial<EvaluateTestSuite> = {
+        providers: ['mock-traced-provider'],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { topic: 'testing' } }],
+        // No tracing config in YAML
+      };
 
-    const config: Partial<EvaluateTestSuite> = {
-      providers: ['mock-traced-provider'],
-      prompts: ['Test prompt'],
-      tests: [{ vars: { topic: 'testing' } }],
-      // No tracing config in YAML
-    };
+      // Run evaluation
+      const results = await evaluate(config as EvaluateTestSuite, {
+        cache: false,
+        maxConcurrency: 1,
+      });
 
-    // Run evaluation
-    const results = await evaluate(config as EvaluateTestSuite, {
-      cache: false,
-      maxConcurrency: 1,
-    });
-
-    // Should have trace context from environment variable
-    expect(results.results[0].response).toBeDefined();
-    expect(results.results[0].response?.metadata?.traceparent).toBeDefined();
-
-    // Clean up
-    delete process.env.PROMPTFOO_OTEL_ENABLED;
+      // Should have trace context from environment variable
+      expect(results.results[0].response).toBeDefined();
+      expect(results.results[0].response?.metadata?.traceparent).toBeDefined();
+    } finally {
+      restoreEnv();
+    }
   });
 });

@@ -206,6 +206,18 @@ describe('sanitizeObject', () => {
       it('should redact authToken', () => {
         expect(sanitizeObject({ authToken: 'token123' })).toEqual({ authToken: '[REDACTED]' });
       });
+
+      it('should redact AWS_BEARER_TOKEN_BEDROCK', () => {
+        expect(sanitizeObject({ AWS_BEARER_TOKEN_BEDROCK: 'bedrock-token' })).toEqual({
+          AWS_BEARER_TOKEN_BEDROCK: '[REDACTED]',
+        });
+      });
+
+      it('should redact ANTHROPIC_API_KEY', () => {
+        expect(sanitizeObject({ ANTHROPIC_API_KEY: 'anthropic-key' })).toEqual({
+          ANTHROPIC_API_KEY: '[REDACTED]',
+        });
+      });
     });
 
     describe('authorization and auth variants', () => {
@@ -446,6 +458,28 @@ describe('sanitizeObject', () => {
       };
       const result = sanitizeObject(input);
       expect(result.l1.l2.l3.l4.l5).toBe('[...]');
+    });
+
+    it('should allow overriding max depth limit', () => {
+      const input = {
+        l1: {
+          l2: {
+            l3: {
+              l4: {
+                l5: {
+                  l6: {
+                    data: 'reachable',
+                    token: 'secret',
+                  },
+                },
+              },
+            },
+          },
+        },
+      };
+      const result = sanitizeObject(input, { maxDepth: Number.POSITIVE_INFINITY });
+      expect(result.l1.l2.l3.l4.l5.l6.data).toBe('reachable');
+      expect(result.l1.l2.l3.l4.l5.l6.token).toBe('[REDACTED]');
     });
 
     it('should sanitize at all depth levels within limit', () => {
@@ -1277,6 +1311,45 @@ describe('sanitizeUrl', () => {
       // The regex in sanitizeUrl is broad and matches substrings, so these will be redacted
       expect(result).toContain('tokens_available=%5BREDACTED%5D');
       expect(result).toContain('secret_santa=%5BREDACTED%5D');
+    });
+  });
+
+  describe('path-only URLs', () => {
+    it('should handle simple path-only URLs', () => {
+      const url = '/api/openai/completion';
+      expect(sanitizeUrl(url)).toBe('/api/openai/completion');
+    });
+
+    it('should not emit a warning for path-only URLs', () => {
+      sanitizeUrl('/api/openai/completion');
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should sanitize sensitive query params in path-only URLs', () => {
+      const url = '/api/endpoint?api_key=secret123&data=public';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('/api/endpoint?api_key=%5BREDACTED%5D&data=public');
+    });
+
+    it('should handle path-only URL with fragment', () => {
+      const url = '/api/endpoint?token=secret#section';
+      const result = sanitizeUrl(url);
+      expect(result).toBe('/api/endpoint?token=%5BREDACTED%5D#section');
+    });
+
+    it('should handle path-only URL with no query params', () => {
+      const url = '/api/v1/users';
+      expect(sanitizeUrl(url)).toBe('/api/v1/users');
+    });
+
+    it('should handle root path', () => {
+      expect(sanitizeUrl('/')).toBe('/');
+    });
+
+    it('should not treat protocol-relative URLs as path-only', () => {
+      const url = '//example.com/api?api_key=secret123';
+      // Protocol-relative URLs fail new URL() and fall through to the catch
+      expect(sanitizeUrl(url)).toBe(url);
     });
   });
 

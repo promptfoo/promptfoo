@@ -1,5 +1,6 @@
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
+import { isLoggedIntoCloud } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import {
@@ -10,7 +11,13 @@ import {
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
+import { materializeInputVariablesWithMetadata } from '../inputVariables';
+import {
+  getRemoteGenerationDisabledError,
+  getRemoteGenerationExplicitlyDisabledError,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../remoteGeneration';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -22,8 +29,10 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
+  buildGraderResultAssertion,
   createIterationContext,
   externalizeResponseForRedteamHistory,
+  getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -38,12 +47,14 @@ import type {
   CallApiOptionsParams,
   GradingResult,
   GuardrailResponse,
+  Inputs,
   NunjucksFilterMap,
   Prompt,
   RedteamFileConfig,
   TokenUsage,
   VarValue,
 } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
@@ -114,7 +125,7 @@ export async function runMetaAgentRedteam({
   test?: AtomicTestCase;
   vars: Record<string, VarValue>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
@@ -226,7 +237,8 @@ export async function runMetaAgentRedteam({
 
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total
-    accumulateResponseTokenUsage(totalTokenUsage, agentResp);
+    // Agent coordination calls are internal and should not count as target probes.
+    accumulateResponseTokenUsage(totalTokenUsage, agentResp, { countAsRequest: false });
 
     if (agentProvider.delay) {
       logger.debug(`[IterativeMeta] Sleeping for ${agentProvider.delay}ms`);
@@ -329,12 +341,22 @@ export async function runMetaAgentRedteam({
 
     // Extract input vars from the attack prompt for multi-input mode
     const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
+    const materializedInputVars =
+      currentInputVars && inputs
+        ? await materializeInputVariablesWithMetadata(currentInputVars, inputs, {
+            materializationIndex: i,
+            pluginId: String(test?.metadata?.pluginId || 'iterative-meta'),
+            provider: agentProvider,
+            purpose: test?.metadata?.purpose as string | undefined,
+          })
+        : undefined;
+    const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
     // Build updated vars - handle multi-input mode
     const updatedVars: Record<string, VarValue> = {
       ...iterationVars,
       [injectVar]: escapedAttackPrompt,
-      ...(currentInputVars || {}),
+      ...(currentRenderInputVars || {}),
     };
 
     const targetPrompt = await renderPrompt(
@@ -352,10 +374,16 @@ export async function runMetaAgentRedteam({
 
     // Execute attack against target
     const iterationStart = Date.now();
+    const targetContext = iterationContext
+      ? {
+          ...iterationContext,
+          vars: updatedVars,
+        }
+      : iterationContext;
     const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
-      iterationContext,
+      targetContext,
       options,
     );
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
@@ -454,21 +482,13 @@ export async function runMetaAgentRedteam({
           vars: iterationVars,
         };
 
-        // Build grading context with exfil tracking data
-        let gradingContext:
-          | {
-              traceContext?: TraceContextData | null;
-              traceSummary?: string;
-              wasExfiltrated?: boolean;
-              exfilCount?: number;
-              exfilRecords?: Array<{
-                timestamp: string;
-                ip: string;
-                userAgent: string;
-                queryParams: Record<string, string>;
-              }>;
-            }
-          | undefined;
+        // Build grading context with provider raw output, tracing, and exfil tracking data.
+        const gradingContext: RedteamGradingContext = {
+          providerResponse: targetResponse,
+          ...(tracingOptions.includeInGrading
+            ? { traceContext, traceSummary: gradingTraceSummary }
+            : {}),
+        };
 
         // LAYER MODE: Fetch exfil tracking from server API using transform result metadata
         // In layer mode, lastTransformResult.metadata is the ONLY source for webPageUuid
@@ -490,14 +510,11 @@ export async function runMetaAgentRedteam({
           try {
             const exfilData = await checkExfilTracking(webPageUuid, evalId);
             if (exfilData) {
-              gradingContext = {
-                ...(tracingOptions.includeInGrading
-                  ? { traceContext, traceSummary: gradingTraceSummary }
-                  : {}),
+              Object.assign(gradingContext, {
                 wasExfiltrated: exfilData.wasExfiltrated,
                 exfilCount: exfilData.exfilCount,
                 exfilRecords: exfilData.exfilRecords,
-              };
+              });
             }
           } catch (error) {
             logger.warn('[IterativeMeta] Failed to fetch exfil tracking from server', {
@@ -508,24 +525,19 @@ export async function runMetaAgentRedteam({
         }
 
         // Fall back to provider response metadata if server lookup didn't work (Playwright provider)
-        if (!gradingContext && targetResponse.metadata?.wasExfiltrated !== undefined) {
+        if (
+          gradingContext.wasExfiltrated === undefined &&
+          targetResponse.metadata?.wasExfiltrated !== undefined
+        ) {
           logger.debug(
             '[IterativeMeta] Using exfil data from provider response metadata (fallback)',
           );
-          gradingContext = {
-            ...(tracingOptions.includeInGrading
-              ? { traceContext, traceSummary: gradingTraceSummary }
-              : {}),
+          Object.assign(gradingContext, {
             wasExfiltrated: targetResponse.metadata.wasExfiltrated as boolean,
             exfilCount: (targetResponse.metadata.exfilCount as number) ?? 0,
             // Note: Full exfilRecords with all fields come from server API, not provider metadata
             exfilRecords: [],
-          };
-        }
-
-        // Fallback to just tracing context if no exfil data found
-        if (!gradingContext && tracingOptions.includeInGrading) {
-          gradingContext = { traceContext, traceSummary: gradingTraceSummary };
+          });
         }
 
         const { grade, rubric } = await grader.getResult(
@@ -533,18 +545,14 @@ export async function runMetaAgentRedteam({
           targetResponse.output,
           iterationTest,
           gradingProvider,
-          assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+          getGraderAssertionValue(assertToUse),
           additionalRubric,
           undefined, // skipRefusalCheck
           gradingContext,
         );
         graderResult = {
           ...grade,
-          assertion: grade.assertion
-            ? { ...grade.assertion, value: rubric }
-            : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-              ? { ...assertToUse, value: rubric }
-              : undefined,
+          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
         storedGraderResult = graderResult;
 
@@ -576,7 +584,7 @@ export async function runMetaAgentRedteam({
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
       // Include input vars for multi-input mode (extracted from current prompt)
-      inputVars: currentInputVars,
+      inputVars: currentRenderInputVars,
     });
 
     // Check if vulnerability was achieved
@@ -627,7 +635,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  readonly inputs?: Record<string, string>;
+  readonly inputs?: Inputs;
 
   constructor(readonly config: Record<string, VarValue>) {
     logger.debug('[IterativeMeta] Constructor config', {
@@ -635,20 +643,25 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
-    this.inputs = config.inputs as Record<string, string> | undefined;
+    this.inputs = config.inputs as Inputs | undefined;
 
-    this.numIterations =
+    const configuredIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);
+    this.numIterations = isLoggedIntoCloud()
+      ? configuredIterations
+      : Math.min(configuredIterations, 10);
 
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
-    // Meta-agent strategy requires cloud
+    // Meta-agent strategy requires remote generation
     if (!shouldGenerateRemote()) {
       throw new Error(
-        'jailbreak:meta strategy requires cloud access. Set PROMPTFOO_REMOTE_GENERATION_URL or log into Promptfoo Cloud.',
+        neverGenerateRemote()
+          ? getRemoteGenerationExplicitlyDisabledError('jailbreak:meta strategy')
+          : getRemoteGenerationDisabledError('jailbreak:meta strategy'),
       );
     }
 

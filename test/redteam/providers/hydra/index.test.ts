@@ -1,9 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
-import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import {
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../../../src/redteam/remoteGeneration';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -47,16 +55,14 @@ vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    getGraderById: mockGetGraderById,
-  };
-});
+vi.mock('../../../../src/redteam/graders', () => ({
+  getGraderById: mockGetGraderById,
+}));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
     shouldGenerateRemote: vi.fn(),
   };
 });
@@ -95,34 +101,29 @@ vi.mock('../../../../src/redteam/providers/traceFormatting', () => ({
 }));
 
 describe('HydraProvider', () => {
-  let mockAgentProvider: Mocked<ApiProvider>;
-  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockAgentProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
   let mockGrader: any;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
+    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
+    HydraProvider = hydraModule.HydraProvider;
+  });
+
+  beforeEach(() => {
     vi.clearAllMocks();
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
 
-    // Reset modules and dynamically import HydraProvider so it gets the mocked graders
-    vi.resetModules();
-    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
-    HydraProvider = hydraModule.HydraProvider;
-
     // Mock agent provider (cloud provider)
-    mockAgentProvider = {
-      id: vi.fn().mockReturnValue('mock-agent'),
-      callApi: vi.fn(),
-      delay: 0,
-    } as Mocked<ApiProvider>;
+    mockAgentProvider = createMockProvider({ id: 'mock-agent', delay: 0 });
+    mockAgentProvider.callApi.mockReset();
 
     // Mock target provider
-    mockTargetProvider = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Target response',
-      }),
-    } as Mocked<ApiProvider>;
+    mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({ output: 'Target response' }),
+    });
 
     // Mock grader
     mockGrader = {
@@ -145,6 +146,8 @@ describe('HydraProvider', () => {
     vi.mocked(shouldGenerateRemote).mockImplementation(function () {
       return true;
     });
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
     mockIsBasicRefusal.mockReturnValue(false);
@@ -198,15 +201,29 @@ describe('HydraProvider', () => {
       expect(provider['scanId']).toBe('test-scan-id');
     });
 
-    it('should throw error when remote generation is not available', () => {
+    it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       expect(() => {
         new HydraProvider({ injectVar: 'input' });
       }).toThrow(
-        'jailbreak:hydra strategy requires cloud access. Set PROMPTFOO_REMOTE_GENERATION_URL or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+      );
+    });
+
+    it('should throw the explicit-disabled error when a disable flag is set', () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      expect(() => {
+        new HydraProvider({ injectVar: 'input' });
+      }).toThrow(
+        /jailbreak:hydra strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
     });
 
@@ -504,6 +521,73 @@ describe('HydraProvider', () => {
       );
       expect(escapedCall).toBeDefined();
     });
+
+    it('should propagate sessionId to context.vars in stateful mode', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        sessionId: 'session-456',
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 2,
+        stateful: true,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(context.vars['sessionId']).toBe('session-456');
+      expect(result.metadata?.sessionId).toBe('session-456');
+    });
+
+    it('should not propagate sessionId to context.vars in stateless mode', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        sessionId: 'session-789',
+        tokenUsage: { total: 50, prompt: 25, completion: 25 },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        stateful: false,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      expect(context.vars['sessionId']).toBeUndefined();
+    });
   });
 
   describe('callApi() - stateless mode', () => {
@@ -757,6 +841,40 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraRoundsCompleted).toBeGreaterThanOrEqual(1);
       // Agent is called for each turn + learning update
       expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(3);
+    });
+
+    it('should stop when target ends conversation', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: '',
+        conversationEnded: true,
+        conversationEndReason: 'thread_closed',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 5,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      expect(result.metadata?.stopReason).toBe('Target ended conversation');
+      expect(result.metadata?.hydraRoundsCompleted).toBe(1);
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
     });
 
     it('should handle empty target response', async () => {
@@ -1079,6 +1197,40 @@ describe('HydraProvider', () => {
         assertion: { type: 'harmful:test', value: testRubric },
       });
     });
+
+    it('passes target provider raw response into the grader', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        providerResponse?: { raw?: unknown };
+      };
+      expect(gradingContext.providerResponse?.raw).toContain('finalResponse');
+    });
   });
 
   describe('callApi() - scan learning', () => {
@@ -1244,13 +1396,15 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      // Total should be sum of all calls
+      // Total tokens should be sum of all calls
       // Agent: 100 + 150 = 250
       // Target: 80 + 120 = 200
       // Total: 450
       expect(result.tokenUsage?.total).toBe(450);
       expect(result.tokenUsage?.prompt).toBe(225);
       expect(result.tokenUsage?.completion).toBe(225);
+      // Probes should only count target calls.
+      expect(result.tokenUsage?.numRequests).toBe(2);
     });
   });
 

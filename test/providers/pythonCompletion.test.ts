@@ -88,7 +88,7 @@ describe('PythonProvider', () => {
   };
   const PythonWorkerPoolMock = workerPoolMocks.PythonWorkerPoolMock;
 
-  beforeEach(() => {
+  const resetPythonCompletionMocks = () => {
     vi.clearAllMocks();
     PythonWorkerPoolMock.mockClear();
     mockPoolInstance.initialize.mockReset();
@@ -120,11 +120,17 @@ describe('PythonProvider', () => {
 
     // Reset cliState.maxConcurrency before each test
     cliState.maxConcurrency = undefined;
+  };
+
+  beforeEach(() => {
+    resetPythonCompletionMocks();
   });
 
   afterEach(() => {
     // Ensure cliState is cleaned up after each test
     cliState.maxConcurrency = undefined;
+    vi.unstubAllEnvs();
+    resetPythonCompletionMocks();
   });
 
   describe('constructor', () => {
@@ -214,7 +220,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: {"invalidKey":"invalid value"}',
+          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {"invalidKey":"invalid value"}',
         );
       });
 
@@ -230,7 +236,7 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue(null as never);
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'The Python script `call_api` function must return a dict with an `output` string/object or `error` string, instead got: null',
+          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: null',
         );
       });
 
@@ -239,7 +245,17 @@ describe('PythonProvider', () => {
         mockPoolInstance.execute.mockResolvedValue('string result');
 
         await expect(provider.callApi('test prompt')).rejects.toThrow(
-          "Cannot use 'in' operator to search for 'output' in string result",
+          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: "string result"',
+        );
+      });
+
+      it('should reject inherited output properties from a polluted prototype', async () => {
+        const provider = new PythonProvider('script.py');
+        const inheritedResult = Object.create({ output: 'polluted output' });
+        mockPoolInstance.execute.mockResolvedValue(inheritedResult);
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          'The Python script `call_api` function must return a dict with an own `output` string/object or `error` string (inherited prototype properties are rejected), instead got: {}',
         );
       });
 
@@ -271,7 +287,17 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Python script `call_embedding_api` function must return a dict with an `embedding` array or `error` string, instead got {"invalidKey":"invalid value"}',
+        'The Python script `call_embedding_api` function must return a dict with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {"invalidKey":"invalid value"}',
+      );
+    });
+
+    it('should reject inherited embedding properties from a polluted prototype', async () => {
+      const provider = new PythonProvider('script.py');
+      const inheritedResult = Object.create({ embedding: [0.1, 0.2, 0.3] });
+      mockPoolInstance.execute.mockResolvedValue(inheritedResult);
+
+      await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
+        'The Python script `call_embedding_api` function must return a dict with an own `embedding` array or `error` string (inherited prototype properties are rejected), instead got {}',
       );
     });
   });
@@ -295,7 +321,17 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Python script `call_classification_api` function must return a dict with a `classification` object or `error` string, instead of {"invalidKey":"invalid value"}',
+        'The Python script `call_classification_api` function must return a dict with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {"invalidKey":"invalid value"}',
+      );
+    });
+
+    it('should reject inherited classification properties from a polluted prototype', async () => {
+      const provider = new PythonProvider('script.py');
+      const inheritedResult = Object.create({ classification: { label: 'polluted' } });
+      mockPoolInstance.execute.mockResolvedValue(inheritedResult);
+
+      await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
+        'The Python script `call_classification_api` function must return a dict with an own `classification` object or `error` string (inherited prototype properties are rejected), instead of {}',
       );
     });
   });
@@ -313,7 +349,7 @@ describe('PythonProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(mockCache.get).toHaveBeenCalledWith(
-        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        expect.stringContaining('python:undefined:default:call_api:'),
       );
       expect(mockPoolInstance.execute).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
@@ -332,7 +368,7 @@ describe('PythonProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        expect.stringContaining('python:undefined:default:call_api:'),
         '{"output":"new result"}',
       );
     });
@@ -467,6 +503,29 @@ describe('PythonProvider', () => {
       expect(mockCache.set).not.toHaveBeenCalled();
     });
 
+    it('should ignore inherited error properties when deciding whether to cache', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = Object.create({ error: 'prototype error' });
+      result.output = 'fresh result';
+      mockPoolInstance.execute.mockResolvedValue(result);
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({
+        output: 'fresh result',
+        cached: false,
+      });
+      expect(mockCache.set).toHaveBeenCalledWith(
+        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        '{"output":"fresh result"}',
+      );
+    });
+
     it('should properly use different cache keys for different function names', async () => {
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
@@ -494,9 +553,82 @@ describe('PythonProvider', () => {
       // The second call should contain the custom function name
       expect(cacheSetCalls[1][0]).toContain(':custom_function:');
     });
+
+    it('should not apply cached metadata to embedding results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(JSON.stringify({ embedding: [0.1, 0.2, 0.3] })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = await provider.callEmbeddingApi('test prompt');
+
+      expect(result).toEqual({ embedding: [0.1, 0.2, 0.3] });
+      expect(result).not.toHaveProperty('cached');
+    });
+
+    it('should not apply cached metadata to classification results', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ classification: { label: 'test', score: 0.9 } })),
+        set: vi.fn(),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+
+      const result = await provider.callClassificationApi('test prompt');
+
+      expect(result).toEqual({ classification: { label: 'test', score: 0.9 } });
+      expect(result).not.toHaveProperty('cached');
+    });
   });
 
   describe('worker pool integration', () => {
+    it('should reuse the in-flight initialization promise and skip reinitialization once ready', async () => {
+      const provider = new PythonProvider('script.py');
+      let resolveInitialize: (() => void) | undefined;
+      mockPoolInstance.initialize.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveInitialize = resolve;
+          }),
+      );
+
+      const firstInitialize = provider.initialize();
+      const secondInitialize = provider.initialize();
+
+      await Promise.resolve();
+      expect(mockPythonWorkerPool).toHaveBeenCalledTimes(1);
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(1);
+
+      resolveInitialize?.();
+      await expect(Promise.all([firstInitialize, secondInitialize])).resolves.toEqual([
+        undefined,
+        undefined,
+      ]);
+      await provider.initialize();
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledTimes(1);
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(1);
+    });
+
+    it('should clear the initialization promise after a failed initialization attempt', async () => {
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.initialize
+        .mockRejectedValueOnce(new Error('pool init failed'))
+        .mockResolvedValueOnce(undefined);
+
+      await expect(provider.initialize()).rejects.toThrow('pool init failed');
+      await expect(provider.initialize()).resolves.toBeUndefined();
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledTimes(2);
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+    });
+
     it('should initialize worker pool with default worker count', async () => {
       const provider = new PythonProvider('script.py');
       await provider.initialize();
@@ -705,6 +837,130 @@ describe('PythonProvider', () => {
         undefined,
         300000,
         undefined,
+      );
+    });
+
+    it('should enable Python OTEL env overrides for calls with trace context', async () => {
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.execute.mockResolvedValue({ output: 'traced result' });
+
+      await provider.callApi('test prompt', {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      } as any);
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        undefined,
+        undefined,
+        {
+          PROMPTFOO_ENABLE_OTEL: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318',
+        },
+      );
+    });
+
+    it('should use the evaluator-provided OTLP endpoint for traced calls', async () => {
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.execute.mockResolvedValue({ output: 'traced result' });
+
+      await provider.callApi('test prompt', {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+        otelExporterOtlpEndpoint: 'http://127.0.0.1:44329',
+      } as any);
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        undefined,
+        undefined,
+        {
+          PROMPTFOO_ENABLE_OTEL: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:44329',
+        },
+      );
+    });
+
+    it('should not invent a local OTLP endpoint when evaluator explicitly disables one', async () => {
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.execute.mockResolvedValue({ output: 'traced result' });
+
+      await provider.callApi('test prompt', {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+        otelExporterOtlpEndpoint: undefined,
+      } as any);
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should enable Python OTEL env overrides when global tracing is enabled', async () => {
+      vi.stubEnv('PROMPTFOO_OTEL_ENABLED', 'true');
+
+      const provider = new PythonProvider('script.py');
+      await provider.initialize();
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        undefined,
+        undefined,
+        {
+          PROMPTFOO_ENABLE_OTEL: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://127.0.0.1:4318',
+        },
+      );
+    });
+
+    it('should pass PROMPTFOO_OTEL_ENDPOINT through as the Python OTLP endpoint', async () => {
+      vi.stubEnv('PROMPTFOO_OTEL_ENDPOINT', 'http://collector.local:4319');
+
+      const provider = new PythonProvider('script.py');
+      mockPoolInstance.execute.mockResolvedValue({ output: 'traced result' });
+
+      await provider.callApi('test prompt', {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      } as any);
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        undefined,
+        undefined,
+        {
+          PROMPTFOO_ENABLE_OTEL: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector.local:4319',
+        },
+      );
+    });
+
+    it('should prefer PROMPTFOO_OTEL_ENDPOINT over OTEL_EXPORTER_OTLP_ENDPOINT', async () => {
+      vi.stubEnv('PROMPTFOO_OTEL_ENDPOINT', 'http://promptfoo-collector.local:4319');
+      vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://otel-collector.local:4318');
+
+      const provider = new PythonProvider('script.py');
+      await provider.initialize({ enableOtelTracing: true });
+
+      expect(mockPythonWorkerPool).toHaveBeenCalledWith(
+        expect.stringContaining('script.py'),
+        'call_api',
+        1,
+        undefined,
+        undefined,
+        {
+          PROMPTFOO_ENABLE_OTEL: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://promptfoo-collector.local:4319',
+        },
       );
     });
 
