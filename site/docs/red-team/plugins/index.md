@@ -118,7 +118,7 @@ plugins:
   - 'agentic:memory-poisoning' # Tests if agents are vulnerable to memory poisoning attacks
 ```
 
-The `agentic:*` runtime plugins test SDK boundaries such as approval reuse, handoff filtering, nested agent tools, MCP schema trust, session isolation, deferred tool discovery, tool error handling, and guardrail placement. See the [Agentic Plugins](/docs/red-team/plugins/agentic/) documentation for the full runtime taxonomy.
+The `agentic:*` runtime plugins test SDK boundaries such as approval reuse, handoff filtering, nested agent tools, MCP schema trust, session isolation, deferred tool discovery, tool error handling, and guardrail placement. See the [Agentic Runtime Plugins](/docs/red-team/plugins/agentic/) overview and the individual plugin guides for the full runtime taxonomy.
 
 Memory poisoning attacks attempt to inject malicious instructions into an agent's memory that persists across conversation turns. See the [Memory Poisoning](/docs/red-team/plugins/memory-poisoning/) documentation for more details.
 

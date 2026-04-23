@@ -79,6 +79,25 @@ const redTeamSidebar = [
       },
       {
         type: 'category',
+        label: 'Agentic Runtime',
+        collapsed: true,
+        link: {
+          type: 'doc',
+          id: 'red-team/plugins/agentic/index',
+        },
+        items: [
+          'red-team/plugins/agentic/approval-continuity',
+          'red-team/plugins/agentic/handoff-context-leakage',
+          'red-team/plugins/agentic/agent-as-tool-boundary',
+          'red-team/plugins/agentic/mcp-schema-injection',
+          'red-team/plugins/agentic/session-memory-contamination',
+          'red-team/plugins/agentic/tool-discovery-confusion',
+          'red-team/plugins/agentic/tool-error-feedback-injection',
+          'red-team/plugins/agentic/guardrail-coverage-gap',
+        ],
+      },
+      {
+        type: 'category',
         label: 'Trust, Safety, & Compliance',
         collapsed: true,
         items: [
