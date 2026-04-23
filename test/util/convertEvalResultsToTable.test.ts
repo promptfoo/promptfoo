@@ -1,19 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
+import { createCompletedPrompt } from '../factories/eval';
 
-import type { CompletedPrompt, EvaluateTable, ResultsFile } from '../../src/types/index';
+import type { EvaluateTable, ResultsFile } from '../../src/types/index';
 
 describe('convertResultsToTable', () => {
   it('should convert results to table format', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -50,13 +45,7 @@ describe('convertResultsToTable', () => {
 
     const expected: EvaluateTable = {
       head: {
-        prompts: [
-          {
-            raw: 'test prompt',
-            display: 'test prompt',
-            id: 'prompt1',
-          } as CompletedPrompt,
-        ],
+        prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
         vars: ['var1', 'var2'],
       },
       body: [
@@ -104,13 +93,7 @@ describe('convertResultsToTable', () => {
   it('should handle error responses', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -146,13 +129,7 @@ describe('convertResultsToTable', () => {
   it('should handle null output by falling back to error', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -192,13 +169,7 @@ describe('convertResultsToTable', () => {
   it('should preserve falsy var values like 0 and false', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -240,13 +211,7 @@ describe('convertResultsToTable', () => {
   it('should handle assertion results', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -298,13 +263,7 @@ describe('convertResultsToTable', () => {
   it('should handle redteam final prompts', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -344,13 +303,7 @@ describe('convertResultsToTable', () => {
   it('should handle multiple redteam final prompts', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -393,13 +346,7 @@ describe('convertResultsToTable', () => {
   it('should handle audio responses', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -450,13 +397,7 @@ describe('convertResultsToTable', () => {
   it('should format object and array variables with pretty-printed JSON', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -521,13 +462,7 @@ describe('convertResultsToTable', () => {
   it('should copy sessionId from metadata to vars when vars.sessionId is not present', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -573,13 +508,7 @@ describe('convertResultsToTable', () => {
   it('should not overwrite user-set vars.sessionId with metadata.sessionId', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -625,13 +554,7 @@ describe('convertResultsToTable', () => {
   it('should handle empty vars.sessionId by populating from metadata.sessionId', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -677,13 +600,7 @@ describe('convertResultsToTable', () => {
   it('should not crash when metadata is missing', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -724,13 +641,7 @@ describe('convertResultsToTable', () => {
   it('should create vars object if missing when populating sessionId from metadata', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -773,13 +684,7 @@ describe('convertResultsToTable', () => {
   it('should handle multiple results with varying sessionId configurations', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           // Result 0: Only metadata.sessionId (should copy to vars)
@@ -896,13 +801,7 @@ describe('convertResultsToTable', () => {
   it('should copy sessionIds array from metadata to vars for multi-turn strategies', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -948,13 +847,7 @@ describe('convertResultsToTable', () => {
   it('should prefer sessionIds array over sessionId when both exist', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -1000,13 +893,7 @@ describe('convertResultsToTable', () => {
   it('should fall back to sessionId when sessionIds is empty array', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -1052,13 +939,7 @@ describe('convertResultsToTable', () => {
   it('should handle single-element sessionIds array', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -1103,13 +984,7 @@ describe('convertResultsToTable', () => {
   it('should ignore non-array sessionIds and fall back to sessionId', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {
@@ -1155,13 +1030,7 @@ describe('convertResultsToTable', () => {
   it('should handle multiple results with varying sessionIds array configurations', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           // Result 0: Has sessionIds array (multi-turn)
@@ -1280,13 +1149,7 @@ describe('convertResultsToTable', () => {
   it('should filter out null, undefined, empty strings, and convert non-strings in sessionIds array', () => {
     const resultsFile: ResultsFile = {
       version: 4,
-      prompts: [
-        {
-          raw: 'test prompt',
-          display: 'test prompt',
-          id: 'prompt1',
-        } as CompletedPrompt,
-      ],
+      prompts: [createCompletedPrompt('test prompt', { display: 'test prompt', id: 'prompt1' })],
       results: {
         results: [
           {

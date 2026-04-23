@@ -10,8 +10,9 @@ import {
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
+import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
-import type { ApiProvider, Assertion, ProviderResponse, TestCase } from '../../src/types/index';
+import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
 
 vi.mock('fs');
 vi.mock('path');
@@ -117,10 +118,8 @@ describe('getFinalTest', () => {
     vi.clearAllMocks();
   });
 
-  const createMockProvider = (id: string): ApiProvider => ({
-    id: () => id,
-    callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
-  });
+  const createMockProvider = (id: string): ApiProvider =>
+    createFactoryProvider({ id, response: {} });
 
   it('should correctly merge test and assertion data', () => {
     const mockApiProvider = createMockProvider('mockProvider');

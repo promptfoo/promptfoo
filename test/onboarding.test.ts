@@ -1,9 +1,10 @@
 import { rm } from 'fs/promises';
 
 import yaml from 'js-yaml';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDummyFiles, reportProviderAPIKeyWarnings } from '../src/onboarding';
 import { TestSuiteConfigSchema } from '../src/types/index';
+import { mockProcessEnv } from './util/utils';
 
 // Create hoisted mocks for inquirer modules
 const mockSelect = vi.hoisted(() => vi.fn());
@@ -69,20 +70,32 @@ vi.mock('../src/envars', () => ({
   getEnvInt: vi.fn((_key: string, defaultValue: number) => defaultValue),
 }));
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockSelect.mockReset();
+  mockCheckbox.mockReset();
+  mockConfirm.mockReset();
+  mockFs.existsSync.mockReset();
+  mockFs.writeFileSync.mockReset();
+  mockFs.mkdirSync.mockReset();
+});
+
 describe('reportProviderAPIKeyWarnings', () => {
   const openaiID = 'openai:gpt-4o';
   const anthropicID = 'anthropic:messages:claude-3-5-sonnet-20241022';
-  let oldEnv: any = {};
-  beforeAll(() => {
-    oldEnv = { ...process.env };
-  });
+  let restoreEnv: () => void;
+
   beforeEach(() => {
-    process.env.OPENAI_API_KEY = '';
-    process.env.ANTHROPIC_API_KEY = '';
+    restoreEnv = mockProcessEnv({
+      ANTHROPIC_API_KEY: '',
+      OPENAI_API_KEY: '',
+    });
   });
-  afterAll(() => {
-    process.env = { ...oldEnv };
+
+  afterEach(() => {
+    restoreEnv();
   });
+
   it('should produce a warning for openai if env key is not set', () => {
     expect(reportProviderAPIKeyWarnings([openaiID])).toEqual(
       expect.arrayContaining([
@@ -114,7 +127,7 @@ describe('reportProviderAPIKeyWarnings', () => {
     );
   });
   it('should produce only warnings for applicable providers if the env keys are not set', () => {
-    process.env.OPENAI_API_KEY = '<my-api-key>';
+    mockProcessEnv({ OPENAI_API_KEY: '<my-api-key>' });
     expect(reportProviderAPIKeyWarnings([openaiID, anthropicID])).toEqual(
       expect.arrayContaining([
         expect.stringContaining('ANTHROPIC_API_KEY environment variable is not set'),
@@ -128,7 +141,6 @@ describe('createDummyFiles', () => {
 
   beforeEach(() => {
     tempDir = '/fake/temp/dir';
-    vi.clearAllMocks();
     mockConfirm.mockResolvedValue(true);
     mockFs.existsSync.mockReturnValue(false);
     mockFs.writeFileSync.mockImplementation(() => undefined);
@@ -221,9 +233,7 @@ describe('createDummyFiles', () => {
   });
 
   it('should prompt for confirmation when files exist', async () => {
-    mockFs.existsSync.mockImplementation((path: string) =>
-      path.toString().includes('promptfooconfig.yaml'),
-    );
+    mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 
     mockConfirm.mockResolvedValueOnce(true);
     mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce('openai:gpt-4o');

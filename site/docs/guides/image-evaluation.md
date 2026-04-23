@@ -2,6 +2,7 @@
 title: Evaluating Image Generation
 description: How to evaluate and compare LLM-generated images using promptfoo with vision-capable graders
 sidebar_label: Image Generation Evaluation
+sidebar_position: 7
 ---
 
 # Evaluating Image Generation
@@ -31,7 +32,7 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: openai:image:gpt-image-1
+  - id: openai:image:gpt-image-2
     config:
       size: 1024x1024
       quality: low

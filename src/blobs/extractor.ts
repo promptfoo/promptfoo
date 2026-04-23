@@ -227,16 +227,28 @@ async function externalizeDataUrls(
  * @internal Exported for testing
  */
 export function detectImageMimeType(b64: string): string {
-  if (b64.startsWith('/9j/')) {
+  const buffer = Buffer.from(b64.trim(), 'base64');
+
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return 'image/jpeg';
   }
-  if (b64.startsWith('iVBORw0KGgo')) {
+  if (
+    buffer.length >= 8 &&
+    buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  ) {
     return 'image/png';
   }
-  if (b64.startsWith('UklGR')) {
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
     return 'image/webp';
   }
-  if (b64.startsWith('R0lGOD')) {
+  if (
+    buffer.length >= 6 &&
+    ['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'))
+  ) {
     return 'image/gif';
   }
   return 'image/png';

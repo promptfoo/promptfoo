@@ -299,6 +299,16 @@ If a `ruby` binary is not present, you will see a "ruby: command not found" erro
 
 To override the Ruby binary, set the `PROMPTFOO_RUBY` environment variable. You may set it to a path (such as `/path/to/ruby`) or just an executable in your PATH (such as `ruby`).
 
+## Negation
+
+Use `not-ruby` to invert the final pass/fail result while preserving the returned score. Numeric scores are still compared against `threshold` before the result is inverted:
+
+```yaml
+assert:
+  - type: not-ruby
+    value: output.include?('error')
+```
+
 ## Other assertion types
 
 For more info on assertions, see [Test assertions](/docs/configuration/expected-outputs).

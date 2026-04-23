@@ -8,7 +8,7 @@ prompts:
   - '{{prompt}}'
 
 providers:
-  - id: openai:image:gpt-image-1
+  - id: openai:image:gpt-image-2
     config:
       size: 1024x1024
       quality: low

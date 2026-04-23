@@ -431,6 +431,10 @@ describe('detectImageMimeType', () => {
     expect(detectImageMimeType('iVBORw0KGgoAAAANSUhEUg==')).toBe('image/png');
   });
 
+  it('should ignore surrounding whitespace in base64 data', () => {
+    expect(detectImageMimeType('\n  iVBORw0KGgoAAAANSUhEUg==  ')).toBe('image/png');
+  });
+
   it('should detect WebP from magic bytes', () => {
     expect(detectImageMimeType('UklGRlYAAABXRUJQ')).toBe('image/webp');
   });
