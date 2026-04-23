@@ -275,6 +275,56 @@ describe('Plugins', () => {
     });
   });
 
+  it('enables next button when only named custom policies are configured', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: {
+                id: '0f4e92ab19c7',
+                name: 'Refund Policy',
+                text: 'Do not issue refunds outside the published return window.',
+              },
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
+  it('does not enable next button for non-text custom policy config values', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: true,
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
   it('enables next button when only custom intents are configured', async () => {
     mockUseRedTeamConfig.mockReturnValue({
       config: {

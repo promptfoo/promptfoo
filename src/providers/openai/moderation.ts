@@ -1,4 +1,6 @@
-import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
+import { createHmac } from 'crypto';
+
+import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
@@ -68,6 +70,39 @@ export type ImageInput = {
 
 type ModerationInput = string | (TextInput | ImageInput)[];
 
+const OPENAI_MODERATION_CACHE_HASH_KEY = 'promptfoo:openai:moderation-cache-key:v1';
+const OPENAI_MODERATION_INFLIGHT_REQUESTS = new Map<string, Promise<OpenAIModerationFetchResult>>();
+
+type OpenAIModerationFetchResult = {
+  data: OpenAIModerationResponse;
+  status: number;
+  statusText: string;
+  cached: boolean;
+};
+
+function hashModerationCacheValue(value: unknown): string {
+  const serialized = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value));
+  return createHmac('sha256', OPENAI_MODERATION_CACHE_HASH_KEY).update(serialized).digest('hex');
+}
+
+function getOpenAIModerationAuthCacheNamespace(apiKey: string): string {
+  return createHmac('sha256', apiKey).update(OPENAI_MODERATION_CACHE_HASH_KEY).digest('hex');
+}
+
+function fetchOpenAIModerationWithDedupe(
+  inflightCacheKey: string,
+  fetcher: () => Promise<OpenAIModerationFetchResult>,
+): Promise<OpenAIModerationFetchResult> {
+  let inflightRequest = OPENAI_MODERATION_INFLIGHT_REQUESTS.get(inflightCacheKey);
+  if (!inflightRequest) {
+    inflightRequest = fetcher().finally(() => {
+      OPENAI_MODERATION_INFLIGHT_REQUESTS.delete(inflightCacheKey);
+    });
+    OPENAI_MODERATION_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
+  }
+  return inflightRequest;
+}
+
 export function isTextInput(input: TextInput | ImageInput): input is TextInput {
   return input.type === 'text';
 }
@@ -120,7 +155,11 @@ function parseOpenAIModerationResponse(data: OpenAIModerationResponse): Provider
 }
 
 function handleApiError(err: any, data?: any): ProviderModerationResponse {
-  logger.error(`API error: ${String(err)}`);
+  logger.error('OpenAI moderation API error', {
+    error: err instanceof Error ? err.message : String(err),
+    hasData: data !== undefined,
+    dataLength: typeof data === 'string' ? data.length : undefined,
+  });
   return {
     error: data
       ? `API error: ${String(err)}: ${typeof data === 'string' ? data : JSON.stringify(data)}`
@@ -131,10 +170,27 @@ function handleApiError(err: any, data?: any): ProviderModerationResponse {
 function getModerationCacheKey(
   modelName: string,
   config: any,
-  content: string | (TextInput | ImageInput)[],
+  content: ModerationInput,
+  identity: { apiKey?: string; apiUrl?: string; organization?: string | undefined } = {},
 ): string {
-  const contentKey = typeof content === 'string' ? content : JSON.stringify(content);
-  return `openai:moderation:${modelName}:${JSON.stringify(config)}:${contentKey}`;
+  const headers = config?.headers as Record<string, string> | undefined;
+  const cacheConfig = {
+    ...config,
+    apiKey: undefined,
+    apiKeyEnvar: undefined,
+    apiUrl: identity.apiUrl,
+    organization: identity.organization,
+    headers:
+      headers && Object.keys(headers).length > 0
+        ? hashModerationCacheValue(
+            Object.keys(headers)
+              .sort()
+              .map((key) => [key, hashModerationCacheValue(headers[key])]),
+          )
+        : undefined,
+  };
+
+  return `openai:moderation:${modelName}:${hashModerationCacheValue(cacheConfig)}:${identity.apiKey ? getOpenAIModerationAuthCacheNamespace(identity.apiKey) : 'no-api-key'}:${hashModerationCacheValue(content)}`;
 }
 
 export function supportsImageInput(modelName: string): boolean {
@@ -189,10 +245,15 @@ export class OpenAiModerationProvider
     }
 
     const useCache = isCacheEnabled();
-    let cacheKey = '';
+    const supportsImages = supportsImageInput(this.modelName);
+    const input = formatModerationInput(assistantResponse, supportsImages);
+    const cacheKey = getModerationCacheKey(this.modelName, this.config, input, {
+      apiKey,
+      apiUrl: this.getApiUrl(),
+      organization: this.getOrganization(),
+    });
 
     if (useCache) {
-      cacheKey = getModerationCacheKey(this.modelName, this.config, assistantResponse);
       const cache = await getCache();
       const cachedResponse = await cache.get(cacheKey);
 
@@ -204,8 +265,6 @@ export class OpenAiModerationProvider
 
     logger.debug(`Calling OpenAI moderation API with model ${this.modelName}`);
 
-    const supportsImages = supportsImageInput(this.modelName);
-    const input = formatModerationInput(assistantResponse, supportsImages);
     const requestBody = JSON.stringify({
       model: this.modelName,
       input,
@@ -213,23 +272,28 @@ export class OpenAiModerationProvider
 
     const headers = {
       'Content-Type': 'application/json',
+      'x-promptfoo-silent': 'true',
       ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization() } : {}),
       ...this.config.headers,
     };
 
     try {
-      const { data, status, statusText } = await fetchWithCache<OpenAIModerationResponse>(
-        `${this.getApiUrl()}/moderations`,
-        {
-          method: 'POST',
-          headers,
-          body: requestBody,
-        },
-        REQUEST_TIMEOUT_MS,
-        'json',
-        false,
-        this.config.maxRetries,
+      const { data, status, statusText } = await fetchOpenAIModerationWithDedupe(
+        getScopedCacheKey(cacheKey),
+        async () =>
+          fetchWithCache<OpenAIModerationResponse>(
+            `${this.getApiUrl()}/moderations`,
+            {
+              method: 'POST',
+              headers,
+              body: requestBody,
+            },
+            REQUEST_TIMEOUT_MS,
+            'json',
+            true,
+            this.config.maxRetries,
+          ),
       );
 
       if (status < 200 || status >= 300) {

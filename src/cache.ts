@@ -11,6 +11,7 @@ import { cloudConfig } from './globalConfig/cloud';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
+import { sha256 } from './util/createHash';
 import { isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import { isPromptfooCloudApiHost } from './util/fetch/monkeyPatchFetch';
@@ -346,12 +347,7 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
 }
 
 function hashFetchCacheKey(identity: unknown) {
-  return crypto
-    .createHmac('sha256', FETCH_CACHE_SECRET_HMAC_KEY)
-    .update(`${FETCH_CACHE_SECRET_HMAC_CONTEXT}:identity`)
-    .update('\0')
-    .update(JSON.stringify(identity))
-    .digest('hex');
+  return sha256(JSON.stringify(identity));
 }
 
 function hashBytesForCacheKey(bytes: ArrayBuffer | ArrayBufferView) {
