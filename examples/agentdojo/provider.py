@@ -107,7 +107,9 @@ def _slugify(value: str) -> str:
     return slug or "default"
 
 
-def _run_logdir(base_logdir: Path, model: str, defense: str | None, attack_name: str) -> Path:
+def _run_logdir(
+    base_logdir: Path, model: str, defense: str | None, attack_name: str
+) -> Path:
     """Separate AgentDojo traces by model, defense, and attack to avoid stale reuse."""
     slug = _slugify(f"{model}__defense-{defense or 'none'}__attack-{attack_name}")
     return base_logdir / slug
