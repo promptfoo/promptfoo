@@ -1,3 +1,6 @@
+import * as path from 'path';
+
+import { expandAssertionFileRefs } from './assertions/expandAssertionFileRefs';
 import assertions from './assertions/index';
 import * as cache from './cache';
 import cliState from './cliState';
@@ -240,11 +243,34 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
 
   // Resolve defaultTest from file reference if needed
   let resolvedDefaultTest = testSuiteConfig.defaultTest;
+  let defaultTestBaseDir: string | undefined;
   if (
     typeof testSuiteConfig.defaultTest === 'string' &&
     testSuiteConfig.defaultTest.startsWith('file://')
   ) {
+    // Remember the file's directory so nested file:// assertion refs inside
+    // it resolve relative to it rather than the process CWD.
+    const defaultTestPath = path.resolve(
+      cliState.basePath || '',
+      testSuiteConfig.defaultTest.slice('file://'.length),
+    );
+    defaultTestBaseDir = path.dirname(defaultTestPath);
     resolvedDefaultTest = await maybeLoadFromExternalFile(testSuiteConfig.defaultTest);
+  }
+  // Expand any `file://*.yaml|json` include entries in defaultTest.assert.
+  // Regular tests are already expanded by readTests -> readTest below.
+  if (
+    resolvedDefaultTest &&
+    typeof resolvedDefaultTest === 'object' &&
+    (resolvedDefaultTest as Partial<TestCase>).assert
+  ) {
+    const defaultTestObj = resolvedDefaultTest as Partial<TestCase>;
+    const expanded = await expandAssertionFileRefs(defaultTestObj.assert, {
+      baseDir: defaultTestBaseDir,
+    });
+    if (expanded) {
+      defaultTestObj.assert = expanded;
+    }
   }
 
   const constructedTestSuite: TestSuite = {

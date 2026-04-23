@@ -7,6 +7,7 @@ import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { expandAssertionFileRefs } from '../assertions/expandAssertionFileRefs';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
@@ -298,6 +299,35 @@ async function readJsonlTestCases(resolvedVarsPath: string): Promise<TestCase[]>
     });
 }
 
+/**
+ * Walk a raw test-case payload (parsed from YAML) and expand any
+ * `file://*.yaml|json` include entries inside `assert` arrays in place,
+ * anchored at `baseDir`. Called BEFORE `maybeLoadConfigFromExternalFile`
+ * so the generic loader does not preload assertion-include files with the
+ * wrong base directory.
+ */
+async function preExpandAssertionsInRawContent(raw: unknown, baseDir: string): Promise<void> {
+  if (!raw) {
+    return;
+  }
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      await preExpandAssertionsInRawContent(item, baseDir);
+    }
+    return;
+  }
+  if (typeof raw !== 'object') {
+    return;
+  }
+  const rawObj = raw as Record<string, unknown>;
+  if (Array.isArray(rawObj.assert)) {
+    const expanded = await expandAssertionFileRefs(rawObj.assert as any, { baseDir });
+    if (expanded) {
+      rawObj.assert = expanded as unknown as typeof rawObj.assert;
+    }
+  }
+}
+
 async function loadTestWithVars(
   testCase: TestCaseWithVarsFile,
   testBasePath: string,
@@ -323,10 +353,25 @@ export async function readTest(
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(await fsPromises.readFile(testFilePath, 'utf-8'));
+    // Expand `file://*.yaml|json` assertion includes BEFORE the generic loader
+    // preloads them (which would happen with the wrong baseDir).
+    await preExpandAssertionsInRawContent(rawContent, effectiveBasePath);
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
+  }
+
+  // Expand `file://*.yaml|json` include entries in the assertion list using
+  // the test file's directory as the base for relative refs. For inline tests
+  // this is a no-op (pre-expansion above already handled file-backed ones).
+  if (testCase.assert) {
+    const expandedAssert = await expandAssertionFileRefs(testCase.assert, {
+      baseDir: effectiveBasePath,
+    });
+    if (expandedAssert) {
+      testCase.assert = expandedAssert;
+    }
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {
@@ -437,6 +482,7 @@ export async function loadTestsFromGlob(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = yaml.load(await fsPromises.readFile(testFile, 'utf-8'));
+      await preExpandAssertionsInRawContent(rawContent, path.dirname(testFile));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
@@ -445,10 +491,12 @@ export async function loadTestsFromGlob(
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
+      await preExpandAssertionsInRawContent(rawCases, path.dirname(testFile));
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const rawContent = JSON.parse(await fsPromises.readFile(testFile, 'utf8'));
+      await preExpandAssertionsInRawContent(rawContent, path.dirname(testFile));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {

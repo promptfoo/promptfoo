@@ -78,11 +78,16 @@ export function maybeLoadFromExternalFile(
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
 
-  // In assertion contexts, always preserve Python/JS file references
+  // In assertion contexts, always preserve Python/JS/Ruby file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
+  if (
+    context === 'assertion' &&
+    (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath) || cleanPath.endsWith('.rb'))
+  ) {
+    logger.debug(
+      `Preserving Python/JS/Ruby file reference in assertion context: ${renderedFilePath}`,
+    );
     return renderedFilePath;
   }
 
@@ -95,16 +100,20 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // For Python/JS files with function names, return the original string unchanged
+  // For Python/JS/Ruby files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
-  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (
+    functionName &&
+    (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath) || cleanPath.endsWith('.rb'))
+  ) {
     return renderedFilePath;
   }
 
-  // For non-Python/JS files, use the original path (ignore potential function name)
+  // For non-script files, use the original path (ignore potential function name)
   const pathToUse =
-    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
+    functionName &&
+    !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath) || cleanPath.endsWith('.rb'))
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
@@ -246,13 +255,15 @@ export function maybeLoadConfigFromExternalFile(
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
-      // and current key is 'value', switch to assertion context
+      // Detect assertion contexts: if we have a sibling 'type' key with
+      // 'python', 'javascript', or 'ruby' and current key is 'value',
+      // switch to assertion context so the generic loader preserves the
+      // script file reference instead of eagerly reading its contents.
       const isAssertionValue =
         key === 'value' &&
         'type' in config &&
         typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
+        (config.type === 'python' || config.type === 'javascript' || config.type === 'ruby');
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
