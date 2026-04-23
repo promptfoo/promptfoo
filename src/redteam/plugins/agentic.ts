@@ -283,39 +283,49 @@ function getAttribute(
   return undefined;
 }
 
-function parseEvidenceCandidate(value: unknown): AgenticRuntimeEvidence | undefined {
+function parseEvidenceCandidates(value: unknown): AgenticRuntimeEvidence[] {
   if (isRecord(value)) {
     const nested = value.agenticEvidence ?? value.agentSdkEvidence;
     if (isRecord(nested)) {
-      return nested as AgenticRuntimeEvidence;
+      return [nested as AgenticRuntimeEvidence];
     }
-    return value as AgenticRuntimeEvidence;
+    return [value as AgenticRuntimeEvidence];
   }
 
   if (typeof value !== 'string' || !value.trim()) {
-    return undefined;
+    return [];
   }
 
   try {
-    return parseEvidenceCandidate(JSON.parse(value));
+    return parseEvidenceCandidates(JSON.parse(value));
   } catch {
-    const tagged =
-      /<AgenticRuntimeEvidence>([\s\S]*?)<\/AgenticRuntimeEvidence>/i.exec(value) ??
-      /<AgenticEvidence>([\s\S]*?)<\/AgenticEvidence>/i.exec(value) ??
-      /<AgentSdkEvidence>([\s\S]*?)<\/AgentSdkEvidence>/i.exec(value);
-    if (tagged) {
-      return parseEvidenceCandidate(tagged[1]);
+    const candidates: AgenticRuntimeEvidence[] = [];
+    let untaggedValue = value;
+    const tagPatterns = [
+      /<AgenticRuntimeEvidence>([\s\S]*?)<\/AgenticRuntimeEvidence>/gi,
+      /<AgenticEvidence>([\s\S]*?)<\/AgenticEvidence>/gi,
+      /<AgentSdkEvidence>([\s\S]*?)<\/AgentSdkEvidence>/gi,
+    ];
+    for (const pattern of tagPatterns) {
+      for (const tagged of value.matchAll(pattern)) {
+        candidates.push(...parseEvidenceCandidates(tagged[1]));
+      }
+      untaggedValue = untaggedValue.replace(pattern, '');
     }
 
-    for (const object of extractJsonObjects(value)) {
+    for (const object of extractJsonObjects(untaggedValue)) {
       const evidence = parseEvidenceCandidate(object);
       if (evidence?.findings || evidence?.pluginId || evidence?.mode) {
-        return evidence;
+        candidates.push(evidence);
       }
     }
-  }
 
-  return undefined;
+    return candidates;
+  }
+}
+
+function parseEvidenceCandidate(value: unknown): AgenticRuntimeEvidence | undefined {
+  return parseEvidenceCandidates(value)[0];
 }
 
 function getTraceSpans(gradingContext?: RedteamGradingContext): TraceLikeSpan[] {
@@ -374,18 +384,11 @@ function inferredTraceFindings(
 }
 
 function evidenceCandidateMatchesPlugin(value: unknown, pluginId: AgenticRuntimePluginId): boolean {
-  const evidence = parseEvidenceCandidate(value);
-  if (!evidence) {
-    return false;
-  }
-
-  if (normalizePluginId(evidence.pluginId) === pluginId) {
-    return true;
-  }
-
-  return (
-    Array.isArray(evidence.findings) &&
-    evidence.findings.some((finding) => normalizePluginId(finding.pluginId) === pluginId)
+  return parseEvidenceCandidates(value).some(
+    (evidence) =>
+      normalizePluginId(evidence.pluginId) === pluginId ||
+      (Array.isArray(evidence.findings) &&
+        evidence.findings.some((finding) => normalizePluginId(finding.pluginId) === pluginId)),
   );
 }
 
@@ -530,13 +533,14 @@ function extractAgenticRuntimeEvidence(
   ];
 
   for (const candidate of candidates) {
-    const evidence = parseEvidenceCandidate(candidate);
-    const scopedEvidence = normalizeEvidenceForPlugin(evidence, pluginId);
-    if (scopedEvidence?.findings || scopedEvidence?.pluginId || scopedEvidence?.mode) {
-      return {
-        ...scopedEvidence,
-        evidenceSource: scopedEvidence.evidenceSource || 'provider',
-      };
+    for (const evidence of parseEvidenceCandidates(candidate)) {
+      const scopedEvidence = normalizeEvidenceForPlugin(evidence, pluginId);
+      if (scopedEvidence?.findings || scopedEvidence?.pluginId || scopedEvidence?.mode) {
+        return {
+          ...scopedEvidence,
+          evidenceSource: scopedEvidence.evidenceSource || 'provider',
+        };
+      }
     }
   }
 

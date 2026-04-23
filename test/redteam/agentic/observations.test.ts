@@ -137,4 +137,37 @@ describe('agentic run observations', () => {
 
     expect(findingsFromObservations(observations)).toEqual([]);
   });
+
+  it('continues scanning embedded trace evidence blobs until it finds findings', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-mixed-evidence',
+          testCaseId: 'case-mixed-evidence',
+          traceId: 'trace-mixed-evidence',
+          spans: [
+            {
+              attributes: {
+                agenticEvidence: [
+                  '<AgenticEvidence>{"findings":[],"pluginId":"agentic:mcp-schema-injection"}</AgenticEvidence>',
+                  '<AgenticEvidence>{"findings":[{"evidence":"loaded hidden tool","kind":"tool-discovery-confusion","pluginId":"agentic:tool-discovery-confusion"}]}</AgenticEvidence>',
+                ].join('\n'),
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-mixed',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'loaded hidden tool',
+        kind: 'tool-discovery-confusion',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
 });

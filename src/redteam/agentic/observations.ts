@@ -200,41 +200,47 @@ function parseRawValue(raw: unknown): unknown {
   }
 }
 
-function parseAgentEvidenceCandidate(
+function parseAgentEvidenceCandidates(
   value: unknown,
-): { findings?: AgentRunFinding[]; pluginId?: unknown } | undefined {
+): { findings?: AgentRunFinding[]; pluginId?: unknown }[] {
   if (isRecord(value)) {
     const nested = value.agenticEvidence ?? value.agentSdkEvidence;
     if (isRecord(nested)) {
-      return parseAgentEvidenceCandidate(nested);
+      return parseAgentEvidenceCandidates(nested);
     }
-    return value as { findings?: AgentRunFinding[] };
+    return [value as { findings?: AgentRunFinding[] }];
   }
 
   if (typeof value !== 'string' || !value.trim()) {
-    return undefined;
+    return [];
   }
 
   try {
-    return parseAgentEvidenceCandidate(JSON.parse(value));
+    return parseAgentEvidenceCandidates(JSON.parse(value));
   } catch {
-    const tagged =
-      /<AgenticRuntimeEvidence>([\s\S]*?)<\/AgenticRuntimeEvidence>/i.exec(value) ??
-      /<AgenticEvidence>([\s\S]*?)<\/AgenticEvidence>/i.exec(value) ??
-      /<AgentSdkEvidence>([\s\S]*?)<\/AgentSdkEvidence>/i.exec(value);
-    if (tagged) {
-      return parseAgentEvidenceCandidate(tagged[1]);
+    const candidates: { findings?: AgentRunFinding[]; pluginId?: unknown }[] = [];
+    let untaggedValue = value;
+    const tagPatterns = [
+      /<AgenticRuntimeEvidence>([\s\S]*?)<\/AgenticRuntimeEvidence>/gi,
+      /<AgenticEvidence>([\s\S]*?)<\/AgenticEvidence>/gi,
+      /<AgentSdkEvidence>([\s\S]*?)<\/AgentSdkEvidence>/gi,
+    ];
+    for (const pattern of tagPatterns) {
+      for (const tagged of value.matchAll(pattern)) {
+        candidates.push(...parseAgentEvidenceCandidates(tagged[1]));
+      }
+      untaggedValue = untaggedValue.replace(pattern, '');
     }
 
-    for (const object of extractJsonObjects(value)) {
-      const evidence = parseAgentEvidenceCandidate(object);
+    for (const object of extractJsonObjects(untaggedValue)) {
+      const evidence = parseAgentEvidenceCandidates(object)[0];
       if (evidence?.findings) {
-        return evidence;
+        candidates.push(evidence);
       }
     }
-  }
 
-  return undefined;
+    return candidates;
+  }
 }
 
 function traceAttributeField(
@@ -366,22 +372,25 @@ function findingObservationsFromAttributes(
 ): AgentObservation[] {
   const observations: AgentObservation[] = [];
   const evidenceJson = getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS);
-  const parsedEvidence = parseAgentEvidenceCandidate(evidenceJson);
+  const parsedEvidenceCandidates = parseAgentEvidenceCandidates(evidenceJson);
 
-  if (Array.isArray(parsedEvidence?.findings)) {
-    parsedEvidence.findings.forEach((finding, index) => {
-      observations.push({
-        evidence: stringifyValue(finding.evidence),
-        fieldLocations: { evidence: location },
-        findingKind: stringifyValue(finding.kind),
-        kind: 'finding',
-        location: `${location} finding ${index + 1}`,
-        pluginId: normalizePluginId(finding.pluginId) ?? normalizePluginId(parsedEvidence.pluginId),
-        severity: stringifyValue(finding.severity),
-        source,
-        spanId: span?.spanId,
-        spanName: span?.name,
-        text: stringifyValue(finding.evidence),
+  if (parsedEvidenceCandidates.some((evidence) => Array.isArray(evidence.findings))) {
+    parsedEvidenceCandidates.forEach((parsedEvidence) => {
+      parsedEvidence.findings?.forEach((finding, index) => {
+        observations.push({
+          evidence: stringifyValue(finding.evidence),
+          fieldLocations: { evidence: location },
+          findingKind: stringifyValue(finding.kind),
+          kind: 'finding',
+          location: `${location} finding ${index + 1}`,
+          pluginId:
+            normalizePluginId(finding.pluginId) ?? normalizePluginId(parsedEvidence.pluginId),
+          severity: stringifyValue(finding.severity),
+          source,
+          spanId: span?.spanId,
+          spanName: span?.name,
+          text: stringifyValue(finding.evidence),
+        });
       });
     });
     return observations;
