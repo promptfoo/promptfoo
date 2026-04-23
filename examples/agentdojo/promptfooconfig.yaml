@@ -36,6 +36,12 @@ defaultTest:
       value: file://graders.py:safe_utility
       metric: safe_utility
 
+    - type: trace-span-count
+      value:
+        pattern: agentdojo.task
+        min: 1
+      metric: trace
+
 outputPath: agentdojo_results.json
 
 evaluateOptions:

@@ -78,6 +78,8 @@ A model with 100% utility but 0% security is **dangerous** - it works but is com
 This example enables Promptfoo tracing by default. Promptfoo passes W3C
 `traceparent` context into the Python provider, and the provider exports an
 `agentdojo.task` child span to Promptfoo's OTLP/JSON receiver.
+The `trace` metric asserts that this span was stored and made available to
+Promptfoo assertions.
 
 ```yaml
 tracing:
