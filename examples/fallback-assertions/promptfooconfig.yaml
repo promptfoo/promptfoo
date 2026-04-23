@@ -12,7 +12,7 @@ prompts:
   - 'Answer the following question concisely: {{question}}'
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:chat:gpt-5.4-mini
 
 tests:
   - vars:
@@ -22,15 +22,12 @@ tests:
       - type: javascript
         value: |
           const validAnswers = ['Paris', 'paris'];
-          if (validAnswers.includes(output.trim())) {
-            return { pass: true, score: 1.0 };
-          }
-          return { pass: false, score: 0 };
+          return validAnswers.includes(output.trim());
         fallback: next # If this fails, try the next assertion
 
       # LLM judge as fallback (only runs if exact match fails)
       - type: llm-rubric
-        provider: openai:gpt-4o-mini
+        provider: openai:chat:gpt-5.4-mini
         value: 'The response correctly identifies Paris as the capital of France'
 
   - vars:
@@ -46,7 +43,7 @@ tests:
         fallback: next # Try LLM judge if regex fails
 
       - type: llm-rubric
-        provider: openai:gpt-5-mini
+        provider: openai:chat:gpt-5.4-mini
         value: |
           The response demonstrates understanding of photosynthesis,
           mentioning key concepts like light energy, plants, and glucose production.
@@ -61,16 +58,12 @@ tests:
       # Fallback chain
       - type: javascript
         value: |
-          const answer = output.match(/\d+/)?.[0];
-          return {
-            pass: answer === '4',
-            score: answer === '4' ? 1.0 : 0
-          };
+          /\b4\b/.test(output)
         fallback: next
 
       # Final fallback
       - type: llm-rubric
-        provider: openai:gpt-4o-mini
+        provider: openai:chat:gpt-5.4-mini
         value: 'The response correctly states that 2+2=4'
 
       # Another independent assertion

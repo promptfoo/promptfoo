@@ -1,4 +1,11 @@
-# Fallback Assertions Example
+# fallback-assertions (Fallback Assertions Example)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example fallback-assertions
+cd fallback-assertions
+```
 
 This example demonstrates the **fallback assertion mechanism** in promptfoo, which allows you to create cascading validation strategies where expensive checks only run if cheaper checks fail.
 
@@ -24,7 +31,7 @@ When an assertion has `fallback: next`:
 ```yaml
 assert:
   - type: javascript # Fast check
-    value: "return { pass: output === 'Paris', score: 1.0 };"
+    value: "output.trim() === 'Paris'"
     fallback: next
 
   - type: llm-rubric # Expensive LLM judge (fallback)
@@ -129,11 +136,18 @@ assert:
 ## Running the Example
 
 ```bash
-# Run evaluation
-npx promptfoo@latest eval
+# Create this example
+npx promptfoo@latest init --example fallback-assertions
+cd fallback-assertions
+
+# Set your API key
+export OPENAI_API_KEY=your-key-here
+
+# Run the eval
+promptfoo eval
 
 # View results
-npx promptfoo@latest view
+promptfoo view
 ```
 
 ## Performance Benefits
