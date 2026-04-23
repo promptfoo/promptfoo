@@ -39,6 +39,24 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     ).toThrow('MLflow Gateway URL is required');
   });
 
+  it('should throw if endpoint name is empty', () => {
+    expect(
+      () =>
+        new MlflowGatewayChatCompletionProvider('', {
+          config: { gatewayUrl: 'http://localhost:5000' },
+        }),
+    ).toThrow('MLflow Gateway endpoint name is required');
+  });
+
+  it('should throw if endpoint name is whitespace', () => {
+    expect(
+      () =>
+        new MlflowGatewayChatCompletionProvider('   ', {
+          config: { gatewayUrl: 'http://localhost:5000' },
+        }),
+    ).toThrow('MLflow Gateway endpoint name is required');
+  });
+
   it('should default apiKeyEnvar to MLFLOW_GATEWAY_API_KEY', () => {
     const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
       config: { gatewayUrl: 'http://localhost:5000' },
@@ -53,11 +71,40 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     expect(provider.config.apiKeyEnvar).toBe('MY_CUSTOM_KEY');
   });
 
+  it('should default apiKeyRequired to false', () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.config.apiKeyRequired).toBe(false);
+  });
+
+  it('should honor explicit apiKeyRequired true', () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000', apiKeyRequired: true },
+    });
+    expect(provider.config.apiKeyRequired).toBe(true);
+  });
+
   it('should preserve the model name', () => {
     const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
       config: { gatewayUrl: 'http://localhost:5000' },
     });
     expect(provider.modelName).toBe('my-chat-endpoint');
+  });
+
+  it('should use namespaced provider id by default', () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.id()).toBe('mlflow-gateway:my-chat-endpoint');
+  });
+
+  it('should honor explicit provider id', () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-chat-endpoint', {
+      id: 'custom-id',
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.id()).toBe('custom-id');
   });
 
   it('should prefer explicit config over env var', () => {

@@ -40,6 +40,14 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
   config: MlflowGatewayCompletionOptions;
 
   constructor(modelName: string, providerOptions: MlflowGatewayProviderOptions) {
+    if (!modelName || modelName.trim() === '') {
+      throw new Error(
+        'MLflow Gateway endpoint name is required. Use the format ' +
+          '"mlflow-gateway:<endpoint-name>" where <endpoint-name> is the name of ' +
+          'the gateway endpoint you created in the MLflow UI.',
+      );
+    }
+
     const gatewayUrl = providerOptions.config?.gatewayUrl || getEnvString('MLFLOW_GATEWAY_URL');
 
     if (!gatewayUrl) {
@@ -57,10 +65,17 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
       // Default to a placeholder key since the gateway manages provider keys
       apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'MLFLOW_GATEWAY_API_KEY',
       apiBaseUrl,
+      // The gateway does not validate the API key — default to not required
+      apiKeyRequired:
+        providerOptions.config?.apiKeyRequired !== undefined
+          ? providerOptions.config.apiKeyRequired
+          : false,
     };
 
     super(modelName, {
       ...providerOptions,
+      // Preserve the namespaced provider id so results are distinguishable
+      id: providerOptions.id || `mlflow-gateway:${modelName}`,
       config: mergedConfig,
     });
 
