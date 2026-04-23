@@ -153,6 +153,19 @@ function stringifyValue(value: unknown): string | undefined {
   }
 }
 
+function isExplicitlyTrue(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    return ['1', 'true', 'yes'].includes(value.trim().toLowerCase());
+  }
+  return false;
+}
+
 function normalizePluginId(pluginId: unknown): string | undefined {
   const value = stringifyValue(pluginId);
   if (!value) {
@@ -348,7 +361,7 @@ function controlObservationFromSpan(
   if (
     name.includes('approval') ||
     spanType === 'approval' ||
-    Boolean(attributes['approval.required'])
+    isExplicitlyTrue(attributes['approval.required'])
   ) {
     return {
       kind: 'approval',

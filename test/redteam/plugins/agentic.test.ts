@@ -552,6 +552,45 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
   });
 
+  it('does not let string false approval attributes suppress guardrail gap inference', async () => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      JSON.stringify({ agenticEvidence: { findings: [], mode: 'hardened' } }),
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-codex-tool-string-false',
+          testCaseId: 'case-codex-tool-string-false',
+          traceId: '77777777777777777777777777777777',
+          spans: [
+            {
+              attributes: {
+                'approval.required': 'false',
+                'codex.tool.name': 'update_seat',
+              },
+              name: 'tool update_seat',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+  });
+
   it('passes when structured Agentic evidence has no matching finding', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
