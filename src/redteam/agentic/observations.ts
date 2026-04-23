@@ -200,7 +200,9 @@ function parseRawValue(raw: unknown): unknown {
   }
 }
 
-function parseAgentEvidenceCandidate(value: unknown): { findings?: AgentRunFinding[] } | undefined {
+function parseAgentEvidenceCandidate(
+  value: unknown,
+): { findings?: AgentRunFinding[]; pluginId?: unknown } | undefined {
   if (isRecord(value)) {
     const nested = value.agenticEvidence ?? value.agentSdkEvidence;
     if (isRecord(nested)) {
@@ -374,7 +376,7 @@ function findingObservationsFromAttributes(
         findingKind: stringifyValue(finding.kind),
         kind: 'finding',
         location: `${location} finding ${index + 1}`,
-        pluginId: normalizePluginId(finding.pluginId),
+        pluginId: normalizePluginId(finding.pluginId) ?? normalizePluginId(parsedEvidence.pluginId),
         severity: stringifyValue(finding.severity),
         source,
         spanId: span?.spanId,

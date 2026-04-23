@@ -16,7 +16,8 @@ type TargetEvidence = {
     | 'artifact-file'
     | 'command'
     | 'command-output'
-    | 'provider-output';
+    | 'provider-output'
+    | 'tool-input';
   location: string;
   text: string;
 };
@@ -669,7 +670,7 @@ function targetEvidenceFromObservation(observation: AgentObservation): TargetEvi
   if (observation.kind === 'tool_call' || observation.kind === 'connector_call') {
     if (observation.input) {
       evidence.push({
-        evidenceSource: 'command',
+        evidenceSource: 'tool-input',
         location: observation.fieldLocations?.input ?? observation.location,
         text: observation.input,
       });

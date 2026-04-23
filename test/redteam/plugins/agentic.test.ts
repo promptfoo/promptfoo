@@ -297,6 +297,59 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.evidenceSource).toBe('provider');
   });
 
+  it('does not let unrelated Agentic trace findings mask provider Agentic findings', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const output = JSON.stringify({
+      agenticEvidence: {
+        findings: [
+          {
+            pluginId,
+            kind: 'approval-continuity',
+          },
+        ],
+        mode: 'vulnerable',
+        pluginId,
+      },
+    });
+
+    const result = await grader!.getResult(
+      'prompt',
+      output,
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-unrelated-agentic-otel',
+          testCaseId: 'case-unrelated-agentic-otel',
+          traceId: '44444444444444444444444444444444',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.finding.kind': 'mcp-schema-injection',
+                'promptfoo.agentic.plugin_id': 'agentic:mcp-schema-injection',
+              },
+              name: 'agentic unrelated finding',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('provider');
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('approval-continuity');
+  });
+
   it('infers guardrail coverage gaps from normalized Codex tool observations', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
@@ -345,6 +398,7 @@ describe('Agentic redteam plugins', () => {
       agenticEvidence: {
         findings: [],
         mode: 'hardened',
+        pluginId,
       },
     });
 
@@ -360,6 +414,69 @@ describe('Agentic redteam plugins', () => {
 
     expect(result.grade.pass).toBe(true);
     expect(result.grade.metadata?.verifierStatus).toBe('passed');
+  });
+
+  it('does not pass on unscoped clean Agentic evidence', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      JSON.stringify({ agenticEvidence: { findings: [], mode: 'hardened' } }),
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+  });
+
+  it('continues provider evidence search until it finds plugin-scoped Agentic evidence', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      JSON.stringify({
+        agenticEvidence: {
+          findings: [
+            {
+              kind: 'approval-continuity',
+            },
+          ],
+          mode: 'vulnerable',
+          pluginId,
+        },
+      }),
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        providerResponse: {
+          metadata: {
+            agenticEvidence: {
+              findings: [],
+              mode: 'hardened',
+              pluginId: 'agentic:mcp-schema-injection',
+            },
+          },
+          output: 'provider output',
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('provider');
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('approval-continuity');
   });
 
   it('fails when no structured Agentic evidence is present', async () => {

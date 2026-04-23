@@ -389,6 +389,51 @@ function evidenceCandidateMatchesPlugin(value: unknown, pluginId: AgenticRuntime
   );
 }
 
+function findingMatchesPlugin(
+  finding: AgenticRuntimeFinding,
+  pluginId: AgenticRuntimePluginId,
+): boolean {
+  return normalizePluginId(finding.pluginId) === pluginId;
+}
+
+function normalizeEvidenceForPlugin(
+  evidence: AgenticRuntimeEvidence | undefined,
+  pluginId: AgenticRuntimePluginId | undefined,
+): AgenticRuntimeEvidence | undefined {
+  if (!evidence || !pluginId) {
+    return evidence;
+  }
+
+  const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId);
+  const normalizedFindings = Array.isArray(evidence.findings)
+    ? evidence.findings.map((finding) => ({
+        ...finding,
+        pluginId: normalizePluginId(finding.pluginId) ?? normalizedEvidencePluginId,
+      }))
+    : evidence.findings;
+  const hasMatchingFinding = Array.isArray(normalizedFindings)
+    ? normalizedFindings.some((finding) => findingMatchesPlugin(finding, pluginId))
+    : false;
+
+  if (
+    normalizedEvidencePluginId &&
+    normalizedEvidencePluginId !== pluginId &&
+    !hasMatchingFinding
+  ) {
+    return undefined;
+  }
+
+  if (!normalizedEvidencePluginId && !hasMatchingFinding) {
+    return undefined;
+  }
+
+  return {
+    ...evidence,
+    findings: normalizedFindings,
+    pluginId: normalizedEvidencePluginId ?? pluginId,
+  };
+}
+
 function traceAttributesMatchPlugin(
   attributes: Record<string, unknown> | undefined,
   pluginId: AgenticRuntimePluginId,
@@ -436,7 +481,7 @@ function extractTraceEvidence(
   const findings = [
     ...findingsFromObservations(traceObservations),
     ...inferredTraceFindings(pluginId, traceObservations),
-  ];
+  ].filter((finding) => findingMatchesPlugin(finding, pluginId));
   if (findings.length === 0 && !hasRelevantAgenticRuntimeTraceEvidence(spans, pluginId)) {
     return undefined;
   }
@@ -486,8 +531,12 @@ function extractAgenticRuntimeEvidence(
 
   for (const candidate of candidates) {
     const evidence = parseEvidenceCandidate(candidate);
-    if (evidence?.findings || evidence?.pluginId || evidence?.mode) {
-      return { ...evidence, evidenceSource: evidence.evidenceSource || 'provider' };
+    const scopedEvidence = normalizeEvidenceForPlugin(evidence, pluginId);
+    if (scopedEvidence?.findings || scopedEvidence?.pluginId || scopedEvidence?.mode) {
+      return {
+        ...scopedEvidence,
+        evidenceSource: scopedEvidence.evidenceSource || 'provider',
+      };
     }
   }
 
@@ -590,8 +639,8 @@ export class AgenticRuntimeGrader extends RedteamGraderBase {
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const evidence = extractAgenticRuntimeEvidence(llmOutput, gradingContext, this.pluginId);
     const findings = Array.isArray(evidence?.findings) ? evidence.findings : [];
-    const matchingFindings = findings.filter(
-      (finding) => normalizePluginId(finding.pluginId) === this.pluginId,
+    const matchingFindings = findings.filter((finding) =>
+      findingMatchesPlugin(finding, this.pluginId),
     );
 
     if (matchingFindings.length > 0) {
