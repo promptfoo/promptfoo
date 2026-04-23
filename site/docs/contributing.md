@@ -81,7 +81,7 @@ We particularly welcome contributions in the following areas:
    npm run dev
    ```
 
-   This will run the express server on port 15500 and the web UI on port 3000.
+   This will run the express server on port 18601 and the web UI on port 15500.
    Both the API and UI will be automatically reloaded when you make changes.
 
    :::info
@@ -342,7 +342,7 @@ To run the web UI in dev mode:
 npm run dev
 ```
 
-This will host the web UI at http://localhost:3000. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
+This will host the web UI at http://localhost:15500. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
 
 ```bash
 npm run dev:app

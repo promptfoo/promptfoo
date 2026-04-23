@@ -61,8 +61,8 @@ npx vitest path/to/test    # Run a specific backend test file
 
 # Development
 npm run dev                # Start both server and app
-npm run dev:app            # Start only frontend (localhost:3000)
-npm run dev:server         # Start only server/API (localhost:15500)
+npm run dev:app            # Start only frontend (localhost:15500)
+npm run dev:server         # Start only server/API (localhost:18601)
 npm run local -- eval      # Test with local build
 
 # Database
@@ -92,7 +92,7 @@ npm run local eval --max-concurrency 1     # Wrong - flags go to npm
 
 **Don't run `npm run local -- view`** unless explicitly asked. Assume the user already has `npm run dev` running. The `view` command serves static production builds without hot reload.
 
-When starting `npm run dev`, keep it attached in a live terminal session; backgrounding with `&`/`nohup` can exit silently in agent shells. The expected local URLs are `http://localhost:3000/` for the Web UI and `http://localhost:15500` for the server/API. Do not assume Vite's default `5173`; confirm the actual ports from startup output or with `lsof -nP -iTCP:3000 -iTCP:15500 -sTCP:LISTEN`.
+When starting `npm run dev`, keep it attached in a live terminal session; backgrounding with `&`/`nohup` can exit silently in agent shells. The expected local URLs are `http://localhost:15500/` for the Web UI and `http://localhost:18601` for the server/API. Do not assume Vite's default `5173`; confirm the actual ports from startup output or with `lsof -nP -iTCP:15500 -iTCP:18601 -sTCP:LISTEN`.
 
 ### Using Environment Variables
 
@@ -192,7 +192,7 @@ LOG_LEVEL=debug npm run local -- eval -c config.yaml
 npm run local -- eval -c config.yaml --no-cache
 ```
 
-**View results in web UI:** First check if the Web UI is running on port 3000, then ask user before starting. Use `npm run dev` for localhost:3000.
+**View results in web UI:** First check if the Web UI is running on port 15500, then ask user before starting. Use `npm run dev` for localhost:15500.
 
 **Cache:** Located at `~/.promptfoo/cache` by default, unless overridden with
 `PROMPTFOO_CACHE_PATH` or `PROMPTFOO_CONFIG_DIR`. **NEVER delete or clear the cache
