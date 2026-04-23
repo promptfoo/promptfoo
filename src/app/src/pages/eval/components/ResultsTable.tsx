@@ -20,6 +20,7 @@ import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app
 import { getActualPrompt } from '@app/utils/providerResponse';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
+  type AssertionOrSet,
   type EvalResultsFilterMode,
   type EvaluateTable,
   type EvaluateTableOutput,
@@ -69,6 +70,33 @@ import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorag
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import { getNamedMetricTotals } from './utils';
+
+function addPercentageMetricTotal(totals: Record<string, number>, assertion: AssertionOrSet): void {
+  if (!assertion.metric || isValueMetricAssertion(assertion)) {
+    return;
+  }
+  totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
+}
+
+function collectPercentageMetricTotals(
+  assertions: AssertionOrSet[] | undefined,
+  totals: Record<string, number>,
+): void {
+  for (const assertion of assertions ?? []) {
+    addPercentageMetricTotal(totals, assertion);
+    if ('assert' in assertion && Array.isArray(assertion.assert)) {
+      collectPercentageMetricTotals(assertion.assert, totals);
+    }
+  }
+}
+
+function getFallbackPercentageMetricTotals(body: EvaluateTable['body']): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of body) {
+    collectPercentageMetricTotals(row.test.assert, totals);
+  }
+  return totals;
+}
 
 /**
  * Audio player component that handles both storage refs and base64 data
@@ -1869,31 +1897,8 @@ function ResultsTable({
     // used when the backend didn't persist namedScoreWeights. Compute lazily.
     let fallbackTotals: Record<string, number> | undefined;
     function getFallbackTotals(): Record<string, number> {
-      if (fallbackTotals) {
-        return fallbackTotals;
-      }
-      const totals: Record<string, number> = {};
-      for (const row of body) {
-        for (const assertion of row.test.assert ?? []) {
-          if (assertion.metric && !isValueMetricAssertion(assertion)) {
-            totals[assertion.metric] = (totals[assertion.metric] || 0) + (assertion.weight ?? 1);
-          }
-          if ('assert' in assertion && Array.isArray(assertion.assert)) {
-            for (const subAssertion of assertion.assert) {
-              if (
-                'metric' in subAssertion &&
-                subAssertion.metric &&
-                !isValueMetricAssertion(subAssertion)
-              ) {
-                totals[subAssertion.metric] =
-                  (totals[subAssertion.metric] || 0) + (subAssertion.weight ?? 1);
-              }
-            }
-          }
-        }
-      }
-      fallbackTotals = totals;
-      return totals;
+      fallbackTotals ??= getFallbackPercentageMetricTotals(body);
+      return fallbackTotals;
     }
 
     return head.prompts.map((prompt) => {
