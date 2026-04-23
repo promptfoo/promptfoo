@@ -62,6 +62,12 @@ const assertTypes: AssertionType[] = [
   'is-valid-function-call',
   'is-valid-openai-function-call',
   'is-valid-openai-tools-call',
+  'skill-used',
+  'trajectory:goal-success',
+  'trajectory:tool-args-match',
+  'trajectory:tool-used',
+  'trajectory:tool-sequence',
+  'trajectory:step-count',
 
   // Metrics
   'bleu',
@@ -88,6 +94,14 @@ const assertTypes: AssertionType[] = [
   'not-webhook',
 ];
 
+// Assertion types that accept comma-separated values
+const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
+  'contains-any',
+  'contains-all',
+  'not-contains-any',
+  'not-contains-all',
+]);
+
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'similar',
@@ -102,6 +116,7 @@ const LLM_ASSERTION_TYPES = new Set<AssertionType>([
   'moderation',
   'pi',
   'select-best',
+  'trajectory:goal-success',
 ]);
 
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
@@ -149,7 +164,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     className="shrink-0"
                     aria-label="Remove assertion"
                   >
-                    <DeleteIcon className="h-4 w-4" />
+                    <DeleteIcon className="size-4" />
                   </Button>
                 </div>
 
@@ -200,8 +215,20 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                       setAsserts(newAsserts);
                       onAdd(newAsserts);
                     }}
-                    className="min-h-[80px] resize-y"
+                    className="min-h-20 resize-y"
                   />
+                  {ARRAY_VALUE_ASSERTION_TYPES.has(assert.type) && (
+                    <p className="text-xs text-muted-foreground">
+                      Separate values with commas, e.g.{' '}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello, world</code>
+                    </p>
+                  )}
+                  {(assert.type === 'regex' || assert.type === 'not-regex') && (
+                    <p className="text-xs text-muted-foreground">
+                      Enter a regular expression pattern, e.g.{' '}
+                      <code className="rounded bg-muted px-1 py-0.5 font-mono">hello.*world</code>
+                    </p>
+                  )}
                 </div>
               </div>
             </Card>

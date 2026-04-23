@@ -111,7 +111,7 @@ const PromptsSection = () => {
               <label className="cursor-pointer" aria-label="Upload prompt from file">
                 <Button variant="ghost" size="icon" asChild>
                   <span>
-                    <UploadIcon className="h-4 w-4" />
+                    <UploadIcon className="size-4" />
                   </span>
                 </Button>
                 <input
@@ -126,6 +126,8 @@ const PromptsSection = () => {
             <TooltipContent>Upload prompt from file</TooltipContent>
           </Tooltip>
 
+          <Button onClick={() => setPromptDialogOpen(true)}>Add Prompt</Button>
+
           {prompts.length === 0 && (
             <Button
               variant="secondary"
@@ -138,7 +140,6 @@ const PromptsSection = () => {
               Add Example
             </Button>
           )}
-          <Button onClick={() => setPromptDialogOpen(true)}>Add Prompt</Button>
         </div>
       </div>
 
@@ -172,7 +173,7 @@ const PromptsSection = () => {
                           handleEditPrompt(index);
                         }}
                       >
-                        <EditIcon className="h-4 w-4" />
+                        <EditIcon className="size-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Edit</TooltipContent>
@@ -186,7 +187,7 @@ const PromptsSection = () => {
                         onClick={(event) => handleDuplicatePrompt(event, index)}
                         aria-label={`Duplicate prompt ${index + 1}`}
                       >
-                        <ContentCopyIcon className="h-4 w-4" />
+                        <ContentCopyIcon className="size-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Duplicate</TooltipContent>
@@ -200,7 +201,7 @@ const PromptsSection = () => {
                         onClick={(event) => handleRemovePrompt(event, index)}
                         aria-label={`Delete prompt ${index + 1}`}
                       >
-                        <DeleteIcon className="h-4 w-4" />
+                        <DeleteIcon className="size-4" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Delete</TooltipContent>
@@ -217,6 +218,7 @@ const PromptsSection = () => {
         open={promptDialogOpen}
         prompt={editingPromptIndex === null ? '' : prompts[editingPromptIndex]}
         index={editingPromptIndex === null ? 0 : editingPromptIndex}
+        isEditing={editingPromptIndex !== null}
         onAdd={(newPrompt) => {
           if (editingPromptIndex === null) {
             setPrompts([...prompts, newPrompt]);

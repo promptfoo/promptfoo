@@ -13,6 +13,7 @@ import {
 import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
 import { TooltipProvider } from './components/ui/tooltip';
+import { EvalHistoryProvider } from './contexts/EvalHistoryContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
@@ -22,6 +23,7 @@ import EvalsIndexPage from './pages/evals/page';
 import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
+import MediaPage from './pages/media/page';
 import ModelAuditHistoryPage from './pages/model-audit-history/page';
 import ModelAuditLatestPage from './pages/model-audit-latest/page';
 import ModelAuditResultPage from './pages/model-audit-result/page';
@@ -69,6 +71,8 @@ const router = createBrowserRouter(
           {/* Redirect legacy /progress route to /history (since v0.104.5) */}
           <Route path="/progress" element={<Navigate to="/history" replace />} />
           <Route path="/history" element={<HistoryPage />} />
+
+          <Route path="/media" element={<MediaPage />} />
 
           <Route path="/prompts" element={<PromptsPage />} />
 
@@ -128,11 +132,13 @@ const queryClient = new QueryClient();
 
 function App() {
   return (
-    <TooltipProvider delayDuration={300}>
+    <TooltipProvider delayDuration={300} skipDelayDuration={0}>
       <ToastProvider>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
+        <EvalHistoryProvider>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </EvalHistoryProvider>
       </ToastProvider>
     </TooltipProvider>
   );

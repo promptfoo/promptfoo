@@ -29,7 +29,7 @@ interface FrameworkComplianceProps {
 }
 
 const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplianceProps) => {
-  const { pluginPassRateThreshold } = useReportStore();
+  const { pluginPassRateThreshold, showUntestedPlugins } = useReportStore();
 
   // Filter frameworks based on config
   const frameworksToShow = React.useMemo(() => {
@@ -172,7 +172,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
   };
 
   return (
-    <div className="break-before-page print:break-before-always">
+    <div>
       <div className="mb-4 flex items-center justify-between">
         <Typography variant="title" as="h2">
           Framework Compliance ({Object.values(frameworkCompliance).filter(Boolean).length}/
@@ -217,6 +217,7 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
                   categoryStats={categoryStats}
                   pluginPassRateThreshold={pluginPassRateThreshold}
                   nonCompliantPlugins={nonCompliantPlugins}
+                  showUntestedPlugins={showUntestedPlugins}
                   idx={idx}
                 />
               );

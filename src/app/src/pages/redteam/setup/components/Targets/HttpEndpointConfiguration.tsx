@@ -1,10 +1,9 @@
 import './syntax-highlighting.css';
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
 
 import { useCallback, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Dialog,
   DialogContent,
@@ -18,6 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import {
@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Switch } from '@app/components/ui/switch';
-import { Typography } from '@app/components/ui/typography';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import yaml from 'js-yaml';
@@ -43,8 +43,6 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import ResponseParserTestModal from './ResponseParserTestModal';
@@ -55,7 +53,7 @@ import type { TestResult } from './TestSection';
 
 interface HttpEndpointConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   bodyError: string | React.ReactNode | null;
   setBodyError: (error: string | React.ReactNode | null) => void;
   urlError: string | null;
@@ -70,7 +68,7 @@ interface GeneratedConfig {
     url?: string;
     method?: string;
     headers?: Record<string, string>;
-    body?: any;
+    body?: unknown;
     request?: string;
     transformRequest?: string;
     transformResponse?: string;
@@ -151,6 +149,9 @@ Content-Type: application/json
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
+
+  // Request body type (json or text)
+  const [requestBodyType, setRequestBodyType] = useState<'json' | 'text'>('json');
 
   // Handle test target
   const handleTestTarget = useCallback(async () => {
@@ -294,15 +295,12 @@ Content-Type: application/json
         newHeaders.splice(index, 1);
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;
@@ -318,15 +316,12 @@ Content-Type: application/json
         newHeaders[index] = { ...newHeaders[index], key: newKey };
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;
@@ -342,15 +337,12 @@ Content-Type: application/json
         newHeaders[index] = { ...newHeaders[index], value: newValue };
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;
@@ -359,19 +351,41 @@ Content-Type: application/json
     [updateCustomTarget],
   );
 
+  const formatJsonError = (error: unknown): string => {
+    if (!(error instanceof SyntaxError)) {
+      return 'Invalid JSON';
+    }
+    const message = error.message;
+    // Extract position info from various browser formats:
+    // Chrome: "Unexpected token x in JSON at position 123"
+    // Firefox: "JSON.parse: unexpected character at line 1 column 5 of the JSON data"
+    // Safari: "JSON Parse error: Unexpected identifier"
+    const positionMatch = message.match(/position\s+(\d+)/i);
+    const lineColMatch = message.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+
+    if (lineColMatch) {
+      return `Invalid JSON at line ${lineColMatch[1]}, column ${lineColMatch[2]}`;
+    }
+    if (positionMatch) {
+      const position = parseInt(positionMatch[1], 10);
+      return `Invalid JSON at position ${position}`;
+    }
+    return 'Invalid JSON syntax';
+  };
+
   const handleRequestBodyChange = (content: string) => {
     setRequestBody(content);
 
-    // Validate JSON if content is not empty
-    if (content.trim()) {
+    // Only validate JSON if in JSON mode and content is not empty
+    if (requestBodyType === 'json' && content.trim()) {
       try {
         JSON.parse(content);
         setBodyError(null); // Clear error if JSON is valid
-      } catch {
-        setBodyError('Invalid JSON format');
+      } catch (e) {
+        setBodyError(formatJsonError(e));
       }
     } else {
-      setBodyError(null); // Clear error for empty content
+      setBodyError(null); // Clear error for empty content or text mode
     }
 
     updateCustomTarget('body', content);
@@ -385,8 +399,8 @@ Content-Type: application/json
         setRequestBody(formatted);
         updateCustomTarget('body', formatted);
         setBodyError(null);
-      } catch {
-        setBodyError('Cannot format: Invalid JSON');
+      } catch (e) {
+        setBodyError(`Cannot format: ${formatJsonError(e)}`);
       }
     }
   };
@@ -514,7 +528,7 @@ ${exampleRequest}`;
   };
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Switch
@@ -533,16 +547,16 @@ ${exampleRequest}`;
           <DropdownMenuTrigger asChild>
             <Button variant="outline">
               Import
-              <ChevronDown className="ml-2 h-4 w-4" />
+              <ChevronDown className="ml-2 size-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => setConfigDialogOpen(true)}>
-              <Sparkles className="mr-2 h-4 w-4" />
+              <Sparkles className="mr-2 size-4" />
               Auto-fill from Example
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setPostmanDialogOpen(true)}>
-              <Globe className="mr-2 h-4 w-4" />
+              <Globe className="mr-2 size-4" />
               Postman
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -574,7 +588,7 @@ ${exampleRequest}`;
                 maxHeight: '40rem',
               }}
             />
-            {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
+            {bodyError && <HelperText error>{bodyError}</HelperText>}
           </>
         ) : (
           <>
@@ -606,12 +620,10 @@ ${exampleRequest}`;
                   placeholder="https://example.com/api/chat"
                 />
               </div>
-              {urlError && <p className="text-sm text-destructive">{urlError}</p>}
+              {urlError && <HelperText error>{urlError}</HelperText>}
             </div>
 
-            <Typography variant="label" className="mb-2 mt-6">
-              Headers
-            </Typography>
+            <p className="mb-2 mt-6 font-medium">Headers</p>
             {headers.map(({ key, value }, index) => (
               <div key={index} className="mb-2 flex items-center gap-2">
                 <Input
@@ -627,35 +639,81 @@ ${exampleRequest}`;
                   className="flex-1"
                 />
                 <Button variant="ghost" size="icon" onClick={() => removeHeader(index)}>
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="size-4" />
                 </Button>
               </div>
             ))}
 
             <Button variant="outline" onClick={addHeader} className="mt-2">
-              <Plus className="mr-1 h-4 w-4" />
+              <Plus className="mr-1 size-4" />
               Add Header
             </Button>
 
-            <Typography variant="label" className="mb-2 mt-6">
-              Request Body
-            </Typography>
+            <div className="mb-2 mt-6 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <p className="font-medium">Request Body</p>
+                <div className="flex items-center rounded-md border border-border bg-muted/30 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestBodyType('json');
+                      // Re-validate content as JSON
+                      if (requestBody.trim()) {
+                        try {
+                          JSON.parse(requestBody);
+                          setBodyError(null);
+                        } catch (e) {
+                          setBodyError(formatJsonError(e));
+                        }
+                      }
+                    }}
+                    className={cn(
+                      'rounded px-2 py-1 text-xs font-medium transition-colors',
+                      requestBodyType === 'json'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    JSON
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRequestBodyType('text');
+                      setBodyError(null); // Clear any JSON errors when switching to text
+                    }}
+                    className={cn(
+                      'rounded px-2 py-1 text-xs font-medium transition-colors',
+                      requestBodyType === 'text'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    Text
+                  </button>
+                </div>
+              </div>
+              {requestBodyType === 'json' && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleFormatJson}
+                  disabled={!requestBody.trim() || !!bodyError}
+                  title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
+                  aria-label="Format JSON"
+                  className="size-8"
+                >
+                  <AlignLeft className="size-4" />
+                </Button>
+              )}
+            </div>
             <div
               className={cn(
-                'relative mt-2 rounded-md border bg-white dark:bg-zinc-900',
+                'min-h-[100px] max-h-[400px] resize-y overflow-auto rounded-md border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900',
                 bodyError ? 'border-destructive' : 'border-border',
               )}
+              style={{ contain: 'inline-size' }}
             >
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleFormatJson}
-                disabled={!requestBody.trim() || !!bodyError}
-                title={bodyError ? 'Fix JSON errors first' : 'Format JSON'}
-                className="absolute right-1 top-1 z-10 h-8 w-8 bg-muted/50 hover:bg-muted"
-              >
-                <AlignLeft className="h-4 w-4" />
-              </Button>
               <Editor
                 value={
                   typeof requestBody === 'object'
@@ -669,51 +727,54 @@ ${exampleRequest}`;
                   fontFamily: '"Fira code", "Fira Mono", monospace',
                   fontSize: 14,
                   minHeight: '100px',
-                  paddingRight: '40px', // Add space for the format button
+                  width: 'max-content',
+                  minWidth: '100%',
                 }}
+                preClassName="!whitespace-pre"
+                textareaClassName="!whitespace-pre"
               />
             </div>
-            {bodyError && <p className="mt-1 text-sm text-destructive">{bodyError}</p>}
+            {bodyError && <HelperText error>{bodyError}</HelperText>}
           </>
         )}
 
         {/* Response Transform Section - Common for both modes */}
-        <Typography variant="label" className="mb-2 mt-6">
-          Response Parser
-        </Typography>
-        <p className="mb-4 text-sm text-muted-foreground">
-          This tells promptfoo how to extract the AI's response from your API. Most APIs return JSON
-          with the actual response nested inside - this parser helps find the right part. Leave
-          empty if your API returns plain text. See{' '}
-          <a
-            href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            docs
-          </a>{' '}
-          for examples.
-          <span className="mt-2 block">
-            <details>
-              <summary className="cursor-pointer">Examples</summary>
-              <ol className="ml-4 mt-2 list-decimal space-y-1">
-                <li>
-                  A JavaScript object path: <code>json.choices[0].message.content</code>
-                </li>
-                <li>
-                  A function:{' '}
-                  <code>{`(json, text) => json.choices[0].message.content || text`}</code>
-                </li>
-                <li>
-                  With guardrails:{' '}
-                  <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
-                </li>
-              </ol>
-            </details>
-          </span>
-        </p>
-        <div className="relative rounded-md border border-border bg-white dark:bg-zinc-900">
+        <p className="mb-2 mt-6 font-medium">Response Parser</p>
+        <div className="mb-4 text-sm text-muted-foreground">
+          <p>
+            This tells promptfoo how to extract the AI's response from your API. Most APIs return
+            JSON with the actual response nested inside - this parser helps find the right part.
+            Leave empty if your API returns plain text. See{' '}
+            <a
+              href="https://www.promptfoo.dev/docs/providers/http/#response-transform"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              docs
+            </a>{' '}
+            for examples.
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer">Examples</summary>
+            <ol className="ml-4 mt-2 list-decimal space-y-1">
+              <li>
+                A JavaScript object path: <code>json.choices[0].message.content</code>
+              </li>
+              <li>
+                A function: <code>{`(json, text) => json.choices[0].message.content || text`}</code>
+              </li>
+              <li>
+                With guardrails:{' '}
+                <code>{`{ output: json.data, guardrails: { flagged: context.response.status === 500 } }`}</code>
+              </li>
+            </ol>
+          </details>
+        </div>
+        <div
+          className="relative min-h-[150px] max-h-[400px] resize-y overflow-auto rounded-md border border-border bg-white focus-within:ring-2 focus-within:ring-ring [&_textarea]:focus:outline-none dark:bg-zinc-900"
+          style={{ contain: 'inline-size' }}
+        >
           <Editor
             value={selectedTarget.config.transformResponse || ''}
             onValueChange={(code) => updateCustomTarget('transformResponse', code)}
@@ -724,7 +785,11 @@ ${exampleRequest}`;
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
               minHeight: '150px',
+              width: 'max-content',
+              minWidth: '100%',
             }}
+            preClassName="!whitespace-pre"
+            textareaClassName="!whitespace-pre"
           />
           <Button
             variant="outline"
@@ -732,7 +797,7 @@ ${exampleRequest}`;
             onClick={() => setResponseTestOpen(true)}
             className="absolute right-2 top-2 z-10"
           >
-            <Play className="mr-1 h-4 w-4" />
+            <Play className="mr-1 size-4" />
             Test
           </Button>
         </div>
@@ -764,9 +829,9 @@ ${exampleRequest}`;
           </p>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
-              <Typography variant="subtitle" className="mb-2">
+              <p className="mb-2 text-lg font-semibold">
                 Example Request (paste your HTTP request here)
-              </Typography>
+              </p>
               <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                 <Editor
                   value={request}
@@ -782,9 +847,9 @@ ${exampleRequest}`;
               </div>
             </div>
             <div>
-              <Typography variant="subtitle" className="mb-2">
+              <p className="mb-2 text-lg font-semibold">
                 Example Response (optional, improves accuracy)
-              </Typography>
+              </p>
               <div className="h-[300px] overflow-auto rounded-lg border border-border bg-muted/30 dark:bg-zinc-900">
                 <Editor
                   value={response}
@@ -807,9 +872,7 @@ ${exampleRequest}`;
             {generatedConfig && (
               <div className="col-span-2">
                 <div className="mb-2 mt-4 flex items-center">
-                  <Typography variant="subtitle" className="flex-1">
-                    Generated Configuration
-                  </Typography>
+                  <p className="flex-1 text-lg font-semibold">Generated Configuration</p>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -817,9 +880,9 @@ ${exampleRequest}`;
                     title={copied ? 'Copied!' : 'Copy to clipboard'}
                   >
                     {copied ? (
-                      <Check className="h-4 w-4 text-emerald-600" />
+                      <Check className="size-4 text-emerald-600" />
                     ) : (
-                      <Copy className="h-4 w-4" />
+                      <Copy className="size-4" />
                     )}
                   </Button>
                 </div>

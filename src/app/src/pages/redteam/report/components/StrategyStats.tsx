@@ -5,7 +5,6 @@ import { Card, CardContent } from '@app/components/ui/card';
 import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
-import { Typography } from '@app/components/ui/typography';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { cn } from '@app/lib/utils';
 import { formatASRForDisplay } from '@app/utils/redteam';
@@ -14,19 +13,7 @@ import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { type RedteamPluginObject } from '@promptfoo/redteam/types';
 import { compareByASRDescending } from '../utils/utils';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
-import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-
-interface TestWithMetadata {
-  prompt: string;
-  output: string;
-  gradingResult?: GradingResult;
-  result?: EvaluateResult;
-  metadata?: {
-    strategyId?: string;
-    [key: string]: any;
-  };
-}
+import { getPluginIdFromResult, getStrategyIdFromTest, type TestWithMetadata } from './shared';
 
 /**
  * Gets the progress bar color based on ASR percentage.
@@ -136,7 +123,7 @@ const DrawerContent = ({
         }
       }
     } catch {
-      console.debug('Failed to parse prompt as JSON, using raw string');
+      // Raw prompt strings are valid display input.
     }
     return prompt;
   };
@@ -200,24 +187,24 @@ const DrawerContent = ({
 
   return (
     <div className="p-6">
-      <Typography variant="title" as="h2" className="mb-2">
+      <h2 className="mb-2 text-xl font-semibold">
         {displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
           selectedStrategy}
-      </Typography>
-      <Typography variant="muted" className="mb-6">
+      </h2>
+      <p className="mb-6 text-sm text-muted-foreground">
         {subCategoryDescriptions[selectedStrategy as keyof typeof subCategoryDescriptions] || ''}
-      </Typography>
+      </p>
 
       {/* Stats Grid */}
       <div className="mb-6 rounded-lg border border-border bg-muted/30 p-4">
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center">
             <p className="text-2xl font-bold text-primary">{selectedStrategyStats.total}</p>
-            <Typography variant="muted">Total Attempts</Typography>
+            <p className="text-sm text-muted-foreground">Total Attempts</p>
           </div>
           <div className="text-center">
             <p className="text-2xl font-bold text-destructive">{selectedStrategyStats.pass}</p>
-            <Typography variant="muted">Flagged Attempts</Typography>
+            <p className="text-sm text-muted-foreground">Flagged Attempts</p>
           </div>
           <div className="text-center">
             <p className="text-2xl font-bold">
@@ -229,15 +216,13 @@ const DrawerContent = ({
               )}
               %
             </p>
-            <Typography variant="muted">Success Rate</Typography>
+            <p className="text-sm text-muted-foreground">Attack Success Rate</p>
           </div>
         </div>
       </div>
 
       {/* Plugin Performance Table */}
-      <Typography variant="subtitle" as="h3" className="mb-3">
-        Attack Performance by Plugin
-      </Typography>
+      <h3 className="mb-3 text-lg font-semibold">Attack Performance by Plugin</h3>
       <div className="mb-6 overflow-hidden rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
@@ -444,12 +429,10 @@ const StrategyStats = ({
       <Card
         role="region"
         aria-label="Attack Methods Statistics"
-        className="break-inside-avoid print:break-inside-avoid print:break-after-page"
+        className="break-inside-avoid print:break-inside-avoid"
       >
         <CardContent className="p-6">
-          <Typography variant="title" as="h2" className="mb-4">
-            Attack Methods
-          </Typography>
+          <h2 className="mb-4 text-xl font-semibold">Attack Methods</h2>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
             {strategies.map(([strategy, { total, failCount }]) => {
               const asr = calculateAttackSuccessRate(total, failCount);
@@ -470,17 +453,17 @@ const StrategyStats = ({
                     'hover:bg-muted/50',
                   )}
                 >
-                  <Typography variant="bodyMedium" className="mb-2">
+                  <p className="mb-2 font-semibold">
                     {displayNameOverrides[strategy as keyof typeof displayNameOverrides] ||
                       strategy}
-                  </Typography>
-                  <Typography variant="muted" className="mb-4 min-h-[40px]">
+                  </p>
+                  <p className="mb-4 min-h-10 text-sm text-muted-foreground">
                     {subCategoryDescriptions[strategy as keyof typeof subCategoryDescriptions] ||
                       ''}
-                  </Typography>
+                  </p>
                   {/* Progress bar */}
                   <div className="mb-2 flex items-center">
-                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-red-100 dark:bg-red-950/30">
+                    <div className="mr-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-300 dark:bg-zinc-600 print:bg-zinc-300">
                       <div
                         className={cn(
                           'h-full rounded-full transition-all',
@@ -493,9 +476,9 @@ const StrategyStats = ({
                       {formatASRForDisplay(asr)}%
                     </span>
                   </div>
-                  <Typography variant="small" className="text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {failCount} / {total} attacks succeeded
-                  </Typography>
+                  </p>
                 </div>
               );
             })}

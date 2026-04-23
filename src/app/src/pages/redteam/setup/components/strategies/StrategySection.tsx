@@ -16,6 +16,7 @@ interface StrategySectionProps {
   description?: string;
   isStrategyDisabled: (strategyId: string) => boolean;
   isRemoteGenerationDisabled: boolean;
+  isStrategyAuthGated?: (strategyId: string) => boolean;
   isStrategyConfigured?: (strategyId: string) => boolean;
 }
 
@@ -30,6 +31,7 @@ export function StrategySection({
   description,
   isStrategyDisabled,
   isRemoteGenerationDisabled,
+  isStrategyAuthGated,
   isStrategyConfigured,
 }: StrategySectionProps) {
   const selectedStrategiesInSection = strategies
@@ -89,6 +91,7 @@ export function StrategySection({
             onConfigClick={onConfigClick}
             isDisabled={isStrategyDisabled(strategy.id)}
             isRemoteGenerationDisabled={isRemoteGenerationDisabled}
+            isAuthGated={isStrategyAuthGated ? isStrategyAuthGated(strategy.id) : false}
             isConfigured={isStrategyConfigured ? isStrategyConfigured(strategy.id) : true}
           />
         ))}

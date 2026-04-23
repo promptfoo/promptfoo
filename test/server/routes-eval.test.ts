@@ -7,7 +7,7 @@ vi.mock('../../src/util/database');
 
 // Import the handler directly to avoid Express overhead
 const patchHandler = (req: Request, res: Response): void => {
-  const id = req.params.id;
+  const id = req.params.id as string;
   const { table, config } = req.body;
 
   if (!id) {

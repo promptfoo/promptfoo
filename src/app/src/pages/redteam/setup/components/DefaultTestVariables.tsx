@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
+import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Plus, Trash2 } from 'lucide-react';
@@ -39,6 +40,7 @@ export default function DefaultTestVariables() {
   }, [config.defaultTest?.vars]);
 
   // Sync local state back to global config
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const syncToGlobalState = useCallback(() => {
     const vars: Record<string, string> = {};
     variables.forEach((variable) => {
@@ -135,7 +137,7 @@ export default function DefaultTestVariables() {
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={addVariable} className="shrink-0">
-          <Plus className="mr-2 h-4 w-4" />
+          <Plus className="mr-2 size-4" />
           Add Variable
         </Button>
       </div>
@@ -152,11 +154,9 @@ export default function DefaultTestVariables() {
                   onChange={(e) => updateVariableName(variable.id, e.target.value)}
                   className={variable.nameError ? 'border-destructive' : ''}
                 />
-                {variable.nameError && (
-                  <p className="mt-1 text-xs text-destructive">{variable.nameError}</p>
-                )}
+                {variable.nameError && <HelperText error>{variable.nameError}</HelperText>}
               </div>
-              <div className="flex-grow">
+              <div className="grow">
                 <Label className="sr-only">Value</Label>
                 <Input
                   placeholder="Value"
@@ -171,13 +171,13 @@ export default function DefaultTestVariables() {
                 aria-label={`Delete variable ${variable.name}`}
                 className="mt-0.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="size-4" />
               </Button>
             </div>
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed px-6 py-8 text-center">
+        <div className="rounded-lg border border-border border-dashed px-6 py-8 text-center">
           <p className="mb-1 text-sm text-muted-foreground">No test variables configured</p>
           <p className="text-xs text-muted-foreground">Click "Add Variable" to get started</p>
         </div>

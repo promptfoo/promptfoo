@@ -4,7 +4,6 @@ import { DataTable } from '@app/components/data-table';
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
-import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -46,6 +45,7 @@ export default function Prompts({
     setDialogState((prev) => ({ ...prev, open: false }));
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     const promptId = searchParams.get('id');
     if (promptId && data.length > 0) {
@@ -104,8 +104,11 @@ export default function Prompts({
       {
         accessorKey: 'count',
         header: '# Evals',
-        cell: ({ getValue }) => <span className="text-sm">{getValue<number>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="font-mono tabular-nums">{getValue<number>()}</span>
+        ),
         size: 120,
+        meta: { align: 'right' },
       },
     ],
     [],
@@ -121,13 +124,11 @@ export default function Prompts({
   return (
     <PageContainer className="fixed top-14 left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
       <PageHeader>
-        <div className="container max-w-7xl mx-auto px-6 py-6">
-          <Typography variant="pageTitle" as="h1">
-            Prompts
-          </Typography>
-          <Typography variant="muted" className="mt-1">
+        <div className="container max-w-7xl mx-auto p-6">
+          <h1 className="text-2xl font-semibold">Prompts</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Manage and track all prompt templates and their evaluation history
-          </Typography>
+          </p>
         </div>
       </PageHeader>
       <div className="flex-1 min-h-0 flex flex-col p-6">

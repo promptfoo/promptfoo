@@ -32,7 +32,7 @@ function EnvSection({ title, defaultOpen = false, children }: EnvSectionProps) {
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="border-b border-border">
       <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-left font-medium hover:bg-muted/50 transition-colors">
         {title}
-        <ExpandMoreIcon className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')} />
+        <ExpandMoreIcon className={cn('size-4 transition-transform', isOpen && 'rotate-180')} />
       </CollapsibleTrigger>
       <CollapsibleContent className="px-4 pb-4 space-y-4">{children}</CollapsibleContent>
     </Collapsible>
@@ -87,7 +87,7 @@ const ConfigureEnvButton = () => {
   return (
     <>
       <Button variant="outline" onClick={handleOpen}>
-        <SettingsIcon className="h-4 w-4 mr-2" />
+        <SettingsIcon className="size-4 mr-2" />
         API keys
       </Button>
 

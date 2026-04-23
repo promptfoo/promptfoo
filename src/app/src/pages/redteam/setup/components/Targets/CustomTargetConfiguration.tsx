@@ -1,9 +1,8 @@
-import 'prismjs/components/prism-json';
-
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import Editor from '@app/components/ui/code-editor';
 import {
   Collapsible,
   CollapsibleContent,
@@ -12,7 +11,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { Typography } from '@app/components/ui/typography';
+import Prism from '@app/lib/prism';
 import { cn } from '@app/lib/utils';
 import {
   AlertCircle,
@@ -24,14 +23,12 @@ import {
   Server,
   Terminal,
 } from 'lucide-react';
-import Prism from 'prismjs';
-import Editor from 'react-simple-code-editor';
 
 import type { ProviderOptions } from '../../types';
 
 interface CustomTargetConfigurationProps {
   selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  updateCustomTarget: (field: string, value: unknown) => void;
   rawConfigJson: string;
   setRawConfigJson: (value: string) => void;
   bodyError: string | React.ReactNode | null;
@@ -55,7 +52,7 @@ interface ProviderConfig {
 
 const highlightJSON = (code: string): string => {
   try {
-    const grammar = (Prism as any)?.languages?.json;
+    const grammar = Prism?.languages?.json;
     if (!grammar) {
       return code;
     }
@@ -70,7 +67,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'python':
       return {
         title: 'Python Provider',
-        icon: <FileCode2 className="h-5 w-5 text-primary" />,
+        icon: <FileCode2 className="size-5 text-primary" />,
         targetIdLabel: 'Python File Path',
         targetIdPlaceholder: './my_provider.py or ./my_provider.py:call_api',
         helpText: (
@@ -98,7 +95,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'javascript':
       return {
         title: 'JavaScript Provider',
-        icon: <FileCode2 className="h-5 w-5 text-primary" />,
+        icon: <FileCode2 className="size-5 text-primary" />,
         targetIdLabel: 'JavaScript File Path',
         targetIdPlaceholder: './my_provider.js or ./my_provider.js:callApi',
         helpText: (
@@ -128,7 +125,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'go':
       return {
         title: 'Go Provider',
-        icon: <FileCode2 className="h-5 w-5 text-primary" />,
+        icon: <FileCode2 className="size-5 text-primary" />,
         targetIdLabel: 'Go Executable Path',
         targetIdPlaceholder: './my_provider (compiled Go binary)',
         helpText: (
@@ -155,7 +152,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'exec':
       return {
         title: 'Executable Provider',
-        icon: <Terminal className="h-5 w-5 text-primary" />,
+        icon: <Terminal className="size-5 text-primary" />,
         targetIdLabel: 'Command',
         targetIdPlaceholder: 'exec:./my_script.sh or exec:python script.py',
         helpText: (
@@ -185,7 +182,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'mcp':
       return {
         title: 'MCP Provider',
-        icon: <Server className="h-5 w-5 text-primary" />,
+        icon: <Server className="size-5 text-primary" />,
         targetIdLabel: 'MCP Server Configuration',
         targetIdPlaceholder: 'mcp:server-name',
         helpText: (
@@ -213,7 +210,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'bedrock':
       return {
         title: 'AWS Bedrock',
-        icon: <Cloud className="h-5 w-5 text-primary" />,
+        icon: <Cloud className="size-5 text-primary" />,
         targetIdLabel: 'Model ID',
         targetIdPlaceholder: 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0',
         helpText: <>AWS Bedrock model identifier. Requires AWS credentials configured.</>,
@@ -240,7 +237,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'sagemaker':
       return {
         title: 'AWS SageMaker',
-        icon: <Cloud className="h-5 w-5 text-primary" />,
+        icon: <Cloud className="size-5 text-primary" />,
         targetIdLabel: 'Endpoint Name',
         targetIdPlaceholder: 'sagemaker:my-endpoint-name',
         helpText: <>SageMaker endpoint name. Requires AWS credentials configured.</>,
@@ -265,7 +262,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'ollama':
       return {
         title: 'Ollama',
-        icon: <Server className="h-5 w-5 text-primary" />,
+        icon: <Server className="size-5 text-primary" />,
         targetIdLabel: 'Model Name',
         targetIdPlaceholder: 'ollama:llama3.2 or ollama:chat:mistral',
         helpText: <>Ollama model name. Make sure Ollama is running locally.</>,
@@ -290,7 +287,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'vllm':
       return {
         title: 'vLLM',
-        icon: <Server className="h-5 w-5 text-primary" />,
+        icon: <Server className="size-5 text-primary" />,
         targetIdLabel: 'Model Path',
         targetIdPlaceholder: 'vllm:meta-llama/Llama-2-7b-hf',
         helpText: <>vLLM model path. Can be a HuggingFace model ID or local path.</>,
@@ -313,7 +310,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'localai':
       return {
         title: 'LocalAI',
-        icon: <Server className="h-5 w-5 text-primary" />,
+        icon: <Server className="size-5 text-primary" />,
         targetIdLabel: 'Model Name',
         targetIdPlaceholder: 'localai:gpt4all-j',
         helpText: <>LocalAI model name. Ensure LocalAI server is running.</>,
@@ -336,7 +333,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     case 'llama.cpp':
       return {
         title: providerType === 'llamafile' ? 'Llamafile' : 'llama.cpp',
-        icon: <Server className="h-5 w-5 text-primary" />,
+        icon: <Server className="size-5 text-primary" />,
         targetIdLabel: 'Server URL',
         targetIdPlaceholder: `${providerType}:http://localhost:8080`,
         helpText: (
@@ -364,7 +361,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     default:
       return {
         title: 'Custom Target Configuration',
-        icon: <FileCode2 className="h-5 w-5 text-primary" />,
+        icon: <FileCode2 className="size-5 text-primary" />,
         targetIdLabel: 'Target ID',
         targetIdPlaceholder: 'e.g., openai:chat:gpt-4o or ./my-provider.py',
         helpText: (
@@ -460,10 +457,10 @@ const CustomTargetConfiguration = ({
 
   return (
     <div className="mt-4">
-      <Typography variant="subtitle" as="h3" className="mb-4 flex items-center gap-2">
+      <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold">
         {config.icon}
         {config.title}
-      </Typography>
+      </h3>
 
       <div className="rounded-lg border border-border p-4">
         {/* Target ID Section */}
@@ -509,7 +506,7 @@ const CustomTargetConfiguration = ({
                   disabled={!rawConfigJson.trim() || !!bodyError}
                   className="h-7 px-2"
                 >
-                  <AlignLeft className="h-4 w-4" />
+                  <AlignLeft className="size-4" />
                   <span className="ml-1 text-xs">Format</span>
                 </Button>
               </TooltipTrigger>
@@ -525,12 +522,12 @@ const CustomTargetConfiguration = ({
           >
             <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none">
               <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Code2 className="h-4 w-4" />
+                <Code2 className="size-4" />
                 Examples
               </span>
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 text-muted-foreground transition-transform',
+                  'size-4 text-muted-foreground transition-transform',
                   docsExpanded && 'rotate-180',
                 )}
               />
@@ -590,8 +587,10 @@ const CustomTargetConfiguration = ({
 
           {bodyError ? (
             <Alert variant="destructive" className="py-2">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{bodyError}</AlertDescription>
+              <AlertCircle className="size-4" />
+              <AlertContent>
+                <AlertDescription>{bodyError}</AlertDescription>
+              </AlertContent>
             </Alert>
           ) : (
             <p className="text-sm text-muted-foreground">{config.configDescription}</p>

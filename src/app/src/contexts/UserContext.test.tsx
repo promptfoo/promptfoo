@@ -1,5 +1,6 @@
 import React, { useContext } from 'react';
 
+import { useTestTimers } from '@app/tests/timers';
 import * as api from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,8 +14,8 @@ describe('UserProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Note: Do NOT use vi.useFakeTimers() here - it breaks waitFor
-    // Only use fake timers in specific tests that need timer control
+    // Do not enable fake timers for the whole suite; waitFor needs real timers in most tests.
+    // Only use the shared timer helper in specific tests that need timer control.
   });
 
   afterEach(() => {
@@ -109,7 +110,7 @@ describe('UserProvider', () => {
 
   it('should not update state after unmounting', async () => {
     // This test needs fake timers to control timing
-    vi.useFakeTimers();
+    const timers = useTestTimers();
 
     const testEmail = 'test.user@example.com';
     const setEmailMock = vi.fn();
@@ -138,11 +139,9 @@ describe('UserProvider', () => {
 
     // Advance fake timers instead of using real setTimeout
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(100);
+      await timers.advanceByAsync(100);
     });
 
     expect(setEmailMock).not.toHaveBeenCalled();
-
-    vi.useRealTimers();
   });
 });

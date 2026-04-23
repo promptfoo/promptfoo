@@ -1,4 +1,4 @@
-import * as React from 'react';
+import type { ComponentPropsWithRef, ElementType, ReactElement, ReactNode } from 'react';
 
 import { cn } from '@app/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
@@ -45,24 +45,24 @@ const typographyVariants = cva('', {
 type TypographyVariant = NonNullable<VariantProps<typeof typographyVariants>['variant']>;
 type TypographyWeight = VariantProps<typeof typographyVariants>['weight'];
 
-type PolymorphicProps<E extends React.ElementType> = {
+type PolymorphicProps<E extends ElementType> = {
   as?: E;
   variant?: TypographyVariant;
   weight?: TypographyWeight;
   className?: string;
-  children?: React.ReactNode;
-} & Omit<React.ComponentPropsWithoutRef<E>, 'as' | 'variant' | 'weight' | 'className' | 'children'>;
+  children?: ReactNode;
+  ref?: ComponentPropsWithRef<E>['ref'];
+} & Omit<ComponentPropsWithRef<E>, 'as' | 'variant' | 'weight' | 'className' | 'children' | 'ref'>;
 
-type TypographyComponent = <E extends React.ElementType = 'p'>(
-  props: PolymorphicProps<E> & { ref?: React.Ref<Element> },
-) => React.ReactElement | null;
-
-const Typography: TypographyComponent = React.forwardRef(function Typography<
-  E extends React.ElementType = 'p',
->(
-  { as, variant, weight, className, children, ...props }: PolymorphicProps<E>,
-  ref: React.Ref<Element>,
-): React.ReactElement {
+function Typography<E extends ElementType = 'p'>({
+  as,
+  variant,
+  weight,
+  className,
+  children,
+  ref,
+  ...props
+}: PolymorphicProps<E>): ReactElement {
   const Component = as || 'p';
   return (
     <Component
@@ -73,7 +73,7 @@ const Typography: TypographyComponent = React.forwardRef(function Typography<
       {children}
     </Component>
   );
-}) as TypographyComponent;
+}
 
-export { Typography, typographyVariants };
 export type { TypographyVariant, TypographyWeight };
+export { Typography, typographyVariants };

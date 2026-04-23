@@ -1,3 +1,5 @@
+import { createRef } from 'react';
+
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { Typography } from './typography';
@@ -170,6 +172,12 @@ describe('Typography', () => {
       render(<Typography aria-label="accessible text">Text</Typography>);
       const element = screen.getByText('Text');
       expect(element).toHaveAttribute('aria-label', 'accessible text');
+    });
+
+    it('supports ref as a prop', () => {
+      const ref = createRef<HTMLParagraphElement>();
+      render(<Typography ref={ref}>Text with ref</Typography>);
+      expect(ref.current).toBe(screen.getByText('Text with ref'));
     });
   });
 

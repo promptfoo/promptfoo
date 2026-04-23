@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
@@ -22,35 +22,24 @@ import { Label } from '@app/components/ui/label';
 import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
+import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
-import { isFoundationModelProvider } from '@promptfoo/constants';
+import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
 import {
   isValidPolicyObject,
   makeDefaultPolicyName,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import {
-  BarChart2,
-  ChevronDown,
-  Eye,
-  Info,
-  Play,
-  Save,
-  Search,
-  Sliders,
-  Square,
-  X,
-} from 'lucide-react';
+import { BarChart2, ChevronDown, Eye, Info, Play, Save, Search, Sliders, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
@@ -93,6 +82,7 @@ export default function Review({
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
+  const { signalEvalCompleted } = useEvalHistoryRefresh();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
@@ -191,6 +181,7 @@ export default function Review({
     updateConfig('description', event.target.value);
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     recordEvent('webui_page_view', { page: 'redteam_config_review' });
   }, []);
@@ -205,9 +196,8 @@ export default function Review({
 
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
-  // Using "use no memo" - this effect intentionally runs once after hydration with limited deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
-    'use no memo';
     if (!_hasHydrated || hasAttemptedRecovery.current) {
       return;
     }
@@ -339,6 +329,7 @@ export default function Review({
     return typeof strategy === 'string' ? strategy : strategy.id;
   };
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const strategySummary = useMemo(() => {
     const summary = new Map<string, number>();
 
@@ -424,6 +415,7 @@ export default function Review({
 
             if (status.status === 'complete' && status.result && status.evalId) {
               setEvalId(status.evalId);
+              signalEvalCompleted();
 
               recordEvent('funnel', {
                 type: 'redteam',
@@ -451,7 +443,7 @@ export default function Review({
 
       pollIntervalRef.current = interval;
     },
-    [clearJob, recordEvent, showToast],
+    [clearJob, recordEvent, showToast, signalEvalCompleted],
   );
 
   const handleRunWithSettings = async () => {
@@ -604,9 +596,7 @@ export default function Review({
           />
         </div>
 
-        <Typography variant="title" as="h2" className="mb-6">
-          Configuration Summary
-        </Typography>
+        <h2 className="mb-6 text-xl font-semibold">Configuration Summary</h2>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* Plugins Card */}
@@ -637,7 +627,7 @@ export default function Review({
                       }}
                       className="ml-1 rounded-full p-0.5 hover:bg-black/10"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="size-3" />
                     </button>
                   </Badge>
                 ))}
@@ -645,10 +635,12 @@ export default function Review({
               {pluginSummary.length === 0 && (
                 <>
                   <Alert variant="warning" className="mt-4">
-                    <AlertDescription>
-                      You haven't selected any plugins. Plugins are the vulnerabilities that the red
-                      team will search for.
-                    </AlertDescription>
+                    <AlertContent>
+                      <AlertDescription>
+                        You haven't selected any plugins. Plugins are the vulnerabilities that the
+                        red team will search for.
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
                   <Button onClick={navigateToPlugins} className="mt-4">
                     Add a plugin
@@ -702,7 +694,7 @@ export default function Review({
                       }}
                       className="ml-1 rounded-full p-0.5 hover:bg-black/10"
                     >
-                      <X className="h-3 w-3" />
+                      <X className="size-3" />
                     </button>
                   </Badge>
                 ))}
@@ -711,11 +703,13 @@ export default function Review({
                 (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
                 <>
                   <Alert variant="warning" className="mt-4">
-                    <AlertDescription>
-                      The basic strategy is great for an end-to-end setup test, but don't expect any
-                      findings. Once you've verified that the setup is working, add another
-                      strategy.
-                    </AlertDescription>
+                    <AlertContent>
+                      <AlertDescription>
+                        The basic strategy is great for an end-to-end setup test, but don't expect
+                        any findings. Once you've verified that the setup is working, add another
+                        strategy.
+                      </AlertDescription>
+                    </AlertContent>
                   </Alert>
                   <Button onClick={navigateToStrategies} className="mt-4">
                     Add more strategies
@@ -755,7 +749,7 @@ export default function Review({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 shrink-0"
+                          className="size-6 shrink-0"
                           onClick={() => {
                             const policyToMatch =
                               typeof policy.config.policy === 'string'
@@ -776,7 +770,7 @@ export default function Review({
                             updateConfig('plugins', newPlugins);
                           }}
                         >
-                          <X className="h-4 w-4" />
+                          <X className="size-4" />
                         </Button>
                       </div>
                     );
@@ -800,7 +794,7 @@ export default function Review({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="absolute right-1 top-1 h-6 w-6"
+                        className="absolute right-1 top-1 size-6"
                         onClick={() => {
                           const intentPlugin = config.plugins.find(
                             (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
@@ -826,7 +820,7 @@ export default function Review({
                           }
                         }}
                       >
-                        <X className="h-4 w-4" />
+                        <X className="size-4" />
                       </Button>
                     </div>
                   ))}
@@ -850,12 +844,10 @@ export default function Review({
         <div className="mt-6 rounded-lg border border-border shadow-sm">
           {/* Application Details */}
           <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
+            <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
-                <Info className="h-4 w-4 text-muted-foreground" />
-                <Typography variant="subtitle" as="h3">
-                  Application Details
-                </Typography>
+                <Info className="size-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Application Details</h3>
                 {config.purpose && (
                   <Badge
                     variant="outline"
@@ -877,7 +869,7 @@ export default function Review({
               </div>
               <ChevronDown
                 className={cn(
-                  'h-5 w-5 text-muted-foreground transition-transform',
+                  'size-5 text-muted-foreground transition-transform',
                   isPurposeExpanded && 'rotate-180',
                 )}
               />
@@ -910,18 +902,20 @@ export default function Review({
                 !isFoundationModelProvider(config.target.id) ? (
                   <div className="mb-4">
                     <Alert variant="warning">
-                      <AlertDescription>
-                        Application details are required to generate a high quality red team. Go to
-                        the Application Details section and add a purpose.{' '}
-                        <Link
-                          className="underline"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
-                        >
-                          Learn more about red team best practices.
-                        </Link>
-                      </AlertDescription>
+                      <AlertContent>
+                        <AlertDescription>
+                          Application details are required to generate a high quality red team. Go
+                          to the Application Details section and add a purpose.{' '}
+                          <Link
+                            className="underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                          >
+                            Learn more about red team best practices.
+                          </Link>
+                        </AlertDescription>
+                      </AlertContent>
                     </Alert>
                     <Button onClick={navigateToPurpose} className="mt-4">
                       Add application details
@@ -932,7 +926,7 @@ export default function Review({
                 {parsedPurposeSections.length > 0 ? (
                   <div className="mt-2 space-y-4">
                     {parsedPurposeSections.map((section, index) => (
-                      <div key={index} className="overflow-hidden rounded-lg border">
+                      <div key={index} className="overflow-hidden rounded-lg border border-border">
                         <button
                           type="button"
                           onClick={() => togglePurposeSection(section.title)}
@@ -941,7 +935,7 @@ export default function Review({
                           <span className="text-sm font-medium">{section.title}</span>
                           <ChevronDown
                             className={cn(
-                              'h-4 w-4 transition-transform',
+                              'size-4 transition-transform',
                               expandedPurposeSections.has(section.title) && 'rotate-180',
                             )}
                           />
@@ -983,9 +977,7 @@ export default function Review({
 
                 {config.testGenerationInstructions && (
                   <div className="mt-4">
-                    <Typography variant="bodyMedium" as="h4" className="mb-2">
-                      Test Generation Instructions
-                    </Typography>
+                    <h4 className="mb-2 text-sm font-medium">Test Generation Instructions</h4>
                     <p
                       onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
                       className={cn(
@@ -1013,19 +1005,17 @@ export default function Review({
 
           {/* Advanced Configuration */}
           <Collapsible open={isAdvancedConfigExpanded} onOpenChange={setIsAdvancedConfigExpanded}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
+            <CollapsibleTrigger className="flex w-full items-center justify-between border-b border-border p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
-                <Sliders className="h-4 w-4 text-muted-foreground" />
-                <Typography variant="subtitle" as="h3">
-                  Advanced Configuration
-                </Typography>
+                <Sliders className="size-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Advanced Configuration</h3>
                 <Badge variant="outline" className="text-xs">
                   Optional
                 </Badge>
               </div>
               <ChevronDown
                 className={cn(
-                  'h-5 w-5 text-muted-foreground transition-transform',
+                  'size-5 text-muted-foreground transition-transform',
                   isAdvancedConfigExpanded && 'rotate-180',
                 )}
               />
@@ -1045,14 +1035,12 @@ export default function Review({
           <Collapsible open={isRunOptionsExpanded} onOpenChange={setIsRunOptionsExpanded}>
             <CollapsibleTrigger className="flex w-full items-center justify-between p-4 hover:bg-muted/50">
               <div className="flex items-center gap-2">
-                <Play className="h-4 w-4 text-muted-foreground" />
-                <Typography variant="subtitle" as="h3">
-                  Run Options
-                </Typography>
+                <Play className="size-4 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Run Options</h3>
               </div>
               <ChevronDown
                 className={cn(
-                  'h-5 w-5 text-muted-foreground transition-transform',
+                  'size-5 text-muted-foreground transition-transform',
                   isRunOptionsExpanded && 'rotate-180',
                 )}
               />
@@ -1061,13 +1049,17 @@ export default function Review({
               <div className="p-4 pt-0">
                 <RunOptionsContent
                   numTests={config.numTests}
+                  maxCharsPerMessage={config.maxCharsPerMessage}
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
                     delay: config.target.config.delay,
                     verbose: config.target.config.verbose,
                   }}
                   updateConfig={updateConfig}
-                  updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
+                  updateRunOption={(
+                    key: keyof RedteamRunOptions,
+                    value: RedteamRunOptions[keyof RedteamRunOptions],
+                  ) => {
                     if (key === 'delay') {
                       updateConfig('target', {
                         ...config.target,
@@ -1091,17 +1083,13 @@ export default function Review({
 
         <Separator className="my-8" />
 
-        <Typography variant="title" as="h2" className="mb-6">
-          Run Your Scan
-        </Typography>
+        <h2 className="mb-6 text-xl font-semibold">Run Your Scan</h2>
 
         <EstimationsDisplay config={config} />
 
         <Card className="p-6">
           <div className="mb-8">
-            <Typography variant="subtitle" as="h3" className="mb-2">
-              Option 1: Save and Run via CLI
-            </Typography>
+            <h3 className="mb-2 text-lg font-semibold">Option 1: Save and Run via CLI</h3>
             <p className="mb-4 text-muted-foreground">
               Save your configuration and run it from the command line. Full control over the
               evaluation process, good for larger scans:
@@ -1109,11 +1097,11 @@ export default function Review({
             <Code>promptfoo redteam run</Code>
             <div className="mt-4 flex gap-3">
               <Button onClick={handleSaveYaml} className="gap-2">
-                <Save className="h-4 w-4" />
+                <Save className="size-4" />
                 Save YAML
               </Button>
               <Button variant="outline" onClick={handleOpenYamlDialog} className="gap-2">
-                <Eye className="h-4 w-4" />
+                <Eye className="size-4" />
                 View YAML
               </Button>
             </div>
@@ -1122,22 +1110,22 @@ export default function Review({
           <Separator className="my-6" />
 
           <div>
-            <Typography variant="subtitle" as="h3" className="mb-2">
-              Option 2: Run Directly in Browser
-            </Typography>
+            <h3 className="mb-2 text-lg font-semibold">Option 2: Run Directly in Browser</h3>
             <p className="mb-4 text-muted-foreground">
               Run the red team evaluation right here. Simpler but less powerful than the CLI, good
               for tests and small scans:
             </p>
             {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
-                <AlertDescription>
-                  {apiHealthStatus === 'blocked'
-                    ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
-                    : apiHealthStatus === 'disabled'
-                      ? 'Remote generation is disabled. The "Run Now" option is not available.'
-                      : 'Checking connection status...'}
-                </AlertDescription>
+                <AlertContent>
+                  <AlertDescription>
+                    {apiHealthStatus === 'blocked'
+                      ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
+                      : apiHealthStatus === 'disabled'
+                        ? 'Remote generation is disabled. The "Run Now" option is not available.'
+                        : 'Checking connection status...'}
+                  </AlertDescription>
+                </AlertContent>
               </Alert>
             )}
             <div className="mb-4">
@@ -1150,7 +1138,7 @@ export default function Review({
                         disabled={isRunNowDisabled}
                         className="gap-2"
                       >
-                        {isRunning ? <Spinner className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                        {isRunning ? <Spinner className="size-4" /> : <Play className="size-4" />}
                         {isRunning ? 'Running...' : 'Run Now'}
                       </Button>
                     </span>
@@ -1159,7 +1147,7 @@ export default function Review({
                 </Tooltip>
                 {isRunning && (
                   <Button variant="destructive" onClick={handleCancel} className="gap-2">
-                    <Square className="h-4 w-4" />
+                    <X className="size-4" />
                     Cancel
                   </Button>
                 )}
@@ -1167,13 +1155,13 @@ export default function Review({
                   <>
                     <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
                       <a href={REDTEAM_ROUTES.REPORT_DETAIL(evalId)}>
-                        <BarChart2 className="h-4 w-4" />
+                        <BarChart2 className="size-4" />
                         View Report
                       </a>
                     </Button>
                     <Button asChild className="gap-2 bg-green-600 hover:bg-green-700">
                       <a href={EVAL_ROUTES.DETAIL(evalId)}>
-                        <Search className="h-4 w-4" />
+                        <Search className="size-4" />
                         View Probes
                       </a>
                     </Button>
@@ -1218,7 +1206,9 @@ export default function Review({
 
         {emailVerificationError && (
           <Alert variant="destructive" className="mt-4">
-            <AlertDescription>{emailVerificationError}</AlertDescription>
+            <AlertContent>
+              <AlertDescription>{emailVerificationError}</AlertDescription>
+            </AlertContent>
           </Alert>
         )}
 

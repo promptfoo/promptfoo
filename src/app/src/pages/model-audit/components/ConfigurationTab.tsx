@@ -1,4 +1,4 @@
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { PlayArrowIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
@@ -94,11 +94,11 @@ export default function ConfigurationTab({
       )}
 
       <div className="flex items-center justify-between">
-        <Typography variant="pageTitle" as="h2" className="tracking-tight">
+        <Typography variant="pageTitle" as="h2">
           Select Models
         </Typography>
         <Button variant="outline" onClick={onShowOptions}>
-          <SettingsIcon className="h-4 w-4 mr-2" />
+          <SettingsIcon className="size-4 mr-2" />
           Advanced Options
         </Button>
       </div>
@@ -126,7 +126,7 @@ export default function ConfigurationTab({
                 {isScanning || isCheckingInstallation ? (
                   <Spinner size="sm" className="mr-2" />
                 ) : (
-                  <PlayArrowIcon className="h-5 w-5 mr-2" />
+                  <PlayArrowIcon className="size-5 mr-2" />
                 )}
                 {getScanButtonText()}
               </Button>
@@ -141,12 +141,14 @@ export default function ConfigurationTab({
 
         {error && (
           <Alert variant="destructive" className="mt-4">
-            <AlertDescription className="flex items-center justify-between">
-              <span>{error}</span>
-              <Button type="button" variant="destructive" onClick={onClearError}>
-                Dismiss
-              </Button>
-            </AlertDescription>
+            <AlertContent>
+              <AlertDescription className="flex items-center justify-between">
+                <span>{error}</span>
+                <Button type="button" variant="destructive" onClick={onClearError}>
+                  Dismiss
+                </Button>
+              </AlertDescription>
+            </AlertContent>
           </Alert>
         )}
       </div>

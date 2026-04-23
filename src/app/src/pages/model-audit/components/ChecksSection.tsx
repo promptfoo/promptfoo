@@ -242,10 +242,8 @@ export default function ChecksSection({
               { id: 'severity', desc: true },
               { id: 'status', desc: true },
             ]}
-            initialPageSize={25}
             emptyMessage={showPassed ? 'No checks to display' : 'All checks passed'}
             showToolbar={false}
-            showPagination
           />
         </>
       )}
@@ -266,12 +264,12 @@ export default function ChecksSection({
                   <Button variant="ghost" size="sm">
                     {showAssets ? (
                       <>
-                        <ExpandLessIcon className="h-4 w-4 mr-1" />
+                        <ExpandLessIcon className="size-4 mr-1" />
                         Hide Details
                       </>
                     ) : (
                       <>
-                        <ExpandMoreIcon className="h-4 w-4 mr-1" />
+                        <ExpandMoreIcon className="size-4 mr-1" />
                         Show Details
                       </>
                     )}

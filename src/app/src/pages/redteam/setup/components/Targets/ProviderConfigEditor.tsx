@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import AgentFrameworkConfiguration from './AgentFrameworkConfiguration';
 import BrowserAutomationConfiguration from './BrowserAutomationConfiguration';
 import CommonConfigurationOptions from './CommonConfigurationOptions';
@@ -11,7 +12,7 @@ import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
 
-interface ProviderConfigEditorProps {
+export interface ProviderConfigEditorProps {
   provider: ProviderOptions;
   setProvider: (provider: ProviderOptions) => void;
   extensions?: string[];
@@ -23,6 +24,8 @@ interface ProviderConfigEditorProps {
   providerType?: string;
   onTargetTested?: (success: boolean) => void;
   onSessionTested?: (success: boolean) => void;
+  /** Set to 'eval' to hide red-team-specific options like Test Generation */
+  mode?: 'eval' | 'redteam';
 }
 
 function ProviderConfigEditor({
@@ -37,7 +40,10 @@ function ProviderConfigEditor({
   providerType,
   onTargetTested,
   onSessionTested,
+  mode = 'redteam',
 }: ProviderConfigEditorProps) {
+  const { config, updateConfig } = useRedTeamConfig();
+  const isRedTeam = mode === 'redteam';
   const [bodyError, setBodyError] = useState<string | React.ReactNode | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [rawConfigJson, setRawConfigJson] = useState<string>(
@@ -59,24 +65,28 @@ function ProviderConfigEditor({
     }
   }, []);
 
-  const updateCustomTarget = (field: string, value: any) => {
+  const updateCustomTarget = (field: string, value: unknown) => {
     const updatedTarget = { ...provider } as ProviderOptions;
 
     if (field === 'id') {
-      updatedTarget.id = value;
+      updatedTarget.id = value as string;
     } else if (field === 'url') {
-      updatedTarget.config.url = value;
-      if (validateUrl(value)) {
+      updatedTarget.config.url = value as string;
+      if (validateUrl(value as string)) {
         setUrlError(null);
       } else {
         setUrlError('Invalid URL format');
       }
     } else if (field === 'method') {
-      updatedTarget.config.method = value;
+      updatedTarget.config.method = value as string;
     } else if (field === 'body') {
-      updatedTarget.config.body = value;
+      updatedTarget.config.body =
+        typeof value === 'string' || (typeof value === 'object' && value !== null)
+          ? value
+          : String(value);
       const bodyStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
-      if (bodyStr.includes('{{prompt}}')) {
+      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
+      if (bodyStr.includes('{{prompt}}') || hasInputs) {
         setBodyError(null);
       } else if (!updatedTarget.config.request) {
         setBodyError(
@@ -96,20 +106,32 @@ function ProviderConfigEditor({
         );
       }
     } else if (field === 'request') {
-      updatedTarget.config.request = value;
-      if (value && !value.includes('{{prompt}}')) {
+      updatedTarget.config.request = value as string;
+      const hasInputs = updatedTarget.inputs && Object.keys(updatedTarget.inputs).length > 0;
+      if (value && typeof value === 'string' && !value.includes('{{prompt}}') && !hasInputs) {
         setBodyError('Raw request must contain {{prompt}} template variable');
       } else {
         setBodyError(null);
       }
     } else if (field === 'transformResponse') {
-      updatedTarget.config.transformResponse = value;
+      updatedTarget.config.transformResponse = value as string;
     } else if (field === 'label') {
-      updatedTarget.label = value;
+      updatedTarget.label = value as string;
     } else if (field === 'delay') {
-      updatedTarget.delay = value;
+      updatedTarget.delay = value as number;
     } else if (field === 'config') {
-      updatedTarget.config = value;
+      updatedTarget.config = value as typeof updatedTarget.config;
+    } else if (field === 'inputs') {
+      // Handle top-level inputs field for multi-variable input configuration
+      if (value === undefined) {
+        delete updatedTarget.inputs;
+      } else {
+        updatedTarget.inputs = value as NonNullable<ProviderOptions['inputs']>;
+        // Clear body error if inputs are provided ({{prompt}} not required with multi-input)
+        if (Object.keys(value as NonNullable<ProviderOptions['inputs']>).length > 0) {
+          setBodyError(null);
+        }
+      }
     } else {
       updatedTarget.config[field] = value;
     }
@@ -117,11 +139,11 @@ function ProviderConfigEditor({
     setProvider(updatedTarget);
   };
 
-  const updateWebSocketTarget = (field: string, value: any) => {
+  const updateWebSocketTarget = (field: string, value: unknown) => {
     const updatedTarget = { ...provider } as ProviderOptions;
     if (field === 'url') {
-      updatedTarget.config.url = value;
-      if (validateUrl(value, 'websocket')) {
+      updatedTarget.config.url = value as string;
+      if (validateUrl(value as string, 'websocket')) {
         setUrlError(null);
       } else {
         setUrlError('Please enter a valid WebSocket URL (ws:// or wss://)');
@@ -131,9 +153,9 @@ function ProviderConfigEditor({
       field === 'streamResponse' ||
       field === 'transformResponse'
     ) {
-      (updatedTarget.config as any)[field] = value;
+      (updatedTarget.config as Record<string, unknown>)[field] = value;
     } else if (field === 'label') {
-      updatedTarget.label = value;
+      updatedTarget.label = value as string;
     }
     setProvider(updatedTarget);
   };
@@ -143,15 +165,15 @@ function ProviderConfigEditor({
 
     if (providerType === 'http') {
       // Check if we're in raw mode (using request field) or structured mode (using url field)
-      if (provider.config.request !== undefined) {
-        // Raw mode: validate that request is not empty
-        if (!provider.config.request || provider.config.request.trim() === '') {
-          errors.push('HTTP request content is required');
-        }
-      } else {
+      if (provider.config.request === undefined) {
         // Structured mode: validate URL
         if (!provider.config.url || !validateUrl(provider.config.url)) {
           errors.push('Valid URL is required');
+        }
+      } else {
+        // Raw mode: validate that request is not empty
+        if (!provider.config.request || provider.config.request.trim() === '') {
+          errors.push('HTTP request content is required');
         }
       }
 
@@ -384,6 +406,12 @@ function ProviderConfigEditor({
           extensions={extensions}
           onExtensionsChange={onExtensionsChange}
           onValidationChange={(hasErrors) => setExtensionErrors(hasErrors)}
+          {...(isRedTeam && {
+            testGenerationInstructions: config.testGenerationInstructions ?? '',
+            onTestGenerationInstructionsChange: (instructions: string) =>
+              updateConfig('testGenerationInstructions', instructions),
+            onPromptsChange: (prompts: string[]) => updateConfig('prompts', prompts),
+          })}
         />
       </div>
     </div>

@@ -21,7 +21,6 @@ import {
 } from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { getIssueFilePath, getSeverityLabel, isCriticalSeverity } from '../utils';
 import ChecksSection from './ChecksSection';
@@ -39,7 +38,7 @@ interface ResultsTabProps {
 // Compact issue row component
 function IssueRow({ issue }: { issue: ScanIssue }) {
   const filePath = getIssueFilePath(issue);
-  const fileName = filePath !== 'Unknown' ? filePath.split('/').pop() : null;
+  const fileName = filePath === 'Unknown' ? null : filePath.split('/').pop();
 
   const severityConfig = {
     error: { icon: ErrorIcon, color: 'text-red-600 dark:text-red-400' },
@@ -56,7 +55,7 @@ function IssueRow({ issue }: { issue: ScanIssue }) {
   return (
     <div className="group flex items-center gap-3 py-2.5 px-3 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
       {/* Icon - centered */}
-      <Icon className={cn('h-4 w-4 shrink-0', config.color)} />
+      <Icon className={cn('size-4 shrink-0', config.color)} />
 
       {/* Content */}
       <div className="flex-1 min-w-0">
@@ -71,7 +70,7 @@ function IssueRow({ issue }: { issue: ScanIssue }) {
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 max-w-[180px]">
-              <FileIcon className="h-3.5 w-3.5 shrink-0" />
+              <FileIcon className="size-3.5 shrink-0" />
               <span className="truncate font-mono">{fileName}</span>
             </span>
           </TooltipTrigger>
@@ -164,10 +163,10 @@ export default function ResultsTab({
     <div className="space-y-6">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <Typography variant="subtitle" as="h2">
+        <h2 className="text-lg font-semibold">
           Findings
           <span className="ml-2 text-muted-foreground font-normal">({filteredIssues.length})</span>
-        </Typography>
+        </h2>
         <div className="flex-1" />
 
         <Select
@@ -186,17 +185,17 @@ export default function ResultsTab({
         </Select>
 
         <Button variant="ghost" size="sm" onClick={handleDownloadCSV}>
-          <DownloadIcon className="h-4 w-4 mr-1.5" />
+          <DownloadIcon className="size-4 mr-1.5" />
           CSV
         </Button>
 
         <Button variant="ghost" size="sm" onClick={() => setShowRawOutput(true)}>
-          <CodeIcon className="h-4 w-4 mr-1.5" />
+          <CodeIcon className="size-4 mr-1.5" />
           Raw
         </Button>
 
         <Button variant="ghost" size="sm" onClick={onShowFilesDialog}>
-          <FileIcon className="h-4 w-4 mr-1.5" />
+          <FileIcon className="size-4 mr-1.5" />
           Files
         </Button>
       </div>
@@ -206,12 +205,12 @@ export default function ResultsTab({
       {/* Findings List */}
       {filteredIssues.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <CheckCircleIcon className="h-12 w-12 text-emerald-500 mb-3" />
-          <Typography variant="subtitle" as="h3" className="text-emerald-700 dark:text-emerald-300">
+          <CheckCircleIcon className="size-12 text-emerald-500 mb-3" />
+          <h3 className="text-lg font-medium text-emerald-700 dark:text-emerald-300">
             {selectedSeverity
               ? `No ${getSeverityLabel(selectedSeverity)} issues`
               : 'No issues found'}
-          </Typography>
+          </h3>
           <p className="text-sm text-muted-foreground mt-1">
             {selectedSeverity
               ? 'Try selecting a different severity filter.'

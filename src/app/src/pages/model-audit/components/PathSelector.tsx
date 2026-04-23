@@ -1,9 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
 
-import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
+import { HelperText } from '@app/components/ui/helper-text';
 import {
   ClearIcon,
   CloudIcon,
@@ -19,9 +20,9 @@ import {
   UploadIcon,
 } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { Typography } from '@app/components/ui/typography';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { useModelAuditConfigStore } from '../stores';
@@ -78,10 +79,8 @@ function EnterpriseTabContent({
 }) {
   return (
     <div className="py-8 text-center">
-      <Icon className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
-      <Typography variant="subtitle" as="h3" className="text-muted-foreground mb-2">
-        {title}
-      </Typography>
+      <Icon className="size-16 text-muted-foreground/50 mx-auto mb-4" />
+      <h3 className="text-lg font-medium text-muted-foreground mb-2">{title}</h3>
       <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">{description}</p>
 
       {examples && (
@@ -89,10 +88,8 @@ function EnterpriseTabContent({
           {examples.map(({ provider, desc, example }) => (
             <Card key={provider} className="bg-muted/50">
               <CardContent className="p-4 text-center">
-                <CloudUploadIcon className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
-                <Typography variant="label" as="h4" className="mb-1">
-                  {provider}
-                </Typography>
+                <CloudUploadIcon className="size-8 text-muted-foreground/50 mx-auto mb-2" />
+                <h4 className="font-medium mb-1">{provider}</h4>
                 <p className="text-xs text-muted-foreground mb-2">{desc}</p>
                 <code className="text-xs bg-muted px-2 py-1 rounded">{example}</code>
               </CardContent>
@@ -107,7 +104,7 @@ function EnterpriseTabContent({
           target="_blank"
           rel="noopener noreferrer"
         >
-          <LockIcon className="h-4 w-4 mr-2" />
+          <LockIcon className="size-4 mr-2" />
           Available in Enterprise
         </a>
       </Button>
@@ -197,6 +194,7 @@ export default function PathSelector({
     setIsDragging(false);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -232,15 +230,15 @@ export default function PathSelector({
       <Tabs defaultValue="local" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="local" className="flex items-center gap-2">
-            <ComputerIcon className="h-4 w-4" />
+            <ComputerIcon className="size-4" />
             <span className="hidden sm:inline">Local Files</span>
           </TabsTrigger>
           <Tooltip>
             <TooltipTrigger asChild>
               <TabsTrigger value="cloud" disabled className="flex items-center gap-2 opacity-60">
                 <div className="relative">
-                  <CloudIcon className="h-4 w-4" />
-                  <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                  <CloudIcon className="size-4" />
+                  <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
                 <span className="hidden sm:inline">Cloud</span>
               </TabsTrigger>
@@ -251,8 +249,8 @@ export default function PathSelector({
             <TooltipTrigger asChild>
               <TabsTrigger value="github" disabled className="flex items-center gap-2 opacity-60">
                 <div className="relative">
-                  <GitHubIcon className="h-4 w-4" />
-                  <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                  <GitHubIcon className="size-4" />
+                  <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
                 <span className="hidden sm:inline">GitHub</span>
               </TabsTrigger>
@@ -263,8 +261,8 @@ export default function PathSelector({
             <TooltipTrigger asChild>
               <TabsTrigger value="registry" disabled className="flex items-center gap-2 opacity-60">
                 <div className="relative">
-                  <StorageIcon className="h-4 w-4" />
-                  <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                  <StorageIcon className="size-4" />
+                  <LockIcon className="size-2.5 absolute -top-1 -right-1 text-muted-foreground" />
                 </div>
                 <span className="hidden sm:inline">Registry</span>
               </TabsTrigger>
@@ -277,20 +275,22 @@ export default function PathSelector({
           {/* Current Working Directory Info */}
           {currentWorkingDir && (
             <Alert variant="info">
-              <AlertDescription>
-                <strong>Current directory:</strong> {currentWorkingDir}
-                <span className="block text-xs text-muted-foreground mt-1">
-                  Relative paths will be resolved from this directory
-                </span>
-              </AlertDescription>
+              <AlertContent>
+                <AlertDescription>
+                  <strong>Current directory:</strong> {currentWorkingDir}
+                  <span className="block text-xs text-muted-foreground mt-1">
+                    Relative paths will be resolved from this directory
+                  </span>
+                </AlertDescription>
+              </AlertContent>
             </Alert>
           )}
 
           {/* Drag and Drop Zone */}
           <div>
-            <label htmlFor="model-path-input" className="text-sm text-muted-foreground mb-2 block">
+            <Label htmlFor="model-path-input" className="text-muted-foreground block">
               Add model path
-            </label>
+            </Label>
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -304,7 +304,7 @@ export default function PathSelector({
             >
               <UploadIcon
                 className={cn(
-                  'h-10 w-10 mx-auto mb-3',
+                  'size-10 mx-auto mb-3',
                   isDragging ? 'text-primary' : 'text-muted-foreground',
                 )}
               />
@@ -325,7 +325,7 @@ export default function PathSelector({
           {/* Manual Input */}
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <FolderOpenIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <FolderOpenIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
                 id="model-path-input"
                 value={pathInput}
@@ -348,22 +348,24 @@ export default function PathSelector({
               {isChecking ? 'Checking...' : 'Add'}
             </Button>
           </div>
-          {error && <p className="text-sm text-destructive -mt-4">{error}</p>}
+          {error && (
+            <HelperText error className="-mt-4">
+              {error}
+            </HelperText>
+          )}
 
           {/* Recent Paths */}
           {recentPaths.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-3">
-                <Typography variant="label" as="h4" className="text-muted-foreground">
-                  Recent Paths
-                </Typography>
+                <h4 className="text-sm font-medium text-muted-foreground">Recent Paths</h4>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={clearRecentScans}
                   className="text-muted-foreground"
                 >
-                  <ClearIcon className="h-4 w-4 mr-1" />
+                  <ClearIcon className="size-4 mr-1" />
                   Clear All
                 </Button>
               </div>
@@ -386,9 +388,9 @@ export default function PathSelector({
                     )}
                   >
                     {path.type === 'directory' ? (
-                      <FolderIcon className="h-4 w-4 text-primary" />
+                      <FolderIcon className="size-4 text-primary" />
                     ) : (
-                      <FileIcon className="h-4 w-4 text-muted-foreground" />
+                      <FileIcon className="size-4 text-muted-foreground" />
                     )}
                     <span>{path.name || path.path}</span>
                     {hoveredChipIndex === index && (
@@ -399,7 +401,7 @@ export default function PathSelector({
                         }}
                         className="ml-1 hover:text-destructive"
                       >
-                        <ClearIcon className="h-3.5 w-3.5" />
+                        <ClearIcon className="size-3.5" />
                       </span>
                     )}
                   </button>
@@ -455,9 +457,7 @@ export default function PathSelector({
       {paths.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center gap-2 mb-3">
-            <Typography variant="subtitle" as="h3">
-              Selected Paths
-            </Typography>
+            <h3 className="text-lg font-semibold">Selected Paths</h3>
             <Badge variant="default" className="text-xs">
               {paths.length}
             </Badge>
@@ -473,9 +473,9 @@ export default function PathSelector({
                 )}
               >
                 {path.type === 'directory' ? (
-                  <FolderIcon className="h-6 w-6 text-primary shrink-0" />
+                  <FolderIcon className="size-6 text-primary shrink-0" />
                 ) : (
-                  <FileIcon className="h-6 w-6 text-muted-foreground shrink-0" />
+                  <FileIcon className="size-6 text-muted-foreground shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">
@@ -498,7 +498,7 @@ export default function PathSelector({
                   className="opacity-70 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
                   aria-label={`Remove ${path.name}`}
                 >
-                  <DeleteIcon className="h-4 w-4" />
+                  <DeleteIcon className="size-4" />
                 </Button>
               </div>
             ))}

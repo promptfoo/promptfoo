@@ -4,7 +4,26 @@ import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
 import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import type { TestSuite } from '../../../types/index';
+import type { TestSuite, VarMapping } from '../../../types/index';
+
+/**
+ * A generated test case with variables and assertions
+ */
+interface GeneratedTestCase {
+  vars: VarMapping;
+  assert: Array<{ type: string }>;
+}
+
+/**
+ * Analysis results for generated test cases
+ */
+interface TestCaseAnalysis {
+  totalCases: number;
+  casesWithAssertions: number;
+  assertionTypes: Record<string, number>;
+  variableCoverage: Record<string, number>;
+  insights: string[];
+}
 
 /**
  * Tool to generate test cases with assertions for existing prompts
@@ -32,11 +51,10 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         ),
 
       numTestCases: z
-        .number()
         .int()
         .min(1)
         .max(50)
-        .default(5)
+        .prefault(5)
         .describe('Number of test cases to generate (1-50)'),
 
       assertionTypes: z
@@ -113,8 +131,8 @@ export function registerGenerateTestCasesTool(server: McpServer) {
         }
 
         // Format results as test cases with basic assertions
-        const tests = results.map((vars: any) => {
-          const testCase: any = { vars };
+        const tests: GeneratedTestCase[] = results.map((vars) => {
+          const testCase: GeneratedTestCase = { vars, assert: [] };
 
           // Add basic assertions based on the prompt type
           if (assertionTypes && assertionTypes.length > 0) {
@@ -202,13 +220,13 @@ export function registerGenerateTestCasesTool(server: McpServer) {
   );
 }
 
-function analyzeTestCases(testCases: any[], variables: string[]): any {
-  const analysis = {
+function analyzeTestCases(testCases: GeneratedTestCase[], variables: string[]): TestCaseAnalysis {
+  const analysis: TestCaseAnalysis = {
     totalCases: testCases.length,
     casesWithAssertions: 0,
-    assertionTypes: {} as Record<string, number>,
-    variableCoverage: {} as Record<string, number>,
-    insights: [] as string[],
+    assertionTypes: {},
+    variableCoverage: {},
+    insights: [],
   };
 
   // Analyze each test case
@@ -218,7 +236,7 @@ function analyzeTestCases(testCases: any[], variables: string[]): any {
       analysis.casesWithAssertions++;
 
       // Count assertion types
-      testCase.assert.forEach((assertion: any) => {
+      testCase.assert.forEach((assertion) => {
         const type = assertion.type || 'unknown';
         analysis.assertionTypes[type] = (analysis.assertionTypes[type] || 0) + 1;
       });

@@ -26,7 +26,6 @@ import {
   resolveImageUrlSync,
   resolveVideoUrlSync,
 } from '@app/utils/mediaStorage';
-import Typography from '@mui/material/Typography';
 
 interface MediaPlayerProps {
   /** The media data - either a storageRef:xxx string or base64 data */
@@ -55,11 +54,7 @@ export function AudioPlayer({ data, format = 'mp3', style, testId, transcript }:
   const audioUrl = resolveAudioUrlSync(data, format);
 
   if (!audioUrl) {
-    return (
-      <Typography variant="caption" color="error">
-        Failed to load audio
-      </Typography>
-    );
+    return <span className="text-xs text-destructive">Failed to load audio</span>;
   }
 
   return (
@@ -98,11 +93,7 @@ export function ImageDisplay({
   const imageUrl = resolveImageUrlSync(data, format);
 
   if (!imageUrl) {
-    return (
-      <Typography variant="caption" color="error">
-        Failed to load image
-      </Typography>
-    );
+    return <span className="text-xs text-destructive">Failed to load image</span>;
   }
 
   return (
@@ -129,11 +120,7 @@ export function VideoPlayer({ data, format = 'mp4', style, testId }: MediaPlayer
   const videoUrl = resolveVideoUrlSync(data, format);
 
   if (!videoUrl) {
-    return (
-      <Typography variant="caption" color="error">
-        Failed to load video
-      </Typography>
-    );
+    return <span className="text-xs text-destructive">Failed to load video</span>;
   }
 
   return (
