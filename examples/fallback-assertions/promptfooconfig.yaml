@@ -74,5 +74,5 @@ tests:
         value: 'The response correctly states that 2+2=4'
 
       # Another independent assertion
-      - type: is-valid-openai-function-call
-        value: false # Just checking it's not a function call
+      - type: not-contains
+        value: '5'
