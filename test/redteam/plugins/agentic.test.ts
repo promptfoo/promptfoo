@@ -1,11 +1,29 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hasTraceAwareAssertions } from '../../../src/assertions';
+import { fetchWithCache } from '../../../src/cache';
 import { AGENTIC_RUNTIME_PLUGINS } from '../../../src/redteam/constants/agentic';
 import { getGraderById } from '../../../src/redteam/graders';
 import { Plugins } from '../../../src/redteam/plugins';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import { checkRemoteHealth } from '../../../src/util/apiHealth';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types';
 import type { TraceData } from '../../../src/types/tracing';
+
+vi.mock('../../../src/cache');
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => ({
+  ...(await importOriginal()),
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('https://remote.example.test/api/v1/task'),
+  getRemoteHealthUrl: vi.fn().mockReturnValue('https://remote.example.test/health'),
+  neverGenerateRemote: vi.fn().mockReturnValue(false),
+}));
+vi.mock('../../../src/util/apiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
+  checkRemoteHealth: vi.fn().mockResolvedValue({
+    message: 'API is healthy',
+    status: 'OK',
+  }),
+}));
 
 describe('Agentic redteam plugins', () => {
   const provider = {
@@ -13,7 +31,50 @@ describe('Agentic redteam plugins', () => {
     callApi: vi.fn(),
   } as unknown as ApiProvider;
 
-  it('generates deterministic local tests for every Agentic plugin', async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
+    vi.mocked(checkRemoteHealth).mockResolvedValue({
+      message: 'API is healthy',
+      status: 'OK',
+    });
+    vi.mocked(fetchWithCache).mockImplementation(async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      return {
+        cached: false,
+        data: {
+          result: [
+            {
+              assert: [
+                {
+                  metric: 'AgenticRuntimeRemote',
+                  type: `promptfoo:redteam:${body.task}`,
+                },
+              ],
+              metadata: {
+                agenticScenario: {
+                  expectedFinding: `remote expected finding for ${body.task}`,
+                  goal: `remote goal for ${body.task}`,
+                  id: `remote-${body.task}`,
+                },
+                pluginId: body.task,
+              },
+              vars: {
+                [body.injectVar]: `remote goal for ${body.task}`,
+                agenticExpectedFinding: `remote expected finding for ${body.task}`,
+                agenticPluginId: body.task,
+                agenticScenarioId: `remote-${body.task}`,
+              },
+            },
+          ],
+        },
+        status: 200,
+        statusText: 'OK',
+      };
+    });
+  });
+
+  it('routes generation for every Agentic runtime plugin through remote generation', async () => {
     for (const pluginId of AGENTIC_RUNTIME_PLUGINS) {
       const factory = Plugins.find((plugin) => plugin.key === pluginId);
       expect(factory, `${pluginId} should be registered`).toBeDefined();
@@ -27,15 +88,19 @@ describe('Agentic redteam plugins', () => {
         purpose: 'OpenAI agentic runtime support workflow',
       });
 
-      expect(tests).toHaveLength(2);
-      for (const test of tests) {
-        expect(test.vars?.prompt).toEqual(expect.any(String));
-        expect(test.vars?.agenticPluginId).toBe(pluginId);
-        expect(test.assert?.[0].type).toBe(`promptfoo:redteam:${pluginId}`);
-        expect(test.metadata?.pluginId).toBe(pluginId);
-      }
+      expect(tests).toHaveLength(1);
+      expect(tests[0].vars?.prompt).toBe(`remote goal for ${pluginId}`);
+      expect(tests[0].vars?.agenticPluginId).toBe(pluginId);
+      expect(tests[0].assert?.[0].type).toBe(`promptfoo:redteam:${pluginId}`);
+      expect(tests[0].metadata?.pluginId).toBe(pluginId);
+      expect(tests[0].metadata?.pluginConfig).toEqual({ modifiers: {} });
     }
     expect(provider.callApi).not.toHaveBeenCalled();
+    expect(fetchWithCache).toHaveBeenCalledTimes(AGENTIC_RUNTIME_PLUGINS.length);
+    const requestTasks = vi
+      .mocked(fetchWithCache)
+      .mock.calls.map((call) => JSON.parse(String(call[1]?.body)).task);
+    expect(requestTasks).toEqual([...AGENTIC_RUNTIME_PLUGINS]);
   });
 
   it('fails every plugin deterministically when structured evidence contains a matching finding', async () => {

@@ -20,6 +20,7 @@ import {
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../../src/redteam/constants';
+import { AGENTIC_RUNTIME_PLUGINS } from '../../src/redteam/constants/agentic';
 import {
   CODING_AGENT_COLLECTIONS,
   CODING_AGENT_CORE_PLUGINS,
@@ -141,12 +142,20 @@ describe('constants', () => {
     ]);
   });
 
-  it('remote-only UI guards should include coding-agent plugins and collections', () => {
+  it('remote-only UI guards should include agentic runtime and coding-agent plugins', () => {
     expect(REMOTE_ONLY_PLUGIN_IDS).toEqual(
-      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
+      expect.arrayContaining([
+        ...AGENTIC_RUNTIME_PLUGINS,
+        ...CODING_AGENT_COLLECTIONS,
+        ...CODING_AGENT_PLUGINS,
+      ]),
     );
     expect(UI_DISABLED_WHEN_REMOTE_UNAVAILABLE).toEqual(
-      expect.arrayContaining([...CODING_AGENT_COLLECTIONS, ...CODING_AGENT_PLUGINS]),
+      expect.arrayContaining([
+        ...AGENTIC_RUNTIME_PLUGINS,
+        ...CODING_AGENT_COLLECTIONS,
+        ...CODING_AGENT_PLUGINS,
+      ]),
     );
   });
 
