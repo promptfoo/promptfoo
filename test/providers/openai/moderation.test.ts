@@ -134,6 +134,47 @@ describe('OpenAiModerationProvider', () => {
         flags: [],
       });
     });
+
+    it('should use flagged categories when scores are close together', async () => {
+      const provider = createProvider();
+
+      const mockResponse = {
+        id: 'modr-123',
+        model: 'text-moderation-latest',
+        results: [
+          {
+            flagged: true,
+            categories: {
+              hate: true,
+              'hate/threatening': false,
+            },
+            category_scores: {
+              hate: 0.5,
+              'hate/threatening': 0.49,
+            },
+          },
+        ],
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const result = await provider.callModerationApi('user input', 'assistant response');
+
+      expect(result).toEqual({
+        flags: [
+          {
+            code: 'hate',
+            description: 'hate',
+            confidence: 0.5,
+          },
+        ],
+      });
+    });
   });
 
   describe('Error handling', () => {
@@ -213,6 +254,61 @@ describe('OpenAiModerationProvider', () => {
         id: 'modr-123',
         model: 'text-moderation-latest',
         results: [], // Empty results array
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const result = await provider.callModerationApi('user', 'assistant');
+      expect(result).toEqual({ flags: [] });
+    });
+
+    it('should handle non-empty results with no flagged categories', async () => {
+      const provider = createProvider();
+
+      const mockResponse = {
+        id: 'modr-124',
+        model: 'text-moderation-latest',
+        results: [
+          {
+            flagged: false,
+            categories: {
+              hate: false,
+              'hate/threatening': false,
+              harassment: false,
+              'harassment/threatening': false,
+              illicit: false,
+              'illicit/violent': false,
+              'self-harm': false,
+              'self-harm/intent': false,
+              'self-harm/instructions': false,
+              sexual: false,
+              'sexual/minors': false,
+              violence: false,
+              'violence/graphic': false,
+            },
+            category_scores: {
+              hate: 0,
+              'hate/threatening': 0,
+              harassment: 0,
+              'harassment/threatening': 0,
+              illicit: 0,
+              'illicit/violent': 0,
+              'self-harm': 0,
+              'self-harm/intent': 0,
+              'self-harm/instructions': 0,
+              sexual: 0,
+              'sexual/minors': 0,
+              violence: 0,
+              'violence/graphic': 0,
+            },
+            category_applied_input_types: {},
+          },
+        ],
       };
 
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
@@ -444,7 +540,7 @@ describe('OpenAiModerationProvider', () => {
       expect(cacheKeyA).not.toContain('sk-moderation-reload');
     });
 
-    it('should deduplicate in-flight moderation requests without raw fetch cache keys', async () => {
+    it('should deduplicate concurrent moderation requests with identical cache identity', async () => {
       vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
@@ -622,7 +718,7 @@ describe('OpenAiModerationProvider', () => {
       );
     });
 
-    it('hashes cached mixed text and image inputs without leaking raw content', async () => {
+    it('should hash cached mixed text and image inputs without leaking raw content', async () => {
       vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
       });
@@ -863,6 +959,33 @@ describe('Moderation Utility Functions', () => {
         { type: 'text' as const, text: 'second text' },
       ];
       expect(formatModerationInput(input, false)).toBe('first text second text');
+    });
+
+    it('should handle empty text strings when joining for text-only models', () => {
+      const input = [
+        { type: 'text' as const, text: '' },
+        { type: 'image_url' as const, image_url: { url: 'https://example.com/image.jpg' } },
+        { type: 'text' as const, text: 'second text' },
+      ];
+      expect(formatModerationInput(input, false)).toBe(' second text');
+    });
+
+    it('should preserve leading and trailing whitespace in text inputs when joining', () => {
+      const input = [
+        { type: 'text' as const, text: '  first text  ' },
+        { type: 'image_url' as const, image_url: { url: 'https://example.com/image.jpg' } },
+        { type: 'text' as const, text: 'second text' },
+      ];
+      expect(formatModerationInput(input, false)).toBe('  first text   second text');
+    });
+
+    it('should return single text input unchanged when mixed with images for text-only models', () => {
+      const input = [
+        { type: 'image_url' as const, image_url: { url: 'https://example.com/image-1.jpg' } },
+        { type: 'text' as const, text: 'only text' },
+        { type: 'image_url' as const, image_url: { url: 'https://example.com/image-2.jpg' } },
+      ];
+      expect(formatModerationInput(input, false)).toBe('only text');
     });
   });
 });
