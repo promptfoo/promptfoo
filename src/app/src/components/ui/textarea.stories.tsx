@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { HelperText } from './helper-text';
 import { Label } from './label';
 import { Textarea } from './textarea';
 import type { Meta, StoryObj } from '@storybook/react-vite';
@@ -37,7 +38,7 @@ export const Default: Story = {
 // With label
 export const WithLabel: Story = {
   render: () => (
-    <div className="grid w-full gap-1.5">
+    <div className="flex flex-col w-full">
       <Label htmlFor="message">Your message</Label>
       <Textarea placeholder="Type your message here." id="message" />
     </div>
@@ -47,12 +48,10 @@ export const WithLabel: Story = {
 // With helper text
 export const WithHelperText: Story = {
   render: () => (
-    <div className="grid w-full gap-1.5">
+    <div className="flex flex-col w-full">
       <Label htmlFor="bio">Bio</Label>
       <Textarea placeholder="Tell us about yourself" id="bio" />
-      <p className="text-sm text-muted-foreground">
-        You can @mention other users and organizations.
-      </p>
+      <HelperText>You can @mention other users and organizations.</HelperText>
     </div>
   ),
 };
@@ -77,15 +76,15 @@ export const WithValue: Story = {
 export const DifferentRows: Story = {
   render: () => (
     <div className="space-y-4 w-full max-w-md">
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label>Small (3 rows)</Label>
         <Textarea placeholder="Small textarea" rows={3} />
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label>Medium (5 rows)</Label>
         <Textarea placeholder="Medium textarea" rows={5} />
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label>Large (8 rows)</Label>
         <Textarea placeholder="Large textarea" rows={8} />
       </div>
@@ -108,7 +107,7 @@ export const WithCharacterCount: Story = {
     const [value, setValue] = useState('');
 
     return (
-      <div className="grid w-full gap-1.5">
+      <div className="flex flex-col w-full">
         <Label htmlFor="tweet">Tweet</Label>
         <Textarea
           id="tweet"
@@ -117,13 +116,9 @@ export const WithCharacterCount: Story = {
           onChange={(e) => setValue(e.target.value)}
           maxLength={maxLength}
         />
-        <div className="flex justify-end">
-          <span
-            className={`text-sm ${value.length > maxLength * 0.9 ? 'text-destructive' : 'text-muted-foreground'}`}
-          >
-            {value.length}/{maxLength}
-          </span>
-        </div>
+        <HelperText error={value.length > maxLength * 0.9} className="text-right">
+          {value.length}/{maxLength}
+        </HelperText>
       </div>
     );
   },
@@ -133,7 +128,7 @@ export const WithCharacterCount: Story = {
 export const FormExample: Story = {
   render: () => (
     <div className="space-y-4 w-full max-w-md">
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="subject">Subject</Label>
         <input
           id="subject"
@@ -141,7 +136,7 @@ export const FormExample: Story = {
           placeholder="Enter subject"
         />
       </div>
-      <div className="grid gap-1.5">
+      <div className="flex flex-col">
         <Label htmlFor="body">Message</Label>
         <Textarea id="body" placeholder="Enter your message" rows={6} />
       </div>

@@ -85,7 +85,11 @@ export interface AgenticCacheOptions {
   workingDir?: string;
   /** Whether to bust the cache (read bypass, but still write) */
   bustCache?: boolean;
-  /** Repeat index for per-repeat caching. Repeats > 0 get unique cache keys. */
+  /** MCP configuration — when present and cacheMcp is not true, caching is disabled */
+  mcp?: unknown;
+  /** When true, enables caching even when MCP is configured */
+  cacheMcp?: boolean;
+  /** Repeat index for per-repeat cache isolation */
   repeatIndex?: number;
 }
 
@@ -112,7 +116,6 @@ export interface CacheCheckResult {
  *
  * @param prefix - Cache key prefix (provider identifier)
  * @param data - Data to hash for the cache key
- * @param repeatIndex - Optional repeat index for per-repeat caching
  * @returns Prefixed SHA-256 hash cache key
  */
 export function generateCacheKey(
@@ -122,7 +125,6 @@ export function generateCacheKey(
 ): string {
   const stringified = JSON.stringify(data);
   const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-  // Add repeat suffix for repeatIndex > 0 to enable per-repeat caching
   const repeatSuffix = repeatIndex != null && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
   return `${prefix}:${hash}${repeatSuffix}`;
 }
@@ -147,6 +149,16 @@ export async function initializeAgenticCache(
   const shouldCache = isCacheEnabled();
 
   if (!shouldCache) {
+    return {
+      shouldCache: false,
+      shouldReadCache: false,
+      shouldWriteCache: false,
+    };
+  }
+
+  // MCP tools typically interact with external state, so disable caching by default.
+  // Users can opt in with cacheMcp: true for deterministic MCP tools.
+  if (options.mcp && !options.cacheMcp) {
     return {
       shouldCache: false,
       shouldReadCache: false,
@@ -179,6 +191,7 @@ export async function initializeAgenticCache(
     {
       ...cacheKeyData,
       workingDirFingerprint,
+      ...(options.mcp ? { mcp: options.mcp } : {}),
     },
     options.repeatIndex,
   );

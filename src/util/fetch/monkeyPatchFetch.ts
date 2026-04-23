@@ -22,6 +22,15 @@ function isConnectionError(error: Error) {
  * Enhanced fetch wrapper that adds logging, authentication, error handling, and optional compression
  */
 
+export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
+  try {
+    const targetUrl = url instanceof Request ? url.url : url.toString();
+    return new URL(targetUrl).origin === CLOUD_API_HOST;
+  } catch {
+    return false;
+  }
+}
+
 export async function monkeyPatchFetch(
   url: string | URL | Request,
   options?: FetchOptions,
@@ -51,10 +60,7 @@ export async function monkeyPatchFetch(
     }
   }
 
-  if (
-    (typeof url === 'string' && url.startsWith(CLOUD_API_HOST)) ||
-    (url instanceof URL && url.host === CLOUD_API_HOST.replace(/^https?:\/\//, ''))
-  ) {
+  if (isPromptfooCloudApiHost(url)) {
     const token = cloudConfig.getApiKey();
     opts.headers = {
       ...(opts.headers || {}),

@@ -4,29 +4,36 @@ import logger from '../../logger';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
-import { MCPClient } from '../mcp/client';
-import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getCacheOptions, parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { CHAT_MODELS } from './shared';
 import {
+  calculateGoogleCost,
   createAuthCacheDiscriminator,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  normalizeSafetySettings,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
+  ApiEmbeddingProvider,
   ApiProvider,
   CallApiContextParams,
   GuardrailResponse,
+  ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
 import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
+const GENERATE_CONTENT_MODEL_PREFIXES = ['gemini', 'gemma', 'codegemma', 'paligemma'];
+
+function usesGenerateContentApi(modelName: string): boolean {
+  return GENERATE_CONTENT_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
+}
 
 class AIStudioGenericProvider implements ApiProvider {
   modelName: string;
@@ -245,23 +252,27 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
     }
 
-    const isGemini = this.modelName.startsWith('gemini');
-    if (isGemini) {
+    if (usesGenerateContentApi(this.modelName)) {
       return this.callGemini(prompt, context);
     }
 
     // Legacy PaLM API path
     // https://developers.generativeai.google/tutorials/curl_quickstart
     // https://ai.google.dev/api/rest/v1beta/models/generateMessage
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
     const messages = parseChatPrompt(prompt, [{ content: prompt }]);
     const body = {
       prompt: { messages },
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      topK: this.config.topK,
-      safetySettings: this.config.safetySettings,
-      stopSequences: this.config.stopSequences,
-      maxOutputTokens: this.config.maxOutputTokens,
+      temperature: config.temperature,
+      topP: config.topP,
+      topK: config.topK,
+      safetySettings: normalizeSafetySettings(config.safetySettings),
+      stopSequences: config.stopSequences,
+      maxOutputTokens: config.maxOutputTokens,
     };
 
     let data,
@@ -323,9 +334,25 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      // Include thinking tokens in output cost - Google bills them as output tokens
+      const completionForCost =
+        data.usageMetadata?.candidatesTokenCount == null
+          ? undefined
+          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            completionForCost,
+          );
+
       return {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
       };
@@ -377,7 +404,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         }),
         ...config.generationConfig,
       },
-      safetySettings: config.safetySettings,
+      safetySettings: normalizeSafetySettings(config.safetySettings),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
@@ -479,9 +506,25 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             }),
           };
 
+      // Calculate cost (only for non-cached responses)
+      // Include thinking tokens in output cost - Google bills them as output tokens
+      const completionForCost =
+        data.usageMetadata?.candidatesTokenCount == null
+          ? undefined
+          : data.usageMetadata.candidatesTokenCount + (data.usageMetadata?.thoughtsTokenCount ?? 0);
+      const cost = cached
+        ? undefined
+        : calculateGoogleCost(
+            this.modelName,
+            config,
+            data.usageMetadata?.promptTokenCount,
+            completionForCost,
+          );
+
       return {
         output,
         tokenUsage,
+        cost,
         raw: data,
         cached,
         ...(guardrails && { guardrails }),
@@ -500,6 +543,110 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   }
 
   // cleanup() is inherited from GoogleGenericProvider
+}
+
+/**
+ * Google AI Studio embedding provider.
+ *
+ * Calls the Gemini API `:embedContent` endpoint and normalizes the response
+ * into `ProviderEmbeddingResponse`.
+ *
+ * Exposes the three standard knobs the Gemini API accepts: `taskType`
+ * (optimizes the vector for a particular use case), `outputDimensionality`
+ * (truncates the vector; useful for storage cost), and `title` (only
+ * meaningful when `taskType` is `RETRIEVAL_DOCUMENT`).
+ */
+export class AIStudioEmbeddingProvider
+  extends AIStudioChatProvider
+  implements ApiEmbeddingProvider
+{
+  id(): string {
+    if (this.customId) {
+      return this.customId();
+    }
+    return `google:embedding:${this.modelName}`;
+  }
+
+  toString(): string {
+    return `[Google AI Studio Embedding Provider ${this.modelName}]`;
+  }
+
+  async callApi(_prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
+    return {
+      error: `Provider ${this.id()} is an embedding provider; use a non-embedding google: provider for chat completions.`,
+    };
+  }
+
+  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      return {
+        error:
+          'Google API key is not set. Set the GOOGLE_API_KEY or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
+      };
+    }
+
+    if (typeof text !== 'string') {
+      return {
+        error: `Invalid input type for embedding API. Expected string, got ${typeof text}.`,
+      };
+    }
+
+    const config = this.config as CompletionOptions & {
+      taskType?: string;
+      outputDimensionality?: number;
+      title?: string;
+    };
+
+    const body: Record<string, any> = {
+      content: { parts: [{ text }] },
+      ...(config.taskType !== undefined && { taskType: config.taskType }),
+      ...(config.outputDimensionality !== undefined && {
+        outputDimensionality: config.outputDimensionality,
+      }),
+      ...(config.title !== undefined && { title: config.title }),
+    };
+
+    let data: any;
+    let cached = false;
+    try {
+      const endpoint = this.getApiEndpoint('embedContent');
+      const headers = await this.getAuthHeaders();
+      const authDiscriminator = createAuthCacheDiscriminator(headers);
+      ({ data, cached } = (await fetchWithCache(
+        endpoint,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+          ...(authDiscriminator && { _authHash: authDiscriminator }),
+        } as RequestInit,
+        REQUEST_TIMEOUT_MS,
+        'json',
+      )) as unknown as { data: any; cached: boolean });
+    } catch (err) {
+      logger.error(`Google AI Studio embedding API call error: ${String(err)}`);
+      return {
+        error: `API call error: ${String(err)}`,
+      };
+    }
+
+    const values: number[] | undefined = data?.embedding?.values;
+    if (!values) {
+      return {
+        error: `No embedding found in Google AI Studio response: ${JSON.stringify(data)}`,
+      };
+    }
+
+    const promptTokens: number | undefined = data?.usageMetadata?.promptTokenCount;
+    return {
+      embedding: values,
+      tokenUsage: cached
+        ? { cached: promptTokens ?? 0, total: promptTokens ?? 0, numRequests: 0 }
+        : { total: promptTokens ?? 0, numRequests: 1 },
+      cached,
+    };
+  }
 }
 
 export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');

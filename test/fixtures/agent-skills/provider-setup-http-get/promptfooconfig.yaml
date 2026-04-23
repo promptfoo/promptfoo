@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Provider setup HTTP GET smoke
+
+prompts:
+  - '{{message}}'
+
+providers:
+  - id: https
+    label: provider-setup-get
+    config:
+      url: '{{env.PROVIDER_SETUP_GET_URL}}'
+      method: GET
+      stateful: false
+      headers:
+        X-Smoke-Mode: provider-setup
+      queryParams:
+        q: '{{prompt}}'
+        user_id: '{{user_id}}'
+      transformResponse: json.answer
+
+tests:
+  - description: endpoint returns pong from query params
+    vars:
+      user_id: qa-get
+      message: Say exactly PONG.
+    assert:
+      - type: contains
+        value: PONG
+      - type: contains
+        value: qa-get

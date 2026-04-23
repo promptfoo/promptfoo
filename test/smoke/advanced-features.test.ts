@@ -94,6 +94,61 @@ describe('Advanced Features Smoke Tests', () => {
       expect(output).toContain('sk-test-12345');
       expect(output).toContain('super-secret-value');
     });
+
+    it('1.4.8b - --env-file resolves env placeholders in file:// provider references', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/file-provider-env-7079.yaml');
+      const envFilePath = path.join(FIXTURES_DIR, 'data/file-provider-env-7079.env');
+      const outputPath = path.join(OUTPUT_DIR, 'file-provider-env-7079-output.json');
+
+      const { exitCode } = runCli([
+        'eval',
+        '-c',
+        configPath,
+        '--env-file',
+        envFilePath,
+        '-o',
+        outputPath,
+        '--no-cache',
+      ]);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const result = parsed.results.results[0];
+
+      expect(result.provider.id).toBe('echo');
+      expect(result.provider.label).toBe('Smoke Provider Label');
+      expect(result.response.output).toContain('Hello World');
+    });
+  });
+
+  describe('2.5.2 Conversation Relevance Config Loading', () => {
+    it('2.5.2 - preserves template syntax in static _conversation vars', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/conversation-relevance-ssti.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'conversation-relevance-ssti-output.json');
+      const capturePath = path.join(OUTPUT_DIR, 'conversation-relevance-ssti-prompt.txt');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        env: {
+          OPENAI_API_KEY: 'SHOULD_NOT_RENDER',
+          PROMPTFOO_CAPTURE_PATH: capturePath,
+        },
+      });
+
+      expect(exitCode).toBe(0);
+
+      const prompt = fs.readFileSync(capturePath, 'utf-8');
+      expect(prompt).toContain('What is the capital of {{country}}?');
+      expect(prompt).toContain('{{capital}}');
+      expect(prompt).toContain('{{ env.OPENAI_API_KEY }}');
+      expect(prompt).toContain('{% for x in range(3) %}{{x}}{% endfor %}');
+      expect(prompt).not.toContain('SHOULD_NOT_RENDER');
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      expect(parsed.results.results[0].success).toBe(true);
+    });
   });
 
   describe('1.10.1 Delay Between Tests', () => {
@@ -264,6 +319,33 @@ describe('Advanced Features Smoke Tests', () => {
       expect(parsed.results.results[0].success).toBe(true);
       // The weighted assertions should both pass
       expect(parsed.results.results[0].gradingResult.componentResults.length).toBe(2);
+    });
+
+    it('5.3.2 - weighted named metrics preserve prompt totals and denominators', () => {
+      const configPath = path.join(FIXTURES_DIR, 'configs/weighted-named-metric.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'weighted-named-metric-output.json');
+
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
+
+      expect(exitCode).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].score).toBeCloseTo(0.75, 10);
+      expect(parsed.results.results[0].gradingResult.namedScores.weightedMetric).toBeCloseTo(
+        0.75,
+        10,
+      );
+      expect(parsed.results.results[0].gradingResult.namedScoreWeights.weightedMetric).toBe(4);
+      expect(parsed.results.prompts[0].metrics.namedScores.weightedMetric).toBeCloseTo(3, 10);
+      expect(parsed.results.prompts[0].metrics.namedScoresCount.weightedMetric).toBe(2);
+      expect(parsed.results.prompts[0].metrics.namedScoreWeights.weightedMetric).toBe(4);
+      expect(
+        parsed.results.prompts[0].metrics.namedScores.weightedMetric /
+          parsed.results.prompts[0].metrics.namedScoreWeights.weightedMetric,
+      ).toBeCloseTo(0.75, 10);
     });
   });
 

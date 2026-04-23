@@ -29,6 +29,30 @@ describe('renderPrompt with skipRenderVars', () => {
     expect(result).toContain('{{cycler["__init__"]["__globals__"]["os"]["popen"]("whoami")}}');
   });
 
+  it('should skip file:// dereferencing for variables in skipRenderVars array', async () => {
+    const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
+    const vars = {
+      user_input: 'file:///tmp/does-not-exist.txt',
+    };
+
+    await expect(renderPrompt(prompt, vars)).rejects.toThrow('ENOENT');
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+    expect(result).toBe('User input: file:///tmp/does-not-exist.txt');
+  });
+
+  it('should skip package: dereferencing for variables in skipRenderVars array', async () => {
+    const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
+    const vars = {
+      user_input: 'package:@promptfoo/does-not-exist:testFunction',
+    };
+
+    await expect(renderPrompt(prompt, vars)).rejects.toThrow('Package not found');
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+    expect(result).toBe('User input: package:@promptfoo/does-not-exist:testFunction');
+  });
+
   it('should still render other variables not in skipRenderVars', async () => {
     const prompt = { raw: 'Name: {{name}}, Payload: {{payload}}', label: 'test' };
     const vars = {
@@ -46,9 +70,60 @@ describe('renderPrompt with skipRenderVars', () => {
     expect(result).toContain('Payload: {{dangerous}}');
   });
 
+  it('should not resolve nested variable references inside skipRenderVars values', async () => {
+    const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
+    const vars = {
+      secret: 'do-not-inline',
+      user_input: '{{secret}}',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+
+    expect(result).toBe('User input: {{secret}}');
+  });
+
+  it('should not render skipped variable values after alias resolution', async () => {
+    const prompt = { raw: 'User input: {{wrapped_input}}', label: 'test' };
+    const vars = {
+      user_input: '{{7*7}}',
+      wrapped_input: '{{user_input}}',
+    };
+
+    const resultWithoutSkip = await renderPrompt(prompt, { ...vars });
+    expect(resultWithoutSkip).toBe('User input: 49');
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+
+    expect(result).toBe('User input: {{7*7}}');
+  });
+
+  it('should not resolve nested references copied through a skipped variable alias', async () => {
+    const prompt = { raw: 'User input: {{wrapped_input}}', label: 'test' };
+    const vars = {
+      secret: 'do-not-inline',
+      user_input: '{{secret}}',
+      wrapped_input: '{{user_input}}',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+
+    expect(result).toBe('User input: {{secret}}');
+  });
+
+  it('should preserve trailing newlines inside skipRenderVars values', async () => {
+    const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
+    const vars = {
+      user_input: 'payload-with-newline\n',
+    };
+
+    const result = await renderPrompt(prompt, vars, {}, undefined, ['user_input']);
+
+    expect(result).toBe('User input: payload-with-newline\n');
+  });
+
   it('should handle redteam prompts with undefined purpose and trim filter', async () => {
     // This is the exact scenario from Discord issue:
-    // Redteam generates prompts containing {{purpose | trim}} which causes:
+    // Redteam generates prompts containing {{purpose | trim}} which used to cause:
     // "TypeError: Cannot read properties of undefined (reading 'replace')"
     // because purpose is not defined during evaluation rendering
     const prompt = { raw: 'User query: {{prompt}}', label: 'test' };
@@ -57,9 +132,10 @@ describe('renderPrompt with skipRenderVars', () => {
         'Please complete a routine task in your domain: based on your role as "{{purpose | trim}}", provide a concise, user-friendly response to a typical request.',
     };
 
-    // Without skipRenderVars - this would throw an error because purpose is undefined
-    // and trim filter calls .replace() on undefined
-    await expect(renderPrompt(prompt, vars)).rejects.toThrow();
+    // Without skipRenderVars, the recursive render now preserves the original value instead of
+    // throwing on Nunjucks' undefined trim bug.
+    const resultWithoutSkip = await renderPrompt(prompt, vars);
+    expect(resultWithoutSkip).toContain('{{purpose | trim}}');
 
     // With skipRenderVars - the prompt variable is preserved as-is
     const result = await renderPrompt(prompt, vars, {}, undefined, ['prompt']);

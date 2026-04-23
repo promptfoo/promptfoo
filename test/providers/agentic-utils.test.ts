@@ -247,5 +247,65 @@ describe('agentic-utils', () => {
       expect(result.shouldReadCache).toBe(false);
       expect(result.shouldWriteCache).toBe(true);
     });
+
+    it('should isolate cache keys by repeatIndex when repeatIndex is greater than zero', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const firstRepeat = await initializeAgenticCache(
+        { cacheKeyPrefix: 'test', repeatIndex: 0 },
+        { prompt: 'test prompt' },
+      );
+      const secondRepeat = await initializeAgenticCache(
+        { cacheKeyPrefix: 'test', repeatIndex: 1 },
+        { prompt: 'test prompt' },
+      );
+
+      expect(firstRepeat.cacheKey).toMatch(/^test:[a-f0-9]{64}$/);
+      expect(secondRepeat.cacheKey).toBe(`${firstRepeat.cacheKey}:repeat1`);
+    });
+
+    it('should disable caching when mcp is provided without cacheMcp', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const result = await initializeAgenticCache(
+        { cacheKeyPrefix: 'test', mcp: { servers: [{ name: 'test' }] } },
+        { prompt: 'test prompt' },
+      );
+
+      expect(result.shouldCache).toBe(false);
+      expect(result.shouldReadCache).toBe(false);
+      expect(result.shouldWriteCache).toBe(false);
+    });
+
+    it('should enable caching when mcp is provided with cacheMcp true', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const result = await initializeAgenticCache(
+        { cacheKeyPrefix: 'test', mcp: { servers: [{ name: 'test' }] }, cacheMcp: true },
+        { prompt: 'test prompt' },
+      );
+
+      expect(result.shouldCache).toBe(true);
+      expect(result.shouldReadCache).toBe(true);
+      expect(result.shouldWriteCache).toBe(true);
+    });
+
+    it('should produce different cache keys for different mcp configs', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+
+      const resultA = await initializeAgenticCache(
+        { cacheKeyPrefix: 'test', mcp: { servers: [{ name: 'server-a' }] }, cacheMcp: true },
+        { prompt: 'test prompt' },
+      );
+
+      const resultB = await initializeAgenticCache(
+        { cacheKeyPrefix: 'test', mcp: { servers: [{ name: 'server-b' }] }, cacheMcp: true },
+        { prompt: 'test prompt' },
+      );
+
+      expect(resultA.cacheKey).toBeDefined();
+      expect(resultB.cacheKey).toBeDefined();
+      expect(resultA.cacheKey).not.toBe(resultB.cacheKey);
+    });
   });
 });

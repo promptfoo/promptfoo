@@ -53,6 +53,13 @@ export class PythonWorker {
     // Listen for READY signal
     return new Promise((resolve, reject) => {
       const readyTimeout = setTimeout(() => {
+        // Kill the process to prevent orphaned Python processes
+        // and avoid triggering handleCrash() which would retry
+        this.shuttingDown = true;
+        if (this.process) {
+          this.process.kill('SIGTERM');
+          this.process = null;
+        }
         reject(new Error('Worker failed to become ready within timeout'));
       }, 30000);
 

@@ -46,6 +46,7 @@ describe('HttpProvider with TLS Configuration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadFileSync.mockReset();
 
     // Setup default mock response
     mockFetchWithCache.mockResolvedValue({
@@ -94,7 +95,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         'text',
-        { bust: undefined, repeatIndex: undefined },
+        undefined,
         undefined,
       );
 
@@ -131,7 +132,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        { bust: undefined, repeatIndex: undefined },
+        undefined,
         undefined,
       );
     });
@@ -167,7 +168,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        { bust: undefined, repeatIndex: undefined },
+        undefined,
         undefined,
       );
     });
@@ -204,7 +205,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        { bust: undefined, repeatIndex: undefined },
+        undefined,
         undefined,
       );
     });
@@ -239,7 +240,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        { bust: undefined, repeatIndex: undefined },
+        undefined,
         undefined,
       );
     });
@@ -277,7 +278,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        { bust: undefined, repeatIndex: undefined },
+        undefined,
         undefined,
       );
     });
@@ -338,7 +339,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         'text',
-        { bust: undefined, repeatIndex: undefined },
+        undefined,
         undefined,
       );
     });
@@ -386,7 +387,7 @@ describe('HttpProvider with TLS Configuration', () => {
         }),
         expect.any(Number),
         expect.any(String),
-        { bust: undefined, repeatIndex: undefined },
+        undefined,
         undefined,
       );
     });

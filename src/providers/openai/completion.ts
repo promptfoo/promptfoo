@@ -45,9 +45,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (this.requiresApiKey() && !this.getApiKey()) {
-      throw new Error(
-        'OpenAI API key is not set. Set the OPENAI_API_KEY environment variable or add `apiKey` to the provider config.',
-      );
+      throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
     let stop: string;
