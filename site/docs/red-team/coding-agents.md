@@ -11,6 +11,8 @@ Coding-agent evals test two things at once: whether the model makes safe enginee
 
 Coding agents are different from chatbots. They read repositories, run shell commands, consume noisy logs, edit files, call tools, and often operate inside a sandbox. That means the evidence should not be limited to the final answer. Use traces, command output, changed files, canaries, protected hashes, sidecar reports, and host-side probes wherever possible.
 
+If your target is an SDK agent that does not primarily edit code, use the [agentic runtime plugins](/docs/red-team/plugins/agentic/) instead. If your coding agent also uses MCP connectors, nested agents, approvals, handoffs, sessions, or runtime guardrails, combine the coding-agent collection with the relevant agentic runtime plugins.
+
 ## Start With the Core Collection
 
 For a first pass, run the core coding-agent collection:

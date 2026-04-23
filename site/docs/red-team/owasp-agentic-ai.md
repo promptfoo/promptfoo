@@ -55,6 +55,8 @@ redteam:
 
 To set up the scan through the Promptfoo UI, select the **OWASP Agentic** preset on the Plugins page.
 
+The OWASP preset gives broad framework coverage. For SDK-level evidence, layer in the [agentic runtime plugins](/docs/red-team/plugins/agentic/) that match your architecture. They focus on approvals, handoffs, nested agents, MCP schemas, sessions, tool discovery, tool errors, and guardrail spans.
+
 ## ASI01: Agent Goal Hijack
 
 Agent Goal Hijack occurs when an attacker alters an agent's objectives or decision path through malicious content, exploiting the agent's planning and reasoning capabilities.
@@ -98,6 +100,10 @@ redteam:
     - excessive-agency
     - mcp
     - tool-discovery
+    - agentic:approval-continuity
+    - agentic:agent-as-tool-boundary
+    - agentic:tool-error-feedback-injection
+    - agentic:guardrail-coverage-gap
   strategies:
     - jailbreak
     - prompt-injection
@@ -122,6 +128,7 @@ redteam:
     - bfla
     - bola
     - imitation
+    - agentic:approval-continuity
   strategies:
     - jailbreak
     - prompt-injection
@@ -144,6 +151,8 @@ redteam:
   plugins:
     - indirect-prompt-injection
     - mcp
+    - agentic:mcp-schema-injection
+    - agentic:tool-discovery-confusion
   strategies:
     - prompt-injection
 ```
@@ -167,6 +176,7 @@ redteam:
     - sql-injection
     - harmful:cybercrime:malicious-code
     - ssrf
+    - agentic:guardrail-coverage-gap
   strategies:
     - jailbreak
     - prompt-injection
@@ -188,6 +198,7 @@ Attackers poison agent memory systems, embeddings, and RAG databases to corrupt 
 redteam:
   plugins:
     - agentic:memory-poisoning
+    - agentic:session-memory-contamination
     - cross-session-leak
     - indirect-prompt-injection
   strategies:
@@ -213,6 +224,8 @@ redteam:
     - indirect-prompt-injection
     - hijacking
     - imitation
+    - agentic:handoff-context-leakage
+    - agentic:agent-as-tool-boundary
   strategies:
     - prompt-injection
 ```
@@ -235,6 +248,8 @@ redteam:
     - hallucination
     - harmful:misinformation-disinformation
     - divergent-repetition
+    - agentic:tool-error-feedback-injection
+    - agentic:guardrail-coverage-gap
   strategies:
     - jailbreak
     - prompt-injection
@@ -281,6 +296,9 @@ redteam:
     - hijacking
     - rbac
     - goal-misalignment
+    - agentic:approval-continuity
+    - agentic:handoff-context-leakage
+    - agentic:agent-as-tool-boundary
   strategies:
     - jailbreak
     - crescendo
@@ -317,6 +335,8 @@ redteam:
 To learn more about red teaming agents, see:
 
 - [How to Red Team LLM Agents](/docs/red-team/agents/)
+- [Agentic Runtime Plugins](/docs/red-team/plugins/agentic/)
+- [Tracing](/docs/tracing/)
 - [Introduction to LLM Red Teaming](/docs/red-team/)
 - [Red Team Configuration](/docs/red-team/configuration/)
 

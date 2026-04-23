@@ -14,7 +14,7 @@ It includes configuration examples for Promptfoo, an open-source red teaming too
 
 :::tip
 
-Testing autonomous coding agents? Start with the [coding-agent red-team guide](/docs/red-team/coding-agents/) and the [coding-agent plugins](/docs/red-team/plugins/coding-agent/). They cover repository prompt injection, terminal output injection, secret environment reads, sandbox read escapes, and verifier sabotage.
+Testing SDK-based agents with approvals, handoffs, nested agents, MCP tools, sessions, or guardrails? Start with the [agentic runtime plugins](/docs/red-team/plugins/agentic/). Testing autonomous coding agents? Use the [coding-agent red-team guide](/docs/red-team/coding-agents/) and the [coding-agent plugins](/docs/red-team/plugins/coding-agent/).
 
 :::
 
@@ -111,6 +111,7 @@ When the user then makes an otherwise normal request, the agent may follow the p
 redteam:
   plugins:
     - 'agentic:memory-poisoning' # Tests if stateful agents are vulnerable to memory poisoning attacks
+    - 'agentic:session-memory-contamination' # Tests whether stale or cross-user session state affects later turns
   strategies:
     - 'jailbreak'
     - 'crescendo' # Multi-turn strategy that gradually builds up an attack
@@ -120,6 +121,28 @@ redteam:
 The Memory Poisoning plugin creates scenarios with specific "memories" the agent should maintain, sends a poisoned message attempting to corrupt this established memory, and then tests the effectiveness of the attack with a follow-up question that relies on the original memory.
 
 A successful attack is indicated when the agent's response to the follow-up question reflects the poisoned instructions rather than the original memory, demonstrating that the memory poisoning attempt was effective.
+
+## Agentic Runtime Boundaries
+
+Agent frameworks introduce runtime-specific failure modes that generic chatbot and RAG plugins do not fully cover. Use the [agentic runtime plugin collection](/docs/red-team/plugins/agentic/) when the target uses SDK concepts such as approval prompts, agent-as-tool calls, handoffs, MCP tool metadata, session memory, dynamic tool discovery, tool-error retries, or guardrail spans.
+
+```yaml
+redteam:
+  plugins:
+    - 'agentic:approval-continuity'
+    - 'agentic:handoff-context-leakage'
+    - 'agentic:agent-as-tool-boundary'
+    - 'agentic:mcp-schema-injection'
+    - 'agentic:session-memory-contamination'
+    - 'agentic:tool-discovery-confusion'
+    - 'agentic:tool-error-feedback-injection'
+    - 'agentic:guardrail-coverage-gap'
+  strategies:
+    - 'jailbreak:meta'
+    - 'jailbreak:hydra'
+```
+
+These plugins are strongest when the target provider emits [OpenTelemetry traces](/docs/tracing/) with structured tool, guardrail, handoff, approval, session, and MCP evidence. The final response still matters, but trace evidence lets graders distinguish a refused answer from a hidden unsafe tool call.
 
 ## Multi-stage Attack Chains
 
@@ -183,6 +206,12 @@ redteam:
     - 'ssrf' # Checks for unauthorized API calls or URL manipulations
     - 'tool-discovery' # Tests if the agent reveals available tools to unauthorized users
     - 'mcp' # Tests Model Context Protocol implementations for security vulnerabilities
+    - 'agentic:approval-continuity' # Checks whether sensitive tool calls bypass or reuse stale approval
+    - 'agentic:agent-as-tool-boundary' # Checks nested-agent delegation and tool-boundary enforcement
+    - 'agentic:mcp-schema-injection' # Checks whether MCP schemas or tool descriptions become instruction channels
+    - 'agentic:tool-discovery-confusion' # Checks unsafe behavior caused by misleading or conflicting tool catalogs
+    - 'agentic:tool-error-feedback-injection' # Checks whether tool errors steer retries into unsafe actions
+    - 'agentic:guardrail-coverage-gap' # Checks whether guardrails miss tool, handoff, or intermediate actions
   strategies:
     - 'prompt-injection'
     - 'jailbreak'
@@ -412,6 +441,9 @@ redteam:
       - 'command.'
       - 'search.'
   plugins:
+    - agentic:approval-continuity
+    - agentic:agent-as-tool-boundary
+    - agentic:guardrail-coverage-gap
     - excessive-agency
     - rbac
     - tool-discovery
@@ -422,6 +454,8 @@ redteam:
 ```
 
 For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, Vercel AI SDK `ai.toolCall.name`, `ai.toolCall.args`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits; it uses case-insensitive substring matching, not wildcards or regex, so values like `llm.` and `tool.` will match spans such as `llm.chat.completions` or `tool.database_query`. Overly narrow filters can hide the evidence you want graders or assertions to inspect.
+
+Agentic runtime plugins also consume `promptfoo.agentic.*` OTEL attributes when available. Use those attributes to attach compact, structured evidence for approvals, handoffs, guardrail decisions, MCP schemas, session IDs, tool catalogs, tool errors, and nested-agent calls.
 
 #### How Trace Feedback Improves Attacks
 
@@ -551,6 +585,8 @@ Promptfoo is a free open-source red teaming tool for LLM agents. If you'd like t
 
 - **[Red Team Strategies](/docs/red-team/strategies/)** - Learn about different attack strategies like prompt injection, jailbreaking, and crescendo attacks
 - **[Red Team Plugins](/docs/red-team/plugins/)** - Explore the full catalog of security testing plugins available
+- **[Agentic Runtime Plugins](/docs/red-team/plugins/agentic/)** - Test approval continuity, handoffs, nested agents, MCP schemas, session memory, tool discovery, tool errors, and guardrail coverage
+- **[Tracing](/docs/tracing/)** - Emit OTEL spans so red-team graders can inspect tool calls, guardrails, commands, and intermediate agent actions
 - **[Custom Graders](/docs/configuration/expected-outputs/)** - Configure custom evaluation criteria for your agent tests
 - **[OWASP LLM Top 10](/docs/red-team/owasp-llm-top-10/)** - Understand the top security risks for LLM applications
 - **[Getting Started Guide](/docs/red-team/quickstart/)** - Quick tutorial to begin red teaming your agents
