@@ -6,11 +6,14 @@ prompts:
 
 providers:
   - id: file://provider.py
-    label: 'GPT-5.1 (no defense)'
+    label: 'GPT-5.4 (no defense)'
     config:
-      model: gpt-5.1
+      model: gpt-5.4
       defense: null
       attack: important_instructions
+      force_rerun: true
+      request_timeout: 120
+      max_output_tokens: 4096
 
 # Generate test cases dynamically from AgentDojo
 # Full workspace suite: 560 test cases (40 user tasks x 14 injections)
@@ -37,3 +40,11 @@ outputPath: agentdojo_results.json
 
 evaluateOptions:
   maxConcurrency: 1
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats: ['json']
