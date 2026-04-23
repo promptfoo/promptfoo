@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { getTraceStore } from '../../src/tracing/store';
+import { mockProcessEnv } from '../util/utils';
 
 import type {
   Assertion,
@@ -59,16 +60,31 @@ vi.mock('../../src/python/wrapper', () => ({
 
 describe('trace assertions', () => {
   const originalBasePath = cliState.basePath;
+  const originalTraceFetchEnv = {
+    PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS,
+    PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS,
+    PROMPTFOO_TRACE_FETCH_STABLE_POLLS: process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS,
+  };
   const mockTraceStore = {
     getTrace: vi.fn(),
+  };
+
+  const restoreTraceFetchEnv = () => {
+    for (const [name, value] of Object.entries(originalTraceFetchEnv)) {
+      if (value === undefined) {
+        mockProcessEnv({ [name]: undefined });
+      } else {
+        mockProcessEnv({ [name]: value });
+      }
+    }
   };
 
   beforeEach(() => {
     mockTraceStore.getTrace.mockReset();
     vi.clearAllMocks();
-    delete process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS;
-    delete process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS;
-    delete process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS;
+    restoreTraceFetchEnv();
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+    mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
     vi.mocked(getTraceStore).mockReturnValue(
       mockTraceStore as unknown as ReturnType<typeof getTraceStore>,
     );
@@ -76,7 +92,9 @@ describe('trace assertions', () => {
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    restoreTraceFetchEnv();
     vi.resetAllMocks();
+    vi.useRealTimers();
   });
 
   const mockTest: AtomicTestCase = {
@@ -142,13 +160,15 @@ describe('trace assertions', () => {
       });
 
       expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id');
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+        sanitizeAttributes: false,
+      });
     });
 
     it('should retry until trace spans are available', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '3';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '3' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
 
       mockTraceStore.getTrace
         .mockResolvedValueOnce({
@@ -173,10 +193,34 @@ describe('trace assertions', () => {
       expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
     });
 
+    it('should use default retry timing when trace fetch env vars are unset', async () => {
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: undefined });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: undefined });
+      vi.useFakeTimers();
+
+      mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+      const resultPromise = runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'context.trace?.spans?.length === 2',
+        },
+        test: mockTest,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      });
+
+      await vi.advanceTimersByTimeAsync(250);
+      const result = await resultPromise;
+
+      expect(result.pass).toBe(true);
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(2);
+    });
+
     it('should wait for span count to stabilize', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '4';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '2';
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '4' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '2' });
 
       mockTraceStore.getTrace
         .mockResolvedValueOnce({
@@ -221,9 +265,9 @@ describe('trace assertions', () => {
     });
 
     it('should reuse a preloaded missing trace instead of retrying once per assertion', async () => {
-      process.env.PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS = '2';
-      process.env.PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS = '0';
-      process.env.PROMPTFOO_TRACE_FETCH_STABLE_POLLS = '1';
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '2' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_RETRY_DELAY_MS: '0' });
+      mockProcessEnv({ PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '1' });
 
       mockTraceStore.getTrace.mockResolvedValue(null);
 
@@ -437,7 +481,9 @@ return {
       });
 
       expect(result.pass).toBe(true);
-      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id');
+      expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+        sanitizeAttributes: false,
+      });
     });
   });
 });

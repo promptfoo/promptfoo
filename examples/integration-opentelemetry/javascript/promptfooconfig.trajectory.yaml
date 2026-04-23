@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Trajectory assertions with OpenTelemetry traces
 
+# Promptfoo accepts generic tool span attributes like tool.name/tool.arguments
+# and Vercel AI SDK telemetry attributes like ai.toolCall.name/ai.toolCall.args.
+
 prompts:
   - 'Explain how {{topic}} works in simple terms'
 

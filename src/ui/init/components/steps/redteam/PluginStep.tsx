@@ -124,7 +124,7 @@ export function PluginStep({
         <NavigationBar
           canGoBack={true}
           showNext={true}
-          nextLabel={`Continue with ${effectiveSelected.length} plugin${effectiveSelected.length !== 1 ? 's' : ''}`}
+          nextLabel={`Continue with ${effectiveSelected.length} plugin${effectiveSelected.length === 1 ? '' : 's'}`}
           nextDisabled={effectiveSelected.length === 0}
           showHelp={false}
         />

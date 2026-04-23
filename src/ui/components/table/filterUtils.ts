@@ -280,4 +280,4 @@ export function hasActiveFilter(filterState: TableFilterState): boolean {
   );
 }
 
-export { matchesFilterMode, matchesSearchQuery, matchesColumnFilters };
+export { matchesColumnFilters, matchesFilterMode, matchesSearchQuery };

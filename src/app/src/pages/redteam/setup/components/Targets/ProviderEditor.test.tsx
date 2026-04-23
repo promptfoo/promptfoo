@@ -1,7 +1,8 @@
 import React from 'react';
 
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderEditor, { defaultHttpTarget } from './ProviderEditor';
 
@@ -67,7 +68,8 @@ describe('ProviderEditor', () => {
     vi.clearAllMocks();
   });
 
-  it('should render the provider name TextField and update provider label via setProvider when disableNameField is false or not set in opts', () => {
+  it('should render the provider name TextField and update provider label via setProvider when disableNameField is false or not set in opts', async () => {
+    const user = userEvent.setup();
     const initialProvider: ProviderOptions = {
       ...defaultHttpTarget(),
       label: 'Initial Provider Name',
@@ -79,7 +81,9 @@ describe('ProviderEditor', () => {
     const textField = screen.getByRole('textbox', { name: /Provider Name/i });
     expect(textField).toBeInTheDocument();
 
-    fireEvent.change(textField, { target: { value: 'New Provider Name' } });
+    await user.click(textField);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('New Provider Name');
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     expect(setProvider).toHaveBeenCalledWith({
@@ -88,7 +92,8 @@ describe('ProviderEditor', () => {
     });
   });
 
-  it('should update provider and providerType when a new provider type is selected in ProviderTypeSelector', () => {
+  it('should update provider and providerType when a new provider type is selected in ProviderTypeSelector', async () => {
+    const user = userEvent.setup();
     const initialProvider: ProviderOptions = {
       ...defaultHttpTarget(),
       label: 'My Test Provider',
@@ -105,11 +110,11 @@ describe('ProviderEditor', () => {
     // Provider list is always expanded - find and click OpenAI
     const openAiProviderCard = screen.getByText('OpenAI').closest('[role="button"]');
     expect(openAiProviderCard).toBeInTheDocument();
-    fireEvent.click(openAiProviderCard!);
+    await user.click(openAiProviderCard!);
 
     expect(setProvider).toHaveBeenCalledTimes(1);
     const expectedNewProvider: ProviderOptions = {
-      id: 'openai:gpt-5.2',
+      id: 'openai:gpt-5.4',
       config: {},
       label: 'My Test Provider',
     };
@@ -122,7 +127,8 @@ describe('ProviderEditor', () => {
     );
   });
 
-  it('should call onActionButtonClick when the action button is clicked and validation passes', () => {
+  it('should call onActionButtonClick when the action button is clicked and validation passes', async () => {
+    const user = userEvent.setup();
     const onActionButtonClick = vi.fn();
     const initialProvider: ProviderOptions = defaultHttpTarget();
 
@@ -135,7 +141,7 @@ describe('ProviderEditor', () => {
     );
 
     const nextButton = screen.getByText('Next');
-    fireEvent.click(nextButton);
+    await user.click(nextButton);
 
     expect(onActionButtonClick).toHaveBeenCalledTimes(1);
   });

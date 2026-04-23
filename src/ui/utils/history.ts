@@ -112,7 +112,7 @@ export async function fetchEvalList(limit: number = 50): Promise<EvalListItem[]>
       id: eval_.id,
       createdAt: eval_.createdAt,
       description: eval_.config.description,
-      author: eval_.author,
+      author: eval_.author ?? undefined,
       testCount,
       passCount,
       failCount,

@@ -17,7 +17,7 @@ Install the OpenAI Codex SDK:
 npm install @openai/codex-sdk
 ```
 
-**Requirements**: Node.js 20+
+**Requirements**: Node.js 20.20+ or 22.22+
 
 Authenticate with Codex using one of these options:
 
@@ -41,7 +41,9 @@ When no `apiKey`, `OPENAI_API_KEY`, or `CODEX_API_KEY` is set, promptfoo will le
 
 ### Basic Usage
 
-Simple code generation without file system access.
+Simple code generation with `sandbox_mode: read-only` so Codex can answer from the prompt without writing files. The example also sets `skip_git_repo_check: true` so it works in a standalone example directory that is not a Git repo.
+
+This basic example uses only deterministic string assertions, so it can run with either a Codex login or an API key without needing a separate grader model credential.
 
 **Location**: `./basic/`
 
@@ -59,9 +61,11 @@ This example demonstrates evaluating a local Codex skill stored under `.agents/s
 - **Skill assertions**: Verifies confirmed skill usage with the `skill-used` assertion over normalized `metadata.skillCalls`
 - **Trace assertions**: `promptfooconfig.tracing.yaml` enables OTEL deep tracing and asserts on the traced command that reads `SKILL.md`
 - **Isolated Codex home**: Uses a project-local `CODEX_HOME` so personal skills and config do not leak into the eval
-- **Realistic shell environment**: The tracing config keeps a normal shell `PATH` available while overriding `CODEX_HOME`, so traced skill evals do not waste turns on missing `cat` or `sed`
+- **Controlled shell environment**: Promptfoo now passes a minimal shell environment by default, so the tracing config can override `CODEX_HOME` without inheriting unrelated process secrets while still preserving a usable `PATH`
 
-`metadata.skillCalls` only includes confirmed successful skill reads. When Codex references a skill path but the command fails, Promptfoo records that separately as `metadata.attemptedSkillCalls` for debugging.
+`metadata.skillCalls` only includes confirmed successful skill reads. When Promptfoo sees more candidate `SKILL.md` paths than confirmed successful reads, it also emits `metadata.attemptedSkillCalls` for debugging.
+
+`metadata.skillCalls` and `metadata.attemptedSkillCalls` are heuristic: Promptfoo infers them from direct command references to `SKILL.md`. Wildcard paths are ignored, and absolute `.agents/...` paths outside the active repo are ignored.
 
 **Location**: `./skills/`
 
@@ -76,6 +80,36 @@ This example demonstrates evaluating a local Codex skill stored under `.agents/s
 
 If you run the config from a different working directory, set `CODEX_SKILLS_WORKING_DIR` and `CODEX_HOME_OVERRIDE` to absolute paths before invoking `promptfoo eval`.
 The default relative paths in these configs are intentionally subdirectory-relative for the `(cd skills && promptfoo eval)` workflow above.
+
+The checked-in `sample-codex-home` fixture is intentionally empty of auth state. Use it with `OPENAI_API_KEY`/`CODEX_API_KEY`, or point `CODEX_HOME_OVERRIDE` at `$HOME/.codex` when you want to reuse a local Codex login.
+
+If your network requires proxy or custom certificate environment variables such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, or `NODE_EXTRA_CA_CERTS`, pass them through `config.cli_env` or set `inherit_process_env: true` in the provider config. Promptfoo intentionally does not forward the full process environment to Codex by default.
+
+### Thread Persistence
+
+This example demonstrates `persist_threads: true` with one prompt template and multiple tests. It checks that Codex can remember a marker from the first test when answering the second test.
+
+**Location**: `./thread-persistence/`
+
+**Usage**:
+
+```bash
+(cd thread-persistence && promptfoo eval)
+```
+
+### Sandbox Enforcement
+
+This example runs Codex in `read-only` mode and asks it to create a file. The assertion checks that the model reports a write denial, and you can also inspect the sample workspace after the eval to confirm no file was created.
+
+**Location**: `./sandbox/`
+
+**Usage**:
+
+```bash
+(cd sandbox && promptfoo eval)
+```
+
+If you run this config from the repo root, set `CODEX_SANDBOX_WORKING_DIR="$PWD/examples/openai-codex-sdk/sandbox/sample-workspace"`.
 
 ## Key Features
 

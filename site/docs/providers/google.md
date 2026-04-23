@@ -5,7 +5,7 @@ description: Configure Google's Gemini models with support for text, images, and
 
 # Google AI / Gemini
 
-The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's state-of-the-art language models with support for text, images, and video inputs.
+The `google` provider enables integration with Google AI Studio and the Gemini API. It provides access to Google's Gemini and hosted Gemma models with support for text, images, and video inputs.
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
@@ -100,6 +100,10 @@ providers:
       apiBaseUrl: https://custom.googleapis.com
 ```
 
+For promptfoo's built-in cost estimates, Google providers also support `config.cost`,
+`config.inputCost`, and `config.outputCost`. Use `inputCost` and `outputCost` for separate
+prompt and completion pricing. The legacy `cost` option remains the shared fallback.
+
 ## Quick Start
 
 ### 1. Basic Evaluation
@@ -129,10 +133,11 @@ promptfoo eval
 
 ### 2. Comparing Models
 
-Compare different Gemini models:
+Compare different Gemini and Gemma models:
 
 ```yaml
 providers:
+  - google:gemma-4-31b-it
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
   - google:gemini-2.0-flash
@@ -270,6 +275,8 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ### Chat and Multimodal Models
 
+- `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
+- `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
 - `google:gemini-3.1-pro-preview` - Gemini 3.1 Pro preview with improved reasoning and performance ($2/1M input, $12/1M output; $4/$18 above 200K)
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
@@ -290,8 +297,17 @@ See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed 
 
 ### Embedding Models
 
-- `google:embedding:text-embedding-004` - Google text embedding model
-- `google:embedding:embedding-001` - Google embedding model
+Use the `google:embedding:` prefix (or the plural `google:embeddings:` alias) to call the Gemini API `embedContent` endpoint:
+
+- `google:embedding:gemini-embedding-001` - Recommended default. Multilingual plus code, up to 3,072 dimensions, 2,048 input-token limit
+
+Optional config keys (forwarded as documented in Google's [embedContent reference](https://ai.google.dev/api/embeddings#EmbedContentRequest)):
+
+- `taskType` - one of `SEMANTIC_SIMILARITY`, `CLASSIFICATION`, `CLUSTERING`, `RETRIEVAL_DOCUMENT`, `RETRIEVAL_QUERY`, `QUESTION_ANSWERING`, `FACT_VERIFICATION`, `CODE_RETRIEVAL_QUERY`
+- `outputDimensionality` - truncates the returned vector (useful for storage cost)
+- `title` - document title, only applied with `taskType: RETRIEVAL_DOCUMENT`
+
+If you need Vertex authentication or additional embedding models, see the [Vertex provider](/docs/providers/vertex#embedding-models) instead.
 
 ### Image Generation Models
 
@@ -804,7 +820,7 @@ defaultTest:
           temperature: 0.7
       # Override embedding provider for similarity comparisons
       embedding:
-        id: google:embedding:text-embedding-004
+        id: google:embedding:gemini-embedding-001
 ```
 
 2. For individual assertions:
@@ -815,7 +831,7 @@ assert:
     value: Expected response
     threshold: 0.8
     provider:
-      id: google:embedding:text-embedding-004
+      id: google:embedding:gemini-embedding-001
 ```
 
 3. For specific tests:
@@ -829,7 +845,7 @@ tests:
         text:
           id: google:gemini-2.0-flash
         embedding:
-          id: google:embedding:text-embedding-004
+          id: google:embedding:gemini-embedding-001
     assert:
       - type: similar
         value: The answer is 4

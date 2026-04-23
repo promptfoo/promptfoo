@@ -106,7 +106,7 @@ export function StrategyStep({
         <NavigationBar
           canGoBack={true}
           showNext={true}
-          nextLabel={`Continue with ${effectiveSelected.length} strateg${effectiveSelected.length !== 1 ? 'ies' : 'y'}`}
+          nextLabel={`Continue with ${effectiveSelected.length} strateg${effectiveSelected.length === 1 ? 'y' : 'ies'}`}
           showHelp={false}
         />
       </Box>

@@ -180,15 +180,15 @@ export function CompleteStep({
             </Text>
           )}
           <Text>
-            {directory !== '.' ? '2' : '1'}. Set your API keys (e.g.,{' '}
+            {directory === '.' ? '1' : '2'}. Set your API keys (e.g.,{' '}
             <Text color="cyan">export OPENAI_API_KEY=...</Text>)
           </Text>
           <Text>
-            {directory !== '.' ? '3' : '2'}. Edit <Text color="cyan">{configPath}</Text> to
+            {directory === '.' ? '2' : '3'}. Edit <Text color="cyan">{configPath}</Text> to
             customize
           </Text>
           <Text>
-            {directory !== '.' ? '4' : '3'}. Run <Text color="cyan">{runCommand}</Text>
+            {directory === '.' ? '3' : '4'}. Run <Text color="cyan">{runCommand}</Text>
           </Text>
         </Box>
       </Box>

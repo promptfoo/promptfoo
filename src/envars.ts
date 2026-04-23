@@ -235,6 +235,10 @@ type EnvVars = {
   //=========================================================================
   // Provider-specific settings
   //=========================================================================
+  // Abliteration
+  ABLIT_API_BASE_URL?: string;
+  ABLIT_KEY?: string;
+
   // AI21
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
@@ -374,6 +378,7 @@ type EnvVars = {
   // OpenClaw
   OPENCLAW_CONFIG_PATH?: string;
   OPENCLAW_GATEWAY_PASSWORD?: string;
+  OPENCLAW_GATEWAY_PORT?: number | string;
   OPENCLAW_GATEWAY_TOKEN?: string;
   OPENCLAW_GATEWAY_URL?: string;
 

@@ -756,7 +756,7 @@ export function ResultsTable({
         <Box marginTop={1}>
           <Text dimColor>
             ... {filteredRows.length - visibleEnd} more row
-            {filteredRows.length - visibleEnd !== 1 ? 's' : ''} not shown
+            {filteredRows.length - visibleEnd === 1 ? '' : 's'} not shown
           </Text>
         </Box>
       )}

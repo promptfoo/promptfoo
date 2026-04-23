@@ -509,8 +509,6 @@ const TestSuites = ({
           showColumnToggle={true}
           showFilter={true}
           showExport={false}
-          showPagination={true}
-          initialPageSize={10}
           getRowId={(row) => row.id}
         />
       </Card>

@@ -10,8 +10,9 @@
 // Build-time constants injected by tsdown's `define` option.
 // In development/test environments, these remain undefined.
 //
-// Note: __PROMPTFOO_MIN_NODE_VERSION__ is also injected at build time,
-// but is declared in entrypoint.ts to maintain its zero-dependency isolation.
+// Note: __PROMPTFOO_NODE_ENGINE_RANGE__ and __PROMPTFOO_NODE_ENGINE_COMPARATOR_SETS__
+// are also injected at build time, but are declared in entrypoint.ts to maintain
+// its zero-dependency isolation.
 // The entrypoint must check Node version before importing any modules.
 declare const __PROMPTFOO_VERSION__: string | undefined;
 declare const __PROMPTFOO_POSTHOG_KEY__: string | undefined;

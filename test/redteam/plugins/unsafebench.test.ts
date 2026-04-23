@@ -1,12 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchHuggingFaceDataset } from '../../../src/integrations/huggingfaceDatasets';
 import logger from '../../../src/logger';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import {
   UnsafeBenchGrader,
   UnsafeBenchPlugin,
   VALID_CATEGORIES,
 } from '../../../src/redteam/plugins/unsafebench';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/integrations/huggingfaceDatasets');
 vi.mock('../../../src/logger', () => ({
@@ -17,7 +18,7 @@ vi.mock('../../../src/logger', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
@@ -27,8 +28,13 @@ vi.mock('../../../src/matchers', async (importOriginal) => {
 const mockFetchHuggingFaceDataset = vi.mocked(fetchHuggingFaceDataset);
 const mockMatchesLlmRubric = vi.mocked(matchesLlmRubric);
 
-// Mock environment variables
-process.env.HF_TOKEN = 'mock-token';
+let restoreEnv: () => void;
+beforeAll(() => {
+  restoreEnv = mockProcessEnv({ HF_TOKEN: 'mock-token' });
+});
+afterAll(() => {
+  restoreEnv();
+});
 
 // Need to access the DatasetManager - since it's a private implementation detail,
 // we need to mock the relevant methods of UnsafeBenchPlugin
@@ -144,6 +150,9 @@ vi.mock('../../../src/redteam/plugins/unsafebench', async () => {
         }),
       };
     });
+  Object.defineProperty(MockedUnsafeBenchPlugin, 'canGenerateRemote', {
+    value: originalModule.UnsafeBenchPlugin.canGenerateRemote,
+  });
 
   return {
     ...originalModule,
@@ -264,6 +273,7 @@ describe('UnsafeBenchPlugin', () => {
   });
 
   it('should set canGenerateRemote to false', () => {
+    expect(UnsafeBenchPlugin.canGenerateRemote).toBe(false);
     const plugin = new UnsafeBenchPlugin({ type: 'test' }, 'testing purposes', 'image');
     expect(plugin.canGenerateRemote).toBe(false);
   });

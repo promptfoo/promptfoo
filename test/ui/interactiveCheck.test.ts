@@ -36,14 +36,15 @@ describe('interactiveCheck', () => {
 
   beforeEach(() => {
     vi.resetModules();
-    delete process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI;
-    delete process.env.PROMPTFOO_FORCE_INTERACTIVE_UI;
+    vi.stubEnv('PROMPTFOO_ENABLE_INTERACTIVE_UI', undefined);
+    vi.stubEnv('PROMPTFOO_FORCE_INTERACTIVE_UI', undefined);
+    vi.stubEnv('PROMPTFOO_FORCE_INTERACTIVE_INIT', undefined);
+    vi.stubEnv('PROMPTFOO_DISABLE_INTERACTIVE_UI', undefined);
   });
 
   afterEach(() => {
     Object.defineProperty(process.stdout, 'isTTY', { value: originalIsTTY, writable: true });
-    delete process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI;
-    delete process.env.PROMPTFOO_FORCE_INTERACTIVE_UI;
+    vi.unstubAllEnvs();
   });
 
   describe('canUseInteractiveUI', () => {
@@ -67,7 +68,7 @@ describe('interactiveCheck', () => {
     });
 
     it('should return true when PROMPTFOO_ENABLE_INTERACTIVE_UI=true', async () => {
-      process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI = 'true';
+      vi.stubEnv('PROMPTFOO_ENABLE_INTERACTIVE_UI', 'true');
       const { isInteractiveUIEnabled } = await import('../../src/ui/interactiveCheck');
       expect(isInteractiveUIEnabled()).toBe(true);
     });
@@ -80,7 +81,7 @@ describe('interactiveCheck', () => {
     });
 
     it('should return true when PROMPTFOO_FORCE_INTERACTIVE_UI=true', async () => {
-      process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
+      vi.stubEnv('PROMPTFOO_FORCE_INTERACTIVE_UI', 'true');
       const { isInteractiveUIForced } = await import('../../src/ui/interactiveCheck');
       expect(isInteractiveUIForced()).toBe(true);
     });
@@ -94,35 +95,35 @@ describe('interactiveCheck', () => {
     });
 
     it('should return true when opted in and TTY available', async () => {
-      process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI = 'true';
+      vi.stubEnv('PROMPTFOO_ENABLE_INTERACTIVE_UI', 'true');
       Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
       const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');
       expect(shouldUseInkUI()).toBe(true);
     });
 
     it('should return false when opted in but no TTY', async () => {
-      process.env.PROMPTFOO_ENABLE_INTERACTIVE_UI = 'true';
+      vi.stubEnv('PROMPTFOO_ENABLE_INTERACTIVE_UI', 'true');
       Object.defineProperty(process.stdout, 'isTTY', { value: false, writable: true });
       const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');
       expect(shouldUseInkUI()).toBe(false);
     });
 
     it('should return true when FORCE is set (bypasses opt-in)', async () => {
-      process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
+      vi.stubEnv('PROMPTFOO_FORCE_INTERACTIVE_UI', 'true');
       Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
       const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');
       expect(shouldUseInkUI()).toBe(true);
     });
 
     it('should return false when FORCE is set but no TTY available', async () => {
-      process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
+      vi.stubEnv('PROMPTFOO_FORCE_INTERACTIVE_UI', 'true');
       Object.defineProperty(process.stdout, 'isTTY', { value: false, writable: true });
       const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');
       expect(shouldUseInkUI()).toBe(false);
     });
 
     it('should return true when FORCE is set even without opt-in', async () => {
-      process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
+      vi.stubEnv('PROMPTFOO_FORCE_INTERACTIVE_UI', 'true');
       // ENABLE is not set
       Object.defineProperty(process.stdout, 'isTTY', { value: true, writable: true });
       const { shouldUseInkUI } = await import('../../src/ui/interactiveCheck');

@@ -15,7 +15,9 @@ import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -26,7 +28,12 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
-import { getLastMessageContent, tryUnblocking } from './shared';
+import {
+  buildGraderResultAssertion,
+  getGraderAssertionValue,
+  getLastMessageContent,
+  tryUnblocking,
+} from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
@@ -35,6 +42,7 @@ import type {
   AssertionSet,
   AtomicTestCase,
   GradingResult,
+  Inputs,
   VarValue,
 } from '../../types/index';
 import type {
@@ -79,6 +87,7 @@ export interface ExtractAttackFailureResponse {
 
 interface GoatConfig {
   injectVar: string;
+  maxCharsPerMessage?: number;
   maxTurns: number;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   stateful: boolean;
@@ -91,9 +100,10 @@ interface GoatConfig {
   _perTurnLayers?: LayerConfig[];
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
+   * Keys are variable names, values are Inputs definitions: plain descriptions
+   * or structured typed configs with fields like description, type, and config.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   [key: string]: unknown;
 }
 
@@ -120,13 +130,14 @@ export default class GoatProvider implements ApiProvider {
   constructor(
     options: ProviderOptions & {
       maxTurns?: number;
+      maxCharsPerMessage?: number;
       injectVar?: string;
       stateful?: boolean;
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
       continueAfterSuccess?: boolean;
       tracing?: RawTracingConfig;
       _perTurnLayers?: LayerConfig[];
-      inputs?: Record<string, string>;
+      inputs?: Inputs;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -140,6 +151,7 @@ export default class GoatProvider implements ApiProvider {
     }
     this.config = {
       maxTurns,
+      ...(options.maxCharsPerMessage ? { maxCharsPerMessage: options.maxCharsPerMessage } : {}),
       injectVar: options.injectVar,
       stateful: options.stateful ?? false,
       excludeTargetOutputFromAgenticAttackGeneration:
@@ -154,6 +166,7 @@ export default class GoatProvider implements ApiProvider {
     logger.debug('[GOAT] Constructor options', {
       injectVar: options.injectVar,
       maxTurns: options.maxTurns,
+      maxCharsPerMessage: options.maxCharsPerMessage,
       stateful: options.stateful,
       continueAfterSuccess: options.continueAfterSuccess,
       perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
@@ -185,6 +198,12 @@ export default class GoatProvider implements ApiProvider {
 
     const targetProvider: ApiProvider | undefined = context?.originalProvider;
     invariant(targetProvider, 'Expected originalProvider to be set');
+    const maxCharsPerMessage =
+      this.config.maxCharsPerMessage ??
+      (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: number } | undefined)
+        ?.maxCharsPerMessage ??
+      (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: number } | undefined)
+        ?.maxCharsPerMessage;
 
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
@@ -282,6 +301,7 @@ export default class GoatProvider implements ApiProvider {
               unblockingTargetPrompt = transformResult.prompt;
             }
 
+            throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
             const unblockingResponse = await targetProvider.callApi(
               unblockingTargetPrompt,
               context,
@@ -394,6 +414,14 @@ export default class GoatProvider implements ApiProvider {
 
         // Extract input vars from the attack message for multi-input mode
         const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+        const materializedInputVars =
+          currentInputVars && this.config.inputs
+            ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+                materializationIndex: turn,
+                pluginId: 'goat',
+              })
+            : undefined;
+        const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
         // For multi-input mode, extract the 'prompt' field from JSON for the inject var
         // Cloud returns JSON like: {"prompt": "attack text", "message": "val1", "email": "val2"}
@@ -408,11 +436,13 @@ export default class GoatProvider implements ApiProvider {
           }
         }
 
-        // Build target vars - handle multi-input mode
+        const attackerVars = {
+          [this.config.injectVar]: processedMessage,
+          ...(currentRenderInputVars || {}),
+        };
         const targetVars: Record<string, VarValue> = {
           ...context.vars,
-          [this.config.injectVar]: processedMessage,
-          ...(currentInputVars || {}),
+          ...attackerVars,
         };
 
         const renderedAttackerPrompt = await renderPrompt(
@@ -420,7 +450,7 @@ export default class GoatProvider implements ApiProvider {
           targetVars,
           context.filters,
           targetProvider,
-          [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+          Object.keys(attackerVars),
         );
 
         messages.push({
@@ -522,9 +552,19 @@ export default class GoatProvider implements ApiProvider {
         }
 
         const iterationStart = Date.now();
+        throwIfTargetPromptExceedsMaxChars(targetPrompt, maxCharsPerMessage);
+        const targetContext = context
+          ? {
+              ...context,
+              vars: {
+                ...targetVars,
+                [this.config.injectVar]: targetPrompt,
+              },
+            }
+          : context;
         const targetResponse = (await targetProvider.callApi(
           targetPrompt,
-          context,
+          targetContext,
           options,
         )) as GoatProviderResponse;
 
@@ -593,9 +633,8 @@ export default class GoatProvider implements ApiProvider {
                 targetResponse.audio?.data && targetResponse.audio?.format
                   ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                   : undefined,
-              inputVars: currentInputVars,
+              inputVars: currentRenderInputVars,
             });
-            previousTargetOutput = endedOutput;
           }
 
           lastTargetResponse = targetResponse;
@@ -641,7 +680,7 @@ export default class GoatProvider implements ApiProvider {
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet
           // Include input vars for multi-input mode (extracted from current prompt)
-          inputVars: currentInputVars,
+          inputVars: currentRenderInputVars,
         });
 
         // Store the attack response for potential unblocking in next turn
@@ -658,7 +697,7 @@ export default class GoatProvider implements ApiProvider {
         lastTargetResponse = finalResponse;
 
         const grader = assertToUse ? getGraderById(assertToUse.type) : undefined;
-        if (test && grader && finalOutput) {
+        if (test && assertToUse && grader && finalOutput) {
           // Build grading context with tracing and exfil tracking data
           let gradingContext:
             | {
@@ -726,7 +765,7 @@ export default class GoatProvider implements ApiProvider {
             finalOutput,
             test,
             targetProvider,
-            assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            getGraderAssertionValue(assertToUse),
             additionalRubric,
             undefined,
             gradingContext,
@@ -734,11 +773,7 @@ export default class GoatProvider implements ApiProvider {
           graderPassed = grade.pass;
           storedGraderResult = {
             ...grade,
-            assertion: grade.assertion
-              ? { ...grade.assertion, value: rubric }
-              : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                ? { ...assertToUse, value: rubric }
-                : undefined,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
           };
         }
 

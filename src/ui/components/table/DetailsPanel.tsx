@@ -537,10 +537,10 @@ export function DetailsPanel({
   const navigateFailure = useCallback(
     (direction: 'prev' | 'next') => {
       const failureIndex = findFailureIndex(allRows, currentRowIndex, direction, outputCellIndex);
-      if (failureIndex !== null) {
-        onNavigate(failureIndex, currentColIndex);
-      } else {
+      if (failureIndex === null) {
         showNotification(`No ${direction} failure found`);
+      } else {
+        onNavigate(failureIndex, currentColIndex);
       }
     },
     [allRows, currentRowIndex, currentColIndex, outputCellIndex, onNavigate, showNotification],

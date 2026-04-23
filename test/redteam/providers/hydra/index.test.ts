@@ -1,9 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
-import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import {
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../../../src/redteam/remoteGeneration';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../../factories/provider';
 
-import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -47,16 +55,14 @@ vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../../src/redteam/graders', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    getGraderById: mockGetGraderById,
-  };
-});
+vi.mock('../../../../src/redteam/graders', () => ({
+  getGraderById: mockGetGraderById,
+}));
 
 vi.mock('../../../../src/redteam/remoteGeneration', async (importOriginal) => {
   return {
     ...(await importOriginal()),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
     shouldGenerateRemote: vi.fn(),
   };
 });
@@ -95,34 +101,29 @@ vi.mock('../../../../src/redteam/providers/traceFormatting', () => ({
 }));
 
 describe('HydraProvider', () => {
-  let mockAgentProvider: Mocked<ApiProvider>;
-  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockAgentProvider: MockApiProvider;
+  let mockTargetProvider: MockApiProvider;
   let mockGrader: any;
 
-  beforeEach(async () => {
+  beforeAll(async () => {
+    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
+    HydraProvider = hydraModule.HydraProvider;
+  });
+
+  beforeEach(() => {
     vi.clearAllMocks();
     // Reset the hoisted mock to ensure clean state
     mockGetGraderById.mockReset();
 
-    // Reset modules and dynamically import HydraProvider so it gets the mocked graders
-    vi.resetModules();
-    const hydraModule = await import('../../../../src/redteam/providers/hydra/index');
-    HydraProvider = hydraModule.HydraProvider;
-
     // Mock agent provider (cloud provider)
-    mockAgentProvider = {
-      id: vi.fn().mockReturnValue('mock-agent'),
-      callApi: vi.fn(),
-      delay: 0,
-    } as Mocked<ApiProvider>;
+    mockAgentProvider = createMockProvider({ id: 'mock-agent', delay: 0 });
+    mockAgentProvider.callApi.mockReset();
 
     // Mock target provider
-    mockTargetProvider = {
-      id: vi.fn().mockReturnValue('mock-target'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Target response',
-      }),
-    } as Mocked<ApiProvider>;
+    mockTargetProvider = createMockProvider({
+      id: 'mock-target',
+      response: createProviderResponse({ output: 'Target response' }),
+    });
 
     // Mock grader
     mockGrader = {
@@ -145,6 +146,8 @@ describe('HydraProvider', () => {
     vi.mocked(shouldGenerateRemote).mockImplementation(function () {
       return true;
     });
+    vi.mocked(neverGenerateRemote).mockReset();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
     mockIsBasicRefusal.mockReturnValue(false);
@@ -198,15 +201,29 @@ describe('HydraProvider', () => {
       expect(provider['scanId']).toBe('test-scan-id');
     });
 
-    it('should throw error when remote generation is not available', () => {
+    it('should throw the implicit-disabled error when remote generation is unavailable for this config', () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return false;
       });
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
       expect(() => {
         new HydraProvider({ injectVar: 'input' });
       }).toThrow(
-        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To fix, enable remote generation (for example by unsetting OPENAI_API_KEY), set PROMPTFOO_REMOTE_GENERATION_URL, or log into Promptfoo Cloud.',
+        'jailbreak:hydra strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+      );
+    });
+
+    it('should throw the explicit-disabled error when a disable flag is set', () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(neverGenerateRemote).mockReturnValue(true);
+
+      expect(() => {
+        new HydraProvider({ injectVar: 'input' });
+      }).toThrow(
+        /jailbreak:hydra strategy requires remote generation, which has been explicitly disabled\. To enable it, unset (PROMPTFOO_DISABLE_REMOTE_GENERATION|PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION)/,
       );
     });
 
@@ -1179,6 +1196,40 @@ describe('HydraProvider', () => {
         ...graderResult,
         assertion: { type: 'harmful:test', value: testRubric },
       });
+    });
+
+    it('passes target provider raw response into the grader', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        raw: JSON.stringify({ finalResponse: 'Target response', items: [] }),
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context);
+
+      const gradingContext = mockGrader.getResult.mock.calls[0][7] as {
+        providerResponse?: { raw?: unknown };
+      };
+      expect(gradingContext.providerResponse?.raw).toContain('finalResponse');
     });
   });
 

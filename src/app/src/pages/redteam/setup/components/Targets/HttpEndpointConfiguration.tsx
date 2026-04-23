@@ -295,15 +295,12 @@ Content-Type: application/json
         newHeaders.splice(index, 1);
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;
@@ -319,15 +316,12 @@ Content-Type: application/json
         newHeaders[index] = { ...newHeaders[index], key: newKey };
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;
@@ -343,15 +337,12 @@ Content-Type: application/json
         newHeaders[index] = { ...newHeaders[index], value: newValue };
 
         // Update target configuration inside setState callback
-        const headerObj = newHeaders.reduce(
-          (acc, { key, value }) => {
-            if (key) {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, string>,
-        );
+        const headerObj = newHeaders.reduce<Record<string, string>>((acc, { key, value }) => {
+          if (key) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {});
         updateCustomTarget('headers', headerObj);
 
         return newHeaders;

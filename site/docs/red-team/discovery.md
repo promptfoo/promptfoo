@@ -42,3 +42,13 @@ The agent discovers four key areas:
 4. **User Context**: How the system perceives and categorizes users
 
 The responses are synthesized into a comprehensive profile to inform attack strategies. For privacy, target responses are not stored except in error cases where they may appear in Promptfoo Cloud's error logs for debugging purposes.
+
+## Troubleshooting
+
+If `promptfoo redteam discover` fails with `Remote server returned HTTP 400: Unknown task: target-purpose-discovery` (or a similar 400/404 error), your client is most likely out of date. Update with `npm install -g promptfoo@latest` and rerun.
+
+Other common errors:
+
+- **HTTP 401 / 403** — Run `promptfoo auth login` and confirm your account has access to target discovery.
+- **HTTP 429** — You are being rate limited; wait a moment and try again.
+- **HTTP 5xx** — The remote generation service is temporarily unavailable. Retry in a few minutes.

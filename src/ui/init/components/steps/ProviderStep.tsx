@@ -96,7 +96,7 @@ export function ProviderStep({
       <NavigationBar
         canGoBack={true}
         showNext={true}
-        nextLabel={`Continue with ${totalModels} model${totalModels !== 1 ? 's' : ''}`}
+        nextLabel={`Continue with ${totalModels} model${totalModels === 1 ? '' : 's'}`}
         nextDisabled={totalModels === 0}
         showHelp={false}
       />

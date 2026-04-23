@@ -803,8 +803,7 @@ module.exports = { validateUser, validatePasswordStrength };`;
   // Handle selecting a predefined prompt
   const handlePromptSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedValue = e.target.value;
-    const selectedPromptObj = prompts.find((p) => p.id === selectedValue);
-    if (selectedPromptObj) {
+    if (prompts.some((prompt) => prompt.id === selectedValue)) {
       setSelectedPrompt(selectedValue);
     } else {
       setSelectedPrompt('');
@@ -869,15 +868,11 @@ module.exports = { validateUser, validatePasswordStrength };`;
               <div className={styles.editorHeader}>
                 <span className={styles.tabTitle}>{selectedFile.name}</span>
               </div>
-              <pre
-                className={`${styles.codeArea} ${isEditing && selectedFile ? styles.editing : ''}`}
-              >
+              <pre className={`${styles.codeArea} ${isEditing ? styles.editing : ''}`}>
                 <code
-                  dangerouslySetInnerHTML={
-                    selectedFile
-                      ? formatCodeWithHighlightedInstructions(selectedFile.content)
-                      : { __html: '' }
-                  }
+                  dangerouslySetInnerHTML={formatCodeWithHighlightedInstructions(
+                    selectedFile.content,
+                  )}
                 />
               </pre>
               {useHiddenChars && selectedFile?.isMalicious && showMaliciousCode && (
@@ -926,7 +921,7 @@ module.exports = { validateUser, validatePasswordStrength };`;
             <select
               className={styles.promptSelect}
               value={selectedPrompt}
-              onChange={(e) => setSelectedPrompt(e.target.value)}
+              onChange={handlePromptSelect}
             >
               <option value="">Select a prompt...</option>
               {prompts.map((prompt) => (

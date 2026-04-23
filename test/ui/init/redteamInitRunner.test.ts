@@ -65,8 +65,7 @@ describe('redteamInitRunner', () => {
   });
 
   afterEach(() => {
-    delete process.env.PROMPTFOO_FORCE_INTERACTIVE_INIT;
-    delete process.env.PROMPTFOO_DISABLE_INTERACTIVE_UI;
+    vi.unstubAllEnvs();
   });
 
   describe('shouldUseInkRedteamInit', () => {

@@ -36,6 +36,98 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText('Test passed')).toBeInTheDocument();
   });
 
+  it('shows rendered assertion value and original template when both are present', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Rendered correctly',
+        assertion: {
+          type: 'llm-rubric',
+          value: 'Does the output match {{myVar}}?',
+        },
+        metadata: {
+          renderedAssertionValue: 'Does the output match hello world?',
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Does the output match hello world?')).toBeInTheDocument();
+    expect(screen.getByText('Template:')).toBeInTheDocument();
+    expect(screen.getByText('Does the output match {{myVar}}?')).toBeInTheDocument();
+  });
+
+  it('JSON-stringifies object-valued rendered assertion values', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Rendered object',
+        assertion: {
+          type: 'is-json',
+          value: { name: '{{name}}' },
+        },
+        metadata: {
+          renderedAssertionValue: { name: 'hello world' } as unknown as string,
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText(/"name": "hello world"/)).toBeInTheDocument();
+    expect(screen.getByText('Template:')).toBeInTheDocument();
+    expect(screen.getByText(/"name": "\{\{name\}\}"/)).toBeInTheDocument();
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
+  });
+
+  it('falls back to assertion value when rendered assertion value is null', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Null rendered',
+        assertion: {
+          type: 'contains',
+          value: 'Hello world',
+        },
+        metadata: {
+          renderedAssertionValue: null as unknown as string,
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Hello world')).toBeInTheDocument();
+    expect(screen.queryByText('null')).not.toBeInTheDocument();
+    expect(screen.queryByText('Template:')).not.toBeInTheDocument();
+  });
+
+  it('does not show template line when rendered value matches assertion value', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'No template delta',
+        assertion: {
+          type: 'contains',
+          value: 'Hello world',
+        },
+        metadata: {
+          renderedAssertionValue: 'Hello world',
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Hello world')).toBeInTheDocument();
+    expect(screen.queryByText('Template:')).not.toBeInTheDocument();
+  });
+
   it('renders grading prompts section when renderedGradingPrompt is present', () => {
     const gradingResults: GradingResult[] = [
       {
@@ -155,5 +247,147 @@ describe('EvaluationPanel', () => {
 
     expect(screen.getByText('promptfoo:redteam:policy - Full Grading Prompt')).toBeInTheDocument();
     expect(screen.getByText('promptfoo:redteam:harmful - Full Grading Prompt')).toBeInTheDocument();
+  });
+
+  it('renders assert-set rows as a nested hierarchy with assertion type and value labels', () => {
+    const childResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: {
+          type: 'contains',
+          value: 'google_docs/batch_update',
+        },
+      },
+      {
+        pass: true,
+        score: 1,
+        reason: 'Assertion passed',
+        assertion: {
+          type: 'contains',
+          value: 'google_docs/create_document',
+        },
+      },
+    ];
+
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'All assertions passed',
+        componentResults: childResults,
+        metadata: {
+          assertionSet: {
+            type: 'assert-set',
+            metric: 'tool-calls',
+            assertionCount: childResults.length,
+          },
+        },
+      },
+    ];
+
+    const { container } = render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Metric')).toBeInTheDocument();
+    expect(screen.getByText('tool-calls')).toBeInTheDocument();
+    expect(screen.getByText('assert-set')).toBeInTheDocument();
+    expect(screen.getByText('2 nested assertions')).toBeInTheDocument();
+    expect(screen.getAllByText('contains')).toHaveLength(2);
+    expect(screen.getByText('google_docs/batch_update')).toBeInTheDocument();
+    expect(screen.getByText('google_docs/create_document')).toBeInTheDocument();
+    expect(container.querySelectorAll('.lucide-corner-down-right')).toHaveLength(2);
+  });
+
+  it('renders sibling rows after nested children when child results are not duplicated at top level', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Parent set passed',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Nested child set passed',
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'Deep child passed',
+                assertion: {
+                  type: 'contains',
+                  value: 'deep-child',
+                },
+              },
+            ],
+            metadata: {
+              assertionSet: {
+                type: 'assert-set',
+                metric: 'nested-tool-calls',
+                assertionCount: 1,
+              },
+            },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Sibling child failed',
+            assertion: {
+              type: 'equals',
+              value: 'expected-sibling',
+            },
+          },
+        ],
+        metadata: {
+          assertionSet: {
+            type: 'assert-set',
+            metric: 'tool-calls',
+            assertionCount: 2,
+          },
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('nested-tool-calls')).toBeInTheDocument();
+    expect(screen.getByText('deep-child')).toBeInTheDocument();
+    expect(screen.getByText('equals')).toBeInTheDocument();
+    expect(screen.getByText('expected-sibling')).toBeInTheDocument();
+    expect(screen.getByText('Sibling child failed')).toBeInTheDocument();
+  });
+
+  it('ignores malformed assertion-set metadata and falls back to child result counts', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'All assertions passed',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'Assertion passed',
+            assertion: {
+              type: 'contains',
+              value: 'google_docs/create_document',
+            },
+          },
+        ],
+        metadata: {
+          assertionSet: {
+            type: 'assert-set',
+            assertionCount: '1',
+          },
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('assert-set')).toBeInTheDocument();
+    expect(screen.getByText('1 nested assertion')).toBeInTheDocument();
+    expect(screen.getByText('google_docs/create_document')).toBeInTheDocument();
   });
 });

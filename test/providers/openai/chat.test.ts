@@ -6,6 +6,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -41,21 +42,21 @@ describe('OpenAI Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     disableCache();
-    process.env.OPENAI_API_KEY = 'test-api-key';
-    process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
+    mockProcessEnv({ OPENAI_API_KEY: 'test-api-key' });
+    mockProcessEnv({ DEEPSEEK_API_KEY: 'test-deepseek-key' });
   });
 
   afterEach(() => {
     enableCache();
     if (originalOpenAiApiKey) {
-      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+      mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey });
     } else {
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
     }
     if (originalDeepseekApiKey) {
-      process.env.DEEPSEEK_API_KEY = originalDeepseekApiKey;
+      mockProcessEnv({ DEEPSEEK_API_KEY: originalDeepseekApiKey });
     } else {
-      delete process.env.DEEPSEEK_API_KEY;
+      mockProcessEnv({ DEEPSEEK_API_KEY: undefined });
     }
   });
 
@@ -1800,6 +1801,104 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(prefixedGpt5Body.max_completion_tokens).toBeUndefined();
     });
 
+    it('should strip max_tokens from passthrough for GPT-5 models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
+        config: {
+          passthrough: { max_tokens: 16000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it('should strip max_tokens from passthrough for reasoning models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('o3', {
+        config: {
+          passthrough: { max_tokens: 8000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBeUndefined();
+    });
+
+    it('should preserve max_tokens in passthrough for regular models', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Test output' } }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o', {
+        config: {
+          passthrough: { max_tokens: 2000 },
+        },
+      });
+      await provider.callApi('Test prompt');
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const body = JSON.parse(call[1].body);
+      expect(body.max_tokens).toBe(2000);
+    });
+
+    it('should not share config between provider instances', () => {
+      const sharedConfig = {
+        max_tokens: 16000,
+        temperature: 0,
+        response_format: { type: 'json_object' as const },
+      };
+
+      const providerA = new OpenAiChatCompletionProvider('gpt-4.1-mini', {
+        config: sharedConfig,
+      });
+      const providerB = new OpenAiChatCompletionProvider('gpt-5.4-mini', {
+        config: sharedConfig,
+      });
+
+      // Configs should be independent
+      expect(providerA.config).not.toBe(sharedConfig);
+      expect(providerB.config).not.toBe(sharedConfig);
+      expect(providerA.config).not.toBe(providerB.config);
+      expect(providerA.config.max_tokens).toBe(16000);
+      expect(providerB.config.max_tokens).toBe(16000);
+
+      // Mutating one should not affect the other
+      (providerA.config as any).max_tokens = 999;
+      expect(providerB.config.max_tokens).toBe(16000);
+
+      // Original object should not be mutated
+      expect(sharedConfig.max_tokens).toBe(16000);
+    });
+
     it('should handle reasoning_effort for reasoning models', async () => {
       const mockResponse = {
         data: {
@@ -2199,7 +2298,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     it('should use generic error message with fallback when apiKeyEnvar is undefined', async () => {
       // Clear any existing API key environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -2210,7 +2309,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
       }
     });
@@ -2219,8 +2318,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Clear any existing API key environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
       const originalCustomEnv = process.env.CUSTOM_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -2233,10 +2332,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
         if (originalCustomEnv) {
-          process.env.CUSTOM_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_API_KEY: originalCustomEnv });
         }
       }
     });
@@ -2261,8 +2360,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Clear environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
       const originalCustomEnv = process.env.CUSTOM_PROVIDER_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_PROVIDER_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_PROVIDER_API_KEY: undefined });
 
       try {
         const provider = new CustomProvider('custom-model');
@@ -2277,10 +2376,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
         if (originalCustomEnv) {
-          process.env.CUSTOM_PROVIDER_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_PROVIDER_API_KEY: originalCustomEnv });
         }
       }
     });
@@ -2390,7 +2489,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should work with apiKeyRequired: false and API key from environment', () => {
       const originalEnv = process.env.CUSTOM_LOCAL_API_KEY;
-      process.env.CUSTOM_LOCAL_API_KEY = 'test-local-key';
+      mockProcessEnv({ CUSTOM_LOCAL_API_KEY: 'test-local-key' });
 
       try {
         const provider = new OpenAiChatCompletionProvider('local-model', {
@@ -2408,9 +2507,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(provider.requiresApiKey()).toBe(false);
       } finally {
         if (originalEnv === undefined) {
-          delete process.env.CUSTOM_LOCAL_API_KEY;
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: undefined });
         } else {
-          process.env.CUSTOM_LOCAL_API_KEY = originalEnv;
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: originalEnv });
         }
       }
     });
@@ -2419,8 +2518,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Ensure no API key is set in the environment
       const originalCustomEnv = process.env.CUSTOM_LOCAL_API_KEY;
       const originalOpenAIEnv = process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_LOCAL_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ CUSTOM_LOCAL_API_KEY: undefined });
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('local-model', {
@@ -2464,10 +2563,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(headers.Authorization).toBeUndefined();
       } finally {
         if (originalCustomEnv !== undefined) {
-          process.env.CUSTOM_LOCAL_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: originalCustomEnv });
         }
         if (originalOpenAIEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalOpenAIEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalOpenAIEnv });
         }
       }
     });

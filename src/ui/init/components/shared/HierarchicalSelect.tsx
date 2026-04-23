@@ -404,7 +404,7 @@ export function HierarchicalSelect({
       {/* Status and hints */}
       <Box marginTop={1} flexDirection="row" gap={2}>
         <Text color={totalSelected > 0 ? 'green' : 'yellow'}>
-          {totalSelected} model{totalSelected !== 1 ? 's' : ''} selected
+          {totalSelected} model{totalSelected === 1 ? '' : 's'} selected
         </Text>
         <Text dimColor>[Space] toggle [Enter] confirm [←/→] expand/collapse [/] search</Text>
       </Box>

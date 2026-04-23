@@ -39,7 +39,7 @@ function createTestData(
     output: {
       id: 'test-id',
       pass: overrides.pass !== false,
-      score: overrides.pass !== false ? 1 : 0,
+      score: overrides.pass === false ? 0 : 1,
       text: overrides.response || 'Test response content',
       prompt: overrides.prompt || 'Test prompt content',
       latencyMs: overrides.latencyMs || 1234,
@@ -49,8 +49,8 @@ function createTestData(
       failureReason: overrides.pass === false ? 1 : 0,
       gradingResult: overrides.gradingResult || {
         pass: overrides.pass !== false,
-        score: overrides.pass !== false ? 1 : 0,
-        reason: overrides.pass !== false ? 'Test passed' : 'Test failed',
+        score: overrides.pass === false ? 0 : 1,
+        reason: overrides.pass === false ? 'Test failed' : 'Test passed',
       },
       error: overrides.error,
       tokenUsage: { prompt: 100, completion: 50 },

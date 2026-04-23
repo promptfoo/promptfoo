@@ -52,6 +52,7 @@ describe('clipboard utility', () => {
   afterEach(() => {
     // Restore original platform
     Object.defineProperty(process, 'platform', { value: originalPlatform });
+    vi.unstubAllEnvs();
   });
 
   describe('copyToClipboard (async)', () => {
@@ -118,11 +119,7 @@ describe('clipboard utility', () => {
     describe('on Linux', () => {
       beforeEach(() => {
         Object.defineProperty(process, 'platform', { value: 'linux' });
-        process.env.DISPLAY = ':0';
-      });
-
-      afterEach(() => {
-        delete process.env.DISPLAY;
+        vi.stubEnv('DISPLAY', ':0');
       });
 
       it('should use xclip command with selection args', async () => {
@@ -162,8 +159,8 @@ describe('clipboard utility', () => {
       });
 
       it('should return error when no display available', async () => {
-        delete process.env.DISPLAY;
-        delete process.env.WAYLAND_DISPLAY;
+        vi.stubEnv('DISPLAY', undefined);
+        vi.stubEnv('WAYLAND_DISPLAY', undefined);
 
         const result = await copyToClipboard('test content');
 
@@ -260,11 +257,7 @@ describe('clipboard utility', () => {
     describe('on Linux', () => {
       beforeEach(() => {
         Object.defineProperty(process, 'platform', { value: 'linux' });
-        process.env.DISPLAY = ':0';
-      });
-
-      afterEach(() => {
-        delete process.env.DISPLAY;
+        vi.stubEnv('DISPLAY', ':0');
       });
 
       it('should check for xclip first', () => {
@@ -289,8 +282,8 @@ describe('clipboard utility', () => {
       });
 
       it('should return false when no display available', () => {
-        delete process.env.DISPLAY;
-        delete process.env.WAYLAND_DISPLAY;
+        vi.stubEnv('DISPLAY', undefined);
+        vi.stubEnv('WAYLAND_DISPLAY', undefined);
 
         expect(isClipboardAvailable()).toBe(false);
       });
