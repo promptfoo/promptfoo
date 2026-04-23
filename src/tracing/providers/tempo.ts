@@ -64,7 +64,7 @@ interface TempoTraceResponse {
  */
 function nanoToMs(nanoStr: string): number {
   const nanos = BigInt(nanoStr);
-  return Number(nanos / BigInt(1_000_000));
+  return Number.parseInt((nanos / 1_000_000n).toString(), 10);
 }
 
 /**

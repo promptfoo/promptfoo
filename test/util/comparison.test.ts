@@ -3,14 +3,16 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
   deduplicateTestCases,
+  extractRuntimeVars,
   filterRuntimeVars,
   getTestCaseDeduplicationKey,
   isRuntimeVar,
   resultIsForTestCase,
   varsMatch,
 } from '../../src/util/comparison';
+import { createEvaluateResult } from '../factories/eval';
 
-import type { EvaluateResult, TestCase } from '../../src/types/index';
+import type { TestCase } from '../../src/types/index';
 
 describe('varsMatch', () => {
   it('true with both undefined', () => {
@@ -44,12 +46,10 @@ describe('resultIsForTestCase', () => {
       key: 'value',
     },
   };
-  const result = {
-    provider: 'provider',
-    vars: {
-      key: 'value',
-    },
-  } as any as EvaluateResult;
+  const result = createEvaluateResult({
+    provider: 'provider' as any,
+    vars: { key: 'value' },
+  });
 
   it('is true', async () => {
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -74,10 +74,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const resultWithNullProvider = {
-      provider: null,
+    const resultWithNullProvider = createEvaluateResult({
+      provider: null as any,
       vars: { key: 'value' },
-    } as any as EvaluateResult;
+    });
 
     // Should match because we can't compare when result provider is missing
     expect(resultIsForTestCase(resultWithNullProvider, testCaseWithProvider)).toBe(true);
@@ -89,10 +89,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const resultWithUndefinedProvider = {
-      provider: undefined,
+    const resultWithUndefinedProvider = createEvaluateResult({
+      provider: undefined as any,
       vars: { key: 'value' },
-    } as any as EvaluateResult;
+    });
 
     expect(resultIsForTestCase(resultWithUndefinedProvider, testCaseWithProvider)).toBe(true);
   });
@@ -102,10 +102,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const resultWithProvider = {
+    const resultWithProvider = createEvaluateResult({
       provider: { id: 'some-provider' },
       vars: { key: 'value' },
-    } as any as EvaluateResult;
+    });
 
     expect(resultIsForTestCase(resultWithProvider, testCaseNoProvider)).toBe(true);
   });
@@ -120,10 +120,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const resultWithTargetProvider = {
+    const resultWithTargetProvider = createEvaluateResult({
       provider: { id: 'openai:gpt-4' },
       vars: { key: 'value' },
-    } as any as EvaluateResult;
+    });
 
     // Both providers present and different → no match (strict comparison)
     expect(resultIsForTestCase(resultWithTargetProvider, testCaseWithAgenticProvider)).toBe(false);
@@ -141,10 +141,10 @@ describe('resultIsForTestCase', () => {
   });
 
   it('matches when test provider is label and result provider has label and id', async () => {
-    const labelledResult = {
+    const labelledResult = createEvaluateResult({
       provider: { id: 'file://provider.js', label: 'provider' },
       vars: { key: 'value' },
-    } as any as EvaluateResult;
+    });
 
     expect(resultIsForTestCase(labelledResult, testCase)).toBe(true);
   });
@@ -155,10 +155,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const absolutePathResult = {
+    const absolutePathResult = createEvaluateResult({
       provider: { id: `file://${path.join(process.cwd(), 'provider.js')}` },
       vars: { key: 'value' },
-    } as any as EvaluateResult;
+    });
 
     expect(resultIsForTestCase(absolutePathResult, relativePathTestCase)).toBe(true);
   });
@@ -169,10 +169,10 @@ describe('resultIsForTestCase', () => {
       vars: { key: 'value' },
     };
 
-    const absolutePathResult = {
-      provider: `file://${path.join(process.cwd(), 'provider.js')}`,
+    const absolutePathResult = createEvaluateResult({
+      provider: `file://${path.join(process.cwd(), 'provider.js')}` as any,
       vars: { key: 'value' },
-    } as any as EvaluateResult;
+    });
 
     expect(resultIsForTestCase(absolutePathResult, noPathTestCase)).toBe(true);
   });
@@ -188,8 +188,8 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = {
-      provider: 'provider',
+    const result = createEvaluateResult({
+      provider: 'provider' as any,
       vars: {
         input: 'hello',
         language: 'en',
@@ -201,7 +201,7 @@ describe('resultIsForTestCase', () => {
           language: 'en',
         },
       },
-    } as any as EvaluateResult;
+    });
 
     // Should match because _conversation is filtered out
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -218,14 +218,14 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = {
-      provider: 'provider',
+    const result = createEvaluateResult({
+      provider: 'provider' as any,
       vars: {
         input: 'hello',
         language: 'en',
         _conversation: [],
       },
-    } as any as EvaluateResult;
+    });
 
     // Should match because both have same vars after filtering
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -242,14 +242,14 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = {
-      provider: 'provider',
+    const result = createEvaluateResult({
+      provider: 'provider' as any,
       vars: {
         prompt: 'test prompt',
         goal: 'test goal',
         sessionId: 'goat-session-abc123', // Added by GOAT provider during evaluation
       },
-    } as any as EvaluateResult;
+    });
 
     // Should match because sessionId is filtered out
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -263,14 +263,14 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = {
-      provider: 'provider',
+    const result = createEvaluateResult({
+      provider: 'provider' as any,
       vars: {
         input: 'hello',
         _conversation: [{ role: 'user', content: 'hi' }],
         sessionId: 'session-xyz789',
       },
-    } as any as EvaluateResult;
+    });
 
     // Should match because both runtime vars are filtered out
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -286,13 +286,13 @@ describe('resultIsForTestCase', () => {
       },
     };
 
-    const result = {
-      provider: 'provider',
+    const result = createEvaluateResult({
+      provider: 'provider' as any,
       vars: {
         prompt: 'test',
         sessionId: 'different-runtime-session',
       },
-    } as any as EvaluateResult;
+    });
 
     // Should match because sessionId is filtered from both sides
     expect(resultIsForTestCase(result, testCase)).toBe(true);
@@ -414,6 +414,105 @@ describe('filterRuntimeVars', () => {
       some_conversation: 'value2',
       session_id: 'value3',
     });
+  });
+});
+
+describe('extractRuntimeVars', () => {
+  it('should extract _conversation', () => {
+    const vars = { input: 'hello', _conversation: [{ role: 'user', content: 'hi' }] };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ _conversation: [{ role: 'user', content: 'hi' }] });
+  });
+
+  it('should extract sessionId', () => {
+    const vars = { input: 'hello', sessionId: 'test-session-123' };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ sessionId: 'test-session-123' });
+  });
+
+  it('should extract any underscore-prefixed variables', () => {
+    const vars = {
+      input: 'hello',
+      _conversation: [],
+      _metadata: { key: 'value' },
+      _internal: 'data',
+      _customRuntimeVar: 'test',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({
+      _conversation: [],
+      _metadata: { key: 'value' },
+      _internal: 'data',
+      _customRuntimeVar: 'test',
+    });
+  });
+
+  it('should extract multiple runtime vars', () => {
+    const vars = {
+      input: 'hello',
+      goal: 'test goal',
+      _conversation: [{ role: 'assistant', content: 'response' }],
+      sessionId: 'test-session-123',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({
+      _conversation: [{ role: 'assistant', content: 'response' }],
+      sessionId: 'test-session-123',
+    });
+  });
+
+  it('should return undefined for undefined vars', () => {
+    expect(extractRuntimeVars(undefined)).toBeUndefined();
+  });
+
+  it('should return undefined for empty vars', () => {
+    expect(extractRuntimeVars({})).toBeUndefined();
+  });
+
+  it('should return undefined when no runtime vars exist', () => {
+    const vars = { input: 'hello', output: 'world' };
+    expect(extractRuntimeVars(vars)).toBeUndefined();
+  });
+
+  it('should not mutate original vars', () => {
+    const vars = { input: 'hello', sessionId: 'test-123', _conversation: [] };
+    const original = { ...vars };
+    extractRuntimeVars(vars);
+    expect(vars).toEqual(original);
+  });
+
+  it('should not extract variables with underscore in middle of name', () => {
+    const vars = {
+      my_variable: 'value1',
+      some_conversation: 'value2',
+      session_id: 'value3',
+      _runtime: 'filtered',
+    };
+    const result = extractRuntimeVars(vars);
+    expect(result).toEqual({ _runtime: 'filtered' });
+    expect(result).not.toHaveProperty('my_variable');
+    expect(result).not.toHaveProperty('some_conversation');
+    expect(result).not.toHaveProperty('session_id');
+  });
+
+  it('should be inverse of filterRuntimeVars', () => {
+    const vars = {
+      input: 'hello',
+      goal: 'test',
+      _conversation: [{ role: 'user', content: 'hi' }],
+      sessionId: 'session-123',
+      _metadata: { custom: true },
+    };
+    const filtered = filterRuntimeVars(vars);
+    const extracted = extractRuntimeVars(vars);
+
+    // Combining filtered and extracted should give back original vars
+    expect({ ...filtered, ...extracted }).toEqual(vars);
+
+    // No overlap between filtered and extracted
+    const filteredKeys = Object.keys(filtered || {});
+    const extractedKeys = Object.keys(extracted || {});
+    expect(filteredKeys.filter((k) => extractedKeys.includes(k))).toEqual([]);
   });
 });
 

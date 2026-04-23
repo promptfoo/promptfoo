@@ -1,8 +1,9 @@
 import dedent from 'dedent';
 import { withGraderSpan } from '../../tracing/graderTracer';
-import { RedteamGraderBase, type RedteamGradingContext } from './base';
+import { RedteamGraderBase } from './base';
 
 import type { ApiProvider, AssertionValue, AtomicTestCase, GradingResult } from '../../types/index';
+import type { RedteamGradingContext } from '../grading/types';
 
 const PLUGIN_ID = 'promptfoo:redteam:ascii-smuggling';
 

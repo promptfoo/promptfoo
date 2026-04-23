@@ -2,6 +2,7 @@ import logger from '../logger';
 import { sleep } from '../util/time';
 import { createTraceProvider, isExternalTraceProvider } from './providers';
 import { getTraceStore, type SpanData, type TraceSpanQueryOptions } from './store';
+import { getToolNameFromAttributes } from './toolAttributes';
 
 import type { TraceProviderConfig } from './providers/types';
 
@@ -155,11 +156,11 @@ function deriveInsights(traceSpans: TraceSpan[]): string[] {
     insights.push(`Error span "${span.name}" (${span.spanId.slice(0, 8)})${statusMessage}`);
   });
 
-  const toolCalls = traceSpans.filter((span) => span.attributes['tool.name']);
-  toolCalls.forEach((span) => {
-    insights.push(
-      `Tool call ${span.attributes['tool.name']} via "${span.name}" (duration ${span.durationMs ?? 0}ms)`,
-    );
+  const toolCalls = traceSpans
+    .map((span) => ({ span, toolName: getToolNameFromAttributes(span.attributes) }))
+    .filter((entry) => entry.toolName);
+  toolCalls.forEach(({ span, toolName }) => {
+    insights.push(`Tool call ${toolName} via "${span.name}" (duration ${span.durationMs ?? 0}ms)`);
   });
 
   const guardrailHits = traceSpans.filter(

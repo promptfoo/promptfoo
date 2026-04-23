@@ -1,10 +1,10 @@
-import type { Agent } from 'http';
-
 import { getCache, isCacheEnabled } from '../../cache';
-import { getEnvInt, getEnvString } from '../../envars';
+import { getEnvInt } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { sha256 } from '../../util/createHash';
 import { AwsBedrockGenericProvider } from './base';
+import { createBedrockRequestHandler, hasProxyEnv } from './util';
 import type {
   BedrockAgentRuntimeClient,
   InferenceConfig,
@@ -226,22 +226,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
     if (!this.agentRuntimeClient) {
-      let handler;
-
-      // Configure proxy if needed
-      if (getEnvString('HTTP_PROXY') || getEnvString('HTTPS_PROXY')) {
-        try {
-          const { NodeHttpHandler } = await import('@smithy/node-http-handler');
-          const { ProxyAgent } = await import('proxy-agent');
-          handler = new NodeHttpHandler({
-            httpsAgent: new ProxyAgent() as unknown as Agent,
-          });
-        } catch {
-          throw new Error(
-            'The @smithy/node-http-handler package is required for proxy support. Please install it.',
-          );
-        }
-      }
+      // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
+      // need a custom handler for proxy support.
+      const handler = hasProxyEnv() ? await createBedrockRequestHandler() : undefined;
 
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
@@ -251,8 +238,8 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
           retryMode: 'adaptive',
-          ...(credentials ? { credentials } : {}),
           ...(handler ? { requestHandler: handler } : {}),
+          ...(credentials ? { credentials } : {}),
         });
       } catch (err) {
         logger.error(`Error creating BedrockAgentRuntimeClient: ${err}`);
@@ -413,6 +400,8 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
         ? `session-${crypto.randomUUID()}`
         : `session-${Date.now()}-${process.hrtime.bigint().toString(36)}`);
 
+    const inferenceConfig = this.buildInferenceConfig();
+
     // Build the complete input with all supported features
     const input: InvokeAgentCommandInput = {
       // Required fields
@@ -430,9 +419,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       // Advanced configurations - using type assertions for preview features
       // The AWS SDK types may not be fully up to date with all Bedrock Agents features
       // These configurations are validated by AWS at runtime
-      ...(this.buildInferenceConfig() && {
-        inferenceConfig: this.buildInferenceConfig(),
-      }),
+      ...(inferenceConfig && { inferenceConfig }),
       ...(this.config.guardrailConfiguration && {
         guardrailConfiguration: this.config.guardrailConfiguration,
       }),
@@ -454,11 +441,22 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
     const cache = await getCache();
-    const cacheKey = `bedrock-agent:${this.config.agentId}:${JSON.stringify({
-      prompt,
-      inferenceConfig: this.buildInferenceConfig(),
-      knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
-    })}`;
+    const cacheKey = `bedrock-agent:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
+      JSON.stringify({
+        prompt,
+        actionGroups: this.config.actionGroups,
+        enableTrace: this.config.enableTrace,
+        endSession: this.config.endSession,
+        guardrailConfiguration: this.config.guardrailConfiguration,
+        inferenceConfig,
+        inputDataConfig: this.config.inputDataConfig,
+        knowledgeBaseConfigurations: this.config.knowledgeBaseConfigurations,
+        memoryId: this.config.memoryId,
+        promptOverrideConfiguration: this.config.promptOverrideConfiguration,
+        sessionId: this.config.sessionId,
+        sessionState: this.config.sessionState,
+      }),
+    )}`;
 
     // Check cache
     if (isCacheEnabled()) {

@@ -7,33 +7,9 @@ import { Octokit } from '@octokit/rest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
 
-// Mock @actions/core
-vi.mock('@actions/core', () => ({
-  info: vi.fn(),
-  warning: vi.fn(),
-  error: vi.fn(),
-}));
-
-// Mock @actions/github
-vi.mock('@actions/github', () => ({
-  context: {
-    repo: {
-      owner: 'test-owner',
-      repo: 'test-repo',
-    },
-    payload: {
-      pull_request: {
-        number: 123,
-        head: {
-          sha: 'abc123',
-        },
-      },
-    },
-  },
-}));
-
-// Mock diff that includes src/auth.ts with lines 40-100 in scope
-const mockDiff = `diff --git a/src/auth.ts b/src/auth.ts
+const mocks = vi.hoisted(() => {
+  // Mock diff that includes src/auth.ts with lines 40-100 in scope
+  const mockDiff = `diff --git a/src/auth.ts b/src/auth.ts
 index abc123..def456 100644
 --- a/src/auth.ts
 +++ b/src/auth.ts
@@ -61,9 +37,29 @@ index abc123..def456 100644
  context line 60
 `;
 
-// Mock Octokit
-vi.mock('@octokit/rest', () => {
   return {
+    core: {
+      info: vi.fn(),
+      warning: vi.fn(),
+      error: vi.fn(),
+    },
+    github: {
+      context: {
+        repo: {
+          owner: 'test-owner',
+          repo: 'test-repo',
+        },
+        payload: {
+          pull_request: {
+            number: 123,
+            head: {
+              sha: 'abc123',
+            },
+          },
+        },
+      },
+    },
+    mockDiff,
     Octokit: vi.fn().mockImplementation(() => ({
       pulls: {
         createReview: vi.fn().mockResolvedValue({}),
@@ -76,9 +72,46 @@ vi.mock('@octokit/rest', () => {
   };
 });
 
+// Mock @actions/core
+vi.mock('@actions/core', () => mocks.core);
+vi.mock('../../code-scan-action/node_modules/@actions/core/lib/core.js', () => mocks.core);
+
+// Mock both the root specifiers and the nested package entries resolved from code-scan-action.
+vi.mock('@actions/github', () => mocks.github);
+vi.mock('../../code-scan-action/node_modules/@actions/github/lib/github.js', () => mocks.github);
+
+// Mock Octokit
+vi.mock('@octokit/rest', () => ({ Octokit: mocks.Octokit }));
+vi.mock('../../code-scan-action/node_modules/@octokit/rest/dist-src/index.js', () => ({
+  Octokit: mocks.Octokit,
+}));
+
+const mockDiff = mocks.mockDiff;
+
 describe('GitHub API Client', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    mocks.github.context.repo = {
+      owner: 'test-owner',
+      repo: 'test-repo',
+    };
+    mocks.github.context.payload = {
+      pull_request: {
+        number: 123,
+        head: {
+          sha: 'abc123',
+        },
+      },
+    };
+    mocks.Octokit.mockImplementation(() => ({
+      pulls: {
+        createReview: vi.fn().mockResolvedValue({}),
+        get: vi.fn().mockResolvedValue({ data: mockDiff }),
+      },
+      issues: {
+        createComment: vi.fn().mockResolvedValue({}),
+      },
+    }));
   });
 
   describe('getGitHubContext', () => {

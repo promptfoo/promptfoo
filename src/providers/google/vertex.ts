@@ -12,15 +12,25 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
+import {
+  calculateAnthropicCost,
+  getTokenUsage,
+  isClaudeOpus47Model,
+  outputFromMessage,
+  parseMessages,
+} from '../anthropic/util';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import {
+  calculateGoogleCost,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
   loadCredentials,
   mergeParts,
+  normalizeSafetySettings,
+  parseConfigSystemInstruction,
   resolveProjectId,
 } from './util';
 
@@ -33,7 +43,12 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { ClaudeRequest, ClaudeResponse } from './types';
+import type {
+  ClaudeRequest,
+  ClaudeResponse,
+  ClaudeThinkingConfig,
+  GoogleProviderConfig,
+} from './types';
 import type {
   GeminiApiResponse,
   GeminiErrorResponse,
@@ -44,6 +59,21 @@ import type {
 
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
+
+type VertexEmbeddingPredictResponse = {
+  predictions?: Array<{
+    embeddings?: {
+      values?: number[];
+      statistics?: {
+        token_count?: number;
+      };
+    };
+  }>;
+};
+
+type VertexEmbeddingProviderConfig = GoogleProviderConfig & {
+  autoTruncate?: boolean;
+};
 
 function getVertexApiHost(
   region: string,
@@ -160,16 +190,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     // Determine the system based on model name
-    let system = 'vertex';
-    if (this.modelName.includes('claude')) {
-      system = 'vertex:anthropic';
-    } else if (this.modelName.includes('gemini')) {
-      system = 'vertex:gemini';
-    } else if (this.modelName.includes('llama')) {
-      system = 'vertex:llama';
-    } else {
-      system = 'vertex:palm2';
-    }
+    const system = this.modelName.includes('claude')
+      ? 'vertex:anthropic'
+      : this.modelName.includes('gemini')
+        ? 'vertex:gemini'
+        : this.modelName.includes('llama')
+          ? 'vertex:llama'
+          : 'vertex:palm2';
 
     // Set up outer target span context (service name based on context label)
     const targetSpanContext: TargetSpanContext = {
@@ -236,32 +263,81 @@ export class VertexChatProvider extends GoogleGenericProvider {
     return this.callPalm2Api(prompt);
   }
 
-  async callClaudeApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
-    const messages = parseChatPrompt(prompt, [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: prompt,
-          },
-        ],
-      },
-    ]);
+  async callClaudeApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Support YAML chat prompts (legacy format used by parseChatPrompt)
+    let normalizedPrompt = prompt;
+    if (prompt.trim().startsWith('- role:')) {
+      try {
+        const yaml = await import('js-yaml');
+        const parsed = yaml.default.load(prompt);
+        normalizedPrompt = JSON.stringify(parsed);
+      } catch (err) {
+        return { error: `Chat Completion prompt is not a valid YAML string: ${err}` };
+      }
+    }
+
+    const { system, extractedMessages, thinking } = parseMessages(normalizedPrompt);
+
+    // Merge config.systemInstruction (if set) with the system instruction extracted from the prompt.
+    let mergedSystem = system;
+    const parsedConfigInstruction = parseConfigSystemInstruction(
+      this.config.systemInstruction,
+      context?.vars,
+    );
+    if (parsedConfigInstruction) {
+      const configSystemBlocks: Array<{ type: 'text'; text: string }> = [];
+      for (const part of parsedConfigInstruction.parts) {
+        if (part.text) {
+          configSystemBlocks.push({ type: 'text', text: part.text });
+        }
+      }
+      if (configSystemBlocks.length > 0) {
+        mergedSystem = [...configSystemBlocks, ...(mergedSystem || [])];
+      }
+    }
+
+    const thinkingConfig: ClaudeThinkingConfig | undefined =
+      this.config.thinking || (thinking as ClaudeThinkingConfig | undefined);
+    const isThinkingEnabled = thinkingConfig?.type === 'enabled';
+
+    let maxTokens = this.config.max_tokens || this.config.maxOutputTokens || 0;
+    if (!maxTokens) {
+      maxTokens = isThinkingEnabled ? 2048 : 512;
+    }
+    // Claude requires max_tokens >= budget_tokens when thinking is enabled
+    if (
+      isThinkingEnabled &&
+      thinkingConfig?.budget_tokens &&
+      maxTokens < thinkingConfig.budget_tokens
+    ) {
+      maxTokens = thinkingConfig.budget_tokens + 1024;
+    }
+
+    // Claude Opus 4.7 deprecates `temperature` at the model level — the
+    // underlying Anthropic API returns 400 for any request that includes it.
+    // Vertex forwards the request body verbatim to rawPredict, so suppress
+    // the field here too.
+    const resolvedTemperature = isClaudeOpus47Model(this.modelName)
+      ? undefined
+      : this.config.temperature;
 
     const body: ClaudeRequest = {
       anthropic_version:
         this.config.anthropicVersion || this.config.anthropic_version || 'vertex-2023-10-16',
       stream: false,
-      max_tokens: this.config.max_tokens || this.config.maxOutputTokens || 512,
-      temperature: this.config.temperature,
+      max_tokens: maxTokens,
+      temperature: resolvedTemperature,
       top_p: this.config.top_p || this.config.topP,
       top_k: this.config.top_k || this.config.topK,
-      messages,
+      ...(mergedSystem ? { system: mergedSystem } : {}),
+      ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
+      messages: extractedMessages as ClaudeRequest['messages'],
     };
 
+    const showThinking = this.config.showThinking ?? isThinkingEnabled;
+
     const cache = await getCache();
-    const cacheKey = `vertex:claude:${this.modelName}:${JSON.stringify(body)}`;
+    const cacheKey = `vertex:claude:${this.modelName}:showThinking=${showThinking}:${JSON.stringify(body)}`;
 
     let cachedResponse;
     if (isCacheEnabled()) {
@@ -309,15 +385,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      // Extract the text from the response
-      let output = '';
-      if (data.content && data.content.length > 0) {
-        for (const part of data.content) {
-          if (part.type === 'text') {
-            output += part.text;
-          }
-        }
-      }
+      const output = outputFromMessage(data as any, showThinking);
 
       if (!output) {
         return {
@@ -325,18 +393,24 @@ export class VertexChatProvider extends GoogleGenericProvider {
         };
       }
 
-      // Extract token usage information
       const tokenUsage: TokenUsage = {
-        total: data.usage.input_tokens + data.usage.output_tokens || 0,
-        prompt: data.usage.input_tokens || 0,
-        completion: data.usage.output_tokens || 0,
+        ...getTokenUsage(data, false),
         numRequests: 1,
       };
+
+      // Normalize Vertex model names (e.g. claude-3-5-sonnet-v2@20241022 → claude-3-5-sonnet-20241022)
+      const normalizedModelName = this.modelName.replace(/-v\d+@/, '-').replace('@', '-');
 
       const response = {
         cached: false,
         output,
         tokenUsage,
+        cost: calculateAnthropicCost(
+          normalizedModelName,
+          this.config,
+          data.usage?.input_tokens,
+          data.usage?.output_tokens,
+        ),
       };
 
       if (isCacheEnabled()) {
@@ -414,7 +488,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         topK: config.topK,
         ...config.generationConfig,
       },
-      ...(config.safetySettings ? { safetySettings: config.safetySettings } : {}),
+      ...(config.safetySettings
+        ? { safetySettings: normalizeSafetySettings(config.safetySettings) }
+        : {}),
       ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { systemInstruction } : {}),
@@ -658,22 +734,39 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
 
         const lastData = dataWithResponse[dataWithResponse.length - 1];
+        const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
+        const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
+        const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
         const tokenUsage = {
           total: lastData.usageMetadata?.totalTokenCount || 0,
-          prompt: lastData.usageMetadata?.promptTokenCount || 0,
-          completion: lastData.usageMetadata?.candidatesTokenCount || 0,
-          ...(lastData.usageMetadata?.thoughtsTokenCount !== undefined && {
+          prompt: promptTokenCount || 0,
+          completion: completionTokenCount || 0,
+          ...(thoughtsTokenCount !== undefined && {
             completionDetails: {
-              reasoning: lastData.usageMetadata.thoughtsTokenCount,
+              reasoning: thoughtsTokenCount,
               acceptedPrediction: 0,
               rejectedPrediction: 0,
             },
           }),
         };
+        // Include thinking tokens in output cost - Google bills them as output tokens
+        const completionForCost =
+          completionTokenCount == null
+            ? undefined
+            : completionTokenCount + (thoughtsTokenCount ?? 0);
+        const cost = calculateGoogleCost(
+          this.modelName,
+          config,
+          promptTokenCount,
+          completionForCost,
+          true,
+        );
+
         response = {
           cached: false,
           output,
           tokenUsage,
+          cost,
           metadata: {},
         };
 
@@ -739,9 +832,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
           }
           if (results.length > 0) {
             response = {
-              cached: response.cached,
+              ...response,
               output: results.join('\n'),
-              tokenUsage: response.tokenUsage,
             };
           }
         }
@@ -771,7 +863,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       parameters: {
         context: this.config.context,
         examples: this.config.examples,
-        safetySettings: this.config.safetySettings,
+        safetySettings: normalizeSafetySettings(this.config.safetySettings),
         stopSequences: this.config.stopSequences,
         temperature: this.config.temperature,
         maxOutputTokens: this.config.maxOutputTokens,
@@ -1017,13 +1109,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
 export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   modelName: string;
-  config: any;
-  env?: any;
+  config: VertexEmbeddingProviderConfig;
+  env?: EnvOverrides;
 
-  constructor(modelName: string, config: any = {}, env?: any) {
+  constructor(modelName: string, options: GoogleProviderOptions = {}) {
     this.modelName = modelName;
-    this.config = config;
-    this.env = env;
+    this.config = options.config || {};
+    this.env = options.env;
   }
 
   /**
@@ -1073,7 +1165,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
       },
     };
 
-    let data: any;
+    let data: VertexEmbeddingPredictResponse = {};
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
@@ -1085,7 +1177,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         method: 'POST',
         data: body,
       });
-      data = res.data;
+      data = res.data as VertexEmbeddingPredictResponse;
     } catch (err) {
       logger.error(`Vertex API call error: ${err}`);
       throw err;
@@ -1112,4 +1204,4 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 }
 
 export const DefaultGradingProvider = new VertexChatProvider('gemini-2.5-pro');
-export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('text-embedding-004');
+export const DefaultEmbeddingProvider = new VertexEmbeddingProvider('gemini-embedding-001');

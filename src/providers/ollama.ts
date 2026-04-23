@@ -4,7 +4,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { type TargetSpanContext, withTargetSpan } from '../tracing/targetTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { parseChatPrompt, REQUEST_TIMEOUT_MS, transformTools } from './shared';
 
 import type {
   ApiProvider,
@@ -209,22 +209,19 @@ export class OllamaCompletionProvider implements ApiProvider {
       model: this.modelName,
       prompt,
       stream: false,
-      options: Object.keys(this.config).reduce(
-        (options, key) => {
-          const optionName = key as keyof OllamaCompletionOptions;
-          if (
-            OllamaCompletionOptionKeys.has(optionName) &&
-            optionName !== 'think' &&
-            optionName !== 'tools' &&
-            optionName !== 'passthrough'
-          ) {
-            options[optionName] = this.config[optionName];
-          }
-          return options;
-        },
-        {} as Record<string, any>,
-      ),
-      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
+        const optionName = key as keyof OllamaCompletionOptions;
+        if (
+          OllamaCompletionOptionKeys.has(optionName) &&
+          optionName !== 'think' &&
+          optionName !== 'tools' &&
+          optionName !== 'passthrough'
+        ) {
+          options[optionName] = this.config[optionName];
+        }
+        return options;
+      }, {}),
+      ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
 
@@ -389,17 +386,14 @@ export class OllamaChatProvider implements ApiProvider {
     const params: any = {
       model: this.modelName,
       messages,
-      options: Object.keys(this.config).reduce(
-        (options, key) => {
-          const optionName = key as keyof OllamaCompletionOptions;
-          if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
-            options[optionName] = this.config[optionName];
-          }
-          return options;
-        },
-        {} as Record<string, any>,
-      ),
-      ...(this.config.think !== undefined ? { think: this.config.think } : {}),
+      options: Object.keys(this.config).reduce<Record<string, any>>((options, key) => {
+        const optionName = key as keyof OllamaCompletionOptions;
+        if (OllamaCompletionOptionKeys.has(optionName) && optionName !== 'tools') {
+          options[optionName] = this.config[optionName];
+        }
+        return options;
+      }, {}),
+      ...(this.config.think === undefined ? {} : { think: this.config.think }),
       ...(this.config.passthrough || {}),
     };
 
@@ -407,7 +401,8 @@ export class OllamaChatProvider implements ApiProvider {
     if (this.config.tools) {
       const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
       if (loadedTools !== undefined) {
-        params.tools = loadedTools;
+        // Transform tools to OpenAI format if needed (Ollama uses OpenAI format)
+        params.tools = transformTools(loadedTools, 'openai');
       }
     }
 

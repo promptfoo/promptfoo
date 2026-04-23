@@ -1,9 +1,10 @@
-# advanced-options (Claude Agent SDK Advanced Options)
+# claude-agent-sdk/advanced-options (Claude Agent SDK Advanced Options)
 
 This example demonstrates advanced Claude Agent SDK configuration options including sandbox settings, runtime configuration, and CLI arguments.
 
 ```bash
-npx promptfoo@latest init --example claude-agent-sdk
+npx promptfoo@latest init --example claude-agent-sdk/advanced-options
+cd claude-agent-sdk/advanced-options
 ```
 
 ## Setup
@@ -126,6 +127,7 @@ providers:
 | `sandbox`                            | object                       | Sandbox settings for command execution isolation |
 | `sandbox.enabled`                    | boolean                      | Enable sandboxed execution                       |
 | `sandbox.autoAllowBashIfSandboxed`   | boolean                      | Auto-allow bash when sandboxed                   |
+| `sandbox.failIfUnavailable`          | boolean                      | Fail closed if sandbox support is unavailable    |
 | `sandbox.network`                    | object                       | Network configuration for sandbox                |
 | `sandbox.network.allowedDomains`     | string[]                     | Domains allowed for network access               |
 | `sandbox.network.allowLocalBinding`  | boolean                      | Allow binding to localhost                       |

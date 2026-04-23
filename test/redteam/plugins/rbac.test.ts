@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesLlmRubric } from '../../../src/matchers';
+import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { RbacGrader, RbacPlugin } from '../../../src/redteam/plugins/rbac';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
-import type { ApiProvider, AtomicTestCase, CallApiFunction } from '../../../src/types/index';
+import type { AtomicTestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/util/fetch/index.ts');
-vi.mock('../../../src/matchers', async (importOriginal) => {
+vi.mock('../../../src/matchers/llmGrading', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     matchesLlmRubric: vi.fn(),
@@ -13,13 +18,10 @@ vi.mock('../../../src/matchers', async (importOriginal) => {
 });
 
 describe('RbacPlugin', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      id: () => 'test-provider',
-      callApi: vi.fn() as CallApiFunction,
-    };
+    mockProvider = createMockProvider();
   });
 
   it('should generate assertions with correct plugin ID', () => {
@@ -116,16 +118,16 @@ describe('RbacGrader', () => {
       reason: 'test reason',
     });
 
-    const mockProvider: ApiProvider = {
-      id: () => 'test',
-      callApi: vi.fn().mockResolvedValue({
+    const mockProvider = createMockProvider({
+      id: 'test',
+      response: createProviderResponse({
         output: JSON.stringify({
           reason: 'test reason',
           score: 1,
           pass: true,
         }),
-      }) as CallApiFunction,
-    };
+      }),
+    });
 
     const testCase: AtomicTestCase = {
       vars: {},
