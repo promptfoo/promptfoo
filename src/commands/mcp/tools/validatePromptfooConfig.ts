@@ -1,18 +1,19 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
-import { fromError } from 'zod-validation-error';
 import { z } from 'zod';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../../../types/index';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { resolveConfigs } from '../../../util/config/load';
 import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { TestCase, TestSuite, UnifiedConfig } from '../../../types/index';
 
 interface ValidationResults {
   isValid: boolean;
   errors: string[];
   warnings: string[];
-  config?: any;
-  testSuite?: any;
+  config?: Partial<UnifiedConfig>;
+  testSuite?: Partial<TestSuite>;
 }
 
 /**
@@ -74,7 +75,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         if (configParse.success) {
           validationResults.config = config;
         } else {
-          const formattedError = fromError(configParse.error).message;
+          const formattedError = z.prettifyError(configParse.error);
           validationResults.errors.push(`Configuration validation error: ${formattedError}`);
           validationResults.isValid = false;
         }
@@ -84,7 +85,7 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
         if (suiteParse.success) {
           validationResults.testSuite = testSuite;
         } else {
-          const formattedError = fromError(suiteParse.error).message;
+          const formattedError = z.prettifyError(suiteParse.error);
           validationResults.errors.push(`Test suite validation error: ${formattedError}`);
           validationResults.isValid = false;
         }
@@ -143,7 +144,16 @@ export function registerValidatePromptfooConfigTool(server: McpServer) {
   );
 }
 
-function analyzeConfiguration(config: any) {
+interface ConfigurationAnalysis {
+  warnings: string[];
+  promptCount: number;
+  providerCount: number;
+  testCount: number;
+  totalEvaluations: number;
+  hasAssertions: boolean;
+}
+
+function analyzeConfiguration(config: Partial<UnifiedConfig>): ConfigurationAnalysis {
   const warnings: string[] = [];
 
   const promptCount = Array.isArray(config.prompts)
@@ -170,10 +180,19 @@ function analyzeConfiguration(config: any) {
     warnings.push('No test cases defined - add test cases to validate model behavior');
   }
 
-  const hasAssertions =
+  const hasAssertions: boolean = Boolean(
     config.tests &&
-    Array.isArray(config.tests) &&
-    config.tests.some((test: any) => test.assert && test.assert.length > 0);
+      Array.isArray(config.tests) &&
+      config.tests.some((test): test is TestCase => {
+        return (
+          typeof test === 'object' &&
+          test !== null &&
+          'assert' in test &&
+          Array.isArray(test.assert) &&
+          test.assert.length > 0
+        );
+      }),
+  );
 
   if (testCount > 0 && !hasAssertions) {
     warnings.push('No assertions defined in test cases - add assertions to validate outputs');

@@ -21,6 +21,7 @@ export const EVAL_ROUTES = {
   ROOT: '/eval',
   LIST: '/evals',
   DETAIL: (id: string) => `/eval/${id}`,
+  RESULT_RATING: (evalId: string, resultId: string) => `/eval/${evalId}/results/${resultId}/rating`,
 } as const;
 
 // Red Team routes
@@ -28,6 +29,7 @@ export const REDTEAM_ROUTES = {
   ROOT: '/redteam',
   SETUP: '/redteam/setup',
   REPORTS: '/reports',
+  REPORT_DETAIL: (evalId: string) => `/reports?evalId=${evalId}`,
 } as const;
 
 // Other routes
@@ -35,7 +37,11 @@ export const ROUTES = {
   HOME: '/',
   SETUP: '/setup',
   PROMPTS: '/prompts',
+  PROMPT_DETAIL: (id: string) => `/prompts?id=${id}`,
   DATASETS: '/datasets',
+  DATASET_DETAIL: (id: string) => `/datasets?id=${id}`,
   HISTORY: '/history',
+  MEDIA: '/media',
+  MEDIA_DETAIL: (hash: string) => `/media?hash=${encodeURIComponent(hash)}`,
   LOGIN: '/login',
 } as const;

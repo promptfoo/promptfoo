@@ -1,7 +1,9 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import SettingsPanel from './SettingsPanel';
+import { renderWithProviders } from '@app/utils/testutils';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useResultsViewSettingsStore } from '../../store';
+import SettingsPanel from './SettingsPanel';
 
 vi.mock('../../store', () => ({
   useResultsViewSettingsStore: vi.fn(),
@@ -17,6 +19,8 @@ describe('SettingsPanel', () => {
     setShowPrompts: vi.fn(),
     showPassFail: true,
     setShowPassFail: vi.fn(),
+    showPassReasons: false,
+    setShowPassReasons: vi.fn(),
     showInferenceDetails: true,
     setShowInferenceDetails: vi.fn(),
     maxTextLength: 500,
@@ -50,25 +54,25 @@ describe('SettingsPanel', () => {
       expectedNewValue: false,
     },
     {
-      name: 'Show full prompts in output cells',
+      name: 'Full prompts',
       initialState: false,
       setter: 'setShowPrompts' as const,
       expectedNewValue: true,
     },
     {
-      name: 'Show pass/fail indicators',
+      name: 'Pass/fail indicators',
       initialState: true,
       setter: 'setShowPassFail' as const,
       expectedNewValue: false,
     },
     {
-      name: 'Show inference details',
+      name: 'Inference details',
       initialState: true,
       setter: 'setShowInferenceDetails' as const,
       expectedNewValue: false,
     },
     {
-      name: 'Render Markdown content',
+      name: 'Render Markdown',
       initialState: false,
       setter: 'setRenderMarkdown' as const,
       expectedNewValue: true,
@@ -79,13 +83,14 @@ describe('SettingsPanel', () => {
       setter: 'setWordBreak' as const,
       expectedNewValue: 'break-all',
     },
-  ])('should update the $setter setting when the "$name" toggle is clicked', ({
+  ])('should update the $setter setting when the "$name" toggle is clicked', async ({
     name,
     initialState,
     setter,
     expectedNewValue,
   }) => {
-    render(<SettingsPanel />);
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPanel />);
 
     const toggle = screen.getByRole('checkbox', { name });
     expect(toggle).toBeInTheDocument();
@@ -96,41 +101,26 @@ describe('SettingsPanel', () => {
       expect(toggle).not.toBeChecked();
     }
 
-    fireEvent.click(toggle);
+    await user.click(toggle);
 
     expect(mockStore[setter]).toHaveBeenCalledTimes(1);
     expect(mockStore[setter]).toHaveBeenCalledWith(expectedNewValue);
   });
 
-  it.each([
-    {
-      description: 'standard value change',
-      initialValue: 500,
-      newValue: 100,
-      expectedValue: 100,
-    },
-    {
-      description: 'set to infinity when value is 1001',
-      initialValue: 500,
-      newValue: 1001,
-      expectedValue: Number.POSITIVE_INFINITY,
-    },
-  ])('should update maxTextLength for $description', ({
-    initialValue,
-    newValue,
-    expectedValue,
-  }) => {
-    render(<SettingsPanel />);
+  it('should call setMaxTextLength when slider value is committed via keyboard', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<SettingsPanel />);
 
-    const slider = screen.getByRole('slider', { name: /maximum text length/i });
+    const slider = screen.getByRole('slider', { name: /max text length/i });
     expect(slider).toBeInTheDocument();
-    expect(slider).toHaveAttribute('aria-valuenow', String(initialValue));
+    expect(slider).toHaveAttribute('aria-valuenow', '500');
 
-    fireEvent.change(slider, { target: { value: newValue } });
-    fireEvent.mouseUp(slider);
+    // Focus the slider and use keyboard to change value
+    slider.focus();
+    await user.keyboard('{End}');
 
-    expect(mockStore.setMaxTextLength).toHaveBeenCalledTimes(1);
-    expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(expectedValue);
+    // For Radix Slider, the store is called via onValueCommit after key events
+    expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(Number.POSITIVE_INFINITY);
   });
 
   it('should set maxTextLength to POSITIVE_INFINITY when the store has POSITIVE_INFINITY value', () => {
@@ -139,25 +129,42 @@ describe('SettingsPanel', () => {
       maxTextLength: Number.POSITIVE_INFINITY,
     });
 
-    render(<SettingsPanel />);
+    renderWithProviders(<SettingsPanel />);
 
     const slider = screen.getByRole('slider', {
-      name: 'Maximum text length',
+      name: /max text length/i,
     });
     expect(slider).toBeInTheDocument();
-    expect((slider as HTMLInputElement).value).toBe('1001');
+    // Radix Slider uses aria-valuenow, not value property
+    expect(slider).toHaveAttribute('aria-valuenow', '1001');
   });
 
-  it('should update localMaxTextLength when the text length slider is moved', () => {
-    render(<SettingsPanel />);
+  it('should have slider for max text length', () => {
+    renderWithProviders(<SettingsPanel />);
 
     const slider = screen.getByRole('slider', {
-      name: /maximum text length/i,
+      name: /max text length/i,
     });
     expect(slider).toBeInTheDocument();
+    expect(slider).toHaveAttribute('aria-valuenow', '500');
+  });
 
-    fireEvent.change(slider, { target: { value: '300' } });
+  it('should disable Pass reasons when Pass/fail indicators is off', () => {
+    mockedUseResultsViewSettingsStore.mockReturnValue({
+      ...mockStore,
+      showPassFail: false,
+    });
 
-    expect(slider).toHaveAttribute('aria-valuenow', '300');
+    renderWithProviders(<SettingsPanel />);
+
+    const passReasonsToggle = screen.getByRole('checkbox', { name: 'Pass reasons' });
+    expect(passReasonsToggle).toBeDisabled();
+  });
+
+  it('should enable Pass reasons when Pass/fail indicators is on', () => {
+    renderWithProviders(<SettingsPanel />);
+
+    const passReasonsToggle = screen.getByRole('checkbox', { name: 'Pass reasons' });
+    expect(passReasonsToggle).not.toBeDisabled();
   });
 });

@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetDefaultProviders, setDefaultRedteamProviders } from '../../../src/providers/defaults';
+import {
+  getDefaultProviders,
+  resetDefaultProviders,
+  setDefaultRedteamProviders,
+} from '../../../src/providers/defaults';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { mockProcessEnv } from '../../util/utils';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider, DefaultProviders } from '../../../src/types';
 
 // Mock the defaults module to control its behavior in tests
 vi.mock('../../../src/providers/defaults', async (importOriginal) => {
@@ -30,26 +35,42 @@ class MockRedteamProvider implements ApiProvider {
   }
 }
 
+function createDefaultProviders(redteamProvider?: ApiProvider): DefaultProviders {
+  const requiredProvider = new MockRedteamProvider('mock-required-provider');
+  return {
+    embeddingProvider: requiredProvider,
+    gradingJsonProvider: requiredProvider,
+    gradingProvider: requiredProvider,
+    moderationProvider: requiredProvider,
+    suggestionsProvider: requiredProvider,
+    synthesizeProvider: requiredProvider,
+    redteamProvider,
+  };
+}
+
 describe('Redteam Provider Manager Integration with Defaults', () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    vi.mocked(getDefaultProviders).mockResolvedValue(createDefaultProviders());
     // Clear provider manager cache
     redteamProviderManager.clearProvider();
     resetDefaultProviders();
 
     // Clear API keys to test defaults system
-    delete process.env.OPENAI_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.MISTRAL_API_KEY;
-    delete process.env.GEMINI_API_KEY;
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.PALM_API_KEY;
+    mockProcessEnv({
+      OPENAI_API_KEY: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      MISTRAL_API_KEY: undefined,
+      GEMINI_API_KEY: undefined,
+      GOOGLE_API_KEY: undefined,
+      PALM_API_KEY: undefined,
+    });
   });
 
   afterEach(() => {
-    process.env = { ...originalEnv };
+    mockProcessEnv(originalEnv, { clear: true });
     redteamProviderManager.clearProvider();
     resetDefaultProviders();
     vi.resetAllMocks();
@@ -67,10 +88,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     const mockProvider = new MockRedteamProvider('mock-default-provider');
 
     // Mock getDefaultProviders to return our mock provider
-    const { getDefaultProviders } = await import('../../../src/providers/defaults');
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      redteamProvider: mockProvider,
-    });
+    vi.mocked(getDefaultProviders).mockResolvedValue(createDefaultProviders(mockProvider));
 
     // Clear cache to force re-fetch
     redteamProviderManager.clearProvider();
@@ -86,10 +104,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     await setDefaultRedteamProviders(customProvider);
 
     // Mock getDefaultProviders to return our custom provider
-    const { getDefaultProviders } = await import('../../../src/providers/defaults');
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      redteamProvider: customProvider,
-    });
+    vi.mocked(getDefaultProviders).mockResolvedValue(createDefaultProviders(customProvider));
 
     // Clear cache to force re-fetch
     redteamProviderManager.clearProvider();
@@ -102,10 +117,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
   it('should prefer explicit provider over defaults system', async () => {
     // Set up defaults
     const mockDefaultProvider = new MockRedteamProvider('mock-default-provider');
-    const { getDefaultProviders } = await import('../../../src/providers/defaults');
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      redteamProvider: mockDefaultProvider,
-    });
+    vi.mocked(getDefaultProviders).mockResolvedValue(createDefaultProviders(mockDefaultProvider));
 
     // Clear cache to force re-fetch
     redteamProviderManager.clearProvider();
@@ -124,10 +136,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     // the JSON response_format is properly applied (defaults providers don't
     // have JSON mode enabled by default)
     const mockProvider = new MockRedteamProvider('mock-json-provider');
-    const { getDefaultProviders } = await import('../../../src/providers/defaults');
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      redteamProvider: mockProvider,
-    });
+    vi.mocked(getDefaultProviders).mockResolvedValue(createDefaultProviders(mockProvider));
 
     // Clear cache to force re-fetch
     redteamProviderManager.clearProvider();
@@ -145,10 +154,7 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     // When preferSmallModel is requested, we bypass the defaults system to ensure
     // the small model variant is used (defaults providers use a single model)
     const mockProvider = new MockRedteamProvider('mock-small-provider');
-    const { getDefaultProviders } = await import('../../../src/providers/defaults');
-    vi.mocked(getDefaultProviders).mockResolvedValue({
-      redteamProvider: mockProvider,
-    });
+    vi.mocked(getDefaultProviders).mockResolvedValue(createDefaultProviders(mockProvider));
 
     // Clear cache to force re-fetch
     redteamProviderManager.clearProvider();

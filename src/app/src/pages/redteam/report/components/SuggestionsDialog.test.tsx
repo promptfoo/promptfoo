@@ -1,10 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { mockClipboard } from '@app/tests/browserMocks';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import SuggestionsDialog from './SuggestionsDialog';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import type { GradingResult } from '@promptfoo/types';
-
-const theme = createTheme();
 
 function renderSuggestionsDialog(props: {
   open?: boolean;
@@ -19,11 +18,7 @@ function renderSuggestionsDialog(props: {
 
   const mergedProps = { ...defaultProps, ...props };
 
-  return render(
-    <ThemeProvider theme={theme}>
-      <SuggestionsDialog {...mergedProps} />
-    </ThemeProvider>,
-  );
+  return render(<SuggestionsDialog {...mergedProps} />);
 }
 
 describe('SuggestionsDialog', () => {
@@ -36,9 +31,9 @@ describe('SuggestionsDialog', () => {
 
     expect(screen.getByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
 
-    expect(screen.getByLabelText('close')).toBeInTheDocument();
-
-    expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    // Dialog has built-in close button with sr-only "Close" text
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    expect(closeButton).toBeInTheDocument();
   });
 
   it('should render with no suggestion cards when gradingResult is undefined', () => {
@@ -66,17 +61,15 @@ describe('SuggestionsDialog', () => {
     expect(screen.getByText('This is a recommendation note.')).toBeInTheDocument();
   });
 
-  it('should call onClose when the close button or the "Close" dialog action button is clicked', () => {
+  it('should call onClose when the close button is clicked', async () => {
+    const user = userEvent.setup();
     const onClose = vi.fn();
     renderSuggestionsDialog({ onClose });
 
-    const closeIconButton = screen.getByLabelText('close');
-    fireEvent.click(closeIconButton);
+    // Dialog has built-in close button with sr-only "Close" text
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    await user.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
-
-    const closeActionButton = screen.getByRole('button', { name: 'Close' });
-    fireEvent.click(closeActionButton);
-    expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it('should handle a gradingResult with componentResults that have undefined suggestions property', () => {
@@ -122,15 +115,11 @@ describe('SuggestionsDialog', () => {
     expect(screen.queryByText(/This suggestion uses a technique/)).toBeNull();
   });
 
-  it("should display 'Copied!' message when copy button is clicked for a suggestion", async () => {
+  it('should show copy button when suggestion is expanded', async () => {
+    const user = userEvent.setup();
     const mockWriteText = vi.fn().mockResolvedValue(undefined);
 
-    Object.defineProperty(global.navigator, 'clipboard', {
-      value: {
-        writeText: mockWriteText,
-      },
-      writable: true,
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     const mockGradingResult: GradingResult = {
       score: 1,
@@ -148,31 +137,29 @@ describe('SuggestionsDialog', () => {
     renderSuggestionsDialog({ gradingResult: mockGradingResult });
 
     const accordionSummary = screen.getByText('View suggested prompt');
-    fireEvent.click(accordionSummary);
+    await user.click(accordionSummary);
 
-    await screen.findByRole('region');
-
-    const copyIcon = screen.getByTestId('ContentCopyIcon');
-    const copyButton = copyIcon.closest('button') as HTMLButtonElement;
-
-    copyButton.style.display = 'block';
-
-    fireEvent.click(copyButton);
-
+    // Wait for content to appear
     await waitFor(() => {
-      expect(screen.getByText('Copied!')).toBeInTheDocument();
+      expect(screen.getByText('This is a suggested prompt.')).toBeInTheDocument();
     });
+
+    // Copy button uses Lucide Copy icon with class lucide-copy
+    const copyIcon = document.querySelector('.lucide-copy');
+    expect(copyIcon).toBeInTheDocument();
+
+    // Click the copy button
+    const copyButton = copyIcon?.closest('button') as HTMLButtonElement;
+    await user.click(copyButton);
+
+    // Verify clipboard was called
+    expect(mockWriteText).toHaveBeenCalledWith('This is a suggested prompt.');
   });
 
   it('should handle navigator.clipboard.writeText failure gracefully', async () => {
     const mockWriteText = vi.fn().mockRejectedValue(new Error('Clipboard write failed'));
 
-    Object.defineProperty(global.navigator, 'clipboard', {
-      value: {
-        writeText: mockWriteText,
-      },
-      writable: true,
-    });
+    mockClipboard({ writeText: mockWriteText as Clipboard['writeText'] });
 
     const gradingResult: GradingResult = {
       score: 0,

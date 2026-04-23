@@ -40,6 +40,14 @@ tests:
       language: 'French'
 ```
 
+When available, Promptfoo also injects runtime variables such as `{{evaluationId}}`, which is useful for correlating downstream logs with a specific eval run:
+
+```yaml
+body:
+  prompt: '{{prompt}}'
+  evaluation_id: '{{evaluationId}}'
+```
+
 `body` can be a string or JSON object. If the body is a string, the `Content-Type` header defaults to `text/plain` unless specified otherwise. If the body is an object, then content type is automatically set to `application/json`.
 
 ### JSON Example
@@ -64,6 +72,74 @@ providers:
         'Content-Type': 'application/x-www-form-urlencoded'
       body: 'model={{model}}&translate={{language}}'
 ```
+
+## Sending multipart/form-data
+
+Use `multipart.parts` when the target API expects form fields or file uploads.
+Promptfoo builds a fresh `FormData` body for every request and automatically sets the
+multipart boundary. Do not set `Content-Type: multipart/form-data` yourself unless
+you are using [raw HTTP request mode](#sending-a-raw-http-request).
+
+### Text fields and generated documents
+
+This example sends the prompt as a `documentQuery` text field and sends a simple
+generated PDF as the `files` upload field:
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: 'http://localhost:8080/api/genai/analyze-file'
+      method: POST
+      headers:
+        X-API-Key: '{{api_key}}'
+      multipart:
+        parts:
+          - kind: file
+            name: files
+            filename: promptfoo-document.pdf
+            source:
+              type: generated
+              format: pdf
+              text: 'Promptfoo generated document for multipart testing.'
+          - kind: field
+            name: documentQuery
+            value: '{{prompt}}'
+      transformResponse: json.summary
+```
+
+The `generated` source creates a deterministic document suitable for transport
+tests. Supported formats are `pdf`, `png`, `jpeg`, and `jpg` (alias for `jpeg`).
+
+### Uploading local files
+
+Use a `path` source to upload a file from the machine running promptfoo. Relative
+paths resolve from the promptfoo config directory.
+
+```yaml
+providers:
+  - id: http
+    config:
+      url: 'http://localhost:8080/api/genai/analyze-file'
+      method: POST
+      multipart:
+        parts:
+          - kind: file
+            name: files
+            filename: sample-report45.pdf
+            contentType: application/pdf
+            source:
+              type: path
+              path: file://fixtures/sample-report45.pdf
+          - kind: field
+            name: documentQuery
+            value: '{{prompt}}'
+      transformResponse: json.summary
+```
+
+Structured multipart requests bypass the HTTP response cache by default.
+`multipart` is mutually exclusive with `request` and `body`, and it cannot be
+used with `GET` or `HEAD`.
 
 ## Sending a raw HTTP request
 
@@ -424,6 +500,8 @@ interface ProviderResponse {
   output?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
+  conversationEnded?: boolean;
+  conversationEndReason?: string;
   sessionId?: string;
   guardrails?: GuardrailResponse;
   audio?: {
@@ -527,6 +605,29 @@ providers:
         }
 ```
 
+### Ending Multi-turn Conversations
+
+For stateful red team strategies, you can signal that the target intentionally closed the active thread by returning:
+
+- `conversationEnded: true`
+- Optional `conversationEndReason` for debugging (for example, `thread_closed`)
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://example.com/api'
+      transformResponse: |
+        {
+          output: json.message || '',
+          sessionId: json.sessionId,
+          conversationEnded: json.threadClosed === true,
+          conversationEndReason: json.threadClosed ? 'thread_closed' : undefined
+        }
+```
+
+When this flag is set, multi-turn red team attackers stop gracefully instead of continuing into timeout/error turns.
+
 ### Interaction with Test Transforms
 
 The `transformResponse` output becomes the input for test-level transforms. Understanding this pipeline is important for complex evaluations:
@@ -553,6 +654,87 @@ tests:
       - type: context-faithfulness
         contextTransform: 'output.sources.join(" ")'
 ```
+
+## Tool Calling
+
+The HTTP provider supports tool calling through the `tools`, `tool_choice`, and `transformToolsFormat` config options. Define your tools and tool choice in OpenAI format, then set `transformToolsFormat` to the target provider's format (`openai`, `anthropic`, `bedrock`, or `google`). Promptfoo converts `tools` and `tool_choice` before injecting them into your request body via `{{tools}}` and `{{tool_choice}}`.
+
+Setting `transformToolsFormat` is especially important when the HTTP provider is used as a guardrails provider, so that managed tool calls are formatted correctly for the target API.
+
+### Basic Configuration
+
+```yaml
+providers:
+  - id: https://api.example.com/v1/chat/completions
+    config:
+      method: POST
+      headers:
+        Content-Type: application/json
+        Authorization: 'Bearer {{env.API_KEY}}'
+      transformToolsFormat: openai
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            description: Get weather for a location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+              required:
+                - location
+      tool_choice: auto
+      body:
+        model: gpt-4o-mini
+        messages:
+          - role: user
+            content: '{{prompt}}'
+        tools: '{{tools}}'
+        tool_choice: '{{tool_choice}}'
+      transformResponse: 'json.choices[0].message.tool_calls'
+```
+
+### transformToolsFormat
+
+The `transformToolsFormat` option converts **both** `tools` and `tool_choice` from [OpenAI format](/docs/configuration/tools) to provider-specific formats. Define your tools once in OpenAI format, and they'll be automatically transformed to the target provider's native format.
+
+| Provider         | Format      |
+| ---------------- | ----------- |
+| Anthropic        | `anthropic` |
+| AWS Bedrock      | `bedrock`   |
+| Azure OpenAI     | `openai`    |
+| Cerebras         | `openai`    |
+| DeepSeek         | `openai`    |
+| Fireworks AI     | `openai`    |
+| Google AI Studio | `google`    |
+| Google Vertex AI | `google`    |
+| Groq             | `openai`    |
+| Ollama           | `openai`    |
+| OpenAI           | `openai`    |
+| OpenRouter       | `openai`    |
+| Perplexity       | `openai`    |
+| Together AI      | `openai`    |
+| xAI (Grok)       | `openai`    |
+
+Use `openai` or omit for OpenAI-compatible APIs where no conversion is needed.
+
+**Why tool_choice needs transformation:** Each provider represents tool choice differently:
+
+| OpenAI (Promptfoo default) | Anthropic          | Bedrock        | Google                                        |
+| -------------------------- | ------------------ | -------------- | --------------------------------------------- |
+| `"auto"`                   | `{ type: "auto" }` | `{ auto: {} }` | `{ functionCallingConfig: { mode: "AUTO" } }` |
+| `"required"`               | `{ type: "any" }`  | `{ any: {} }`  | `{ functionCallingConfig: { mode: "ANY" } }`  |
+| `"none"`                   | —                  | —              | `{ functionCallingConfig: { mode: "NONE" } }` |
+
+### Template Variables
+
+Use these variables in your request body:
+
+- `{{tools}}` - The transformed tools array, automatically serialized as JSON
+- `{{tool_choice}}` - The transformed tool choice, automatically serialized as JSON
+
+For complete documentation on tool formats and configuration, see [Tool Calling Configuration](/docs/configuration/tools).
 
 ## Token Estimation
 
@@ -643,7 +825,7 @@ providers:
 
 ### Custom Token Counting
 
-For sophisticated token counting, implement it in your `transformResponse` function:
+For accurate token counting, implement it in your `transformResponse` function:
 
 ```yaml
 providers:
@@ -993,64 +1175,45 @@ providers:
 
 ## Authentication
 
-The HTTP provider supports OAuth 2.0 and Basic authentication methods.
+The HTTP provider supports multiple authentication methods. For specialized cases, use custom hooks or custom providers.
 
-### OAuth 2.0
+### Bearer Token
 
-OAuth 2.0 authentication supports both **Client Credentials** and **Username/Password** (Resource Owner Password Credentials) grant types.
-
-#### Client Credentials Grant
-
-Use this grant type for server-to-server authentication:
+For APIs that accept a static bearer token:
 
 ```yaml
 providers:
   - id: https
     config:
       url: 'https://api.example.com/v1/chat'
-      method: 'POST'
       body:
         prompt: '{{prompt}}'
       auth:
-        type: oauth
-        grantType: client_credentials
-        tokenUrl: 'https://auth.example.com/oauth/token'
-        clientId: 'your-client-id'
-        clientSecret: 'your-client-secret'
-        scopes:
-          - read
-          - write
+        type: bearer
+        token: '{{env.API_TOKEN}}'
 ```
 
-#### Username/Password Grant
+The provider adds an `Authorization: Bearer <token>` header to each request.
 
-Use this grant type when authenticating with user credentials:
+### API Key
+
+For APIs that use API key authentication, you can place the key in either a header or query parameter:
 
 ```yaml
 providers:
   - id: https
     config:
       url: 'https://api.example.com/v1/chat'
-      method: 'POST'
       body:
         prompt: '{{prompt}}'
       auth:
-        type: oauth
-        grantType: password
-        tokenUrl: 'https://auth.example.com/oauth/token'
-        clientId: 'your-client-id'
-        clientSecret: 'your-client-secret'
-        username: 'user@example.com'
-        password: 'your-password'
-        scopes:
-          - read
+        type: api_key
+        keyName: 'X-API-Key'
+        value: '{{env.API_KEY}}'
+        placement: header # or 'query'
 ```
 
-The provider will automatically:
-
-- Request an access token from the specified `tokenUrl`
-- Cache the token and refresh it when it expires (with a 60-second buffer)
-- Add the token to requests as an `Authorization: Bearer <token>` header
+When `placement` is `header`, the key is added as a request header. When `placement` is `query`, it's appended as a URL query parameter.
 
 ### Basic Authentication
 
@@ -1061,16 +1224,334 @@ providers:
   - id: https
     config:
       url: 'https://api.example.com/v1/chat'
-      method: 'POST'
       body:
         prompt: '{{prompt}}'
       auth:
         type: basic
-        username: 'your-username'
-        password: 'your-password'
+        username: '{{env.API_USERNAME}}'
+        password: '{{env.API_PASSWORD}}'
 ```
 
-The provider will automatically encode credentials and add them as an `Authorization: Basic <credentials>` header.
+The provider Base64-encodes credentials and adds an `Authorization: Basic <credentials>` header.
+
+### OAuth 2.0
+
+OAuth 2.0 authentication supports **Client Credentials** and **Password** (Resource Owner Password Credentials) grant types.
+
+When a request is made, the provider:
+
+1. Checks if a valid access token exists in cache
+2. If no token exists or is expired, requests a new one from `tokenUrl`
+3. Caches the access token
+4. Adds the token to API requests as an `Authorization: Bearer <token>` header
+
+Tokens are refreshed proactively with a 60-second buffer before expiry.
+
+#### Client Credentials Grant
+
+Use this grant type for server-to-server authentication:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: oauth
+        grantType: client_credentials
+        tokenUrl: 'https://auth.example.com/oauth/token'
+        clientId: '{{env.OAUTH_CLIENT_ID}}'
+        clientSecret: '{{env.OAUTH_CLIENT_SECRET}}'
+        scopes:
+          - read
+          - write
+```
+
+#### Password Grant
+
+Use this grant type when authenticating with user credentials:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: oauth
+        grantType: password
+        tokenUrl: 'https://auth.example.com/oauth/token'
+        clientId: '{{env.OAUTH_CLIENT_ID}}'
+        clientSecret: '{{env.OAUTH_CLIENT_SECRET}}'
+        username: '{{env.OAUTH_USERNAME}}'
+        password: '{{env.OAUTH_PASSWORD}}'
+        scopes:
+          - read
+```
+
+#### Token Endpoint Requirements
+
+The token endpoint must return a JSON response with an `access_token` field. If `expires_in` (lifetime in seconds) is included, the provider uses it to schedule refresh. Otherwise, a 1-hour default is used.
+
+### File-Based Authentication
+
+Use file-based authentication when your token needs custom logic that doesn't fit the built-in auth flows.
+
+The auth file can be written in JavaScript, TypeScript, or Python:
+
+- JavaScript and TypeScript files should export a default function by default
+- Python files should define `get_auth` by default
+- Named exports are supported with `file://path/to/file.ts:functionName`
+
+The auth function receives the standard HTTP provider `callApi` context and must return:
+
+```ts
+{
+  token: string;
+  expiration?: number | null;
+}
+```
+
+- `token` is required
+- `expiration` is optional and should be an absolute Unix timestamp in milliseconds
+- If `expiration` is omitted or `null`, the token is cached for the lifetime of the provider instance
+- If `expiration` is provided, the function is called again when the token is within the same 60-second refresh buffer used by OAuth
+
+The auth function receives the same `callApi` context object that providers receive at runtime, including `vars`, `prompt`, `test`, `originalProvider`, `evaluationId`, `testCaseId`, `traceparent`, `tracestate`, and `repeatIndex`.
+
+Unlike `bearer` and `oauth`, file auth does not automatically attach an `Authorization` header. Instead, the returned values are injected into template variables before the request is rendered so you can place them anywhere in the request:
+
+- headers
+- query params
+- JSON bodies
+- raw requests
+- session endpoint config
+- request transforms
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      method: POST
+      headers:
+        Authorization: 'Bearer {{token}}'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: file
+        path: './auth/get-token.ts'
+```
+
+Available template variables:
+
+- `{{token}}`
+- `{{expiration}}`
+
+If `token` or `expiration` already exist in `vars`, the file auth result overwrites them and emits a warning.
+
+This is intentionally different from OAuth:
+
+- `oauth` automatically adds `Authorization: Bearer <token>`
+- `oauth` does not inject `{{token}}` into template vars
+- `file` injects `{{token}}` and `{{expiration}}` into template vars
+- `file` does not automatically add an `Authorization` header
+
+Example auth files:
+
+```ts
+export default async function getAuth(context) {
+  return {
+    token: context.vars.apiKey,
+    expiration: Date.now() + 55 * 60 * 1000,
+  };
+}
+```
+
+```ts
+export async function buildAuth(context) {
+  return {
+    token: context.vars.sessionToken,
+  };
+}
+```
+
+Use the named export with:
+
+```yaml
+auth:
+  type: file
+  path: file://./auth/get-token.ts:buildAuth
+```
+
+```python
+def get_auth(context):
+    return {
+        "token": context["vars"]["api_key"],
+        "expiration": None,
+    }
+```
+
+### Digital Signature Authentication
+
+For APIs requiring cryptographic request signing, the HTTP provider supports digital signatures with PEM, JKS (Java KeyStore), and PFX certificate formats. The private key is **never sent to Promptfoo** and remains stored locally.
+
+#### Basic Usage (PEM)
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+      signatureAuth:
+        type: pem
+        privateKeyPath: '/path/to/private.key'
+```
+
+When signature authentication is enabled, these template variables become available for use in headers or body:
+
+- `{{signature}}`: The generated signature (base64-encoded)
+- `{{signatureTimestamp}}`: Unix timestamp when the signature was generated
+
+#### Certificate Formats
+
+**PEM Certificates:**
+
+```yaml
+signatureAuth:
+  type: pem
+  privateKeyPath: '/path/to/private.key' # Path to PEM file
+  # OR inline key:
+  # privateKey: '-----BEGIN PRIVATE KEY-----\n...'
+```
+
+**JKS (Java KeyStore):**
+
+```yaml
+signatureAuth:
+  type: jks
+  keystorePath: '/path/to/keystore.jks'
+  keystorePassword: '{{env.JKS_PASSWORD}}' # Or use PROMPTFOO_JKS_PASSWORD env var
+  keyAlias: 'your-key-alias' # Optional: uses first available if not specified
+```
+
+**PFX (PKCS#12):**
+
+```yaml
+signatureAuth:
+  type: pfx
+  pfxPath: '/path/to/certificate.pfx'
+  pfxPassword: '{{env.PFX_PASSWORD}}' # Or use PROMPTFOO_PFX_PASSWORD env var
+  # OR use separate certificate and key files:
+  # certPath: '/path/to/certificate.crt'
+  # keyPath: '/path/to/private.key'
+```
+
+#### Full Configuration Example
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+      signatureAuth:
+        type: pem
+        privateKeyPath: '/path/to/private.key'
+        signatureValidityMs: 300000 # 5 minutes (default)
+        signatureAlgorithm: 'SHA256' # Default
+        signatureDataTemplate: '{{signatureTimestamp}}' # Default; customize as needed
+        signatureRefreshBufferMs: 30000 # Optional custom refresh buffer
+```
+
+:::info Dependencies
+
+- **JKS support** requires the `jks-js` package: `npm install jks-js`
+- **PFX support** requires the `pem` package: `npm install pem`
+
+:::
+
+### Authentication Options Reference
+
+#### Bearer Token Options
+
+| Option | Type   | Required | Description        |
+| ------ | ------ | -------- | ------------------ |
+| type   | string | Yes      | Must be `'bearer'` |
+| token  | string | Yes      | The bearer token   |
+
+#### API Key Options
+
+| Option    | Type   | Required | Description                                     |
+| --------- | ------ | -------- | ----------------------------------------------- |
+| type      | string | Yes      | Must be `'api_key'`                             |
+| keyName   | string | Yes      | Name of the header or query parameter           |
+| value     | string | Yes      | The API key value                               |
+| placement | string | Yes      | Where to place the key: `'header'` or `'query'` |
+
+#### Basic Auth Options
+
+| Option   | Type   | Required | Description       |
+| -------- | ------ | -------- | ----------------- |
+| type     | string | Yes      | Must be `'basic'` |
+| username | string | Yes      | Username          |
+| password | string | Yes      | Password          |
+
+#### OAuth 2.0 Options
+
+| Option       | Type     | Required                                | Description                            |
+| ------------ | -------- | --------------------------------------- | -------------------------------------- |
+| type         | string   | Yes                                     | Must be `'oauth'`                      |
+| grantType    | string   | Yes                                     | `'client_credentials'` or `'password'` |
+| tokenUrl     | string   | Yes                                     | OAuth token endpoint URL               |
+| clientId     | string   | Yes (client_credentials), No (password) | OAuth client ID                        |
+| clientSecret | string   | Yes (client_credentials), No (password) | OAuth client secret                    |
+| username     | string   | Yes (password grant)                    | Username for password grant            |
+| password     | string   | Yes (password grant)                    | Password for password grant            |
+| scopes       | string[] | No                                      | OAuth scopes to request                |
+
+#### File Auth Options
+
+| Option | Type   | Required | Description                                           |
+| ------ | ------ | -------- | ----------------------------------------------------- |
+| type   | string | Yes      | Must be `'file'`                                      |
+| path   | string | Yes      | Path to a JavaScript, TypeScript, or Python auth file |
+
+#### Digital Signature Options
+
+| Option                   | Type   | Required | Default                    | Description                                            |
+| ------------------------ | ------ | -------- | -------------------------- | ------------------------------------------------------ |
+| type                     | string | No       | `'pem'`                    | Certificate type: `'pem'`, `'jks'`, or `'pfx'`         |
+| privateKeyPath           | string | No\*     | -                          | Path to PEM private key file (PEM only)                |
+| privateKey               | string | No\*     | -                          | Inline PEM private key string (PEM only)               |
+| keystorePath             | string | No\*     | -                          | Path to JKS keystore file (JKS only)                   |
+| keystoreContent          | string | No\*     | -                          | Base64-encoded JKS keystore content (JKS only)         |
+| keystorePassword         | string | No       | -                          | JKS password (or use `PROMPTFOO_JKS_PASSWORD` env var) |
+| keyAlias                 | string | No       | First available            | JKS key alias (JKS only)                               |
+| pfxPath                  | string | No\*     | -                          | Path to PFX certificate file (PFX only)                |
+| pfxPassword              | string | No       | -                          | PFX password (or use `PROMPTFOO_PFX_PASSWORD` env var) |
+| certPath                 | string | No\*     | -                          | Path to certificate file (PFX alternative)             |
+| keyPath                  | string | No\*     | -                          | Path to private key file (PFX alternative)             |
+| certContent              | string | No\*     | -                          | Base64-encoded certificate content (PFX alternative)   |
+| keyContent               | string | No\*     | -                          | Base64-encoded private key content (PFX alternative)   |
+| signatureValidityMs      | number | No       | 300000                     | Signature validity period in milliseconds              |
+| signatureAlgorithm       | string | No       | `'SHA256'`                 | Signature algorithm (any Node.js crypto supported)     |
+| signatureDataTemplate    | string | No       | `'{{signatureTimestamp}}'` | Template for data to sign (`\n` = newline)             |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs          | Buffer time before expiry to refresh                   |
+
+\* Requirements by certificate type:
+
+- **PEM**: Either `privateKeyPath` or `privateKey` required
+- **JKS**: Either `keystorePath` or `keystoreContent` required
+- **PFX**: Either `pfxPath`, or both `certPath` and `keyPath`, or both `certContent` and `keyContent` required
 
 ## Session management
 
@@ -1171,158 +1652,13 @@ providers:
         user_message: '{{prompt}}'
 ```
 
-## Digital Signature Authentication
-
-The HTTP provider supports digital signature authentication with multiple certificate formats. This feature allows you to:
-
-- Automatically generate cryptographic signatures for requests
-- Manage signature expiration and refresh
-- Customize header names and signature formats
-- Configure different signature algorithms
-- Support for PEM, JKS (Java KeyStore), and PFX (Personal Information Exchange) certificate formats
-
-The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic. In either case, the private key is **never sent to Promptfoo** and will always be stored locally on your system either in your `promptfooconfig.yaml` file or on a local path that the configuration file references.
-
-### Basic Usage (PEM)
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://api.example.com/v1'
-      method: 'POST'
-      headers:
-        'x-signature': '{{signature}}'
-        'x-timestamp': '{{signatureTimestamp}}'
-      signatureAuth:
-        type: 'pem'
-        privateKeyPath: '/path/to/private.key'
-        clientId: 'your-client-id'
-```
-
-### Certificate Format Support
-
-The HTTP provider supports three certificate formats:
-
-#### PEM Certificates
-
-```yaml
-signatureAuth:
-  type: 'pem'
-  privateKeyPath: '/path/to/private.key' # Path to PEM private key file
-  # OR
-  privateKey: '-----BEGIN PRIVATE KEY-----\n...' # Direct key string
-```
-
-#### JKS (Java KeyStore) Certificates
-
-```yaml
-signatureAuth:
-  type: 'jks'
-  keystorePath: '/path/to/keystore.jks'
-  keystorePassword: 'your-keystore-password' # Optional: can use PROMPTFOO_JKS_PASSWORD env var
-  keyAlias: 'your-key-alias' # Optional: uses first available alias if not specified
-```
-
-#### PFX (Personal Information Exchange) Certificates
-
-```yaml
-signatureAuth:
-  type: 'pfx'
-  pfxPath: '/path/to/certificate.pfx'
-  pfxPassword: 'your-pfx-password' # Optional: can use PROMPTFOO_PFX_PASSWORD env var
-  # OR use separate certificate and key files
-  certPath: '/path/to/certificate.crt'
-  keyPath: '/path/to/private.key'
-```
-
-### Full Configuration
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://api.example.com/v1'
-      headers:
-        'x-signature': '{{signature}}'
-        'x-timestamp': '{{signatureTimestamp}}'
-        'x-client-id': 'your-client-id'
-      signatureAuth:
-        # Certificate type (pem, jks, or pfx)
-        type: 'pem'
-
-        # PEM options
-        privateKeyPath: '/path/to/private.key' # Path to key file
-        # privateKey: '-----BEGIN PRIVATE KEY-----\n...'  # Or direct key string
-
-        # JKS options
-        # keystorePath: '/path/to/keystore.jks'
-        # keystorePassword: 'password'  # Optional: can use PROMPTFOO_JKS_PASSWORD
-        # keyAlias: 'alias'  # Optional: uses first available if not specified
-
-        # PFX options
-        # pfxPath: '/path/to/certificate.pfx'
-        # pfxPassword: 'password'  # Optional: can use PROMPTFOO_PFX_PASSWORD
-        # certPath: '/path/to/certificate.crt'  # Alternative to pfxPath
-        # keyPath: '/path/to/private.key'       # Alternative to pfxPath
-
-        clientId: 'your-client-id'
-
-        # Optional fields with defaults shown
-        signatureValidityMs: 300000 # 5 minutes
-        signatureAlgorithm: 'SHA256'
-        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline character
-        signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
-```
-
-:::note
-You can use environment variables throughout your HTTP provider configuration using the `{{env.VARIABLE_NAME}}` syntax.
-:::
-
-:::info Dependencies
-
-- **JKS support** requires the `jks-js` package: `npm install jks-js`
-- **PFX support** requires the `pem` package: `npm install pem`
-  :::
-
-When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
-
-- `signature`: The generated signature string (base64 encoded)
-- `signatureTimestamp`: The Unix timestamp when the signature was generated
-
-### Signature Auth Options
-
-| Option                   | Type   | Required | Default                             | Description                                                                                                           |
-| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| type                     | string | No       | 'pem'                               | Certificate type: 'pem', 'jks', or 'pfx'                                                                              |
-| privateKeyPath           | string | No\*     | -                                   | Path to the PEM private key file used for signing (PEM type only)                                                     |
-| privateKey               | string | No\*     | -                                   | PEM private key string (if not using privateKeyPath, PEM type only)                                                   |
-| keystorePath             | string | No\*     | -                                   | Path to the JKS keystore file (JKS type only)                                                                         |
-| keystorePassword         | string | No       | -                                   | JKS keystore password (JKS type only, can use PROMPTFOO_JKS_PASSWORD env var)                                         |
-| keyAlias                 | string | No       | First available alias               | JKS key alias to use (JKS type only)                                                                                  |
-| pfxPath                  | string | No\*     | -                                   | Path to the PFX certificate file (PFX type only)                                                                      |
-| pfxPassword              | string | No       | -                                   | PFX certificate password (PFX type only, can use PROMPTFOO_PFX_PASSWORD env var)                                      |
-| certPath                 | string | No\*     | -                                   | Path to the certificate file (PFX type only, alternative to pfxPath)                                                  |
-| keyPath                  | string | No\*     | -                                   | Path to the private key file (PFX type only, alternative to pfxPath)                                                  |
-| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
-| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
-| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
-| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
-| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
-
-\* Requirements depend on certificate type:
-
-- **PEM**: Either `privateKeyPath` or `privateKey` must be provided
-- **JKS**: `keystorePath` must be provided
-- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` must be provided
-
 ## Request Retries
 
 The HTTP provider automatically retries failed requests in the following scenarios:
 
 - Rate limiting (HTTP 429)
-- Server errors
 - Network failures
+- Transient server errors (502, 503, 504, 524)
 
 By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
 
@@ -1332,6 +1668,27 @@ providers:
     config:
       url: https://api.example.com/v1/chat
       maxRetries: 2 # Override default of 4 retries
+```
+
+### Transient Error Handling
+
+Certain server errors are automatically retried when they indicate temporary infrastructure issues:
+
+| Status Code | Description         | Retry Condition                             |
+| ----------- | ------------------- | ------------------------------------------- |
+| 502         | Bad Gateway         | Status text contains "bad gateway"          |
+| 503         | Service Unavailable | Status text contains "service unavailable"  |
+| 504         | Gateway Timeout     | Status text contains "gateway timeout"      |
+| 524         | A Timeout Occurred  | Status text contains "timeout" (Cloudflare) |
+
+These are retried up to 3 times with exponential backoff (1s, 2s, 4s). The status text check ensures permanent failures (like authentication errors using 5xx codes) are not retried.
+
+### Retrying All Server Errors
+
+By default, only the transient errors above are retried. To enable retries for all 5xx responses:
+
+```bash
+PROMPTFOO_RETRY_5XX=true promptfoo eval
 ```
 
 ## Streaming Responses
@@ -1413,50 +1770,18 @@ Supported config options:
 | method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
 | headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
 | body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
+| multipart         | object                  | Multipart form configuration with ordered `parts`. Supports text fields, local file uploads, and generated PDF/PNG/JPEG documents.                                                  |
 | queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
 | transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
-| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
-| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
+| validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
+| auth              | object                  | Authentication configuration (bearer, api_key, basic, oauth, or file). See [Authentication](#authentication) section.                                                               |
+| signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
 | tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
 
-### Signature Auth Options
-
-| Option                   | Type   | Required | Default                             | Description                                                                                                           |
-| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| type                     | string | No       | 'pem'                               | Certificate type: 'pem', 'jks', or 'pfx'                                                                              |
-| privateKeyPath           | string | No\*     | -                                   | Path to the PEM private key file used for signing (PEM type only)                                                     |
-| privateKey               | string | No\*     | -                                   | PEM private key string (if not using privateKeyPath, PEM type only)                                                   |
-| keystorePath             | string | No\*     | -                                   | Path to the JKS keystore file (JKS type only)                                                                         |
-| keystorePassword         | string | No       | -                                   | JKS keystore password (JKS type only, can use PROMPTFOO_JKS_PASSWORD env var)                                         |
-| keyAlias                 | string | No       | First available alias               | JKS key alias to use (JKS type only)                                                                                  |
-| pfxPath                  | string | No\*     | -                                   | Path to the PFX certificate file (PFX type only)                                                                      |
-| pfxPassword              | string | No       | -                                   | PFX certificate password (PFX type only, can use PROMPTFOO_PFX_PASSWORD env var)                                      |
-| certPath                 | string | No\*     | -                                   | Path to the certificate file (PFX type only, alternative to pfxPath)                                                  |
-| keyPath                  | string | No\*     | -                                   | Path to the private key file (PFX type only, alternative to pfxPath)                                                  |
-| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
-| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
-| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
-| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
-| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
-
-\* Requirements depend on certificate type:
-
-- **PEM**: Either `privateKeyPath` or `privateKey` must be provided
-- **JKS**: `keystorePath` must be provided
-- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` must be provided
-
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
-
-## Configuration Generator
-
-Use the generator below to create an HTTP provider configuration based on your endpoint:
-
-import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
-
-<HttpConfigGenerator />
 
 ## Error Handling
 
@@ -1468,7 +1793,7 @@ The HTTP provider throws errors for:
 - Invalid request configurations
 - Status codes that fail the configured validation (if `validateStatus` is set)
 
-By default, all response status codes are accepted. You can customize this using the `validateStatus` option:
+By default, all response status codes are accepted. This accommodates APIs that return valid responses with non-2xx codes (common with guardrails and content filtering). You can customize this using the `validateStatus` option:
 
 ```yaml
 providers:

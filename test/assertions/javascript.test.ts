@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
+import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
@@ -78,8 +79,9 @@ vi.mock('../../src/cliState', () => ({
   },
   basePath: '/base/path',
 }));
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
+vi.mock('../../src/matchers/rag', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../src/matchers/rag')>('../../src/matchers/rag');
   return {
     ...actual,
     matchesContextRelevance: vi
@@ -100,6 +102,117 @@ vi.mock('../../src/providers/packageParser', () => {
     loadFromPackage: mockLoadFromPackage,
     __esModule: true, // This is important for proper mocking
   };
+});
+
+describe('buildFunctionBody', () => {
+  it('should prepend return to simple expressions', () => {
+    expect(buildFunctionBody('output === "test"')).toBe('return output === "test"');
+    expect(buildFunctionBody('output.length > 5')).toBe('return output.length > 5');
+    expect(buildFunctionBody('true')).toBe('return true');
+  });
+
+  it('should inject return before final expression when starting with const', () => {
+    expect(buildFunctionBody('const s = output; s === "test"')).toBe(
+      'const s = output; return s === "test"',
+    );
+    expect(buildFunctionBody('const x = 5; const y = 10; x + y')).toBe(
+      'const x = 5; const y = 10; return x + y',
+    );
+  });
+
+  it('should inject return before final expression when starting with let', () => {
+    expect(buildFunctionBody('let x = output.length; x > 5')).toBe(
+      'let x = output.length; return x > 5',
+    );
+  });
+
+  it('should inject return before final expression when starting with var', () => {
+    expect(buildFunctionBody('var x = output.length; x > 5')).toBe(
+      'var x = output.length; return x > 5',
+    );
+  });
+
+  it('should handle trailing semicolons', () => {
+    expect(buildFunctionBody('const x = 5; x > 0;')).toBe('const x = 5; return x > 0');
+    expect(buildFunctionBody('const x = 5; x > 0;;')).toBe('const x = 5; return x > 0');
+    expect(buildFunctionBody('output === "test";')).toBe('return output === "test"');
+  });
+
+  it('should handle whitespace', () => {
+    expect(buildFunctionBody('  const x = 5; x > 0  ')).toBe('const x = 5; return x > 0');
+    expect(buildFunctionBody('  output === "test"  ')).toBe('return output === "test"');
+  });
+
+  it('should handle declaration without final expression', () => {
+    // This is an edge case - user forgot to add the expression
+    expect(buildFunctionBody('const x = 5;')).toBe('const x = 5');
+  });
+
+  it('should handle semicolons inside strings in declarations', () => {
+    // Semicolon in string within the declaration part (not the final expression)
+    expect(buildFunctionBody('const s = "a;b"; s.length')).toBe('const s = "a;b"; return s.length');
+  });
+
+  it('should handle semicolons inside strings in final expression', () => {
+    // Critical edge case: semicolon in string is the LAST semicolon in the code
+    // This was the bug that caused silent failures
+    expect(buildFunctionBody('const s = output; s === "test;value"')).toBe(
+      'const s = output; return s === "test;value"',
+    );
+    expect(buildFunctionBody('const x = output; x.includes(";")')).toBe(
+      'const x = output; return x.includes(";")',
+    );
+    expect(buildFunctionBody('const x = output; x === "a;b;c"')).toBe(
+      'const x = output; return x === "a;b;c"',
+    );
+  });
+
+  it('should handle single-quoted strings with semicolons', () => {
+    expect(buildFunctionBody("const s = output; s === 'test;value'")).toBe(
+      "const s = output; return s === 'test;value'",
+    );
+    expect(buildFunctionBody("const s = 'a;b'; s.length")).toBe("const s = 'a;b'; return s.length");
+  });
+
+  it('should handle template literals with semicolons', () => {
+    expect(buildFunctionBody('const s = output; s === `test;value`')).toBe(
+      'const s = output; return s === `test;value`',
+    );
+    expect(buildFunctionBody('const s = `a;b`; s.length')).toBe('const s = `a;b`; return s.length');
+  });
+
+  it('should handle escaped quotes', () => {
+    // Escaped quote should not toggle quote state
+    expect(buildFunctionBody('const s = output; s === "test\\"with;quotes"')).toBe(
+      'const s = output; return s === "test\\"with;quotes"',
+    );
+    expect(buildFunctionBody("const s = output; s === 'test\\'with;quotes'")).toBe(
+      "const s = output; return s === 'test\\'with;quotes'",
+    );
+  });
+
+  it('should handle multiple escaped backslashes', () => {
+    // \\\\ is two escaped backslashes, so the quote after is NOT escaped
+    expect(buildFunctionBody('const s = "a\\\\"; s.length')).toBe(
+      'const s = "a\\\\"; return s.length',
+    );
+  });
+
+  it('should handle mixed quote types', () => {
+    // Single quotes inside double quotes
+    expect(buildFunctionBody('const s = output; s === "it\'s;here"')).toBe(
+      'const s = output; return s === "it\'s;here"',
+    );
+    // Double quotes inside single quotes
+    expect(buildFunctionBody('const s = output; s === \'say "hi;there"\'')).toBe(
+      'const s = output; return s === \'say "hi;there"\'',
+    );
+  });
+
+  it('should not modify expressions starting with const-like words', () => {
+    // "constant" starts with "const" but isn't a declaration
+    expect(buildFunctionBody('constant === true')).toBe('return constant === true');
+  });
 });
 
 const javascriptStringAssertion: Assertion = {
@@ -171,6 +284,10 @@ describe('JavaScript file references', () => {
     vi.mocked(loadFromPackage).mockReset();
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should handle JavaScript file reference with function name', async () => {
     const assertion: Assertion = {
       type: 'javascript',
@@ -207,6 +324,51 @@ describe('JavaScript file references', () => {
       prompt: 'Some prompt',
       vars: {},
       test: {},
+      provider,
+      providerResponse,
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should pass assertion config to JavaScript file references', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'file:///path/to/assert.js',
+      config: {
+        minLength: 5,
+      },
+    };
+
+    const mockFn = vi.fn((output: string, context: { config?: { minLength?: number } }) => {
+      return output.length >= (context.config?.minLength ?? 0);
+    });
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue(mockFn);
+
+    const output = 'Expected output';
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(mockFn).toHaveBeenCalledWith(output, {
+      prompt: 'Some prompt',
+      vars: {},
+      test: {},
+      config: {
+        minLength: 5,
+      },
       provider,
       providerResponse,
     });
@@ -482,6 +644,74 @@ describe('JavaScript file references', () => {
     });
   });
 
+  // Fix for GitHub issue #7334: Dynamic vars should be resolved when passed to assertions
+  it('should use resolved vars parameter over test.vars when provided (issue #7334)', async () => {
+    const output = 'Expected output';
+
+    // Simulates the case where test.vars has an unresolved file:// reference
+    // but the vars parameter has the resolved value
+    const javascriptStringAssertionWithVars: Assertion = {
+      type: 'javascript',
+      value: 'context.vars.dynamicVar === "resolved-value"',
+    };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithVars,
+      test: { vars: { dynamicVar: 'file://some-script.js' } } as AtomicTestCase,
+      // Pass resolved vars - this should take precedence over test.vars
+      vars: { dynamicVar: 'resolved-value' },
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fall back to test.vars when vars parameter is not provided', async () => {
+    const output = 'Expected output';
+
+    const javascriptStringAssertionWithVars: Assertion = {
+      type: 'javascript',
+      value: 'context.vars.foo === "bar"',
+    };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithVars,
+      test: { vars: { foo: 'bar' } } as AtomicTestCase,
+      // No vars parameter - should fall back to test.vars
+      providerResponse: { output },
+    });
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'Assertion passed',
+    });
+  });
+
+  it('should fail when vars parameter has wrong value even if test.vars has correct value (issue #7334 negative)', async () => {
+    const output = 'Expected output';
+
+    // This negative test verifies that vars parameter truly takes precedence over test.vars
+    const javascriptStringAssertionWithVars: Assertion = {
+      type: 'javascript',
+      value: 'context.vars.dynamicVar === "expected-value"',
+    };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion: javascriptStringAssertionWithVars,
+      // test.vars has the "correct" value
+      test: { vars: { dynamicVar: 'expected-value' } } as AtomicTestCase,
+      // But vars parameter has the wrong value - this should take precedence and fail
+      vars: { dynamicVar: 'wrong-value' },
+      providerResponse: { output },
+    });
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('false');
+  });
+
   it('should pass when the function returns pass', async () => {
     const output = 'Expected output';
 
@@ -513,6 +743,289 @@ describe('JavaScript file references', () => {
       pass: false,
       score: 0.5,
       reason: 'Assertion failed',
+    });
+  });
+
+  it('should serialize direct function-valued javascript assertions when they throw', async () => {
+    const output = 'Expected output';
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: () => {
+        throw new Error('boom');
+      },
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: expect.stringContaining('Custom function threw error: boom'),
+      assertion: {
+        type: 'javascript',
+        value: expect.any(String),
+      },
+    });
+    expect(typeof result.assertion?.value).toBe('string');
+    expect(result.reason).not.toMatch(/\nundefined$/);
+  });
+
+  it('should serialize function-valued assertions returned inside a custom GradingResult', async () => {
+    const output = 'Expected output';
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: () => ({
+        pass: true,
+        score: 1,
+        reason: 'Custom reason',
+        assertion: {
+          type: 'javascript',
+          value: () => false,
+        },
+      }),
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'Custom reason',
+      assertion: {
+        type: 'javascript',
+        value: expect.any(String),
+      },
+    });
+    expect(typeof result.assertion?.value).toBe('string');
+    expect(result.assertion?.value).toContain('() => false');
+  });
+
+  it.each([
+    ['true', () => true, true, 1],
+    ['false', () => false, false, 0],
+    ['a number', () => 0.75, true, 0.75],
+  ])('should normalize direct function-valued javascript assertions that return %s', async (_type, value, expectedPass, expectedScore) => {
+    const output = 'Expected output';
+    const assertion: Assertion = {
+      type: 'javascript',
+      value,
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: expectedPass,
+      score: expectedScore,
+      reason: expectedPass ? 'Assertion passed' : 'Custom function returned false',
+      assertion: {
+        type: 'javascript',
+        value: expect.any(String),
+      },
+    });
+    expect(typeof result.assertion?.value).toBe('string');
+  });
+
+  it('should honor threshold when a direct function-valued javascript assertion returns a number', async () => {
+    const output = 'Expected output';
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: () => 0.25,
+      threshold: 0.5,
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0.25,
+      reason: 'Custom function returned false',
+      assertion: {
+        type: 'javascript',
+        value: expect.any(String),
+      },
+    });
+  });
+
+  const inverseFunctionAssertionCases: [string, Assertion, boolean, number, string][] = [
+    [
+      'boolean results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: () => true,
+      },
+      false,
+      0,
+      'Custom function returned true',
+    ],
+    [
+      'numeric results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: () => 0.25,
+        threshold: 0.5,
+      },
+      true,
+      0.25,
+      'Assertion passed',
+    ],
+    [
+      'GradingResult results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: () => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom reason',
+        }),
+      },
+      false,
+      0.75,
+      'Custom function returned true',
+    ],
+  ];
+
+  it.each(
+    inverseFunctionAssertionCases,
+  )('should honor inverse mode for direct function-valued javascript assertions with %s', async (_type, assertion, expectedPass, expectedScore, expectedReason) => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: expectedPass,
+      score: expectedScore,
+      reason: expectedReason,
+      assertion: {
+        type: 'not-javascript',
+        value: expect.any(String),
+      },
+    });
+  });
+
+  const inverseStringAssertionCases: [string, Assertion, boolean, number, string][] = [
+    [
+      'boolean results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: 'output === "Expected output"',
+      },
+      false,
+      0,
+      'Custom function returned true\noutput === "Expected output"',
+    ],
+    [
+      'numeric results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: '0.25',
+        threshold: 0.5,
+      },
+      true,
+      0.25,
+      'Assertion passed',
+    ],
+    [
+      'GradingResult results for not-javascript assertions',
+      {
+        type: 'not-javascript',
+        value: `
+          return {
+            pass: true,
+            score: 0.75,
+            reason: 'Custom reason',
+          };
+        `,
+      },
+      false,
+      0.75,
+      'Custom function returned true',
+    ],
+  ];
+
+  it.each(
+    inverseStringAssertionCases,
+  )('should honor inverse mode for inline javascript assertions with %s', async (_type, assertion, expectedPass, expectedScore, expectedReason) => {
+    const output = 'Expected output';
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: expectedPass,
+      score: expectedScore,
+      reason: expectedReason,
+      assertion: {
+        type: 'not-javascript',
+        value: expect.any(String),
+      },
+    });
+  });
+
+  it('should honor inverse mode when a file:// javascript assertion returns a number', async () => {
+    const output = 'Expected output';
+
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue(vi.fn(() => 0.25));
+
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      value: 'file:///path/to/assert.js',
+      threshold: 0.5,
+    };
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0.25,
+      reason: 'Assertion passed',
+      assertion: {
+        type: 'not-javascript',
+        value: 'file:///path/to/assert.js',
+      },
     });
   });
 
@@ -726,6 +1239,252 @@ describe('JavaScript file references', () => {
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
+    });
+  });
+
+  describe('Single-line assertions with variable declarations', () => {
+    it('should handle const declaration in single-line assertion', async () => {
+      // The code injects `return` before the final expression, not at the start
+      // "const s = ...; s >= 0.5" becomes "const s = ...; return s >= 0.5"
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = JSON.parse(output).score; s >= 0.5 && s <= 0.75',
+      };
+
+      const output = JSON.stringify({ score: 0.67, reason: 'test' });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should handle let declaration in single-line assertion', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'let x = output.length; x > 5',
+      };
+
+      const output = 'Hello World';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should handle var declaration in single-line assertion', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'var x = output.length; x > 5',
+      };
+
+      const output = 'Hello World';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should handle multiple declarations in single-line assertion', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const a = 5; const b = 10; a + b === 15',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle declaration with semicolon in string value', async () => {
+      // Semicolons inside strings should not break the parsing
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = "hello; world"; s.length > 5',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle semicolon in final expression string (critical edge case)', async () => {
+      // This is the critical bug fix test - semicolon in final expression's string
+      // was causing silent failures before because lastIndexOf(';') found the wrong semicolon
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = output; s === "test;value"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test;value' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should correctly evaluate includes() with semicolon argument', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const x = output; x.includes(";")',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'hello;world' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle single quotes with semicolons in final expression', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: "const s = output; s === 'a;b;c'",
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'a;b;c' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle template literals with semicolons in final expression', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = output; s === `test;value`',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test;value' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle trailing semicolon in assertion', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const x = 10; x > 5;',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should still work with IIFE format', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '(() => { const s = JSON.parse(output).score; return s >= 0.5 && s <= 0.75; })()',
+      };
+
+      const output = JSON.stringify({ score: 0.67, reason: 'test' });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should still work with multiline format', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `const s = JSON.parse(output).score;
+return s >= 0.5 && s <= 0.75;`,
+      };
+
+      const output = JSON.stringify({ score: 0.67, reason: 'test' });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should fail when assertion evaluates to false', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const x = output.length; x > 100',
+      };
+
+      const output = 'short';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Custom function returned false');
     });
   });
 

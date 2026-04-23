@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
 import { callApi } from '@app/utils/api';
 
 interface VersionInfo {

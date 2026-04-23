@@ -33,7 +33,7 @@ const stripPositionInfo = (filePath: string): string => {
  */
 export const getIssueFilePath = (issue: {
   location?: string | null;
-  details?: Record<string, any> & { path?: string; files?: string[] };
+  details?: Record<string, unknown> & { path?: string; files?: string[] };
 }): string => {
   // Check location first (most common)
   if (issue.location && typeof issue.location === 'string' && issue.location.trim()) {

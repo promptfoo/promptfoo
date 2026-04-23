@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+
+import { AnimatePresence, motion } from 'framer-motion';
 import styles from './A2ACapabilityExplorer.module.css';
 
 interface AgentCapability {
@@ -208,7 +209,7 @@ export default function A2ACapabilityExplorer() {
       cap.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       cap.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesAuth = !filterCriteria.requiresAuth || cap.requiresAuth;
-    const matchesSuccessRate = cap.performance?.successRate >= filterCriteria.minSuccessRate;
+    const matchesSuccessRate = (cap.performance?.successRate ?? 0) >= filterCriteria.minSuccessRate;
     const matchesDataType =
       filterCriteria.dataType === 'all' ||
       cap.contentTypes.some((t) => t.includes(filterCriteria.dataType));

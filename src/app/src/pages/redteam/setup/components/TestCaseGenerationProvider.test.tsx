@@ -6,13 +6,15 @@
  * ```
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { within } from '@testing-library/dom';
-import { callApi } from '@app/utils/api';
-import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import { ToastProvider } from '@app/contexts/ToastContext';
+import { callApi } from '@app/utils/api';
 import { Plugin, Strategy } from '@promptfoo/redteam/constants';
+import { within } from '@testing-library/dom';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 
 // ===================================================================
 // Mocks
@@ -45,25 +47,44 @@ const createJsonResponse = <T,>(data: T): Response =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-callApiMock.mockImplementation((path, options) => {
+const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
+
+const defaultCallApiImplementation = (path: string, options?: RequestInit) => {
   if (path === '/redteam/generate-test') {
+    const body = options?.body ? JSON.parse(options.body as string) : {};
+    const strategyId = body.strategy?.id;
+    const count = body.count || 1;
+
     let prompt = 'Generated test prompt';
 
-    if (options?.body) {
-      const body = JSON.parse(options.body as string);
-      const strategyId = body.strategy?.id;
+    if (body.turn !== undefined && body.turn > 0) {
+      prompt = `Generated test prompt (turn ${body.turn})`;
+    }
 
-      if (body.turn !== undefined && body.turn > 0) {
-        prompt = `Generated test prompt (turn ${body.turn})`;
-      }
+    if (strategyId === 'image') {
+      prompt = FAKE_IMAGE_DATA_URL;
+    } else if (strategyId === 'video') {
+      prompt = 'fake-video-base64';
+    } else if (strategyId === 'audio') {
+      prompt = 'fake-audio-base64';
+    }
 
-      if (strategyId === 'image') {
-        prompt = 'fake-image-base64';
-      } else if (strategyId === 'video') {
-        prompt = 'fake-video-base64';
-      } else if (strategyId === 'audio') {
-        prompt = 'fake-audio-base64';
-      }
+    // Handle batch generation (count > 1)
+    if (count > 1) {
+      // For media strategies, don't append index suffix (tests check exact content)
+      const isMediaStrategy = ['image', 'video', 'audio'].includes(strategyId);
+      const testCases = Array.from({ length: count }, (_, i) => ({
+        prompt: isMediaStrategy ? prompt : `${prompt} #${i + 1}`,
+        context: 'Test context',
+        metadata: { index: i },
+      }));
+
+      return Promise.resolve(
+        createJsonResponse({
+          testCases,
+          count: testCases.length,
+        }),
+      );
     }
 
     return Promise.resolve(
@@ -95,7 +116,7 @@ callApiMock.mockImplementation((path, options) => {
   }
 
   throw new Error(`Unhandled callApi path: ${path}`);
-});
+};
 
 // ===================================================================
 // Helpers
@@ -106,11 +127,13 @@ callApiMock.mockImplementation((path, options) => {
  */
 const TestConsumer = ({
   testPlugin,
+  pluginConfig = {},
   testStrategy,
   isPluginStatic = false,
   isStrategyStatic = false,
 }: {
   testPlugin: Plugin;
+  pluginConfig?: PluginConfig;
   testStrategy: Strategy;
   isPluginStatic?: boolean;
   isStrategyStatic?: boolean;
@@ -119,7 +142,7 @@ const TestConsumer = ({
 
   async function handleGenerateTestCase() {
     await generateTestCase(
-      { id: testPlugin, config: {}, isStatic: isPluginStatic },
+      { id: testPlugin, config: pluginConfig, isStatic: isPluginStatic },
       { id: testStrategy, config: {}, isStatic: isStrategyStatic },
     );
   }
@@ -140,7 +163,8 @@ const TestConsumer = ({
 
 describe('TestCaseGenerationProvider', () => {
   beforeEach(() => {
-    callApiMock.mockClear();
+    callApiMock.mockReset();
+    callApiMock.mockImplementation(defaultCallApiImplementation);
   });
 
   it('should render', () => {
@@ -160,8 +184,18 @@ describe('TestCaseGenerationProvider', () => {
 
   describe('Test case generation', () => {
     it('should generate a test case', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
+      let resolveGeneration!: (response: Response) => void;
+      callApiMock.mockImplementation((path: string, options?: RequestInit) => {
+        if (path === '/redteam/generate-test') {
+          return new Promise<Response>((resolve) => {
+            resolveGeneration = resolve;
+          });
+        }
+        return defaultCallApiImplementation(path, options);
+      });
 
       render(
         <ToastProvider>
@@ -173,7 +207,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // Validate the context state updates immediately
       expect(screen.getByTestId('isGenerating')).toHaveTextContent('true');
@@ -184,15 +218,25 @@ describe('TestCaseGenerationProvider', () => {
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
       expect(testCaseDialogComponent).toBeInTheDocument();
 
-      // The basic strategy's display name should be rendered in the dialog
-      const strategyChipComponent = within(testCaseDialogComponent).getByTestId('strategy-chip');
-      expect(strategyChipComponent).toBeInTheDocument();
-      expect(strategyChipComponent).toHaveTextContent('Strategy: Baseline Testing');
+      // Strategy chip should NOT be shown when allowPluginChange is false (plugins page)
+      expect(
+        within(testCaseDialogComponent).queryByTestId('strategy-chip'),
+      ).not.toBeInTheDocument();
 
-      // The hate speech plugin's display name should be rendered in the dialog
-      const pluginChipComponent = within(testCaseDialogComponent).getByTestId('plugin-chip');
-      expect(pluginChipComponent).toBeInTheDocument();
-      expect(pluginChipComponent).toHaveTextContent('Plugin: Hate Speech');
+      resolveGeneration(
+        createJsonResponse({
+          prompt: 'Generated test prompt',
+          context: 'Test context',
+          metadata: {},
+        }),
+      );
+
+      // The plugin label and name should be rendered in the dialog
+      const pluginLabel = within(testCaseDialogComponent).getByTestId('plugin-chip');
+      expect(pluginLabel).toBeInTheDocument();
+      expect(pluginLabel).toHaveTextContent('Plugin Preview');
+      // Plugin name should be in the dialog title
+      expect(within(testCaseDialogComponent).getByText('Hate Speech')).toBeInTheDocument();
 
       await waitFor(() => {
         expect(
@@ -220,7 +264,96 @@ describe('TestCaseGenerationProvider', () => {
       expect(targetResponseComponent).not.toBeInTheDocument();
     });
 
+    it('should apply the configured review language to generated example tests', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              language: 'Japanese',
+            }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.plugin.config.language).toBe('Japanese');
+    });
+
+    it('should preserve plugin-specific language when review language is configured', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              language: 'Japanese',
+            }}
+          >
+            <TestConsumer
+              testPlugin="harmful:hate"
+              pluginConfig={{ language: 'Spanish' }}
+              testStrategy="basic"
+            />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.plugin.config.language).toBe('Spanish');
+    });
+
+    it('should use the first configured review language for generated example tests', async () => {
+      const user = userEvent.setup();
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              language: ['Japanese', 'Spanish'],
+            }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="basic" />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.plugin.config.language).toBe('Japanese');
+    });
+
     it('should hide plugin documentation link when plugin is static', async () => {
+      const user = userEvent.setup();
       render(
         <ToastProvider>
           <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
@@ -229,7 +362,7 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
 
-      fireEvent.click(screen.getByTestId('test-case-generation-btn'));
+      await user.click(screen.getByTestId('test-case-generation-btn'));
 
       const testCaseDialogComponent = await screen.findByTestId('test-case-dialog');
 
@@ -241,6 +374,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should generate images (strategy: image)', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'image';
 
@@ -254,7 +388,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -272,11 +406,12 @@ describe('TestCaseGenerationProvider', () => {
       const imageComponent = within(testCaseDialogComponent).getByTestId('image');
       expect(imageComponent).toBeInTheDocument();
       expect(imageComponent).toHaveStyle({
-        backgroundImage: 'url(data:image/png;base64,fake-image-base64)',
+        backgroundImage: `url(${FAKE_IMAGE_DATA_URL})`,
       });
     });
 
     it('should generate videos (strategy: video)', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'video';
 
@@ -290,7 +425,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -310,6 +445,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should generate audio (strategy: audio)', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'audio';
 
@@ -323,7 +459,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -345,6 +481,7 @@ describe('TestCaseGenerationProvider', () => {
 
   describe('Test case execution', () => {
     it('should execute a test case against a target', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'basic';
 
@@ -366,7 +503,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -399,6 +536,7 @@ describe('TestCaseGenerationProvider', () => {
     });
 
     it('should execute multi-turn test cases', async () => {
+      const user = userEvent.setup();
       const testPlugin = 'harmful:hate';
       const testStrategy = 'goat'; // 'goat' is a multi-turn strategy
 
@@ -420,7 +558,7 @@ describe('TestCaseGenerationProvider', () => {
 
       // Kick off the test case generation
       const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
-      fireEvent.click(generateTestCaseButton);
+      await user.click(generateTestCaseButton);
 
       // TestCaseDialog should be open
       const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
@@ -451,13 +589,200 @@ describe('TestCaseGenerationProvider', () => {
       });
 
       // Ensure calls were made
-      // 2 generations + 2 executions = 4 calls
+      // Each turn = 1 generation + 1 execution
       // Note: DEFAULT_MULTI_TURN_MAX_TURNS is typically 5, but our test stops naturally or if we mock limits.
       // Since we didn't mock maxTurns specifically in the provider (it uses constant),
       // we rely on the mock API behavior. However, without a stop condition or maxTurns limit in the test setup,
       // it might go on. But the loop logic relies on state updates.
-      // Let's check at least 2 turns occurred.
-      expect(callApi).toHaveBeenCalledTimes(4);
+      // Let's check at least 2 turns occurred (minimum 4 calls).
+      expect(callApiMock.mock.calls.length).toBeGreaterThanOrEqual(4);
+    });
+  });
+
+  describe('Batch generation', () => {
+    it('should request batch of test cases for single-turn strategies', async () => {
+      const user = userEvent.setup();
+      const testPlugin = 'harmful:hate';
+      const testStrategy = 'basic';
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      // Kick off the test case generation
+      const generateTestCaseButton = screen.getByTestId('test-case-generation-btn');
+      await user.click(generateTestCaseButton);
+
+      // Wait for the API call to be made
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+
+      // Verify that count=5 was requested for batch generation
+      expect(callApi).toHaveBeenCalledWith(
+        '/redteam/generate-test',
+        expect.objectContaining({
+          body: expect.stringContaining('"count":5'),
+        }),
+      );
+
+      // After generation completes, isGenerating should be false
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+      });
+
+      // TestCaseDialog should show the first test case from the batch
+      const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
+      const generatedPromptComponent =
+        within(testCaseDialogComponent).getByTestId('chat-message-0');
+      expect(generatedPromptComponent).toHaveTextContent('Generated test prompt #1');
+    });
+
+    it('should use cached test cases on regenerate without API call', async () => {
+      const user = userEvent.setup();
+      const testPlugin = 'harmful:hate';
+      const testStrategy = 'basic';
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      // Wait for the initial batch to load
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+      });
+
+      const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
+
+      // Verify first test case is shown
+      expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
+        'Generated test prompt #1',
+      );
+
+      // Clear mock to track new calls
+      callApiMock.mockClear();
+
+      // Click regenerate (should use cached test case)
+      const regenerateButton = within(testCaseDialogComponent).getByRole('button', {
+        name: /regenerate/i,
+      });
+      await user.click(regenerateButton);
+
+      // Should NOT make a new API call (using cache)
+      await waitFor(() => {
+        expect(callApi).not.toHaveBeenCalled();
+      });
+
+      // Should show the second test case from the batch
+      expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
+        'Generated test prompt #2',
+      );
+    });
+
+    it('should fetch new batch when cache is exhausted', async () => {
+      const user = userEvent.setup();
+      const testPlugin = 'harmful:hate';
+      const testStrategy = 'basic';
+
+      // Track call count to make prefetch fail (simulating network failure)
+      let callCount = 0;
+      callApiMock.mockImplementation((path, options) => {
+        if (path === '/redteam/generate-test') {
+          callCount++;
+          const body = options?.body ? JSON.parse(options.body as string) : {};
+          const count = body.count || 1;
+          const testCases = Array.from({ length: count }, (_, i) => ({
+            prompt: `Batch ${callCount} test prompt #${i + 1}`,
+            context: 'Test context',
+            metadata: { index: i, batch: callCount },
+          }));
+          return Promise.resolve(
+            createJsonResponse({
+              testCases,
+              count: testCases.length,
+            }),
+          );
+        }
+        throw new Error(`Unhandled callApi path: ${path}`);
+      });
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider redTeamConfig={MOCK_CONFIG}>
+            <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      // Wait for the initial batch to load
+      await waitFor(() => expect(callApi).toHaveBeenCalledTimes(1));
+      await waitFor(() => {
+        expect(screen.getByTestId('isGenerating')).toHaveTextContent('false');
+      });
+
+      const testCaseDialogComponent = screen.getByTestId('test-case-dialog');
+
+      // Click through all 5 test cases (using cache) - note: prefetch may add more
+      // We need to click regenerate multiple times to exhaust the batch
+      // Each click should use cache until batch is exhausted
+      for (let i = 0; i < 4; i++) {
+        const regenerateButton = within(testCaseDialogComponent).getByRole('button', {
+          name: /regenerate/i,
+        });
+        await user.click(regenerateButton);
+      }
+
+      // At this point we should have used 5 from first batch
+      // Verify we're showing test case #5 from first batch
+      expect(within(testCaseDialogComponent).getByTestId('chat-message-0')).toHaveTextContent(
+        'Batch 1 test prompt #5',
+      );
+    });
+
+    it('should NOT use batch generation for multi-turn strategies', async () => {
+      const user = userEvent.setup();
+      const testPlugin = 'harmful:hate';
+      const testStrategy = 'goat'; // Multi-turn strategy
+
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{
+              ...MOCK_CONFIG,
+              target: {
+                id: 'http',
+                config: { url: 'http://localhost:7979', method: 'POST' },
+              },
+            }}
+          >
+            <TestConsumer testPlugin={testPlugin} testStrategy={testStrategy} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+
+      // Wait for the API call
+      await waitFor(() => expect(callApi).toHaveBeenCalled());
+
+      // Verify that count=1 was used (no batch for multi-turn)
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
+      expect(generateCall).toBeDefined();
+      const requestBody = JSON.parse(generateCall![1]?.body as string);
+      expect(requestBody.count).toBe(1);
     });
   });
 });

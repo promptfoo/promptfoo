@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { VERSION } from '../constants';
 import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -9,17 +8,19 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
+import { fetchWithRetries } from '../util/fetch/index';
+import { REQUEST_TIMEOUT_MS } from './shared';
+
 import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  Inputs,
   PluginConfig,
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import { fetchWithRetries } from '../util/fetch/index';
-import { REQUEST_TIMEOUT_MS } from './shared';
 
 interface PromptfooHarmfulCompletionOptions {
   harmCategory: string;
@@ -133,8 +134,8 @@ export class PromptfooHarmfulCompletionProvider implements ApiProvider {
 interface PromptfooChatCompletionOptions {
   env?: EnvOverrides;
   id?: string;
-  enforceJson: boolean;
-  preferSmall: boolean;
+  jsonOnly: boolean;
+  preferSmallModel: boolean;
   task:
     | 'crescendo'
     | 'goat'
@@ -144,7 +145,13 @@ interface PromptfooChatCompletionOptions {
     | 'judge'
     | 'blocking-question-analysis'
     | 'meta-agent-decision'
-    | 'hydra-decision';
+    | 'hydra-decision'
+    | 'voice-crescendo'
+    | 'voice-crescendo-eval';
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   */
+  inputs?: Inputs;
 }
 
 /**
@@ -187,12 +194,14 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     }
 
     const body = {
-      enforceJson: this.options.enforceJson,
-      preferSmall: this.options.preferSmall,
+      jsonOnly: this.options.jsonOnly,
+      preferSmallModel: this.options.preferSmallModel,
       prompt,
       step: context?.prompt.label,
       task: this.options.task,
       email: getUserEmail(),
+      // Pass inputs schema for multi-input mode
+      ...(this.options.inputs && { inputs: this.options.inputs }),
     };
 
     try {
@@ -212,7 +221,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const data = await response.json();
 
       if (!data.result) {
-        logger.error(
+        logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {

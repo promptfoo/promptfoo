@@ -1,3 +1,4 @@
+import { Severity } from '@promptfoo/redteam/constants';
 import { del, get, set } from 'idb-keyval';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
@@ -16,21 +17,24 @@ const storage: StateStorage = {
 };
 
 interface ReportState {
-  showPercentagesOnRiskCards: boolean;
-  setShowPercentagesOnRiskCards: (show: boolean) => void;
+  showUntestedPlugins: boolean;
+  setShowUntestedPlugins: (show: boolean) => void;
   pluginPassRateThreshold: number;
   setPluginPassRateThreshold: (threshold: number) => void;
+  severityFilter: Severity | null;
+  setSeverityFilter: (severity: Severity | null) => void;
 }
 
 export const useReportStore = create<ReportState>()(
   persist(
     (set) => ({
-      showPercentagesOnRiskCards: false,
-      setShowPercentagesOnRiskCards: (show: boolean) =>
-        set(() => ({ showPercentagesOnRiskCards: show })),
+      showUntestedPlugins: true,
+      setShowUntestedPlugins: (show: boolean) => set(() => ({ showUntestedPlugins: show })),
       pluginPassRateThreshold: 1.0,
       setPluginPassRateThreshold: (threshold: number) =>
         set(() => ({ pluginPassRateThreshold: threshold })),
+      severityFilter: null,
+      setSeverityFilter: (severity: Severity | null) => set(() => ({ severityFilter: severity })),
     }),
     {
       name: 'ReportViewStorage',

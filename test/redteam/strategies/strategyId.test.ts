@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
+import { describe, expect, it } from 'vitest';
 import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
@@ -133,11 +133,10 @@ describe('Strategy IDs', () => {
       const directPath = path.join(strategyDir, `${strategy}.ts`);
 
       const fileExists = fs.existsSync(expectedPath) || fs.existsSync(directPath);
-      if (!fileExists) {
-        console.error(`Strategy implementation not found for: ${strategy}`);
-        console.error(`Checked paths: ${expectedPath} and ${directPath}`);
-      }
-      expect(fileExists).toBe(true);
+      expect(
+        fileExists,
+        `Strategy implementation not found for ${strategy}. Checked paths: ${expectedPath} and ${directPath}`,
+      ).toBe(true);
     });
   });
 });

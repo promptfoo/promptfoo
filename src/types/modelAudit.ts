@@ -73,6 +73,12 @@ export type ModelAuditScanResults = Partial<{
   // Summary stats
   has_errors: boolean;
   scanner_names: string[];
+  scanner_selection: {
+    requested_scanner_ids?: string[] | null;
+    enabled_scanner_ids?: string[];
+    excluded_scanner_ids?: string[];
+    suppressed_preferred_scanner_ids?: string[];
+  };
   start_time: number;
   duration: number;
   total_checks: number;
@@ -113,5 +119,15 @@ export interface ModelAuditScanConfig {
     progress?: boolean;
     sbom?: string;
     output?: string;
+    scanners?: string[];
+    excludeScanner?: string[];
   };
+}
+
+export interface ModelAuditScannerInfo {
+  id: string;
+  class: string;
+  description: string;
+  extensions: string[];
+  dependencies: string[];
 }

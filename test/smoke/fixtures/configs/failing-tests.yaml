@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config with some intentionally failing tests for --filter-failing testing
+description: 'Smoke test - config with failing tests'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - description: 'passing test 1'
+    vars:
+      name: Alice
+    assert:
+      - type: contains
+        value: Alice
+
+  - description: 'failing test 1'
+    vars:
+      name: Bob
+    assert:
+      - type: contains
+        value: 'WILL_NOT_MATCH_12345'
+
+  - description: 'passing test 2'
+    vars:
+      name: Charlie
+    assert:
+      - type: contains
+        value: Charlie
+
+  - description: 'failing test 2'
+    vars:
+      name: Diana
+    assert:
+      - type: contains
+        value: 'ALSO_NOT_MATCHING_67890'
