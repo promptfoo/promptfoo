@@ -65,6 +65,24 @@ import type {
   SynthesizeOptions,
 } from './types';
 
+const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
+
+function getMaterializedMultiInputPromptSnapshot(
+  metadata: TestCase['metadata'] | undefined,
+): string | undefined {
+  const snapshot = metadata?.[MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY];
+  return typeof snapshot === 'string' ? snapshot : undefined;
+}
+
+function getMaterializedMultiInputPromptMetadata(
+  vars: TestCase['vars'] | undefined,
+): Record<string, string> | undefined {
+  const prompt = vars?.[MULTI_INPUT_VAR];
+  return typeof prompt === 'string'
+    ? { [MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY]: prompt }
+    : undefined;
+}
+
 function getPolicyText(metadata: TestCase['metadata'] | undefined): string | undefined {
   if (!metadata || metadata.policy === undefined || metadata.policy === null) {
     return undefined;
@@ -100,20 +118,26 @@ async function rematerializeStrategyInputVars(
   const inputMaterialization = testCase.metadata?.inputMaterialization as
     | Record<string, unknown>
     | undefined;
+  const materializedPromptSnapshot = getMaterializedMultiInputPromptSnapshot(testCase.metadata);
+  const currentInjectVar = testCase.vars?.[injectVar];
 
-  if (!inputs || Object.keys(inputs).length === 0 || !testCase.vars?.[injectVar]) {
+  if (!inputs || Object.keys(inputs).length === 0 || !currentInjectVar) {
     return {
       inputMaterialization,
       vars: testCase.vars,
     };
   }
 
+  const promptChangedSinceMaterialization =
+    typeof currentInjectVar === 'string' &&
+    typeof materializedPromptSnapshot === 'string' &&
+    currentInjectVar !== materializedPromptSnapshot;
   const alreadyMaterialized =
     Boolean(inputMaterialization) &&
     Object.keys(inputs).every((key) =>
       Object.prototype.hasOwnProperty.call(testCase.vars ?? {}, key),
     );
-  if (alreadyMaterialized) {
+  if (alreadyMaterialized && !promptChangedSinceMaterialization) {
     return {
       inputMaterialization,
       vars: testCase.vars,
@@ -475,6 +499,7 @@ function addLanguageToPluginMetadata(
       },
       // Hoist language to top-level metadata for backward compatibility and easier access
       ...languageToAdd,
+      ...getMaterializedMultiInputPromptMetadata(test.vars),
     },
   };
 }
@@ -651,6 +676,7 @@ async function applyStrategies(
               ...(Object.keys(strategyConfig).length > 0 && {
                 strategyConfig,
               }),
+              ...getMaterializedMultiInputPromptMetadata(vars),
             },
           };
         }),
@@ -1457,6 +1483,7 @@ export async function synthesize({
                   plugin.severity ||
                   getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
                 modifiers,
+                ...getMaterializedMultiInputPromptMetadata(t.vars),
               },
             };
           }),
