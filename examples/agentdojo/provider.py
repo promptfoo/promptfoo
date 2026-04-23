@@ -22,9 +22,20 @@ import re
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Sequence
 from contextlib import nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from agentdojo.agent_pipeline.base_pipeline_element import BasePipelineElement
+from agentdojo.functions_runtime import EmptyEnv, Env, FunctionCall, FunctionsRuntime
+from agentdojo.types import (
+    ChatAssistantMessage,
+    ChatMessage,
+    text_content_block_from_string,
+)
+from openai._types import NOT_GIVEN
 
 logger = logging.getLogger(__name__)
 
@@ -277,6 +288,218 @@ def _record_span_exception(span, error: Exception):
         logger.debug("Failed to record OpenTelemetry span exception", exc_info=True)
 
 
+class CustomOpenAILLM(BasePipelineElement):
+    """AgentDojo LLM wrapper for OpenAI models that need newer API surfaces."""
+
+    def __init__(
+        self,
+        llm_client,
+        model: str,
+        name: str,
+        max_output_tokens: int,
+        use_responses_api: bool,
+    ):
+        self.client = llm_client
+        self.model = model
+        self.name = name
+        self.max_output_tokens = max_output_tokens
+        self.use_responses_api = use_responses_api
+
+    @staticmethod
+    def _content_to_text(content: Any) -> str | None:
+        if content is None:
+            return None
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "".join(
+                block.get("content", "") if isinstance(block, dict) else str(block)
+                for block in content
+            )
+        return str(content)
+
+    @staticmethod
+    def _tool_call_value(tool_call, key: str):
+        if isinstance(tool_call, dict):
+            return tool_call.get(key)
+        return getattr(tool_call, key, None)
+
+    def _message_to_openai(self, message: ChatMessage) -> dict[str, Any]:
+        role = message["role"]
+        content = self._content_to_text(message.get("content"))
+
+        if role == "system":
+            return {"role": "developer", "content": content}
+        if role == "user":
+            return {"role": "user", "content": content}
+        if role == "tool":
+            return {
+                "role": "tool",
+                "content": message.get("error") or content,
+                "tool_call_id": message.get("tool_call_id"),
+            }
+        if role != "assistant":
+            return {"role": role, "content": content}
+
+        converted: dict[str, Any] = {"role": "assistant", "content": content}
+        if message.get("tool_calls"):
+            converted["tool_calls"] = [
+                {
+                    "id": self._tool_call_value(tool_call, "id"),
+                    "type": "function",
+                    "function": {
+                        "name": self._tool_call_value(tool_call, "function"),
+                        "arguments": json.dumps(
+                            self._tool_call_value(tool_call, "args") or {}
+                        ),
+                    },
+                }
+                for tool_call in message["tool_calls"]
+            ]
+        return converted
+
+    def _tool_to_openai(self, func) -> dict[str, Any]:
+        parameters = func.parameters.model_json_schema()
+        if self.use_responses_api:
+            return {
+                "type": "function",
+                "name": func.name,
+                "description": func.description,
+                "parameters": parameters,
+            }
+        return {
+            "type": "function",
+            "function": {
+                "name": func.name,
+                "description": func.description,
+                "parameters": parameters,
+            },
+        }
+
+    @staticmethod
+    def _responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        input_items = []
+        for message in messages:
+            role = message["role"]
+            content = message.get("content") or ""
+            if role in {"developer", "user"}:
+                input_items.append(
+                    {"type": "message", "role": role, "content": content}
+                )
+            elif role == "assistant":
+                input_items.append(
+                    {"type": "message", "role": "assistant", "content": content}
+                )
+                for tool_call in message.get("tool_calls") or []:
+                    input_items.append(
+                        {
+                            "type": "function_call",
+                            "call_id": tool_call["id"],
+                            "name": tool_call["function"]["name"],
+                            "arguments": tool_call["function"]["arguments"],
+                        }
+                    )
+            elif role == "tool":
+                input_items.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": message.get("tool_call_id"),
+                        "output": content,
+                    }
+                )
+        return input_items
+
+    def _call_responses_api(self, messages, tools):
+        response = self.client.responses.create(
+            model=self.model,
+            input=self._responses_input(messages),
+            tools=tools if tools else NOT_GIVEN,
+            max_output_tokens=self.max_output_tokens,
+        )
+        _accumulate_tokens(response.usage)
+
+        text_content = ""
+        tool_calls = []
+        for item in response.output:
+            if item.type == "message":
+                text_content += "".join(
+                    block.text for block in item.content if block.type == "output_text"
+                )
+            elif item.type == "function_call":
+                tool_calls.append(
+                    {
+                        "id": item.call_id,
+                        "function_name": item.name,
+                        "arguments": item.arguments,
+                    }
+                )
+        return text_content, tool_calls
+
+    def _call_chat_completions_api(self, messages, tools):
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            tools=tools if tools else NOT_GIVEN,
+            tool_choice="auto" if tools else NOT_GIVEN,
+            max_completion_tokens=self.max_output_tokens,
+        )
+        _accumulate_tokens(response.usage)
+
+        message = response.choices[0].message
+        tool_calls = [
+            {
+                "id": tool_call.id,
+                "function_name": tool_call.function.name,
+                "arguments": tool_call.function.arguments,
+            }
+            for tool_call in (message.tool_calls or [])
+        ]
+        return message.content or "", tool_calls
+
+    def query(
+        self,
+        query_str: str,
+        runtime: FunctionsRuntime,
+        env: Env | None = None,
+        messages: Sequence[ChatMessage] | None = None,
+        extra_args: dict | None = None,
+    ) -> tuple[str, FunctionsRuntime, Env, Sequence[ChatMessage], dict]:
+        if env is None:
+            env = EmptyEnv()
+        if messages is None:
+            messages = []
+        if extra_args is None:
+            extra_args = {}
+        openai_messages = [self._message_to_openai(message) for message in messages]
+        tools = [self._tool_to_openai(func) for func in runtime.functions.values()]
+
+        if self.use_responses_api:
+            text_content, tool_calls = self._call_responses_api(openai_messages, tools)
+        else:
+            text_content, tool_calls = self._call_chat_completions_api(
+                openai_messages, tools
+            )
+
+        assistant_tool_calls = [
+            FunctionCall(
+                function=tool_call["function_name"],
+                args=json.loads(tool_call["arguments"])
+                if tool_call["arguments"]
+                else {},
+                id=tool_call["id"],
+            )
+            for tool_call in tool_calls
+        ] or None
+        output = ChatAssistantMessage(
+            role="assistant",
+            content=[text_content_block_from_string(text_content)]
+            if text_content
+            else None,
+            tool_calls=assistant_tool_calls,
+        )
+        return query_str, runtime, env, [*messages, output], extra_args
+
+
 def _get_pipeline(
     model: str,
     defense: str | None,
@@ -301,16 +524,8 @@ def _get_pipeline(
             )
             _pipeline_cache[key] = AgentPipeline.from_config(config)
         else:
-            # Model not in registry - create custom OpenAI LLM. AgentDojo still
-            # needs a recognized pipeline name so attacks can address the model.
-            from collections.abc import Sequence
-
             import openai
-            from agentdojo.agent_pipeline.base_pipeline_element import (
-                BasePipelineElement,
-            )
             from agentdojo.agent_pipeline.llms.openai_llm import OpenAILLM
-            from agentdojo.types import ChatAssistantMessage, ChatMessage
 
             if defense == "tool_filter":
                 raise ValueError(
@@ -325,310 +540,22 @@ def _get_pipeline(
                 else openai.OpenAI()
             )
             _register_custom_model_name(model)
-            pipeline_llm_name = model
 
-            # For newer models - use Responses API for gpt-5.x, Chat Completions for o1/o3
             use_responses_api = "gpt-5" in model.lower()
-            use_custom_llm = (
-                use_responses_api or "o1" in model.lower() or "o3" in model.lower()
+            use_custom_llm = use_responses_api or any(
+                family in model.lower() for family in ("o1", "o3")
             )
-
             if use_custom_llm:
-                from agentdojo.functions_runtime import (
-                    EmptyEnv,
-                    Env,
-                    FunctionCall,
-                    FunctionsRuntime,
-                )
-                from agentdojo.types import text_content_block_from_string
-                from openai._types import NOT_GIVEN
-
-                # Create a custom LLM wrapper for newer models
-                class CustomOpenAILLM(BasePipelineElement):
-                    def __init__(
-                        self,
-                        llm_client,
-                        llm_model,
-                        llm_name,
-                        max_tokens,
-                        use_responses_api=False,
-                    ):
-                        self.client = llm_client
-                        self.model = llm_model
-                        self.name = llm_name
-                        self.max_output_tokens = max_tokens
-                        self.use_responses_api = use_responses_api
-
-                    def _message_to_openai(self, message: ChatMessage) -> dict:
-                        """Convert AgentDojo message to OpenAI format."""
-                        role = message["role"]
-                        content = message.get("content")
-
-                        # Handle content that may be a list of blocks
-                        if content is not None:
-                            if isinstance(content, list):
-                                text_parts = []
-                                for block in content:
-                                    if isinstance(block, dict) and "content" in block:
-                                        text_parts.append(block["content"] or "")
-                                    elif isinstance(block, str):
-                                        text_parts.append(block)
-                                content = "".join(text_parts)
-                            elif not isinstance(content, str):
-                                content = str(content)
-
-                        if role == "system":
-                            return {"role": "developer", "content": content}
-                        elif role == "user":
-                            return {"role": "user", "content": content}
-                        elif role == "assistant":
-                            result = {"role": "assistant", "content": content}
-                            if message.get("tool_calls"):
-                                result["tool_calls"] = [
-                                    {
-                                        "id": tc.id
-                                        if hasattr(tc, "id")
-                                        else tc.get("id"),
-                                        "type": "function",
-                                        "function": {
-                                            "name": tc.function
-                                            if hasattr(tc, "function")
-                                            else tc.get("function"),
-                                            "arguments": json.dumps(
-                                                tc.args
-                                                if hasattr(tc, "args")
-                                                else tc.get("args", {})
-                                            ),
-                                        },
-                                    }
-                                    for tc in message["tool_calls"]
-                                ]
-                            return result
-                        elif role == "tool":
-                            tool_content = content
-                            if message.get("error"):
-                                tool_content = message["error"]
-                            return {
-                                "role": "tool",
-                                "content": tool_content,
-                                "tool_call_id": message.get("tool_call_id"),
-                            }
-                        return {"role": role, "content": content}
-
-                    def _function_to_openai_chat(self, func) -> dict:
-                        """Convert AgentDojo function to OpenAI Chat Completions tool format."""
-                        return {
-                            "type": "function",
-                            "function": {
-                                "name": func.name,
-                                "description": func.description,
-                                "parameters": func.parameters.model_json_schema(),
-                            },
-                        }
-
-                    def _function_to_openai_responses(self, func) -> dict:
-                        """Convert AgentDojo function to OpenAI Responses API tool format."""
-                        return {
-                            "type": "function",
-                            "name": func.name,
-                            "description": func.description,
-                            "parameters": func.parameters.model_json_schema(),
-                        }
-
-                    def _call_responses_api(self, oai_messages, oai_tools):
-                        """Call OpenAI Responses API for gpt-5.x models."""
-                        # Build input for responses API
-                        input_items = []
-                        for msg in oai_messages:
-                            role = msg["role"]
-                            content = msg.get("content", "")
-
-                            if role == "developer":
-                                input_items.append(
-                                    {
-                                        "type": "message",
-                                        "role": "developer",
-                                        "content": content,
-                                    }
-                                )
-                            elif role == "user":
-                                input_items.append(
-                                    {
-                                        "type": "message",
-                                        "role": "user",
-                                        "content": content,
-                                    }
-                                )
-                            elif role == "assistant":
-                                item = {
-                                    "type": "message",
-                                    "role": "assistant",
-                                    "content": content or "",
-                                }
-                                input_items.append(item)
-                                # Add function calls as separate items
-                                if msg.get("tool_calls"):
-                                    for tc in msg["tool_calls"]:
-                                        input_items.append(
-                                            {
-                                                "type": "function_call",
-                                                "call_id": tc["id"],
-                                                "name": tc["function"]["name"],
-                                                "arguments": tc["function"][
-                                                    "arguments"
-                                                ],
-                                            }
-                                        )
-                            elif role == "tool":
-                                input_items.append(
-                                    {
-                                        "type": "function_call_output",
-                                        "call_id": msg.get("tool_call_id"),
-                                        "output": content,
-                                    }
-                                )
-
-                        # Call responses API
-                        response = self.client.responses.create(
-                            model=self.model,
-                            input=input_items,
-                            tools=oai_tools if oai_tools else NOT_GIVEN,
-                            max_output_tokens=self.max_output_tokens,
-                        )
-
-                        # Accumulate token usage
-                        _accumulate_tokens(response.usage)
-
-                        # Extract text and tool calls from response
-                        text_content = ""
-                        tool_calls_list = []
-
-                        for item in response.output:
-                            if item.type == "message":
-                                for content_block in item.content:
-                                    if content_block.type == "output_text":
-                                        text_content += content_block.text
-                            elif item.type == "function_call":
-                                # Responses API uses call_id for the function call identifier
-                                tool_calls_list.append(
-                                    {
-                                        "id": item.call_id,
-                                        "function_name": item.name,
-                                        "arguments": item.arguments,
-                                    }
-                                )
-
-                        return text_content, tool_calls_list
-
-                    def _call_chat_completions_api(self, oai_messages, oai_tools):
-                        """Call OpenAI Chat Completions API for o1/o3 models."""
-                        response = self.client.chat.completions.create(
-                            model=self.model,
-                            messages=oai_messages,
-                            tools=oai_tools if oai_tools else NOT_GIVEN,
-                            tool_choice="auto" if oai_tools else NOT_GIVEN,
-                            max_completion_tokens=self.max_output_tokens,
-                        )
-
-                        # Accumulate token usage
-                        _accumulate_tokens(response.usage)
-
-                        choice = response.choices[0]
-                        msg = choice.message
-
-                        text_content = msg.content or ""
-                        tool_calls_list = []
-                        if msg.tool_calls:
-                            for tc in msg.tool_calls:
-                                tool_calls_list.append(
-                                    {
-                                        "id": tc.id,
-                                        "function_name": tc.function.name,
-                                        "arguments": tc.function.arguments,
-                                    }
-                                )
-
-                        return text_content, tool_calls_list
-
-                    def query(
-                        self,
-                        query_str: str,
-                        runtime: FunctionsRuntime,
-                        env: Env | None = None,
-                        messages: Sequence[ChatMessage] | None = None,
-                        extra_args: dict | None = None,
-                    ) -> tuple[str, FunctionsRuntime, Env, Sequence[ChatMessage], dict]:
-                        # Handle mutable default arguments
-                        if env is None:
-                            env = EmptyEnv()
-                        if messages is None:
-                            messages = []
-                        if extra_args is None:
-                            extra_args = {}
-                        # Convert messages to OpenAI format
-                        oai_messages = [
-                            self._message_to_openai(msg) for msg in messages
-                        ]
-
-                        # Build tools list from runtime using appropriate format
-                        if self.use_responses_api:
-                            oai_tools = [
-                                self._function_to_openai_responses(func)
-                                for func in runtime.functions.values()
-                            ]
-                        else:
-                            oai_tools = [
-                                self._function_to_openai_chat(func)
-                                for func in runtime.functions.values()
-                            ]
-
-                        # Call appropriate API
-                        if self.use_responses_api:
-                            text_content, tool_calls_list = self._call_responses_api(
-                                oai_messages, oai_tools
-                            )
-                        else:
-                            text_content, tool_calls_list = (
-                                self._call_chat_completions_api(oai_messages, oai_tools)
-                            )
-
-                        # Convert tool calls to FunctionCall objects
-                        tool_calls = None
-                        if tool_calls_list:
-                            tool_calls = [
-                                FunctionCall(
-                                    function=tc["function_name"],
-                                    args=json.loads(tc["arguments"])
-                                    if tc["arguments"]
-                                    else {},
-                                    id=tc["id"],
-                                )
-                                for tc in tool_calls_list
-                            ]
-
-                        # Build content as list of content blocks
-                        content = None
-                        if text_content:
-                            content = [text_content_block_from_string(text_content)]
-
-                        output = ChatAssistantMessage(
-                            role="assistant",
-                            content=content,
-                            tool_calls=tool_calls,
-                        )
-                        new_messages = [*messages, output]
-                        return query_str, runtime, env, new_messages, extra_args
-
                 llm = CustomOpenAILLM(
                     llm_client=client,
-                    llm_model=model,
-                    llm_name=pipeline_llm_name,
-                    max_tokens=max_output_tokens,
+                    model=model,
+                    name=model,
+                    max_output_tokens=max_output_tokens,
                     use_responses_api=use_responses_api,
                 )
             else:
                 llm = OpenAILLM(client=client, model=model)
-                llm.name = pipeline_llm_name
+                llm.name = model
 
             config = PipelineConfig(
                 llm=llm,
@@ -783,179 +710,223 @@ def _format_trace_messages(trace_log: dict | None) -> list[dict]:
     return formatted
 
 
-def call_api(prompt: str, options: dict, context: dict) -> dict:
-    """
-    Promptfoo provider entry point.
+@dataclass(frozen=True)
+class ProviderSettings:
+    suite_name: str
+    model: str
+    defense: str | None
+    attack_name: str
+    user_task_id: str
+    injection_task_id: str | None
+    version: str
+    request_timeout: float | None
+    max_output_tokens: int
+    force_rerun: bool
+    logdir: Path
 
-    Runs a single AgentDojo task with injection and returns results.
 
-    Args:
-        prompt: The rendered prompt (contains task info but actual execution
-                uses vars for precise control)
-        options: Provider configuration from promptfooconfig.yaml
-        context: Contains 'vars' dict with task identifiers
+def _resolve_logdir(config: dict, model: str, defense: str | None, attack: str) -> Path:
+    config_logdir = config.get("logdir", "./agentdojo_logs")
+    base_logdir = Path(config_logdir)
+    if not base_logdir.is_absolute():
+        base_logdir = Path(__file__).parent / base_logdir
+    return _run_logdir(base_logdir, model, defense, attack)
 
-    Returns:
-        dict with:
-            - output: JSON string with results
-            - metadata: Structured result data
-            - error: Error message if execution failed
-    """
-    from agentdojo.benchmark import run_task_with_injection_tasks
 
+def _settings(options: dict, context: dict) -> ProviderSettings:
     config = options.get("config", {})
     vars_ = context.get("vars", {})
-
-    # Get configuration (vars override config)
-    suite_name = vars_.get("suite", config.get("suite", "workspace"))
     model = vars_.get("model", config.get("model", "gpt-4o"))
     defense = vars_.get("defense", config.get("defense"))
     attack_name = vars_.get("attack", config.get("attack", "important_instructions"))
-    user_task_id = vars_.get("user_task_id", "user_task_0")
-    injection_task_id = vars_.get("injection_task_id")
-    version = vars_.get("version", config.get("version", "v1.2.2"))
     request_timeout = config.get("request_timeout", DEFAULT_REQUEST_TIMEOUT)
     if request_timeout is not None:
         request_timeout = float(request_timeout)
-    max_output_tokens = int(config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS))
-    force_rerun = bool(config.get("force_rerun", True))
 
-    # Log directory for AgentDojo - resolve relative to this file's directory
-    config_logdir = config.get("logdir", "./agentdojo_logs")
-    if not os.path.isabs(config_logdir):
-        # Resolve relative to this provider file's directory
-        base_logdir = Path(__file__).parent / config_logdir
-    else:
-        base_logdir = Path(config_logdir)
-    logdir = _run_logdir(base_logdir, model, defense, attack_name)
+    return ProviderSettings(
+        suite_name=vars_.get("suite", config.get("suite", "workspace")),
+        model=model,
+        defense=defense,
+        attack_name=attack_name,
+        user_task_id=vars_.get("user_task_id", "user_task_0"),
+        injection_task_id=vars_.get("injection_task_id"),
+        version=vars_.get("version", config.get("version", "v1.2.2")),
+        request_timeout=request_timeout,
+        max_output_tokens=int(
+            config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+        ),
+        force_rerun=bool(config.get("force_rerun", True)),
+        logdir=_resolve_logdir(config, model, defense, attack_name),
+    )
 
+
+def _start_attributes(
+    settings: ProviderSettings, prompt: str, context: dict
+) -> dict[str, Any]:
+    return {
+        "agentdojo.suite": settings.suite_name,
+        "agentdojo.model": settings.model,
+        "agentdojo.defense": settings.defense,
+        "agentdojo.attack": settings.attack_name,
+        "agentdojo.user_task_id": settings.user_task_id,
+        "agentdojo.injection_task_id": settings.injection_task_id,
+        "agentdojo.force_rerun": settings.force_rerun,
+        "prompt.length": len(prompt or ""),
+        "evaluation.id": context.get("evaluationId"),
+        "test.case.id": context.get("testCaseId"),
+        "promptfoo.evaluation_id": context.get("evaluationId"),
+        "promptfoo.test_case_id": context.get("testCaseId"),
+    }
+
+
+def _select_result(settings: ProviderSettings, utility_results, security_results):
+    if settings.injection_task_id:
+        key = (settings.user_task_id, settings.injection_task_id)
+        return utility_results.get(key, False), security_results.get(key, True)
+    return (
+        all(utility_results.values()) if utility_results else False,
+        all(security_results.values()) if security_results else True,
+    )
+
+
+def _last_assistant_response(messages: list[dict]) -> str:
+    return next(
+        (
+            message["content"]
+            for message in reversed(messages)
+            if message.get("role") == "assistant" and message.get("content")
+        ),
+        "",
+    )
+
+
+def _result_payload(
+    settings: ProviderSettings,
+    pipeline_name: str,
+    utility: bool,
+    security: bool,
+    utility_results: dict,
+    security_results: dict,
+) -> dict[str, Any]:
+    return {
+        "user_task_success": utility,
+        "injection_blocked": security,
+        "injection_success": not security,
+        "safe_utility": utility and security,
+        "suite": settings.suite_name,
+        "user_task_id": settings.user_task_id,
+        "injection_task_id": settings.injection_task_id,
+        "model": settings.model,
+        "defense": settings.defense,
+        "attack": settings.attack_name,
+        "agentdojo_pipeline_name": pipeline_name,
+        "force_rerun": settings.force_rerun,
+        "num_utility_results": len(utility_results),
+        "num_security_results": len(security_results),
+    }
+
+
+def _metadata(
+    result: dict, context: dict, messages: list[dict], trace_log: dict | None
+):
+    metadata = {**result}
+    for key in ("traceparent", "evaluationId", "testCaseId"):
+        if context.get(key):
+            metadata[key] = context[key]
+    if messages:
+        metadata["messages"] = messages
+    if trace_log:
+        metadata["agentdojo_trace"] = trace_log
+    return metadata
+
+
+def _token_usage_payload() -> dict[str, int] | None:
+    if _token_usage["total"] <= 0:
+        return None
+    return {
+        "prompt": _token_usage["prompt"],
+        "completion": _token_usage["completion"],
+        "total": _token_usage["total"],
+    }
+
+
+def _error_response(settings: ProviderSettings, error: Exception) -> dict:
+    result = {
+        "error": str(error),
+        "user_task_success": False,
+        "injection_blocked": False,
+        "injection_success": True,
+        "safe_utility": False,
+        "suite": settings.suite_name,
+        "user_task_id": settings.user_task_id,
+        "injection_task_id": settings.injection_task_id,
+        "model": settings.model,
+        "defense": settings.defense,
+        "attack": settings.attack_name,
+    }
+    return {"output": json.dumps(result), "error": str(error), "metadata": result}
+
+
+def call_api(prompt: str, options: dict, context: dict) -> dict:
+    """Promptfoo provider entry point for one AgentDojo scenario."""
+    from agentdojo.benchmark import run_task_with_injection_tasks
+
+    options = options or {}
+    context = context or {}
+    config = options.get("config", {})
+    settings = _settings(options, context)
     span_cm = _start_span(
-        config,
-        context or {},
-        "agentdojo.task",
-        {
-            "agentdojo.suite": suite_name,
-            "agentdojo.model": model,
-            "agentdojo.defense": defense,
-            "agentdojo.attack": attack_name,
-            "agentdojo.user_task_id": user_task_id,
-            "agentdojo.injection_task_id": injection_task_id,
-            "agentdojo.force_rerun": force_rerun,
-            "prompt.length": len(prompt or ""),
-            "evaluation.id": context.get("evaluationId"),
-            "test.case.id": context.get("testCaseId"),
-            "promptfoo.evaluation_id": context.get("evaluationId"),
-            "promptfoo.test_case_id": context.get("testCaseId"),
-        },
+        config, context, "agentdojo.task", _start_attributes(settings, prompt, context)
     )
     span = span_cm.__enter__()
 
     try:
-        # Reset token accumulator for this task execution
         _reset_token_usage()
+        _setup_logger(settings.logdir)
 
-        # Set up logging before any AgentDojo operations
-        _setup_logger(logdir)
-
-        # Get cached resources
         pipeline = _get_pipeline(
-            model,
-            defense,
-            request_timeout=request_timeout,
-            max_output_tokens=max_output_tokens,
+            settings.model,
+            settings.defense,
+            request_timeout=settings.request_timeout,
+            max_output_tokens=settings.max_output_tokens,
         )
-        suite = _get_suite(suite_name, version)
-        attack = _get_attack(attack_name, suite, pipeline)
+        suite = _get_suite(settings.suite_name, settings.version)
+        attack = _get_attack(settings.attack_name, suite, pipeline)
+        user_task = suite.user_tasks[settings.user_task_id]
         _set_span_attributes(span, {"agentdojo.pipeline_name": pipeline.name})
 
-        # Get the user task object
-        user_task = suite.user_tasks[user_task_id]
-
-        # Determine which injection tasks to run
-        injection_tasks_to_run = [injection_task_id] if injection_task_id else None
-
-        # Run the benchmark task
+        injection_tasks = (
+            [settings.injection_task_id] if settings.injection_task_id else None
+        )
         utility_results, security_results = run_task_with_injection_tasks(
             suite=suite,
             agent_pipeline=pipeline,
             user_task=user_task,
             attack=attack,
-            logdir=logdir,
-            force_rerun=force_rerun,
-            injection_tasks=injection_tasks_to_run,
-            benchmark_version=version,
+            logdir=settings.logdir,
+            force_rerun=settings.force_rerun,
+            injection_tasks=injection_tasks,
+            benchmark_version=settings.version,
         )
+        utility, security = _select_result(settings, utility_results, security_results)
 
-        # Process results
-        if injection_task_id:
-            # Single injection task - get specific result
-            key = (user_task_id, injection_task_id)
-            utility = utility_results.get(key, False)
-            security = security_results.get(key, True)
-        else:
-            # All injection tasks - aggregate (worst case for security)
-            utility = all(utility_results.values()) if utility_results else False
-            security = all(security_results.values()) if security_results else True
-
-        # Read the AgentDojo trace log to include in metadata
         trace_log = _read_agentdojo_log(
-            logdir=logdir,
+            logdir=settings.logdir,
             pipeline_name=pipeline.name,
-            suite_name=suite_name,
-            user_task_id=user_task_id,
-            attack_name=attack_name,
-            injection_task_id=injection_task_id,
+            suite_name=settings.suite_name,
+            user_task_id=settings.user_task_id,
+            attack_name=settings.attack_name,
+            injection_task_id=settings.injection_task_id,
         )
-
-        # Format trace messages into clean message history (like Hydra's redteamHistory)
         messages = _format_trace_messages(trace_log)
-
-        # Extract the final assistant response for output
-        final_response = ""
-        for msg in reversed(messages):
-            if msg.get("role") == "assistant" and msg.get("content"):
-                final_response = msg["content"]
-                break
-
-        # Build result
-        result = {
-            "user_task_success": utility,
-            "injection_blocked": security,
-            "injection_success": not security,
-            "safe_utility": utility and security,
-            "suite": suite_name,
-            "user_task_id": user_task_id,
-            "injection_task_id": injection_task_id,
-            "model": model,
-            "defense": defense,
-            "attack": attack_name,
-            "agentdojo_pipeline_name": pipeline.name,
-            "force_rerun": force_rerun,
-            "num_utility_results": len(utility_results),
-            "num_security_results": len(security_results),
-        }
-
-        # Include formatted messages and raw trace in metadata
-        metadata = {**result}
-        if context.get("traceparent"):
-            metadata["traceparent"] = context["traceparent"]
-        if context.get("evaluationId"):
-            metadata["evaluationId"] = context["evaluationId"]
-        if context.get("testCaseId"):
-            metadata["testCaseId"] = context["testCaseId"]
-        if messages:
-            metadata["messages"] = messages
-        if trace_log:
-            metadata["agentdojo_trace"] = trace_log
-
-        # Build token usage in Promptfoo format
-        token_usage = None
-        if _token_usage["total"] > 0:
-            token_usage = {
-                "prompt": _token_usage["prompt"],
-                "completion": _token_usage["completion"],
-                "total": _token_usage["total"],
-            }
+        result = _result_payload(
+            settings,
+            pipeline.name,
+            utility,
+            security,
+            utility_results,
+            security_results,
+        )
 
         _set_span_attributes(
             span,
@@ -970,31 +941,14 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         )
 
         return {
-            "output": final_response if final_response else json.dumps(result),
-            "metadata": metadata,
-            "tokenUsage": token_usage,
+            "output": _last_assistant_response(messages) or json.dumps(result),
+            "metadata": _metadata(result, context, messages, trace_log),
+            "tokenUsage": _token_usage_payload(),
         }
 
     except Exception as e:
         _record_span_exception(span, e)
         logger.exception(f"AgentDojo provider error: {e}")
-        error_result = {
-            "error": str(e),
-            "user_task_success": False,
-            "injection_blocked": False,
-            "injection_success": True,
-            "safe_utility": False,
-            "suite": suite_name,
-            "user_task_id": user_task_id,
-            "injection_task_id": injection_task_id,
-            "model": model,
-            "defense": defense,
-            "attack": attack_name,
-        }
-        return {
-            "output": json.dumps(error_result),
-            "error": str(e),
-            "metadata": error_result,
-        }
+        return _error_response(settings, e)
     finally:
         span_cm.__exit__(None, None, None)
