@@ -1,6 +1,8 @@
 import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
+import type { EnvVarKey } from '../envars';
+import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
 
@@ -62,23 +64,36 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
 
     const mergedConfig: MlflowGatewayCompletionOptions = {
       ...providerOptions.config,
-      // Default to a placeholder key since the gateway manages provider keys
       apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'MLFLOW_GATEWAY_API_KEY',
       apiBaseUrl,
-      // The gateway does not validate the API key — default to not required
-      apiKeyRequired:
-        providerOptions.config?.apiKeyRequired !== undefined
-          ? providerOptions.config.apiKeyRequired
-          : false,
+      apiKeyRequired: providerOptions.config?.apiKeyRequired ?? false,
     };
 
     super(modelName, {
       ...providerOptions,
-      // Preserve the namespaced provider id so results are distinguishable
       id: providerOptions.id || `mlflow-gateway:${modelName}`,
       config: mergedConfig,
     });
 
     this.config = mergedConfig;
+  }
+
+  // Do not fall back to OPENAI_API_KEY: the gateway is a different service, and
+  // forwarding a user's cloud OpenAI key to an MLflow proxy URL they control
+  // would leak that credential in the Authorization header.
+  getApiKey(): string | undefined {
+    const envar = this.config?.apiKeyEnvar as EnvVarKey | undefined;
+    return (
+      this.config.apiKey ||
+      (envar ? getEnvString(envar) || this.env?.[envar as keyof EnvOverrides] : undefined)
+    );
+  }
+
+  protected getMissingApiKeyErrorMessage(): string {
+    return (
+      `MLflow Gateway API key is not set. Set the ${this.config.apiKeyEnvar || 'MLFLOW_GATEWAY_API_KEY'} ` +
+      'environment variable or add `apiKey` to the provider config. The gateway does not ' +
+      'validate the key; any non-empty value is accepted.'
+    );
   }
 }

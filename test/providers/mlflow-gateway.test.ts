@@ -1,10 +1,26 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MlflowGatewayChatCompletionProvider } from '../../src/providers/mlflow-gateway';
 import { mockProcessEnv } from '../util/utils';
 
 describe('MlflowGatewayChatCompletionProvider', () => {
+  // Capture a reset closure before each test so tests see a clean env (no
+  // MLFLOW_*/OPENAI_* leakage from the shell or prior tests) and the original
+  // env is restored after.
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv(
+      {
+        MLFLOW_GATEWAY_URL: undefined,
+        MLFLOW_GATEWAY_API_KEY: undefined,
+        OPENAI_API_KEY: undefined,
+      },
+      { clear: false },
+    );
+  });
+
   afterEach(() => {
-    mockProcessEnv({});
+    restoreEnv();
   });
 
   it('should construct with explicit gatewayUrl', () => {
@@ -113,5 +129,46 @@ describe('MlflowGatewayChatCompletionProvider', () => {
       config: { gatewayUrl: 'http://from-config.com' },
     });
     expect(provider.config.apiBaseUrl).toBe('http://from-config.com/gateway/openai/v1');
+  });
+
+  it('should read the API key from MLFLOW_GATEWAY_API_KEY', () => {
+    mockProcessEnv({ MLFLOW_GATEWAY_API_KEY: 'mlflow-token' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.getApiKey()).toBe('mlflow-token');
+  });
+
+  it('should prefer explicit config.apiKey over env var', () => {
+    mockProcessEnv({ MLFLOW_GATEWAY_API_KEY: 'from-env' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000', apiKey: 'from-config' },
+    });
+    expect(provider.getApiKey()).toBe('from-config');
+  });
+
+  it('should NOT fall back to OPENAI_API_KEY when MLFLOW_GATEWAY_API_KEY is unset', () => {
+    // Regression test: forwarding a user's OPENAI_API_KEY as a Bearer token to
+    // an MLflow gateway URL would leak their cloud OpenAI credentials.
+    mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-secret' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.getApiKey()).toBeUndefined();
+  });
+
+  it('should NOT require an API key by default', () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.requiresApiKey()).toBe(false);
+  });
+
+  it('should use MLflow-specific missing-key message when apiKey is required', () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000', apiKeyRequired: true },
+    });
+    expect(provider['getMissingApiKeyErrorMessage']()).toContain('MLFLOW_GATEWAY_API_KEY');
+    expect(provider['getMissingApiKeyErrorMessage']()).not.toContain('OPENAI_API_KEY');
   });
 });

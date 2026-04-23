@@ -35,6 +35,14 @@ Where `<endpoint-name>` is the name of the gateway endpoint you created in the M
 | `MLFLOW_GATEWAY_URL`     | MLflow server URL (e.g., `http://localhost:5000`)    | Yes      |
 | `MLFLOW_GATEWAY_API_KEY` | API key (not validated by gateway, can be any value) | No       |
 
+:::note
+This provider does not fall back to `OPENAI_API_KEY` for authentication, even
+though it uses the OpenAI-compatible endpoint. If you want to send a Bearer
+token to the gateway, set `MLFLOW_GATEWAY_API_KEY` or pass `apiKey` in the
+provider config. This prevents accidentally forwarding cloud-OpenAI credentials
+to a self-hosted gateway URL.
+:::
+
 ## Basic usage
 
 ```yaml title="promptfooconfig.yaml"

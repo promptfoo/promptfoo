@@ -624,6 +624,31 @@ describe('Provider Registry', () => {
       );
     });
 
+    it('should handle mlflow-gateway provider correctly', async () => {
+      const factory = providerMap.find((f) => f.test('mlflow-gateway:my-endpoint'));
+      expect(factory).toBeDefined();
+
+      const options = {
+        ...mockProviderOptions,
+        id: undefined,
+        config: { gatewayUrl: 'http://localhost:5000' },
+      };
+      const provider = await factory!.create('mlflow-gateway:my-endpoint', options, {
+        ...mockContext,
+        options,
+      });
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('mlflow-gateway:my-endpoint');
+
+      await expect(
+        factory!.create(
+          'mlflow-gateway:',
+          { ...options, config: { gatewayUrl: 'http://localhost:5000' } },
+          mockContext,
+        ),
+      ).rejects.toThrow('MLflow Gateway endpoint name is required');
+    });
+
     it('should handle groq:responses provider correctly', async () => {
       // groq:responses: is handled by the same factory as groq:
       const factory = providerMap.find((f) => f.test('groq:responses:llama-3.3-70b-versatile'));
