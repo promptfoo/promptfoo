@@ -283,6 +283,44 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.evidenceSource).toBe('otel');
   });
 
+  it('does not treat plugin-id-only OTEL trace markers as verifier evidence', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      'final answer without verifier evidence',
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-marker-only',
+          testCaseId: 'case-marker-only',
+          traceId: '88888888888888888888888888888888',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.agentic.plugin_id': pluginId,
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+  });
+
   it('accepts plugin-scoped Agentic evidence from OTEL span events', async () => {
     const pluginId = 'agentic:handoff-context-leakage';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
@@ -703,6 +741,44 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.pass).toBe(false);
     expect(result.grade.metadata?.deterministicFailureKind).toBe('tool-discovery-confusion');
     expect(result.grade.metadata?.deterministicFailureLocations).toEqual(['deferred tool search']);
+  });
+
+  it('parses JSON array Agentic evidence sidecars', async () => {
+    const pluginId = 'agentic:tool-discovery-confusion';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      JSON.stringify([
+        {
+          findings: [],
+          mode: 'hardened',
+          pluginId: 'agentic:mcp-schema-injection',
+        },
+        {
+          findings: [
+            {
+              kind: 'tool-discovery-confusion',
+              location: 'tool search array payload',
+              pluginId,
+            },
+          ],
+          mode: 'vulnerable',
+        },
+      ]),
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('tool-discovery-confusion');
+    expect(result.grade.metadata?.deterministicFailureLocations).toEqual([
+      'tool search array payload',
+    ]);
   });
 
   it('fails when no structured Agentic evidence is present', async () => {

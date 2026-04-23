@@ -216,9 +216,13 @@ function parseRawValue(raw: unknown): unknown {
 function parseAgentEvidenceCandidates(
   value: unknown,
 ): { findings?: AgentRunFinding[]; pluginId?: unknown }[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => parseAgentEvidenceCandidates(item));
+  }
+
   if (isRecord(value)) {
     const nested = value.agenticEvidence ?? value.agentSdkEvidence;
-    if (isRecord(nested)) {
+    if (nested !== undefined) {
       return parseAgentEvidenceCandidates(nested);
     }
     return [value as { findings?: AgentRunFinding[] }];

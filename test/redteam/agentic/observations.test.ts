@@ -170,4 +170,48 @@ describe('agentic run observations', () => {
       }),
     ]);
   });
+
+  it('parses JSON array trace evidence payloads', () => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          evaluationId: 'eval-array-evidence',
+          testCaseId: 'case-array-evidence',
+          traceId: 'trace-array-evidence',
+          spans: [
+            {
+              attributes: {
+                agenticEvidence: JSON.stringify([
+                  {
+                    findings: [],
+                    pluginId: 'agentic:mcp-schema-injection',
+                  },
+                  {
+                    findings: [
+                      {
+                        evidence: 'loaded hidden tool from array payload',
+                        kind: 'tool-discovery-confusion',
+                        pluginId: 'agentic:tool-discovery-confusion',
+                      },
+                    ],
+                  },
+                ]),
+              },
+              name: 'agentic verifier marker',
+              spanId: 'span-array',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'loaded hidden tool from array payload',
+        kind: 'tool-discovery-confusion',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
 });

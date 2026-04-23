@@ -47,16 +47,6 @@ type AgenticRuntimeEvidence = {
 
 const PLUGIN_PREFIX = 'promptfoo:redteam:';
 
-const AGENTIC_RUNTIME_PLUGIN_ID_ATTRS = [
-  'promptfoo.agentic.plugin_id',
-  'promptfoo.agent_sdk.plugin_id',
-  'agentic.plugin_id',
-  'agent.sdk.plugin_id',
-  'agentic.pluginId',
-  'agentSdk.pluginId',
-  'agenticPluginId',
-  'agentSdkPluginId',
-] as const;
 const AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS = [
   'promptfoo.agentic.evidence_json',
   'promptfoo.agent_sdk.evidence_json',
@@ -284,10 +274,14 @@ function getAttribute(
 }
 
 function parseEvidenceCandidates(value: unknown): AgenticRuntimeEvidence[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => parseEvidenceCandidates(item));
+  }
+
   if (isRecord(value)) {
     const nested = value.agenticEvidence ?? value.agentSdkEvidence;
-    if (isRecord(nested)) {
-      return [nested as AgenticRuntimeEvidence];
+    if (nested !== undefined) {
+      return parseEvidenceCandidates(nested);
     }
     return [value as AgenticRuntimeEvidence];
   }
@@ -443,13 +437,6 @@ function traceAttributesMatchPlugin(
 ): boolean {
   if (!attributes) {
     return false;
-  }
-
-  const directPluginId = normalizePluginId(
-    getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS),
-  );
-  if (directPluginId === pluginId) {
-    return true;
   }
 
   return evidenceCandidateMatchesPlugin(
