@@ -90,7 +90,8 @@ export interface CallApiContextParams {
   // W3C Trace Context headers
   traceparent?: string; // Format: version-trace-id-parent-id-trace-flags
   tracestate?: string; // Optional vendor-specific trace state
-  otelExporterOtlpEndpoint?: string; // Local OTLP endpoint for provider subprocess exporters
+  // Base HTTP OTLP endpoint for child-process providers that need to export spans to promptfoo's receiver.
+  otelExporterOtlpEndpoint?: string;
 
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;

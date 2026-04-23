@@ -1164,4 +1164,59 @@ describe('TestSuiteSchema', () => {
       expect(result.data!.defaultTest).toBeUndefined();
     });
   });
+
+  describe('tracing validation', () => {
+    it('should accept OTLP HTTP config without acceptFormats', () => {
+      const suite = {
+        ...baseTestSuite,
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              host: '0.0.0.0',
+              port: 44329,
+            },
+          },
+        },
+      };
+
+      const result = TestSuiteSchema.safeParse(suite);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept OTLP HTTP config without suite-level tracing enabled', () => {
+      const suite = {
+        ...baseTestSuite,
+        tracing: {
+          otlp: {
+            http: {
+              enabled: true,
+              host: '0.0.0.0',
+              port: 44329,
+            },
+          },
+        },
+      };
+
+      const result = TestSuiteSchema.safeParse(suite);
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept disabled OTLP HTTP config without receiver defaults', () => {
+      const suite = {
+        ...baseTestSuite,
+        tracing: {
+          otlp: {
+            http: {
+              enabled: false,
+            },
+          },
+        },
+      };
+
+      const result = TestSuiteSchema.safeParse(suite);
+      expect(result.success).toBe(true);
+    });
+  });
 });

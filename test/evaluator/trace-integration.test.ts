@@ -29,6 +29,15 @@ vi.mock('../../src/tracing/evaluatorTracing', () => ({
   generateTraceId: vi.fn(() => 'abcdef1234567890abcdef1234567890'),
   generateSpanId: vi.fn(() => '0123456789abcdef'),
   generateTraceparent: vi.fn((traceId, spanId) => `00-${traceId}-${spanId}-01`),
+  getLocalOtlpHttpEndpoint: vi.fn((testSuite) => {
+    const http = testSuite.tracing?.otlp?.http;
+    if (http?.enabled === false) {
+      return undefined;
+    }
+    const port = http?.port || 4318;
+    const host = http?.host === '0.0.0.0' || !http?.host ? '127.0.0.1' : http.host;
+    return `http://${host}:${port}`;
+  }),
   generateTraceContextIfNeeded: vi.fn(),
   startOtlpReceiverIfNeeded: vi.fn(),
   stopOtlpReceiverIfNeeded: vi.fn(),

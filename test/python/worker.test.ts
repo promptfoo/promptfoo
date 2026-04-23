@@ -1,8 +1,11 @@
 import fs from 'fs';
+import { createServer } from 'http';
 import path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import { PythonWorker } from '../../src/python/worker';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -131,6 +134,245 @@ def call_api(prompt, options, context):
         output: string;
       };
       expect(result.output).toBe('Echo: Hello world');
+    },
+    TEST_TIMEOUT,
+  );
+
+  it('should not log successful wrapper OTEL startup stderr as an error', () => {
+    const worker = new PythonWorker(testScriptPath, 'call_api');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      (worker as any).handleStderr(
+        '[PythonProvider] OpenTelemetry tracing enabled, endpoint: http://127.0.0.1:4318/v1/traces\n',
+      );
+
+      expect(debugSpy).toHaveBeenCalledWith(
+        'Python worker stderr: [PythonProvider] OpenTelemetry tracing enabled, endpoint: http://127.0.0.1:4318/v1/traces',
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      debugSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('should log wrapper OTEL fallback stderr as a warning', () => {
+    const worker = new PythonWorker(testScriptPath, 'call_api');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      (worker as any).handleStderr(
+        '[PythonProvider] OpenTelemetry packages not installed, tracing disabled.',
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Python worker stderr: [PythonProvider] OpenTelemetry packages not installed, tracing disabled.',
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('should log Python warnings on stderr as warnings', () => {
+    const worker = new PythonWorker(testScriptPath, 'call_api');
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      (worker as any).handleStderr(
+        '/venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+\n  warnings.warn(',
+      );
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Python worker stderr: /venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+',
+      );
+      expect(warnSpy).toHaveBeenCalledWith('Python worker stderr:   warnings.warn(');
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('should keep arbitrary stderr containing OTEL text at error level', () => {
+    const worker = new PythonWorker(testScriptPath, 'call_api');
+    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+    try {
+      (worker as any).handleStderr(
+        'user stderr: [PythonProvider] OpenTelemetry tracing enabled but this is not wrapper startup',
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Python worker stderr: user stderr: [PythonProvider] OpenTelemetry tracing enabled but this is not wrapper startup',
+      );
+      expect(debugSpy).not.toHaveBeenCalled();
+    } finally {
+      debugSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  it(
+    'should pass environment overrides to the Python process',
+    async () => {
+      const envPath = path.join(__dirname, 'fixtures', 'env_provider.py');
+      let worker: PythonWorker | undefined;
+      fs.writeFileSync(
+        envPath,
+        `
+import os
+
+def call_api(prompt, options, context):
+    return {
+        "output": "ok",
+        "otel_enabled": os.getenv("PROMPTFOO_ENABLE_OTEL"),
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    }
+`,
+      );
+
+      try {
+        worker = new PythonWorker(envPath, 'call_api', undefined, undefined, undefined, {
+          PROMPTFOO_ENABLE_OTEL: 'true',
+          OTEL_EXPORTER_OTLP_ENDPOINT: 'http://collector.local:4318',
+        });
+        await worker.initialize();
+
+        const result = (await worker.call('call_api', ['Hello world', {}, {}])) as {
+          otel_enabled: string;
+          otlp_endpoint: string;
+        };
+        expect(result.otel_enabled).toBe('true');
+        expect(result.otlp_endpoint).toBe('http://collector.local:4318');
+      } finally {
+        await worker?.shutdown();
+        if (fs.existsSync(envPath)) {
+          fs.unlinkSync(envPath);
+        }
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should lazily enable OTEL env when a traced call reaches an untraced worker',
+    async () => {
+      const envPath = path.join(__dirname, 'fixtures', 'lazy_otel_provider.py');
+      const restoreEnv = mockProcessEnv({
+        OTEL_EXPORTER_OTLP_ENDPOINT: undefined,
+        PROMPTFOO_ENABLE_OTEL: undefined,
+        PROMPTFOO_OTEL_ENDPOINT: undefined,
+      });
+      const otlpServer = createServer((req, res) => {
+        req.resume();
+        res.writeHead(200);
+        res.end();
+      });
+      let worker: PythonWorker | undefined;
+      await new Promise<void>((resolve) => otlpServer.listen(0, '127.0.0.1', resolve));
+      const otlpEndpoint = `http://127.0.0.1:${(otlpServer.address() as { port: number }).port}`;
+
+      fs.writeFileSync(
+        envPath,
+        `
+import os
+
+def call_api(prompt, options, context):
+    return {
+        "output": "ok",
+        "otel_enabled": os.getenv("PROMPTFOO_ENABLE_OTEL"),
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    }
+`,
+      );
+
+      try {
+        worker = new PythonWorker(envPath, 'call_api');
+        await worker.initialize();
+
+        const result = (await worker.call('call_api', [
+          'Hello world',
+          {},
+          {
+            traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+            otelExporterOtlpEndpoint: otlpEndpoint,
+          },
+        ])) as {
+          otel_enabled: string;
+          otlp_endpoint: string;
+        };
+
+        expect(result.otel_enabled).toBe('true');
+        expect(result.otlp_endpoint).toBe(otlpEndpoint);
+      } finally {
+        restoreEnv();
+        await worker?.shutdown();
+        await new Promise<void>((resolve, reject) =>
+          otlpServer.close((error) => (error ? reject(error) : resolve())),
+        );
+        if (fs.existsSync(envPath)) {
+          fs.unlinkSync(envPath);
+        }
+      }
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    'should not lazily enable OTEL without an endpoint for a traced call',
+    async () => {
+      const envPath = path.join(__dirname, 'fixtures', 'lazy_otel_no_endpoint_provider.py');
+      const restoreEnv = mockProcessEnv({
+        OTEL_EXPORTER_OTLP_ENDPOINT: undefined,
+        PROMPTFOO_ENABLE_OTEL: undefined,
+        PROMPTFOO_OTEL_ENDPOINT: undefined,
+      });
+      let worker: PythonWorker | undefined;
+      fs.writeFileSync(
+        envPath,
+        `
+import os
+
+def call_api(prompt, options, context):
+    return {
+        "output": "ok",
+        "otel_enabled": os.getenv("PROMPTFOO_ENABLE_OTEL"),
+        "otlp_endpoint": os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+    }
+`,
+      );
+
+      try {
+        worker = new PythonWorker(envPath, 'call_api');
+        await worker.initialize();
+
+        const result = (await worker.call('call_api', [
+          'Hello world',
+          {},
+          {
+            traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+          },
+        ])) as {
+          otel_enabled: string | null;
+          otlp_endpoint: string | null;
+        };
+
+        expect(result.otel_enabled).toBeNull();
+        expect(result.otlp_endpoint).toBeNull();
+      } finally {
+        restoreEnv();
+        await worker?.shutdown();
+        if (fs.existsSync(envPath)) {
+          fs.unlinkSync(envPath);
+        }
+      }
     },
     TEST_TIMEOUT,
   );

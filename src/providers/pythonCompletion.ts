@@ -241,12 +241,13 @@ export class PythonProvider implements ApiProvider {
           options?.enableOtelTracing ?? getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
         if (enableOtelTracing) {
           envOverrides.PROMPTFOO_ENABLE_OTEL = 'true';
-          // Default to Promptfoo's local OTLP receiver for Python spans unless the user already
-          // has an OTLP endpoint configured (in which case we assume they know what they're doing).
-          if (!process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
-            envOverrides.OTEL_EXPORTER_OTLP_ENDPOINT =
-              options?.otelExporterOtlpEndpoint ?? 'http://127.0.0.1:4318';
-          }
+          // PROMPTFOO_OTEL_ENDPOINT mirrors the JS tracing configuration. Translate it to the
+          // standard OTEL exporter env var expected by Python OpenTelemetry.
+          envOverrides.OTEL_EXPORTER_OTLP_ENDPOINT =
+            process.env.PROMPTFOO_OTEL_ENDPOINT ||
+            process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+            options?.otelExporterOtlpEndpoint ||
+            'http://127.0.0.1:4318';
         }
 
         this.pool = new PythonWorkerPool(
@@ -339,11 +340,19 @@ export class PythonProvider implements ApiProvider {
     apiType: PythonApiType,
   ): Promise<any> {
     if (!this.isInitialized || !this.pool) {
+      const hasContextOtlpEndpoint =
+        context != null &&
+        Object.prototype.hasOwnProperty.call(context, 'otelExporterOtlpEndpoint');
+      const isContextOtlpEndpointDisabled =
+        hasContextOtlpEndpoint && context.otelExporterOtlpEndpoint === undefined;
       const enableOtelTracing =
-        Boolean(context?.traceparent) || getEnvBool('PROMPTFOO_OTEL_ENABLED', false);
+        !isContextOtlpEndpointDisabled &&
+        (Boolean(context?.traceparent) || getEnvBool('PROMPTFOO_OTEL_ENABLED', false));
       await this.initialize({
         enableOtelTracing,
-        otelExporterOtlpEndpoint: context?.otelExporterOtlpEndpoint,
+        ...(hasContextOtlpEndpoint
+          ? { otelExporterOtlpEndpoint: context.otelExporterOtlpEndpoint }
+          : {}),
       });
     }
 
