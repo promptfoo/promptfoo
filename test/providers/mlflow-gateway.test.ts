@@ -30,6 +30,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
   });
 
   it('should throw if no gateway URL is provided', () => {
+    mockProcessEnv({ MLFLOW_GATEWAY_URL: '' });
     expect(
       () =>
         new MlflowGatewayChatCompletionProvider('my-endpoint', {
