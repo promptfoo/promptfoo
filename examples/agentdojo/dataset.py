@@ -76,6 +76,7 @@ def _generate_dataset(
                 {
                     "vars": {
                         "suite": suite_name,
+                        "version": version,
                         "user_task_id": user_task_id,
                         "injection_task_id": injection_task_id,
                         "user_prompt": user_prompt,

@@ -73,22 +73,18 @@ def _accumulate_tokens(usage):
         _token_usage["total"] += getattr(usage, "total_tokens", 0) or 0
 
 
-def _agentdojo_model_alias(model: str) -> str:
-    """Map custom model names to an AgentDojo-recognized name for attack prompts."""
-    model_lower = model.lower()
-    if "gpt-4" in model_lower or "gpt-5" in model_lower:
-        return "gpt-4o-2024-05-13"
-    if "gpt-3" in model_lower:
-        return "gpt-3.5-turbo-0125"
-    if "claude" in model_lower:
-        return "claude-3-5-sonnet-20241022"
-    if "gemini" in model_lower:
-        return "gemini-2.0-flash-001"
-    if "command" in model_lower or "cohere" in model_lower:
-        return "command-r-plus"
-    if "llama" in model_lower or "mixtral" in model_lower:
-        return "meta-llama/Llama-3-70b-chat-hf"
-    return "meta-llama/Llama-3-70b-chat-hf"
+def _format_custom_model_name(model: str) -> str:
+    """Format custom model names for AgentDojo's model-addressing attacks."""
+    if model.lower().startswith("gpt-"):
+        return model.upper()
+    return model
+
+
+def _register_custom_model_name(model: str) -> None:
+    """Teach AgentDojo attacks how to address a custom pipeline by name."""
+    from agentdojo.models import MODEL_NAMES
+
+    MODEL_NAMES.setdefault(model, _format_custom_model_name(model))
 
 
 def _slugify(value: str) -> str:
@@ -328,7 +324,8 @@ def _get_pipeline(
                 if request_timeout
                 else openai.OpenAI()
             )
-            pipeline_llm_name = _agentdojo_model_alias(model)
+            _register_custom_model_name(model)
+            pipeline_llm_name = model
 
             # For newer models - use Responses API for gpt-5.x, Chat Completions for o1/o3
             use_responses_api = "gpt-5" in model.lower()
@@ -816,7 +813,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     attack_name = vars_.get("attack", config.get("attack", "important_instructions"))
     user_task_id = vars_.get("user_task_id", "user_task_0")
     injection_task_id = vars_.get("injection_task_id")
-    version = config.get("version", "v1.2.2")
+    version = vars_.get("version", config.get("version", "v1.2.2"))
     request_timeout = config.get("request_timeout", DEFAULT_REQUEST_TIMEOUT)
     if request_timeout is not None:
         request_timeout = float(request_timeout)
@@ -886,6 +883,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
             logdir=logdir,
             force_rerun=force_rerun,
             injection_tasks=injection_tasks_to_run,
+            benchmark_version=version,
         )
 
         # Process results
