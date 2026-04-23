@@ -154,28 +154,6 @@ export default function AddAssertionsDialog({
     }
   }, [open, defaultScope]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + Enter to submit
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        if (canSubmit && !showConfirmation) {
-          handleSubmitClick();
-        } else if (showConfirmation) {
-          executeSubmit();
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, showConfirmation, canSubmit, executeSubmit, handleSubmitClick]);
-
   const scopeOptions = useMemo(
     () =>
       availableScopes.map((scopeValue) => ({
@@ -306,7 +284,7 @@ export default function AddAssertionsDialog({
       scope === 'results'
         ? { type: 'results' as const, resultIds: resultId ? [resultId] : [] }
         : scope === 'tests'
-          ? { type: 'tests' as const, testIndices: testIndex != null ? [testIndex] : [] }
+          ? { type: 'tests' as const, testIndices: testIndex == null ? [] : [testIndex] }
           : {
               type: 'filtered' as const,
               filters,
@@ -392,6 +370,28 @@ export default function AddAssertionsDialog({
       executeSubmit();
     }
   }, [isLargeRun, executeSubmit]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + Enter to submit
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (canSubmit && !showConfirmation) {
+          handleSubmitClick();
+        } else if (showConfirmation) {
+          executeSubmit();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, showConfirmation, canSubmit, executeSubmit, handleSubmitClick]);
 
   const handleRetry = async () => {
     if (!evalId || !jobStatus || jobStatus.errors.length === 0) {

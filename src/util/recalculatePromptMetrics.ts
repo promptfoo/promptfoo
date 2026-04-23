@@ -1,7 +1,7 @@
-import { renderMetricName } from '../assertions/index';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { ResultFailureReason } from '../types/index';
+import { accumulateNamedMetric } from '../util/namedMetrics';
 import {
   accumulateAssertionTokenUsage,
   accumulateResponseTokenUsage,
@@ -11,15 +11,19 @@ import {
 
 import type { TokenUsage } from '../types/index';
 
+// Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results).
+const RECALCULATE_BATCH_SIZE = 1000;
+
 /**
  * Recalculate prompt metrics based on current results in the database.
- * Intended for post-hoc updates that change grading results.
+ * Intended for post-hoc updates and retry cleanup that change persisted grading results.
  */
 export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
   logger.debug('Recalculating prompt metrics');
 
-  // Load current results from database
-  await evalRecord.loadResults();
+  const startTime = Date.now();
+  let batchNumber = 0;
+  let totalProcessed = 0;
 
   // Create a map to track metrics by promptIdx
   const promptMetricsMap = new Map<
@@ -35,13 +39,13 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       tokenUsage: TokenUsage;
       namedScores: Record<string, number>;
       namedScoresCount: Record<string, number>;
+      namedScoreWeights?: Record<string, number>;
       cost: number;
     }
   >();
 
   // Initialize metrics for each prompt
-  for (const prompt of evalRecord.prompts) {
-    const promptIdx = evalRecord.prompts.indexOf(prompt);
+  for (const [promptIdx] of evalRecord.prompts.entries()) {
     promptMetricsMap.set(promptIdx, {
       score: 0,
       testPassCount: 0,
@@ -53,69 +57,93 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       tokenUsage: createEmptyTokenUsage(),
       namedScores: {},
       namedScoresCount: {},
+      namedScoreWeights: {},
       cost: 0,
     });
   }
 
-  // Recalculate metrics from current results
-  for (const result of evalRecord.results) {
-    const metrics = promptMetricsMap.get(result.promptIdx);
-    if (!metrics) {
-      continue;
-    }
+  let currentResultId: string | undefined;
+  try {
+    for await (const batch of evalRecord.fetchResultsBatched(RECALCULATE_BATCH_SIZE)) {
+      batchNumber++;
+      logger.debug(`Processing batch ${batchNumber} with ${batch.length} results`);
 
-    // Update test counts
-    if (result.success) {
-      metrics.testPassCount++;
-    } else if (result.failureReason === ResultFailureReason.ERROR) {
-      metrics.testErrorCount++;
-    } else {
-      metrics.testFailCount++;
-    }
-
-    // Update scores and other metrics
-    metrics.score += result.score || 0;
-    metrics.totalLatencyMs += result.latencyMs || 0;
-    metrics.cost += result.cost || 0;
-
-    // Update named scores
-    for (const [key, value] of Object.entries(result.namedScores || {})) {
-      metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-
-      // Count assertions contributing to this named score
-      // Note: We need to render template variables in assertion metrics before comparing
-      const testVars = result.testCase?.vars || {};
-      let contributingAssertions = 0;
-      result.gradingResult?.componentResults?.forEach((componentResult) => {
-        const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
-        if (renderedMetric === key) {
-          contributingAssertions++;
+      for (const result of batch) {
+        currentResultId = result.id;
+        const metrics = promptMetricsMap.get(result.promptIdx);
+        if (!metrics) {
+          logger.debug(`Skipping result with invalid promptIdx: ${result.promptIdx}`, {
+            resultId: result.id,
+            evalId: evalRecord.id,
+          });
+          continue;
         }
-      });
-      metrics.namedScoresCount[key] =
-        (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
-    }
 
-    // Update assertion counts
-    if (result.gradingResult?.componentResults) {
-      metrics.assertPassCount += result.gradingResult.componentResults.filter((r) => r.pass).length;
-      metrics.assertFailCount += result.gradingResult.componentResults.filter(
-        (r) => !r.pass,
-      ).length;
-    }
+        // Update test counts
+        if (result.success) {
+          metrics.testPassCount++;
+        } else if (result.failureReason === ResultFailureReason.ERROR) {
+          metrics.testErrorCount++;
+        } else {
+          metrics.testFailCount++;
+        }
 
-    // Update token usage
-    if (result.response?.tokenUsage) {
-      accumulateResponseTokenUsage(metrics.tokenUsage, { tokenUsage: result.response.tokenUsage });
-    }
+        // Update scores and other metrics
+        metrics.score += result.score ?? 0;
+        metrics.totalLatencyMs += result.latencyMs || 0;
+        metrics.cost += result.cost || 0;
 
-    // Update assertion token usage
-    if (result.gradingResult?.tokensUsed) {
-      if (!metrics.tokenUsage.assertions) {
-        metrics.tokenUsage.assertions = createEmptyAssertions();
+        // Update named scores
+        for (const [key, value] of Object.entries(result.namedScores || {})) {
+          accumulateNamedMetric(metrics, {
+            metricName: key,
+            metricValue: value,
+            gradingResult: result.gradingResult,
+            testVars: result.testCase?.vars || {},
+          });
+        }
+
+        // Update assertion counts
+        if (result.gradingResult?.componentResults) {
+          metrics.assertPassCount += result.gradingResult.componentResults.filter(
+            (r) => r.pass,
+          ).length;
+          metrics.assertFailCount += result.gradingResult.componentResults.filter(
+            (r) => !r.pass,
+          ).length;
+        }
+
+        // Update token usage
+        if (result.response?.tokenUsage) {
+          accumulateResponseTokenUsage(metrics.tokenUsage, {
+            tokenUsage: result.response.tokenUsage,
+          });
+        }
+
+        // Update assertion token usage
+        if (result.gradingResult?.tokensUsed) {
+          if (!metrics.tokenUsage.assertions) {
+            metrics.tokenUsage.assertions = createEmptyAssertions();
+          }
+          accumulateAssertionTokenUsage(
+            metrics.tokenUsage.assertions,
+            result.gradingResult.tokensUsed,
+          );
+        }
       }
-      accumulateAssertionTokenUsage(metrics.tokenUsage.assertions, result.gradingResult.tokensUsed);
+
+      totalProcessed += batch.length;
     }
+  } catch (error) {
+    logger.error('Error during batched metrics recalculation', {
+      phase: 'calculation',
+      batchNumber,
+      totalProcessed,
+      currentResultId,
+      evalId: evalRecord.id,
+      error,
+    });
+    throw error;
   }
 
   // Update prompt metrics with recalculated values
@@ -127,8 +155,23 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
 
   // Save the updated prompt metrics
   if (evalRecord.persisted) {
-    await evalRecord.addPrompts(evalRecord.prompts);
+    try {
+      await evalRecord.addPrompts(evalRecord.prompts);
+    } catch (error) {
+      logger.error('Error saving recalculated prompt metrics', {
+        phase: 'save',
+        evalId: evalRecord.id,
+        promptCount: evalRecord.prompts.length,
+        error,
+      });
+      throw error;
+    }
   }
 
-  logger.debug('Prompt metrics recalculation completed');
+  const durationMs = Date.now() - startTime;
+  logger.debug('Prompt metrics recalculation completed', {
+    totalBatches: batchNumber,
+    totalResults: totalProcessed,
+    durationMs,
+  });
 }

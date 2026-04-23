@@ -7,6 +7,15 @@ import { fetchWithProxy } from './fetch/index';
 export const TOKEN_REFRESH_BUFFER_MS = 60000;
 
 /**
+ * A lock object used to deduplicate concurrent token refresh attempts.
+ * Callers acquire the lock by creating one and storing it; subsequent callers
+ * await the existing lock's promise instead of starting a new refresh.
+ */
+export interface TokenRefreshLock {
+  promise: Promise<void>;
+}
+
+/**
  * Configuration for OAuth token requests.
  * Values should already be rendered/resolved (no templates).
  */

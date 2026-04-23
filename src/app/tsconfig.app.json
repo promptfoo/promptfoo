@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "outDir": "../../dist/src/app",
+    "rootDir": "..",
     "paths": {
       "@app/*": ["./src/*"],
       "@promptfoo/*": ["../*"]
@@ -24,5 +25,5 @@
     "strict": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["./src"]
+  "include": ["./src", "../types/optional-deps.d.ts"]
 }

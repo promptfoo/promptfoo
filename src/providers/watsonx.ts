@@ -7,7 +7,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
+import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
@@ -22,7 +22,22 @@ import type {
 import type { ProviderOptions } from '../types/providers';
 
 interface TextGenRequestParametersModel {
-  max_new_tokens: number;
+  max_new_tokens?: number;
+  min_new_tokens?: number;
+  decoding_method?: 'greedy' | 'sample';
+  length_penalty?: {
+    decay_factor?: number;
+    start_index?: number;
+  };
+  random_seed?: number;
+  stop_sequences?: string[];
+  temperature?: number;
+  time_limit?: number;
+  top_k?: number;
+  top_p?: number;
+  repetition_penalty?: number;
+  truncate_input_tokens?: number;
+  include_stop_sequence?: boolean;
 }
 
 interface TextGenRequestParams {
@@ -33,15 +48,37 @@ interface TextGenRequestParams {
 }
 
 const ConfigSchema = z.object({
+  // Authentication options
   apiKey: z.string().optional(),
   apiKeyEnvar: z.string().optional(),
   apiBearerToken: z.string().optional(),
   apiBearerTokenEnvar: z.string().optional(),
+
+  // Service configuration
   serviceUrl: z.string().optional(),
   version: z.string().optional(),
   projectId: z.string().optional(),
   modelId: z.string().optional(),
+
+  // Text generation parameters
   maxNewTokens: z.number().optional(),
+  minNewTokens: z.number().optional(),
+  decodingMethod: z.enum(['greedy', 'sample']).optional(),
+  lengthPenalty: z
+    .object({
+      decayFactor: z.number().optional(),
+      startIndex: z.number().optional(),
+    })
+    .optional(),
+  randomSeed: z.number().optional(),
+  stopSequences: z.array(z.string()).optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  timeLimit: z.number().optional(),
+  topK: z.number().optional(),
+  topP: z.number().min(0).max(1).optional(),
+  repetitionPenalty: z.number().optional(),
+  truncateInputTokens: z.number().optional(),
+  includeStopSequence: z.boolean().optional(),
 });
 
 const TextGenResponseSchema = z.object({
@@ -118,9 +155,44 @@ function sortObject(obj: any): any {
   return result;
 }
 
+const WATSONX_SECRET_FIELD_NAMES = new Set(['apiKey', 'apiBearerToken']);
+const WATSONX_CACHE_HASH_KEY = 'promptfoo:watsonx:cache-key:v1';
+
+function hashWatsonXCacheValue(value: unknown): string {
+  return crypto
+    .createHmac('sha256', WATSONX_CACHE_HASH_KEY)
+    .update(JSON.stringify(value) ?? '')
+    .digest('hex');
+}
+
+function omitWatsonXSecretConfigFields(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(omitWatsonXSecretConfigFields);
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !WATSONX_SECRET_FIELD_NAMES.has(key))
+      .map(([key, fieldValue]) => [key, omitWatsonXSecretConfigFields(fieldValue)]),
+  );
+}
+
 export function generateConfigHash(config: any): string {
-  const sortedConfig = sortObject(config);
-  return crypto.createHash('md5').update(JSON.stringify(sortedConfig)).digest('hex');
+  const sortedConfig = sortObject(omitWatsonXSecretConfigFields(config));
+  return hashWatsonXCacheValue(sortedConfig);
+}
+
+function generatePromptHash(prompt: string): string {
+  return hashWatsonXCacheValue(['prompt', prompt]);
+}
+
+function getWatsonXCredentialFingerprint(type: string, credential: string): string {
+  return crypto
+    .createHmac('sha256', credential)
+    .update(`${WATSONX_CACHE_HASH_KEY}:${type}`)
+    .digest('hex');
 }
 
 interface ModelSpec {
@@ -135,6 +207,26 @@ interface WatsonXModel {
     input: number;
     output: number;
   };
+}
+
+type WatsonXAuthSelection =
+  | { type: 'iam'; apiKey: string; forcedByAuthType: boolean }
+  | { type: 'bearertoken'; bearerToken: string; forcedByAuthType: boolean }
+  | { type: 'none' };
+
+function createWatsonXAuthCacheHash(authSelection: WatsonXAuthSelection): string {
+  if (authSelection.type === 'none') {
+    return hashWatsonXCacheValue({ type: 'none' });
+  }
+
+  const credential =
+    authSelection.type === 'iam' ? authSelection.apiKey : authSelection.bearerToken;
+
+  return hashWatsonXCacheValue({
+    type: authSelection.type,
+    forcedByAuthType: authSelection.forcedByAuthType,
+    credentialFingerprint: getWatsonXCredentialFingerprint(authSelection.type, credential),
+  });
 }
 
 async function fetchModelSpecs(): Promise<ModelSpec[]> {
@@ -209,6 +301,7 @@ export class WatsonXProvider implements ApiProvider {
   env?: EnvOverrides;
   client?: WatsonXAIClient;
   config: z.infer<typeof ConfigSchema>;
+  private authCacheHash?: string;
 
   constructor(modelName: string, options: ProviderOptions) {
     const validationResult = ConfigSchema.safeParse(options.config);
@@ -234,6 +327,61 @@ export class WatsonXProvider implements ApiProvider {
     return `[Watsonx Provider ${this.modelName}]`;
   }
 
+  private getApiKey(): string | undefined {
+    return (
+      this.config.apiKey ||
+      (this.config.apiKeyEnvar
+        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
+          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.WATSONX_AI_APIKEY ||
+      getEnvString('WATSONX_AI_APIKEY')
+    );
+  }
+
+  private getBearerToken(): string | undefined {
+    return (
+      this.config.apiBearerToken ||
+      (this.config.apiBearerTokenEnvar
+        ? getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey) ||
+          this.env?.[this.config.apiBearerTokenEnvar as keyof EnvOverrides]
+        : undefined) ||
+      this.env?.WATSONX_AI_BEARER_TOKEN ||
+      getEnvString('WATSONX_AI_BEARER_TOKEN')
+    );
+  }
+
+  private getAuthType(): string | undefined {
+    return this.env?.WATSONX_AI_AUTH_TYPE || getEnvString('WATSONX_AI_AUTH_TYPE');
+  }
+
+  private getAuthSelection(): WatsonXAuthSelection {
+    const apiKey = this.getApiKey();
+    const bearerToken = this.getBearerToken();
+    const authType = this.getAuthType();
+
+    if (authType === 'iam' && apiKey) {
+      return { type: 'iam', apiKey, forcedByAuthType: true };
+    } else if (authType === 'bearertoken' && bearerToken) {
+      return { type: 'bearertoken', bearerToken, forcedByAuthType: true };
+    }
+
+    if (apiKey) {
+      return { type: 'iam', apiKey, forcedByAuthType: false };
+    } else if (bearerToken) {
+      return { type: 'bearertoken', bearerToken, forcedByAuthType: false };
+    }
+    return { type: 'none' };
+  }
+
+  protected getAuthCacheHash(): string {
+    invariant(
+      this.authCacheHash,
+      'WatsonX auth cache hash is unavailable before authentication is initialized.',
+    );
+    return this.authCacheHash;
+  }
+
   async getAuth(): Promise<IamAuthenticator | BearerTokenAuthenticator> {
     let IamAuthenticator: any;
     let BearerTokenAuthenticator: any;
@@ -247,40 +395,25 @@ export class WatsonXProvider implements ApiProvider {
       );
     }
 
-    const apiKey =
-      this.config.apiKey ||
-      (this.config.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.WATSONX_AI_APIKEY ||
-      getEnvString('WATSONX_AI_APIKEY');
-
-    const bearerToken =
-      this.config.apiBearerToken ||
-      (this.config.apiBearerTokenEnvar
-        ? getEnvString(this.config.apiBearerTokenEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiBearerTokenEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.WATSONX_AI_BEARER_TOKEN ||
-      getEnvString('WATSONX_AI_BEARER_TOKEN');
-
-    const authType = this.env?.WATSONX_AI_AUTH_TYPE || getEnvString('WATSONX_AI_AUTH_TYPE');
-
-    if (authType === 'iam' && apiKey) {
-      logger.info('Using IAM Authentication based on WATSONX_AI_AUTH_TYPE.');
-      return new IamAuthenticator({ apikey: apiKey });
-    } else if (authType === 'bearertoken' && bearerToken) {
-      logger.info('Using Bearer Token Authentication based on WATSONX_AI_AUTH_TYPE.');
-      return new BearerTokenAuthenticator({ bearerToken });
+    const authSelection = this.getAuthSelection();
+    if (!this.client) {
+      this.authCacheHash = createWatsonXAuthCacheHash(authSelection);
     }
 
-    if (apiKey) {
+    if (authSelection.type === 'iam' && authSelection.forcedByAuthType) {
+      logger.info('Using IAM Authentication based on WATSONX_AI_AUTH_TYPE.');
+      return new IamAuthenticator({ apikey: authSelection.apiKey });
+    } else if (authSelection.type === 'bearertoken' && authSelection.forcedByAuthType) {
+      logger.info('Using Bearer Token Authentication based on WATSONX_AI_AUTH_TYPE.');
+      return new BearerTokenAuthenticator({ bearerToken: authSelection.bearerToken });
+    }
+
+    if (authSelection.type === 'iam') {
       logger.info('Using IAM Authentication.');
-      return new IamAuthenticator({ apikey: apiKey });
-    } else if (bearerToken) {
+      return new IamAuthenticator({ apikey: authSelection.apiKey });
+    } else if (authSelection.type === 'bearertoken') {
       logger.info('Using Bearer Token Authentication.');
-      return new BearerTokenAuthenticator({ bearerToken });
+      return new BearerTokenAuthenticator({ bearerToken: authSelection.bearerToken });
     } else {
       throw new Error(
         'Authentication credentials not provided. Please set either `WATSONX_AI_APIKEY` for IAM Authentication or `WATSONX_AI_BEARER_TOKEN` for Bearer Token Authentication.',
@@ -370,40 +503,79 @@ export class WatsonXProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const client = await this.getClient();
+
+    // Merge configs: provider config -> prompt-level config
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
 
     const modelId = this.getModelId();
     const projectId = this.getProjectId();
 
     const cache = getCache();
-    const configHash = generateConfigHash(this.options.config);
-    const cacheKey = `watsonx:${this.modelName}:${configHash}:${prompt}`;
+    const configHash = generateConfigHash(config);
+    const authHash = this.getAuthCacheHash();
+    const cacheKey = `watsonx:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
     const cacheEnabled = isCacheEnabled();
     if (cacheEnabled) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug(
-          `Watsonx: Returning cached response for prompt "${prompt}" with config "${configHash}": ${cachedResponse}`,
-        );
+        logger.debug('Watsonx: Returning cached response', {
+          model: this.modelName,
+          configHash,
+        });
         const resp = JSON.parse(cachedResponse as string) as ProviderResponse;
         return { ...resp, cached: true };
       }
     }
 
     try {
-      const textGenRequestParametersModel: TextGenRequestParametersModel = {
-        max_new_tokens: this.options.config.maxNewTokens || 100,
+      // Build parameters with conditional inclusion
+      const parameters: TextGenRequestParametersModel = {
+        max_new_tokens: config.maxNewTokens ?? 100,
+        ...(config.minNewTokens !== undefined && { min_new_tokens: config.minNewTokens }),
+        ...(config.decodingMethod && { decoding_method: config.decodingMethod }),
+        ...(config.lengthPenalty && {
+          length_penalty: {
+            ...(config.lengthPenalty.decayFactor !== undefined && {
+              decay_factor: config.lengthPenalty.decayFactor,
+            }),
+            ...(config.lengthPenalty.startIndex !== undefined && {
+              start_index: config.lengthPenalty.startIndex,
+            }),
+          },
+        }),
+        ...(config.randomSeed !== undefined && { random_seed: config.randomSeed }),
+        ...(config.stopSequences?.length && { stop_sequences: config.stopSequences }),
+        ...(config.temperature !== undefined && { temperature: config.temperature }),
+        ...(config.timeLimit !== undefined && { time_limit: config.timeLimit }),
+        ...(config.topK !== undefined && { top_k: config.topK }),
+        ...(config.topP !== undefined && { top_p: config.topP }),
+        ...(config.repetitionPenalty !== undefined && {
+          repetition_penalty: config.repetitionPenalty,
+        }),
+        ...(config.truncateInputTokens !== undefined && {
+          truncate_input_tokens: config.truncateInputTokens,
+        }),
+        ...(config.includeStopSequence !== undefined && {
+          include_stop_sequence: config.includeStopSequence,
+        }),
       };
 
       const params: TextGenRequestParams = {
         input: prompt,
         modelId,
         projectId,
-        parameters: textGenRequestParametersModel,
+        parameters,
       };
 
       const apiResponse = await client.generateText(params);
@@ -428,7 +600,7 @@ export class WatsonXProvider implements ApiProvider {
 
       providerResponse.cost = await calculateWatsonXCost(
         this.modelName,
-        this.options.config,
+        config,
         providerResponse.tokenUsage?.prompt,
         providerResponse.tokenUsage?.completion,
       );
@@ -447,5 +619,109 @@ export class WatsonXProvider implements ApiProvider {
         tokenUsage: createEmptyTokenUsage(),
       };
     }
+  }
+}
+
+/**
+ * WatsonX Chat Provider using the textChat API for messages-based interactions.
+ */
+export class WatsonXChatProvider extends WatsonXProvider {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const client = await this.getClient();
+
+    // Merge configs: provider config -> prompt-level config
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
+    const modelId = this.getModelId();
+    const projectId = this.getProjectId();
+
+    const cache = getCache();
+    const configHash = generateConfigHash(config);
+    const authHash = this.getAuthCacheHash();
+    const cacheKey = `watsonx:chat:${this.modelName}:${configHash}:${authHash}:${generatePromptHash(prompt)}`;
+    const cacheEnabled = isCacheEnabled();
+    if (cacheEnabled) {
+      const cachedResponse = await cache.get(cacheKey);
+      if (cachedResponse) {
+        logger.debug(
+          `Watsonx Chat: Returning cached response for prompt with config "${configHash}"`,
+        );
+        const resp = JSON.parse(cachedResponse as string) as ProviderResponse;
+        return { ...resp, cached: true };
+      }
+    }
+
+    try {
+      // Parse chat messages using shared utility
+      const messages = parseChatPrompt(prompt, [{ role: 'user' as const, content: prompt }]);
+
+      // Build chat params
+      const params: Record<string, any> = {
+        modelId,
+        projectId,
+        messages,
+        ...(config.temperature !== undefined && { temperature: config.temperature }),
+        ...(config.maxNewTokens !== undefined && { maxTokens: config.maxNewTokens }),
+        ...(config.topP !== undefined && { topP: config.topP }),
+        ...(config.stopSequences?.length && { stop: config.stopSequences }),
+        ...(config.randomSeed !== undefined && { seed: config.randomSeed }),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const response = await (client as any).textChat(params);
+      const result = response.result as any;
+
+      const providerResponse = this.convertChatResponse(result);
+
+      providerResponse.cost = await calculateWatsonXCost(
+        this.modelName,
+        config,
+        providerResponse.tokenUsage?.prompt,
+        providerResponse.tokenUsage?.completion,
+      );
+
+      if (isCacheEnabled()) {
+        await cache.set(cacheKey, JSON.stringify(providerResponse));
+      }
+
+      return providerResponse;
+    } catch (err) {
+      logger.error(`Watsonx Chat: API call error: ${String(err)}`);
+
+      return {
+        error: `API call error: ${String(err)}`,
+        output: '',
+        tokenUsage: createEmptyTokenUsage(),
+      };
+    }
+  }
+
+  private convertChatResponse(result: any): ProviderResponse {
+    const choice = result?.choices?.[0];
+    const message = choice?.message;
+
+    // Handle tool calls if present
+    if (message?.tool_calls?.length) {
+      return {
+        output: JSON.stringify(message.tool_calls),
+        tokenUsage: {
+          prompt: result?.usage?.prompt_tokens,
+          completion: result?.usage?.completion_tokens,
+          total: result?.usage?.total_tokens,
+        },
+      };
+    }
+
+    return {
+      output: message?.content || '',
+      tokenUsage: {
+        prompt: result?.usage?.prompt_tokens,
+        completion: result?.usage?.completion_tokens,
+        total: result?.usage?.total_tokens,
+      },
+    };
   }
 }

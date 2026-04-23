@@ -20,6 +20,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
+import { mockProcessEnv } from '../../util/utils';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -55,7 +56,7 @@ const nodeHttpHandlerFactory = vi.hoisted(() => {
 });
 
 const credentialProviderSsoFactory = vi.hoisted(() => ({
-  mockSSOProvider: vi.fn(),
+  fromSSO: vi.fn(() => 'sso-provider'),
 }));
 
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
@@ -74,6 +75,10 @@ vi.mock('@smithy/node-http-handler', () => ({
 }));
 
 const NodeHttpHandlerMock = vi.mocked(NodeHttpHandler);
+
+vi.mock('@aws-sdk/credential-provider-sso', () => ({
+  fromSSO: credentialProviderSsoFactory.fromSSO,
+}));
 
 // Preserve proxy variables so they can be restored after each test. These are
 // set in the container environment and can influence proxy-related logic in the
@@ -118,14 +123,16 @@ class TestBedrockProvider extends AwsBedrockGenericProvider {
 describe('AwsBedrockGenericProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.AWS_BEDROCK_MAX_RETRIES;
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    credentialProviderSsoFactory.fromSSO.mockReset();
+    credentialProviderSsoFactory.fromSSO.mockReturnValue('sso-provider');
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     // Ensure proxy environment variables do not force proxy-specific code paths
     // when running tests. The container sets HTTP_PROXY by default which causes
     // getBedrockInstance to require optional dependencies that are not
     // installed in the test environment.
-    process.env.HTTP_PROXY = '';
-    process.env.HTTPS_PROXY = '';
+    mockProcessEnv({ HTTP_PROXY: '' });
+    mockProcessEnv({ HTTPS_PROXY: '' });
 
     nodeHttpHandlerFactory.setHandlerFactory(function () {
       return { handle: vi.fn() };
@@ -134,9 +141,17 @@ describe('AwsBedrockGenericProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
-    process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
-    process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
+    if (ORIGINAL_HTTP_PROXY === undefined) {
+      mockProcessEnv({ HTTP_PROXY: undefined });
+    } else {
+      mockProcessEnv({ HTTP_PROXY: ORIGINAL_HTTP_PROXY });
+    }
+    if (ORIGINAL_HTTPS_PROXY === undefined) {
+      mockProcessEnv({ HTTPS_PROXY: undefined });
+    } else {
+      mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
+    }
   });
 
   it('should create Bedrock instance without proxy settings', async () => {
@@ -147,10 +162,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
   });
 
@@ -168,10 +186,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
       credentials: {
         accessKeyId: 'test-access-key',
         secretAccessKey: 'test-secret-key',
@@ -187,10 +208,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
     expect(BedrockRuntimeMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ credentials: expect.anything() }),
@@ -198,7 +222,7 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
-    process.env.AWS_BEDROCK_MAX_RETRIES = '10';
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '10' });
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
         super('test-model', { config: { region: 'us-east-1' } });
@@ -206,10 +230,13 @@ describe('AwsBedrockGenericProvider', () => {
     })();
     await provider.getBedrockInstance();
 
+    expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
+      requestHandler,
     });
   });
 
@@ -235,16 +262,17 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
   });
 
   it('should create custom request handler when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
-    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
     const mockHandler = {
       handle: vi.fn(),
     };
@@ -261,14 +289,15 @@ describe('AwsBedrockGenericProvider', () => {
     await provider.getBedrockInstance();
 
     expect(NodeHttpHandlerMock).toHaveBeenCalled();
+    const requestHandler = NodeHttpHandlerMock.mock.results.at(-1)?.value;
     expect(BedrockRuntimeMock).toHaveBeenCalledWith({
       region: 'us-east-1',
       retryMode: 'adaptive',
       maxAttempts: 10,
-      requestHandler: expect.any(Object),
+      requestHandler,
     });
 
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
   });
 
   it('should add Authorization header with Bearer token to requests when using API key', async () => {
@@ -594,6 +623,35 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.system).toBe('You are a helpful assistant.');
     });
 
+    it('omits temperature for Claude Opus 4.7 on Bedrock invokeModel path', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0.5,
+      };
+      // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-7',
+      );
+      expect(params.temperature).toBeUndefined();
+    });
+
+    it('still forwards temperature for Claude Opus 4.6 on Bedrock invokeModel (regression)', async () => {
+      const config: BedrockClaudeMessagesCompletionOptions = {
+        region: 'us-east-1',
+        temperature: 0,
+      };
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        config,
+        'hi',
+        undefined,
+        'us.anthropic.claude-opus-4-6-v1',
+      );
+      expect(params.temperature).toBe(0);
+    });
+
     it('should convert lone system message to user message', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
@@ -741,24 +799,14 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return SSO credential provider when profile is specified', async () => {
-      vi.mock('@aws-sdk/credential-provider-sso', async (importOriginal) => {
-        return {
-          ...(await importOriginal()),
-
-          fromSSO: (config: any) => {
-            credentialProviderSsoFactory.mockSSOProvider();
-            expect(config).toEqual({ profile: 'test-profile' });
-            return 'sso-provider';
-          },
-        };
-      });
-
       const provider = new TestBedrockProvider({
         profile: 'test-profile',
       });
 
       const credentials = await provider.getCredentials();
-      expect(credentialProviderSsoFactory.mockSSOProvider).toHaveBeenCalledWith();
+      expect(credentialProviderSsoFactory.fromSSO).toHaveBeenCalledWith({
+        profile: 'test-profile',
+      });
       expect(credentials).toBe('sso-provider');
     });
 
@@ -777,21 +825,21 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
       const provider = new TestBedrockProvider({});
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
-      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     });
 
     it('should prioritize config apiKey over environment variable', async () => {
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
       const provider = new TestBedrockProvider({
         apiKey: 'test-config-api-key',
       });
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
-      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     });
 
     it('should prioritize explicit credentials over API key', async () => {
@@ -828,10 +876,10 @@ describe('addConfigParam', () => {
 
   it('should add env value if config value is not provided', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY);
     expect(params.key).toBe('envValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should add default value if neither config nor env value is provided', async () => {
@@ -842,26 +890,26 @@ describe('addConfigParam', () => {
 
   it('should prioritize config value over env and default values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', 'configValue', process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('configValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should prioritize env value over default value if config value is not provided', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('envValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should parse env value if default value is a number', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '42';
+    mockProcessEnv({ TEST_ENV_KEY: '42' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(42);
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should handle undefined config, env, and default values gracefully', async () => {
@@ -872,18 +920,18 @@ describe('addConfigParam', () => {
 
   it('should correctly parse non-number string values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'nonNumberString';
+    mockProcessEnv({ TEST_ENV_KEY: 'nonNumberString' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(0);
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should correctly parse empty string values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '';
+    mockProcessEnv({ TEST_ENV_KEY: '' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should handle env value not set', async () => {
@@ -908,10 +956,10 @@ describe('addConfigParam', () => {
 
   it('should handle special characters in env values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '!@#$%^&*()_+';
+    mockProcessEnv({ TEST_ENV_KEY: '!@#$%^&*()_+' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('!@#$%^&*()_+');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 });
 
@@ -2255,9 +2303,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
     });
 
     it('should respect environment variables', async () => {
-      process.env.AWS_BEDROCK_MAX_TOKENS = '2000';
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
-      process.env.AWS_BEDROCK_TOP_P = '0.9';
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: '2000' });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.5' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.9' });
 
       const config = {};
       const prompt = 'Test with env vars';
@@ -2271,9 +2319,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
         top_p: 0.9,
       });
 
-      delete process.env.AWS_BEDROCK_MAX_TOKENS;
-      delete process.env.AWS_BEDROCK_TEMPERATURE;
-      delete process.env.AWS_BEDROCK_TOP_P;
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
     });
   });
 
@@ -2434,6 +2482,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
       });
     });
 
+    it('should prefer API-reported total_tokens when it differs from prompt + completion', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 25,
+          completion_tokens: 50,
+          total_tokens: 99,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 25,
+        completion: 50,
+        total: 99,
+        numRequests: 1,
+      });
+    });
+
     it('should return undefined token counts when not provided by the API', async () => {
       const mockResponse = {
         outputs: [{ text: 'This is a generated response' }],
@@ -2490,6 +2556,24 @@ describe('BEDROCK_MODEL token counting functionality', () => {
         prompt: 30,
         completion: 45,
         total: 75, // 30 + 45 = 75, not "3045"
+        numRequests: 1,
+      });
+    });
+
+    it('should prefer API-reported total_tokens when chat completion totals differ', async () => {
+      const mockResponse = {
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 45,
+          total_tokens: 101,
+        },
+      };
+
+      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+      expect(result).toEqual({
+        prompt: 30,
+        completion: 45,
+        total: 101,
         numRequests: 1,
       });
     });
@@ -2872,6 +2956,24 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
+  it('should map Claude Opus 4.7 models correctly', async () => {
+    // Base model ID (no -v1 suffix for 4.7+ — verified via `aws bedrock list-foundation-models`)
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+
+    // Cross-region inference profiles (verified via `aws bedrock list-inference-profiles`).
+    // Opus 4.7 uses the newer `jp.`/`global.` scheme instead of the older `apac.` prefix.
+    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-7']).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+
+    // Sanity check: the -v1 suffix variant (which Anthropic/AWS docs do not publish) is NOT
+    // registered. Regressing this would silently route requests through the generic fallback.
+    expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7-v1']).toBeUndefined();
+  });
+
   it('should map Nova 2 models correctly', async () => {
     // Base model ID
     expect(AWS_BEDROCK_MODELS['amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
@@ -3139,8 +3241,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
     });
 
     it('should use environment variables for defaults', async () => {
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
-      process.env.AWS_BEDROCK_TOP_P = '0.8';
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.5' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.8' });
 
       const config = {};
       const prompt = 'Test prompt';
@@ -3150,8 +3252,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
       expect(result.temperature).toBe(0.5);
       expect(result.top_p).toBe(0.8);
 
-      delete process.env.AWS_BEDROCK_TEMPERATURE;
-      delete process.env.AWS_BEDROCK_TOP_P;
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
     });
   });
 

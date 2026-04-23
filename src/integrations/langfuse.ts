@@ -55,8 +55,12 @@ export async function getPrompt(
     }
   }
 
-  // biome-ignore lint/suspicious/noExplicitAny: FIXME: this is almost certainly a bug.  According to langfuse, this is supposed to be Record<string, string>.
-  const compiledPrompt = prompt.compile(vars as any);
+  // Convert VarValue to strings since Langfuse compile() expects Record<string, string>
+  const stringVars: Record<string, string> = {};
+  for (const [key, value] of Object.entries(vars)) {
+    stringVars[key] = typeof value === 'string' ? value : JSON.stringify(value);
+  }
+  const compiledPrompt = prompt.compile(stringVars);
   if (typeof compiledPrompt !== 'string') {
     return JSON.stringify(compiledPrompt);
   }

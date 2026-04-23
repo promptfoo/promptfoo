@@ -2,11 +2,12 @@ import React from 'react';
 
 import { Label } from '@app/components/ui/label';
 import { Switch } from '@app/components/ui/switch';
-import type { ProviderOptions } from '@promptfoo/types';
+
+import type { HttpProviderOptions } from '../../../types';
 
 interface TokenEstimationTabProps {
-  selectedTarget: ProviderOptions;
-  updateCustomTarget: (field: string, value: any) => void;
+  selectedTarget: HttpProviderOptions;
+  updateCustomTarget: (field: string, value: unknown) => void;
 }
 
 const TokenEstimationTab: React.FC<TokenEstimationTabProps> = ({
@@ -31,12 +32,12 @@ const TokenEstimationTab: React.FC<TokenEstimationTabProps> = ({
       <div className="flex items-center gap-2">
         <Switch
           id="token-estimation"
-          checked={!!selectedTarget.config.tokenEstimation?.enabled}
+          checked={!!selectedTarget.config?.tokenEstimation?.enabled}
           onCheckedChange={(checked) => {
             if (checked) {
               updateCustomTarget('tokenEstimation', {
                 enabled: true,
-                multiplier: selectedTarget.config.tokenEstimation?.multiplier ?? 1.3,
+                multiplier: selectedTarget.config?.tokenEstimation?.multiplier ?? 1.3,
               });
             } else {
               updateCustomTarget('tokenEstimation', { enabled: false });

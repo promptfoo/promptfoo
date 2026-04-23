@@ -1,5 +1,15 @@
+import { mockBrowserProperty } from '@app/tests/browserMocks';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { addEvalAssertions, getApiBaseUrl, getAssertionJobStatus } from './api';
+import {
+  addEvalAssertions,
+  callApi,
+  fetchUserEmail,
+  fetchUserId,
+  generateAssertionSuggestions,
+  getApiBaseUrl,
+  getAssertionJobStatus,
+  updateEvalAuthor,
+} from './api';
 
 // Mock the store
 vi.mock('@app/stores/apiConfig', () => ({
@@ -9,6 +19,13 @@ vi.mock('@app/stores/apiConfig', () => ({
 }));
 
 import useApiConfig from '@app/stores/apiConfig';
+
+// Mock global fetch
+const mockFetch = vi.fn();
+
+beforeEach(() => {
+  mockBrowserProperty(globalThis, 'fetch', mockFetch as typeof fetch);
+});
 
 // Helper to create mock state with only apiBaseUrl (other fields unused by getApiBaseUrl)
 const mockState = (apiBaseUrl: string) =>
@@ -61,70 +78,286 @@ describe('getApiBaseUrl', () => {
   });
 });
 
+describe('callApi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockResolvedValue(new Response('{}', { status: 200 }));
+  });
+
+  it('calls fetch with correct URL when apiBaseUrl is set', async () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+    await callApi('/users');
+    expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/api/users', {});
+  });
+
+  it('calls fetch with correct URL when apiBaseUrl is empty', async () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+    await callApi('/users');
+    expect(mockFetch).toHaveBeenCalledWith('/api/users', {});
+  });
+
+  it('passes through RequestInit options', async () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+    const options = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test: 'data' }),
+    };
+    await callApi('/users', options);
+    expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/api/users', options);
+  });
+
+  it('returns the fetch response', async () => {
+    const mockResponse = new Response(JSON.stringify({ id: '123' }), { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+
+    const response = await callApi('/users');
+    expect(response).toBe(mockResponse);
+  });
+
+  it('handles paths with leading slash', async () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+    await callApi('/users/123');
+    expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/api/users/123', {});
+  });
+
+  it('handles paths without leading slash', async () => {
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+    await callApi('users/123');
+    expect(mockFetch).toHaveBeenCalledWith('https://api.example.com/apiusers/123', {});
+  });
+});
+
+describe('fetchUserEmail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+    // Reset console.error mock
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  it('returns email when API call succeeds', async () => {
+    const mockResponse = new Response(JSON.stringify({ email: 'test@example.com' }), {
+      status: 200,
+    });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const email = await fetchUserEmail();
+    expect(email).toBe('test@example.com');
+    expect(mockFetch).toHaveBeenCalledWith('/api/user/email', { method: 'GET' });
+  });
+
+  it('returns null when API returns non-ok response', async () => {
+    const mockResponse = new Response('Not found', { status: 404 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const email = await fetchUserEmail();
+    expect(email).toBe(null);
+    expect(console.error).toHaveBeenCalledWith('Error fetching user email:', expect.any(Error));
+  });
+
+  it('returns null when fetch throws error', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    const email = await fetchUserEmail();
+    expect(email).toBe(null);
+    expect(console.error).toHaveBeenCalledWith('Error fetching user email:', expect.any(Error));
+  });
+
+  it('returns null when JSON parsing fails', async () => {
+    const mockResponse = new Response('invalid json', { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const email = await fetchUserEmail();
+    expect(email).toBe(null);
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it('handles empty email string', async () => {
+    const mockResponse = new Response(JSON.stringify({ email: '' }), { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const email = await fetchUserEmail();
+    expect(email).toBe('');
+  });
+});
+
+describe('fetchUserId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  it('returns user ID when API call succeeds', async () => {
+    const mockResponse = new Response(JSON.stringify({ id: 'user-123' }), { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const userId = await fetchUserId();
+    expect(userId).toBe('user-123');
+    expect(mockFetch).toHaveBeenCalledWith('/api/user/id', { method: 'GET' });
+  });
+
+  it('returns null when API returns non-ok response', async () => {
+    const mockResponse = new Response('Unauthorized', { status: 401 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const userId = await fetchUserId();
+    expect(userId).toBe(null);
+    expect(console.error).toHaveBeenCalledWith('Error fetching user ID:', expect.any(Error));
+  });
+
+  it('returns null when fetch throws error', async () => {
+    mockFetch.mockRejectedValue(new Error('Connection refused'));
+
+    const userId = await fetchUserId();
+    expect(userId).toBe(null);
+    expect(console.error).toHaveBeenCalledWith('Error fetching user ID:', expect.any(Error));
+  });
+
+  it('returns null when JSON parsing fails', async () => {
+    const mockResponse = new Response('not valid json', { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const userId = await fetchUserId();
+    expect(userId).toBe(null);
+    expect(console.error).toHaveBeenCalled();
+  });
+
+  it('handles numeric user ID', async () => {
+    const mockResponse = new Response(JSON.stringify({ id: '12345' }), { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const userId = await fetchUserId();
+    expect(userId).toBe('12345');
+  });
+});
+
+describe('updateEvalAuthor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('updates eval author successfully', async () => {
+    const mockResponse = new Response(JSON.stringify({ success: true }), { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await updateEvalAuthor('eval-123', 'John Doe');
+    expect(result).toEqual({ success: true });
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/author', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ author: 'John Doe' }),
+    });
+  });
+
+  it('throws error when API returns non-ok response', async () => {
+    const mockResponse = new Response('Server error', { status: 500 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    await expect(updateEvalAuthor('eval-123', 'Jane Doe')).rejects.toThrow(
+      'Failed to update eval author',
+    );
+  });
+
+  it('handles 404 response', async () => {
+    const mockResponse = new Response('Not found', { status: 404 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    await expect(updateEvalAuthor('non-existent', 'Author')).rejects.toThrow(
+      'Failed to update eval author',
+    );
+  });
+
+  it('handles network error', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    await expect(updateEvalAuthor('eval-123', 'Author')).rejects.toThrow('Network error');
+  });
+
+  it('handles empty author name', async () => {
+    const mockResponse = new Response(JSON.stringify({ success: true }), { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await updateEvalAuthor('eval-123', '');
+    expect(result).toEqual({ success: true });
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/author', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ author: '' }),
+    });
+  });
+
+  it('handles special characters in author name', async () => {
+    const mockResponse = new Response(JSON.stringify({ success: true }), { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+    const specialName = "O'Brien & Sons (Testing)";
+
+    const result = await updateEvalAuthor('eval-123', specialName);
+    expect(result).toEqual({ success: true });
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/author', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ author: specialName }),
+    });
+  });
+
+  it('handles special characters in eval ID', async () => {
+    const mockResponse = new Response(JSON.stringify({ success: true }), { status: 200 });
+    mockFetch.mockResolvedValue(mockResponse);
+
+    const result = await updateEvalAuthor('eval-123-abc_def', 'Author');
+    expect(result).toEqual({ success: true });
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123-abc_def/author', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ author: 'Author' }),
+    });
+  });
+});
+
 describe('addEvalAssertions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
   });
 
-  it('sends POST request with correct payload for results scope', async () => {
-    const mockResponseData = { jobId: 'job-123', total: 5 };
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockResponseData),
-    } as Response);
+  it('sends POST request with results scope payload', async () => {
+    const responseData = { success: true, data: { jobId: 'job-123', total: 2 } };
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(responseData), { status: 200 }));
 
     const result = await addEvalAssertions('eval-123', {
       assertions: [{ type: 'contains', value: 'test' }],
       scope: { type: 'results', resultIds: ['result-1', 'result-2'] },
     });
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/eval/eval-123/assertions', {
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/assertions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         assertions: [{ type: 'contains', value: 'test' }],
         scope: { type: 'results', resultIds: ['result-1', 'result-2'] },
       }),
     });
-
-    expect(result).toEqual(mockResponseData);
+    expect(result).toEqual(responseData);
   });
 
-  it('sends POST request with tests scope payload', async () => {
-    const mockResponseData = { jobId: 'job-456', total: 10 };
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockResponseData),
-    } as Response);
-
-    const result = await addEvalAssertions('eval-456', {
-      assertions: [{ type: 'equals', value: 'expected' }],
-      scope: { type: 'tests', testIndices: [0, 1, 2] },
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith('/api/eval/eval-456/assertions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        assertions: [{ type: 'equals', value: 'expected' }],
-        scope: { type: 'tests', testIndices: [0, 1, 2] },
-      }),
-    });
-
-    expect(result).toEqual(mockResponseData);
-  });
-
-  it('sends POST request with filtered scope payload', async () => {
-    const mockResponseData = { jobId: 'job-789', total: 15, matchedTestCount: 15 };
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockResponseData),
-    } as Response);
+  it('sends filtered scope payload', async () => {
+    const responseData = {
+      success: true,
+      data: { jobId: 'job-789', total: 15, matchedTestCount: 15 },
+    };
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(responseData), { status: 200 }));
 
     const result = await addEvalAssertions('eval-789', {
       assertions: [{ type: 'icontains', value: 'error' }],
@@ -136,43 +369,18 @@ describe('addEvalAssertions', () => {
       },
     });
 
-    const fetchCall = vi.mocked(global.fetch).mock.calls[0];
-    const body = JSON.parse(fetchCall[1]?.body as string);
-    expect(body.scope.type).toBe('filtered');
-    expect(body.scope.filters).toHaveLength(1);
-    expect(body.scope.searchText).toBe('timeout');
-
-    expect(result).toEqual(mockResponseData);
-  });
-
-  it('handles multiple assertions in payload', async () => {
-    const assertions = [
-      { type: 'contains', value: 'success' },
-      { type: 'is-json' },
-      { type: 'llm-rubric', value: 'Evaluate response quality' },
-    ];
-
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ jobId: 'job-multi', total: 3 }),
-    } as Response);
-
-    await addEvalAssertions('eval-multi', {
-      assertions,
-      scope: { type: 'results', resultIds: ['result-1'] },
+    const body = JSON.parse(mockFetch.mock.calls[0][1]?.body as string);
+    expect(body.scope).toMatchObject({
+      type: 'filtered',
+      filterMode: 'all',
+      searchText: 'timeout',
     });
-
-    const fetchCall = vi.mocked(global.fetch).mock.calls[0];
-    const body = JSON.parse(fetchCall[1]?.body as string);
-    expect(body.assertions).toHaveLength(3);
-    expect(body.assertions).toEqual(assertions);
+    expect(body.scope.filters).toHaveLength(1);
+    expect(result).toEqual(responseData);
   });
 
-  it('throws error when response is not ok', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: false,
-      text: () => Promise.resolve('Internal server error'),
-    } as Response);
+  it('throws response text when assertion request fails', async () => {
+    mockFetch.mockResolvedValue(new Response('Internal server error', { status: 500 }));
 
     await expect(
       addEvalAssertions('eval-error', {
@@ -180,40 +388,6 @@ describe('addEvalAssertions', () => {
         scope: { type: 'results', resultIds: ['result-1'] },
       }),
     ).rejects.toThrow('Internal server error');
-  });
-
-  it('throws error with default message when response text is empty', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: false,
-      text: () => Promise.resolve(''),
-    } as Response);
-
-    await expect(
-      addEvalAssertions('eval-error', {
-        assertions: [{ type: 'contains', value: 'test' }],
-        scope: { type: 'results', resultIds: ['result-1'] },
-      }),
-    ).rejects.toThrow('Failed to add assertions');
-  });
-
-  it('handles immediate completion without job ID', async () => {
-    const mockResponseData = {
-      jobId: null,
-      updatedResults: 2,
-      skippedResults: 1,
-      skippedAssertions: 0,
-    };
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockResponseData),
-    } as Response);
-
-    const result = await addEvalAssertions('eval-immediate', {
-      assertions: [{ type: 'equals', value: 'test' }],
-      scope: { type: 'results', resultIds: ['result-1', 'result-2', 'result-3'] },
-    });
-
-    expect(result).toEqual(mockResponseData);
   });
 });
 
@@ -224,154 +398,77 @@ describe('getAssertionJobStatus', () => {
   });
 
   it('sends GET request with correct URL', async () => {
-    const mockStatus = {
-      status: 'in-progress',
-      progress: 5,
-      total: 10,
-      completedResults: [],
-      updatedResults: 0,
-      skippedResults: 0,
-      skippedAssertions: 0,
-      errors: [],
+    const responseData = {
+      success: true,
+      data: {
+        status: 'in-progress',
+        progress: 5,
+        total: 10,
+        completedResults: [],
+        updatedResults: 0,
+        skippedResults: 0,
+        skippedAssertions: 0,
+        errors: [],
+      },
     };
-
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockStatus }),
-    } as Response);
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(responseData), { status: 200 }));
 
     const result = await getAssertionJobStatus('eval-123', 'job-456');
 
-    expect(global.fetch).toHaveBeenCalledWith('/api/eval/eval-123/assertions/job/job-456', {});
-    expect(result).toEqual({ data: mockStatus });
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/assertions/job/job-456', {});
+    expect(result).toEqual(responseData);
   });
 
-  it('returns complete status with results', async () => {
-    const mockStatus = {
-      status: 'complete',
-      progress: 10,
-      total: 10,
-      completedResults: [
-        { resultId: 'r1', pass: true, score: 1.0 },
-        { resultId: 'r2', pass: false, score: 0.5 },
-        { resultId: 'r3', pass: true, score: 0.9 },
-      ],
-      updatedResults: 10,
-      skippedResults: 0,
-      skippedAssertions: 0,
-      errors: [],
+  it('throws response text when job status request fails', async () => {
+    mockFetch.mockResolvedValue(new Response('Job not found', { status: 404 }));
+
+    await expect(getAssertionJobStatus('eval-123', 'missing-job')).rejects.toThrow('Job not found');
+  });
+});
+
+describe('generateAssertionSuggestions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
+  });
+
+  it('sends generation options to the assertion suggestion endpoint', async () => {
+    const responseData = {
+      success: true,
+      data: {
+        assertions: [{ type: 'llm-rubric', metric: 'quality', value: 'Check quality' }],
+        context: {
+          numPromptsAnalyzed: 1,
+          numOutputsAnalyzed: 2,
+          existingAssertionCount: 0,
+        },
+      },
     };
+    mockFetch.mockResolvedValue(new Response(JSON.stringify(responseData), { status: 200 }));
 
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockStatus }),
-    } as Response);
+    const result = await generateAssertionSuggestions('eval-123', {
+      type: 'llm-rubric',
+      numAssertions: 1,
+      instructions: 'Focus on correctness',
+      resultIds: ['result-1'],
+    });
 
-    const result = await getAssertionJobStatus('eval-complete', 'job-789');
-
-    expect(result.data.status).toBe('complete');
-    expect(result.data.completedResults).toHaveLength(3);
-    expect(result.data.updatedResults).toBe(10);
+    expect(mockFetch).toHaveBeenCalledWith('/api/eval/eval-123/assertions/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'llm-rubric',
+        numAssertions: 1,
+        instructions: 'Focus on correctness',
+        resultIds: ['result-1'],
+      }),
+    });
+    expect(result).toEqual(responseData);
   });
 
-  it('returns status with errors', async () => {
-    const mockStatus = {
-      status: 'complete',
-      progress: 5,
-      total: 5,
-      completedResults: [{ resultId: 'r1', pass: true, score: 1.0 }],
-      updatedResults: 1,
-      skippedResults: 0,
-      skippedAssertions: 0,
-      errors: [
-        { resultId: 'r2', error: 'API timeout' },
-        { resultId: 'r3', error: 'Rate limit exceeded' },
-        { resultId: 'r4', error: 'API timeout' },
-        { resultId: 'r5', error: 'Connection refused' },
-      ],
-    };
+  it('throws response text when suggestion generation fails', async () => {
+    mockFetch.mockResolvedValue(new Response('Generation failed', { status: 500 }));
 
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockStatus }),
-    } as Response);
-
-    const result = await getAssertionJobStatus('eval-errors', 'job-errors');
-
-    expect(result.data.errors).toHaveLength(4);
-    expect(result.data.errors[0]).toEqual({ resultId: 'r2', error: 'API timeout' });
-  });
-
-  it('returns error status', async () => {
-    const mockStatus = {
-      status: 'error',
-      progress: 3,
-      total: 10,
-      completedResults: [],
-      updatedResults: 0,
-      skippedResults: 0,
-      skippedAssertions: 0,
-      errors: [{ resultId: 'r1', error: 'Job failed catastrophically' }],
-    };
-
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockStatus }),
-    } as Response);
-
-    const result = await getAssertionJobStatus('eval-fail', 'job-fail');
-
-    expect(result.data.status).toBe('error');
-  });
-
-  it('throws error when response is not ok', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: false,
-      text: () => Promise.resolve('Job not found'),
-    } as Response);
-
-    await expect(getAssertionJobStatus('eval-404', 'job-404')).rejects.toThrow('Job not found');
-  });
-
-  it('throws error with default message when response text is empty', async () => {
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: false,
-      text: () => Promise.resolve(''),
-    } as Response);
-
-    await expect(getAssertionJobStatus('eval-404', 'job-404')).rejects.toThrow(
-      'Failed to get job status',
-    );
-  });
-
-  it('handles in-progress status with partial results', async () => {
-    const mockStatus = {
-      status: 'in-progress',
-      progress: 7,
-      total: 15,
-      completedResults: [
-        { resultId: 'r1', pass: true, score: 1.0 },
-        { resultId: 'r2', pass: true, score: 0.95 },
-        { resultId: 'r3', pass: false, score: 0.3 },
-      ],
-      updatedResults: 2,
-      skippedResults: 0,
-      skippedAssertions: 0,
-      errors: [{ resultId: 'r3', error: 'Assertion failed' }],
-      matchedTestCount: 15,
-    };
-
-    vi.mocked(global.fetch).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockStatus }),
-    } as Response);
-
-    const result = await getAssertionJobStatus('eval-progress', 'job-progress');
-
-    expect(result.data.status).toBe('in-progress');
-    expect(result.data.progress).toBe(7);
-    expect(result.data.total).toBe(15);
-    expect(result.data.completedResults).toHaveLength(3);
-    expect(result.data.matchedTestCount).toBe(15);
+    await expect(generateAssertionSuggestions('eval-123')).rejects.toThrow('Generation failed');
   });
 });

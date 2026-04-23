@@ -541,7 +541,9 @@ export default function PosthocAssertionsForm({
                           </Label>
                           <Textarea
                             id={`assert-transform-${index}`}
-                            value={assertion.transform || ''}
+                            value={
+                              typeof assertion.transform === 'string' ? assertion.transform : ''
+                            }
                             onChange={(e) => updateAssertion(index, { transform: e.target.value })}
                             placeholder="Optional transform expression"
                             className="min-h-12 text-sm"
@@ -553,7 +555,11 @@ export default function PosthocAssertionsForm({
                           </Label>
                           <Textarea
                             id={`assert-context-transform-${index}`}
-                            value={assertion.contextTransform || ''}
+                            value={
+                              typeof assertion.contextTransform === 'string'
+                                ? assertion.contextTransform
+                                : ''
+                            }
                             onChange={(e) =>
                               updateAssertion(index, { contextTransform: e.target.value })
                             }
@@ -567,7 +573,9 @@ export default function PosthocAssertionsForm({
                             defaultValue={
                               assertion.config ? JSON.stringify(assertion.config, null, 2) : ''
                             }
-                            onChange={(value) => updateAssertion(index, { config: value as any })}
+                            onChange={(value) =>
+                              updateAssertion(index, { config: value as Record<string, unknown> })
+                            }
                           />
                         </div>
                       </div>
