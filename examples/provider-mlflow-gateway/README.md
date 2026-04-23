@@ -2,6 +2,12 @@
 
 This example demonstrates how to use [MLflow AI Gateway](https://mlflow.org/docs/latest/genai/governance/ai-gateway/) as an LLM provider in promptfoo.
 
+To get started:
+
+```bash
+npx promptfoo@latest init --example provider-mlflow-gateway
+```
+
 ## Setup
 
 1. Install and start MLflow:
