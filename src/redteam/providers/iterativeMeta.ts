@@ -363,7 +363,11 @@ export async function runMetaAgentRedteam({
       | undefined;
     if (currentInputVars && inputs) {
       if (shouldGenerateRemote()) {
-        materializedInputVars = buildRemoteMaterializedInputVariables(agentResp, currentInputVars);
+        materializedInputVars = buildRemoteMaterializedInputVariables(
+          agentResp,
+          currentInputVars,
+          inputs,
+        );
       } else {
         materializedInputVars = await materializeInputVariablesWithMetadata(
           currentInputVars,

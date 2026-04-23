@@ -388,6 +388,7 @@ export async function runRedteamConversation({
         materializedInputVars = buildRemoteMaterializedInputVariables(
           redteamResp,
           currentInputVars,
+          inputs,
         );
       } else {
         materializedInputVars = await materializeInputVariablesWithMetadata(

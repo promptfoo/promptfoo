@@ -4,6 +4,8 @@ import {
   buildRemoteMaterializedInputVariables,
 } from '../../src/redteam/remoteMaterialization';
 
+import type { Inputs } from '../../src/types/shared';
+
 describe('remoteMaterialization', () => {
   it('uses server materialized vars and metadata when provided', () => {
     const result = buildRemoteMaterializedInputVariables(
@@ -48,6 +50,39 @@ describe('remoteMaterialization', () => {
       {
         document: 'fallback document',
       },
+    );
+
+    expect(result.vars).toEqual({
+      document: 'fallback document',
+    });
+    expect(result.metadata).toEqual({
+      document: {
+        injectionPlacement: 'comment',
+      },
+    });
+  });
+
+  it('filters fallback vars to declared input keys when remote materialized vars are missing', () => {
+    const inputs = {
+      document: {
+        description: 'Uploaded planning document',
+        type: 'docx',
+      },
+    } satisfies Inputs;
+
+    const result = buildRemoteMaterializedInputVariables(
+      {
+        inputMaterialization: {
+          document: {
+            injectionPlacement: 'comment',
+          },
+        },
+      },
+      {
+        document: 'fallback document',
+        systemPromptLeak: 'unexpected override',
+      },
+      inputs,
     );
 
     expect(result.vars).toEqual({

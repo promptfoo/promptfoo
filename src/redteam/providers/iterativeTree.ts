@@ -1150,7 +1150,8 @@ async function runRedteamConversation({
         if (remoteBestNodeMaterialization.materializationHandled) {
           Object.assign(
             finalUpdatedVars,
-            buildRemoteMaterializedInputVariables(remoteBestNodeMaterialization, parsed).vars,
+            buildRemoteMaterializedInputVariables(remoteBestNodeMaterialization, parsed, inputs)
+              .vars,
           );
         }
       } else {

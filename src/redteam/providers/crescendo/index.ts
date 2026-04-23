@@ -982,6 +982,7 @@ export class CrescendoProvider implements ApiProvider {
         materializedInputVars = buildRemoteMaterializedInputVariables(
           remoteMaterialization ?? {},
           currentInputVars,
+          this.config.inputs,
         );
       } else {
         materializedInputVars = await materializeInputVariablesWithMetadata(

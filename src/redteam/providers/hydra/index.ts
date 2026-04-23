@@ -430,6 +430,7 @@ export class HydraProvider implements ApiProvider {
           materializedInputVars = buildRemoteMaterializedInputVariables(
             agentResp,
             currentInputVars,
+            this.config.inputs,
           );
         } else {
           materializedInputVars = await materializeInputVariablesWithMetadata(

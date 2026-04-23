@@ -20,9 +20,25 @@ export interface RemoteMaterializationResponse {
   materializedVars?: Record<string, string>;
 }
 
+function filterFallbackVarsToInputs(
+  fallbackVars: Record<string, string>,
+  inputs: Inputs | undefined,
+): Record<string, string> {
+  if (!inputs || Object.keys(inputs).length === 0) {
+    return fallbackVars;
+  }
+
+  return Object.fromEntries(
+    Object.entries(fallbackVars).filter(([key]) =>
+      Object.prototype.hasOwnProperty.call(inputs, key),
+    ),
+  );
+}
+
 export function buildRemoteMaterializedInputVariables(
   response: RemoteMaterializationResponse,
   fallbackVars: Record<string, string>,
+  inputs?: Inputs,
 ): MaterializedInputVariablesResult {
   return {
     ...(response.inputMaterialization
@@ -30,7 +46,7 @@ export function buildRemoteMaterializedInputVariables(
           metadata: response.inputMaterialization as Record<string, MaterializedInputMetadata>,
         }
       : {}),
-    vars: response.materializedVars ?? fallbackVars,
+    vars: response.materializedVars ?? filterFallbackVarsToInputs(fallbackVars, inputs),
   };
 }
 
