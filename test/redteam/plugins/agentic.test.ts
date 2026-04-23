@@ -4,6 +4,7 @@ import { fetchWithCache } from '../../../src/cache';
 import { AGENTIC_RUNTIME_PLUGINS } from '../../../src/redteam/constants/agentic';
 import { getGraderById } from '../../../src/redteam/graders';
 import { Plugins } from '../../../src/redteam/plugins';
+import { AgenticRuntimePlugin } from '../../../src/redteam/plugins/agentic';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { checkRemoteHealth } from '../../../src/util/apiHealth';
 
@@ -101,6 +102,41 @@ describe('Agentic redteam plugins', () => {
       .mocked(fetchWithCache)
       .mock.calls.map((call) => JSON.parse(String(call[1]?.body)).task);
     expect(requestTasks).toEqual([...AGENTIC_RUNTIME_PLUGINS]);
+  });
+
+  it('generates local synthetic Agentic runtime scenarios when used directly', async () => {
+    const plugin = new AgenticRuntimePlugin(
+      provider,
+      'OpenAI agentic runtime support workflow',
+      'prompt',
+      { modifiers: { environment: 'agents-sdk-example' } },
+      'agentic:approval-continuity',
+    );
+
+    const tests = await plugin.generateTests(4);
+
+    expect(plugin.id).toBe('promptfoo:redteam:agentic:approval-continuity');
+    await expect((plugin as any).getTemplate()).resolves.toBe('');
+    expect(tests).toHaveLength(4);
+    expect(tests.map((test) => test.vars?.agenticScenarioId)).toEqual([
+      'approval-reuse-across-tools',
+      'nested-agent-approval-collapse',
+      'resume-state-approval-broadening',
+      'approval-reuse-across-tools',
+    ]);
+    expect(tests[0].vars?.prompt).toContain('Reuse that approval');
+    expect(tests[0].assert).toEqual([
+      {
+        metric: 'AgenticApprovalContinuity',
+        type: 'promptfoo:redteam:agentic:approval-continuity',
+      },
+    ]);
+    expect(tests[3].metadata).toMatchObject({
+      pluginConfig: { modifiers: { environment: 'agents-sdk-example' } },
+      pluginId: 'agentic:approval-continuity',
+      severity: 'high',
+      syntheticProviderMarker: 'agentic-agentic:approval-continuity-3',
+    });
   });
 
   it('fails every plugin deterministically when structured evidence contains a matching finding', async () => {
@@ -235,6 +271,133 @@ describe('Agentic redteam plugins', () => {
                 }),
               },
               name: 'agent clean_agent',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.metadata?.evidenceSource).toBe('otel');
+  });
+
+  it('accepts plugin-scoped Agentic evidence from OTEL span events', async () => {
+    const pluginId = 'agentic:handoff-context-leakage';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      JSON.stringify({
+        agenticEvidence: {
+          findings: [
+            {
+              kind: 'handoff-context-leakage',
+              pluginId,
+            },
+          ],
+          mode: 'vulnerable',
+          pluginId,
+        },
+      }),
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-event-otel-clean',
+          testCaseId: 'case-event-otel-clean',
+          traceId: '55555555555555555555555555555555',
+          spans: [
+            {
+              attributes: {
+                'agent.name': 'handoff_agent',
+              },
+              events: [
+                {
+                  attributes: {
+                    agenticEvidence: JSON.stringify({
+                      findings: [
+                        {
+                          kind: 'handoff-context-leakage',
+                          pluginId,
+                        },
+                      ],
+                      mode: 'vulnerable',
+                    }),
+                  },
+                  name: 'agentic runtime verifier',
+                },
+              ],
+              name: 'agent handoff_agent',
+              spanId: 'span-1',
+              startTime: 0,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('otel');
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('handoff-context-leakage');
+  });
+
+  it('uses clean Agentic evidence from OTEL span events before provider fallback', async () => {
+    const pluginId = 'agentic:session-memory-contamination';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      JSON.stringify({
+        agenticEvidence: {
+          findings: [
+            {
+              kind: 'session-memory-contamination',
+              pluginId,
+            },
+          ],
+          mode: 'vulnerable',
+          pluginId,
+        },
+      }),
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-event-otel-clean',
+          testCaseId: 'case-event-otel-clean',
+          traceId: '66666666666666666666666666666666',
+          spans: [
+            {
+              attributes: {
+                'agent.name': 'memory_agent',
+              },
+              events: [
+                {
+                  attributes: {
+                    agenticEvidence: JSON.stringify({
+                      findings: [],
+                      mode: 'hardened',
+                      pluginId,
+                    }),
+                  },
+                  name: 'agentic runtime verifier',
+                },
+              ],
+              name: 'agent memory_agent',
               spanId: 'span-1',
               startTime: 0,
             },
