@@ -651,17 +651,61 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 OpenAI supports image generation via `openai:image:<model>`. Supported models include:
 
-- `gpt-image-1.5` - OpenAI's state-of-the-art image generation model with best instruction following
+- `gpt-image-2` - OpenAI's latest image generation model with flexible custom sizes
+- `gpt-image-1.5` - High-quality GPT Image model with strong instruction following
 - `gpt-image-1` - High-quality image generation model
 - `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
 
-`dall-e-3` and `dall-e-2` remain available for backward compatibility, but use `gpt-image-1.5`, `gpt-image-1`, or `gpt-image-1-mini` for new evals.
+`dall-e-3` and `dall-e-2` remain available for backward compatibility, but use `gpt-image-2`, `gpt-image-1.5`, `gpt-image-1`, or `gpt-image-1-mini` for new evals.
+
+The `openai:image` provider uses the Image API generations endpoint. It supports text-to-image generation; image edit/reference inputs (`image`, `mask`, `input_fidelity`), streaming (`stream`/`partial_images`), and variations are not implemented in this provider.
 
 See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images).
 
+#### GPT Image 2
+
+GPT Image 2 is OpenAI's latest image generation model. It supports the standard GPT Image output controls plus custom sizes that satisfy OpenAI's dimensional constraints.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:gpt-image-2
+    config:
+      size: 1024x1024 # auto, common sizes, or custom WIDTHxHEIGHT
+      quality: low # low, medium, high, or auto
+      background: opaque # opaque or auto
+      output_format: webp # png, jpeg, or webp
+      output_compression: 80 # 0-100, only set with jpeg/webp
+      moderation: auto # auto or low
+      n: 1 # 1-10 images
+      user: promptfoo-user # optional end-user identifier
+```
+
+| Parameter            | Description                        | Options                                                                                     |
+| -------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------- |
+| `size`               | Image dimensions                   | `auto`, common sizes like `1024x1024`, `1024x1536`, `1536x1024`, or valid custom dimensions |
+| `quality`            | Rendering quality                  | `low`, `medium`, `high`, `auto`                                                             |
+| `background`         | Background handling                | `opaque`, `auto` (`transparent` is not supported)                                           |
+| `output_format`      | Output image format                | `png`, `jpeg`, `webp`                                                                       |
+| `output_compression` | Compression level (jpeg/webp only) | `0-100`                                                                                     |
+| `moderation`         | Content moderation strictness      | `auto`, `low`                                                                               |
+| `n`                  | Number of images to generate       | `1-10`                                                                                      |
+| `user`               | Optional end-user identifier       | Any string                                                                                  |
+
+For custom `size` values, both dimensions must be multiples of 16, the maximum edge must be no larger than 3840px, the long edge to short edge ratio must be at most 3:1, and total pixels must be between 655,360 and 8,294,400.
+
+**Pricing:**
+
+| Quality | 1024x1024 | 1024x1536 | 1536x1024 |
+| ------- | --------- | --------- | --------- |
+| Low     | $0.006    | $0.005    | $0.005    |
+| Medium  | $0.053    | $0.041    | $0.041    |
+| High    | $0.211    | $0.165    | $0.165    |
+
+These are output image estimates. Input text tokens may also apply, and OpenAI may return usage data for the request. For GPT Image 2 `quality: auto`, omitted quality, or custom sizes, promptfoo leaves `cost` unset and preserves the returned usage in `tokenUsage`/`metadata.usage` instead of guessing.
+
 #### GPT Image 1.5
 
-GPT Image 1.5 is OpenAI's most advanced image generation model with superior instruction following, prompt adherence, and photorealistic quality. It uses token-based pricing for more flexible cost control.
+GPT Image 1.5 is a high-quality image generation model with strong instruction following, prompt adherence, and photorealistic quality. It uses token-based pricing for more flexible cost control.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -670,8 +714,8 @@ providers:
       size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
       quality: low # low, medium, high, or auto
       background: transparent # transparent, opaque, or auto
-      output_format: png # png, jpeg, or webp
-      output_compression: 80 # 0-100, only for jpeg/webp
+      output_format: webp # png, jpeg, or webp
+      output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto or low
 ```
 
@@ -705,8 +749,8 @@ providers:
       size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
       quality: low # low, medium, high, or auto
       background: transparent # transparent, opaque, or auto
-      output_format: png # png, jpeg, or webp
-      output_compression: 80 # 0-100, only for jpeg/webp
+      output_format: webp # png, jpeg, or webp
+      output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto or low
 ```
 
@@ -738,8 +782,8 @@ providers:
       size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
       quality: low # low, medium, high, or auto
       background: transparent # transparent, opaque, or auto
-      output_format: png # png, jpeg, or webp
-      output_compression: 80 # 0-100, only for jpeg/webp
+      output_format: webp # png, jpeg, or webp
+      output_compression: 80 # 0-100, only set with jpeg/webp
       moderation: auto # auto or low
 ```
 
@@ -760,7 +804,7 @@ prompts:
   - 'In the style of Dali: {{subject}}'
 
 providers:
-  - openai:image:gpt-image-1.5
+  - openai:image:gpt-image-2
 
 tests:
   - vars:
