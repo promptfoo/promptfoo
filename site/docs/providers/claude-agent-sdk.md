@@ -151,6 +151,7 @@ prompts:
 | `effort`                             | string        | Response effort level: `low`, `medium`, `high`, `max`                                                        | `high`                   |
 | `agent`                              | string        | Named agent for the main thread (must be defined in `agents` or settings)                                    | None                     |
 | `session_id`                         | string        | Custom session UUID (cannot be used with `continue`/`resume` unless `fork_session` is set)                   | Auto-generated           |
+| `title`                              | string        | Custom title for a new session (skips auto-generation from the first message)                                | Auto-generated           |
 | `debug`                              | boolean       | Enable verbose debug logging                                                                                 | false                    |
 | `debug_file`                         | string        | Write debug logs to this file path (implicitly enables debug)                                                | None                     |
 | `betas`                              | string[]      | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                                      | None                     |
