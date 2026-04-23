@@ -3,8 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import cliState from '../../src/cliState';
 import { expandAssertionFileRefs } from '../../src/assertions/expandAssertionFileRefs';
+import cliState from '../../src/cliState';
 
 import type { AssertionOrSet } from '../../src/types';
 

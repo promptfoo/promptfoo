@@ -6,7 +6,7 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { parseFileUrl } from '../util/functions/loadFunction';
 
-import type { Assertion, AssertionOrSet } from '../types';
+import type { AssertionOrSet } from '../types';
 
 const MAX_DEPTH = 16;
 const ASSERTION_FILE_EXTENSIONS = new Set(['.yaml', '.yml', '.json']);
@@ -113,7 +113,11 @@ export async function expandAssertionFileRefs(
   assertions: AssertionOrSet[] | undefined,
   options: ExpandOptions = {},
 ): Promise<AssertionOrSet[] | undefined> {
-  if (!assertions || assertions.length === 0) {
+  // Return the input unchanged when it's missing, empty, or not an array.
+  // Callers pass `test.assert` on any truthy value; a malformed config like
+  // `assert: { ... }` or `assert: "..."` should fall through to
+  // `validateAssertions` so the schema error surfaces, not a TypeError here.
+  if (!assertions || !Array.isArray(assertions) || assertions.length === 0) {
     return assertions;
   }
 
@@ -131,27 +135,32 @@ export async function expandAssertionFileRefs(
   const expanded: AssertionOrSet[] = [];
 
   for (const item of assertions) {
-    if (
-      item &&
-      typeof item === 'object' &&
-      !Array.isArray(item) &&
-      (item as Assertion).type === 'assert-set'
-    ) {
-      const assertSet = item as Assertion & { assert?: unknown };
-      // Pass malformed `assert-set` entries through unchanged so that the
-      // downstream schema validator can surface a helpful error. Rebuilding
-      // with `assert: []` would mask the problem.
-      if (!Array.isArray(assertSet.assert)) {
-        expanded.push(item);
+    // Narrow shape-first, read `type` as an arbitrary string afterwards:
+    // `Assertion.type` is a string-literal union that does NOT include
+    // `'assert-set'` (that lives on `AssertionSet`), so TS would reject a
+    // direct `(item as Assertion).type === 'assert-set'` comparison with
+    // TS2367 "this comparison appears to be unintentional".
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const maybeType = (item as { type?: unknown }).type;
+      if (maybeType === 'assert-set') {
+        const assertSet = item as { assert?: unknown };
+        // Pass malformed `assert-set` entries through unchanged so the
+        // downstream schema validator can surface a helpful error.
+        if (!Array.isArray(assertSet.assert)) {
+          expanded.push(item);
+          continue;
+        }
+        const expandedChildren = await expandAssertionFileRefs(
+          assertSet.assert as AssertionOrSet[],
+          {
+            baseDir,
+            inProgress,
+            depth: depth + 1,
+          },
+        );
+        expanded.push({ ...(item as object), assert: expandedChildren ?? [] } as AssertionOrSet);
         continue;
       }
-      const expandedChildren = await expandAssertionFileRefs(assertSet.assert as AssertionOrSet[], {
-        baseDir,
-        inProgress,
-        depth: depth + 1,
-      });
-      expanded.push({ ...assertSet, assert: expandedChildren ?? [] } as AssertionOrSet);
-      continue;
     }
 
     if (isAssertionFileInclude(item)) {
