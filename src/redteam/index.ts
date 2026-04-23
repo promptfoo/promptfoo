@@ -1326,17 +1326,19 @@ export async function synthesize({
 
       const languageResults = await Promise.allSettled(languagePromises);
 
-      for (const result of languageResults) {
+      for (const [index, result] of languageResults.entries()) {
         if (result.status === 'fulfilled') {
           const { lang, tests, requested, generated } = result.value;
 
           allPluginTests.push(...tests);
           resultsPerLanguage[lang || 'default'] = { requested, generated };
         } else {
+          const lang = languages[index];
           // Handle rejected promise
           logger.warn(
             `[Language Processing] Error generating tests for ${plugin.id}: ${result.reason}`,
           );
+          resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
         }
       }
 
@@ -1403,62 +1405,85 @@ export async function synthesize({
       }
     } else if (plugin.id.startsWith('file://')) {
       try {
-        const customPlugin = new CustomPlugin(
-          redteamProvider,
-          purpose,
-          injectVar,
-          plugin.id,
-          resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
-        );
-        const customTests = await customPlugin.generateTests(plugin.numTests, delay);
+        const languageConfig = plugin.config?.language ?? language;
+        const languages = Array.isArray(languageConfig)
+          ? languageConfig
+          : languageConfig
+            ? [languageConfig]
+            : [undefined];
+        const allCustomTests: TestCaseWithPlugin[] = [];
+        const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
-        // Add metadata to each test case
-        const testCasesWithMetadata = filterOversizedTestCases(
-          customTests.map((t) => {
-            const includePluginConfig = !(
-              t.metadata &&
-              Object.hasOwn(t.metadata, 'pluginConfig') &&
-              t.metadata.pluginConfig === undefined
-            );
-            const pluginConfigWithMaxChars = {
-              ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
-              ...((t.metadata?.pluginConfig as Record<string, any> | undefined) ?? {}),
-            };
-            const modifiers = {
-              ...buildRedteamModifiers({
+        const languagePromises = languages.map(async (lang) => {
+          const resolvedConfig = {
+            ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+            ...(lang ? { language: lang } : {}),
+            ...(hasMultipleInputs ? { inputs } : {}),
+          };
+          const customPluginConfig = {
+            ...resolvedConfig,
+            modifiers: buildRedteamModifiers({
+              maxCharsPerMessage,
+              pluginConfig: resolvedConfig,
+              testGenerationInstructions,
+            }),
+          };
+          const customPlugin = new CustomPlugin(
+            redteamProvider,
+            purpose,
+            injectVar,
+            plugin.id,
+            customPluginConfig,
+          );
+          const customTests = await customPlugin.generateTests(plugin.numTests, delay);
+
+          // Add metadata to each test case
+          const testCasesWithMetadata = filterOversizedTestCases(
+            customTests.map((t) =>
+              addLanguageToPluginMetadata(
+                t,
+                lang,
+                plugin,
                 maxCharsPerMessage,
-                pluginConfig: pluginConfigWithMaxChars,
                 testGenerationInstructions,
-              }),
-              ...t.metadata?.modifiers,
-            };
+              ),
+            ),
+            injectVar,
+            `Custom plugin ${plugin.id}`,
+            maxCharsPerMessage,
+          );
 
-            return {
-              ...t,
-              metadata: {
-                ...(t.metadata || {}),
-                pluginId: plugin.id,
-                ...(includePluginConfig && {
-                  pluginConfig: pluginConfigWithMaxChars,
-                }),
-                severity:
-                  plugin.severity ||
-                  getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
-                modifiers,
-              },
-            };
-          }),
-          injectVar,
-          `Custom plugin ${plugin.id}`,
-          maxCharsPerMessage,
-        );
+          return {
+            lang,
+            tests: testCasesWithMetadata as TestCaseWithPlugin[],
+            requested: plugin.numTests,
+            generated: testCasesWithMetadata.length,
+          };
+        });
+
+        const languageResults = await Promise.allSettled(languagePromises);
+
+        for (const [index, result] of languageResults.entries()) {
+          if (result.status === 'fulfilled') {
+            const { lang, tests, requested, generated } = result.value;
+
+            allCustomTests.push(...tests);
+            resultsPerLanguage[lang || 'default'] = { requested, generated };
+          } else {
+            const lang = languages[index];
+            logger.warn(
+              `[Language Processing] Error generating tests for custom plugin ${plugin.id}: ${result.reason}`,
+            );
+            resultsPerLanguage[lang || 'default'] = { requested: plugin.numTests, generated: 0 };
+          }
+        }
 
         // Extract goal for custom plugin's tests (only needed for agentic strategies)
         if (needsGoalExtraction) {
           logger.debug(
-            `Extracting goal for ${testCasesWithMetadata.length} custom tests from ${plugin.id}...`,
+            `Extracting goal for ${allCustomTests.length} custom tests from ${plugin.id}...`,
           );
-          for (const testCase of testCasesWithMetadata) {
+          for (const testCase of allCustomTests) {
             const promptVar = testCase.vars?.[injectVar];
             const prompt = Array.isArray(promptVar) ? promptVar[0] : String(promptVar);
 
@@ -1470,14 +1495,25 @@ export async function synthesize({
         }
 
         // Add the results to main test cases array
-        testCases.push(...testCasesWithMetadata);
+        testCases.push(...allCustomTests);
 
-        logger.debug(`Added ${customTests.length} custom test cases from ${plugin.id}`);
-        const displayId = getPluginDisplayId(plugin);
-        pluginResults[displayId] = {
-          requested: plugin.numTests,
-          generated: testCasesWithMetadata.length,
-        };
+        logger.debug(`Added ${allCustomTests.length} custom test cases from ${plugin.id}`);
+        const baseDisplayId = getPluginDisplayId(plugin);
+        const definedLanguages = languages.filter((lang) => lang !== undefined);
+
+        if (definedLanguages.length > 1) {
+          for (const [langKey, result] of Object.entries(resultsPerLanguage)) {
+            const displayId = langKey === 'en' ? baseDisplayId : `(${langKey}) ${baseDisplayId}`;
+            pluginResults[displayId] = { requested: result.requested, generated: result.generated };
+          }
+        } else {
+          pluginResults[baseDisplayId] = {
+            requested: plugin.numTests * languages.length,
+            generated: allCustomTests.length,
+          };
+        }
+
+        progressBar?.increment(plugin.numTests * languages.length);
       } catch (e) {
         logger.error(`Error generating tests for custom plugin ${plugin.id}: ${e}`);
         const displayId = getPluginDisplayId(plugin);
