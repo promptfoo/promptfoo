@@ -409,6 +409,144 @@ function isValidSystemPrompt(systemPrompt: string | undefined): boolean {
   return true;
 }
 
+function addSensitiveDataPlugins(pluginIds: Set<string>, sensitiveDataTypes: string | undefined) {
+  if (!sensitiveDataTypes) {
+    return;
+  }
+
+  const data = sensitiveDataTypes.toLowerCase();
+  pluginIds.add('pii:direct');
+  pluginIds.add('pii:session');
+
+  if (data.includes('credit card') || data.includes('payment') || data.includes('financial')) {
+    pluginIds.add('pii:api-db');
+  }
+}
+
+function addConnectedSystemPlugins(pluginIds: Set<string>, connectedSystems: string | undefined) {
+  if (!connectedSystems) {
+    return;
+  }
+
+  const systems = connectedSystems.toLowerCase();
+
+  if (systems.includes('database') || systems.includes('sql')) {
+    pluginIds.add('sql-injection');
+  }
+
+  if (
+    systems.includes('http') ||
+    systems.includes('api') ||
+    systems.includes('webhook') ||
+    systems.includes('external')
+  ) {
+    pluginIds.add('ssrf');
+  }
+
+  if (systems.includes('shell') || systems.includes('command') || systems.includes('exec')) {
+    pluginIds.add('shell-injection');
+  }
+}
+
+function addAuthorizationPlugins(pluginIds: Set<string>, userTypes: string | undefined) {
+  if (!userTypes) {
+    return;
+  }
+
+  const users = userTypes.toLowerCase();
+
+  if (users.includes('admin') || users.includes('role') || users.includes('permission')) {
+    pluginIds.add('rbac');
+  }
+
+  if (users.includes('user') && (users.includes('admin') || users.includes('different'))) {
+    pluginIds.add('bola');
+    pluginIds.add('bfla');
+  }
+}
+
+function addToolPlugins(pluginIds: Set<string>, result: ReconResult) {
+  if (!result.discoveredTools?.length) {
+    return;
+  }
+
+  pluginIds.add('excessive-agency');
+  pluginIds.add('tool-discovery');
+}
+
+function addDefaultPlugins(pluginIds: Set<string>) {
+  pluginIds.add('prompt-extraction');
+  pluginIds.add('hijacking');
+  pluginIds.add('harmful:violent-crime');
+  pluginIds.add('harmful:illegal-activities');
+  pluginIds.add('hallucination');
+}
+
+function addIndustryPlugins(pluginIds: Set<string>, industry: string | undefined) {
+  if (!industry) {
+    return;
+  }
+
+  const normalizedIndustry = industry.toLowerCase();
+
+  if (normalizedIndustry.includes('health') || normalizedIndustry.includes('medical')) {
+    pluginIds.add('harmful:specialized-advice');
+  }
+
+  if (normalizedIndustry.includes('finance') || normalizedIndustry.includes('banking')) {
+    pluginIds.add('harmful:specialized-advice');
+  }
+}
+
+function addSecurityNotePlugins(pluginIds: Set<string>, securityNotes: string[] | undefined) {
+  if (!securityNotes?.length) {
+    return;
+  }
+
+  const notes = securityNotes.join(' ').toLowerCase();
+
+  if (
+    notes.includes('credential') ||
+    notes.includes('auth') ||
+    notes.includes('password') ||
+    notes.includes('plaintext')
+  ) {
+    pluginIds.add('rbac');
+    pluginIds.add('bola');
+    pluginIds.add('bfla');
+  }
+
+  if (notes.includes('database') || notes.includes('sql') || notes.includes('query')) {
+    pluginIds.add('sql-injection');
+  }
+
+  if (notes.includes('payment') || notes.includes('pci') || notes.includes('card')) {
+    pluginIds.add('pii:direct');
+    pluginIds.add('pii:api-db');
+  }
+
+  if (notes.includes('session') || notes.includes('persist') || notes.includes('history')) {
+    pluginIds.add('cross-session-leak');
+  }
+
+  if (notes.includes('shell') || notes.includes('command') || notes.includes('exec')) {
+    pluginIds.add('shell-injection');
+  }
+}
+
+function buildPluginObjects(pluginIds: Set<string>, result: ReconResult): RedteamPluginObject[] {
+  return Array.from(pluginIds, (id) => {
+    if (id === 'prompt-extraction' && isValidSystemPrompt(result.systemPrompt)) {
+      return {
+        id: 'prompt-extraction',
+        config: { systemPrompt: result.systemPrompt! },
+      };
+    }
+
+    return { id };
+  });
+}
+
 /**
  * Determines appropriate plugins based on recon findings
  * Returns plugins with configuration when needed (e.g., prompt-extraction with systemPrompt)
@@ -422,130 +560,15 @@ function suggestPluginsFromFindings(result: ReconResult): RedteamPluginObject[] 
     validSuggested.forEach((p) => pluginIds.add(p));
   }
 
-  // Add plugins based on sensitive data detection
-  if (result.sensitiveDataTypes) {
-    const data = result.sensitiveDataTypes.toLowerCase();
-    pluginIds.add('pii:direct');
-    pluginIds.add('pii:session');
-    if (data.includes('credit card') || data.includes('payment') || data.includes('financial')) {
-      pluginIds.add('pii:api-db');
-    }
-  }
+  addSensitiveDataPlugins(pluginIds, result.sensitiveDataTypes);
+  addConnectedSystemPlugins(pluginIds, result.connectedSystems);
+  addAuthorizationPlugins(pluginIds, result.userTypes);
+  addToolPlugins(pluginIds, result);
+  addDefaultPlugins(pluginIds);
+  addIndustryPlugins(pluginIds, result.industry);
+  addSecurityNotePlugins(pluginIds, result.securityNotes);
 
-  // Add plugins based on connected systems
-  if (result.connectedSystems) {
-    const systems = result.connectedSystems.toLowerCase();
-    if (systems.includes('database') || systems.includes('sql')) {
-      pluginIds.add('sql-injection');
-    }
-    if (
-      systems.includes('http') ||
-      systems.includes('api') ||
-      systems.includes('webhook') ||
-      systems.includes('external')
-    ) {
-      pluginIds.add('ssrf');
-    }
-    if (systems.includes('shell') || systems.includes('command') || systems.includes('exec')) {
-      pluginIds.add('shell-injection');
-    }
-  }
-
-  // Add plugins based on user types (authorization testing)
-  if (result.userTypes) {
-    const users = result.userTypes.toLowerCase();
-    if (users.includes('admin') || users.includes('role') || users.includes('permission')) {
-      pluginIds.add('rbac');
-    }
-    if (users.includes('user') && (users.includes('admin') || users.includes('different'))) {
-      pluginIds.add('bola');
-      pluginIds.add('bfla');
-    }
-  }
-
-  // Add plugins based on discovered tools
-  if (result.discoveredTools && result.discoveredTools.length > 0) {
-    pluginIds.add('excessive-agency');
-    pluginIds.add('tool-discovery');
-  }
-
-  // Add prompt security plugins for all LLM apps
-  pluginIds.add('prompt-extraction');
-  pluginIds.add('hijacking');
-
-  // Add basic harmful content plugins
-  pluginIds.add('harmful:violent-crime');
-  pluginIds.add('harmful:illegal-activities');
-
-  // Add hallucination for factual accuracy
-  pluginIds.add('hallucination');
-
-  // Industry-specific plugins
-  if (result.industry) {
-    const industry = result.industry.toLowerCase();
-    if (industry.includes('health') || industry.includes('medical')) {
-      pluginIds.add('harmful:specialized-advice');
-    }
-    if (industry.includes('finance') || industry.includes('banking')) {
-      pluginIds.add('harmful:specialized-advice');
-    }
-  }
-
-  // Parse security notes for additional attack vectors
-  if (result.securityNotes && result.securityNotes.length > 0) {
-    const notes = result.securityNotes.join(' ').toLowerCase();
-
-    // Auth/credential issues -> authorization plugins
-    if (
-      notes.includes('credential') ||
-      notes.includes('auth') ||
-      notes.includes('password') ||
-      notes.includes('plaintext')
-    ) {
-      pluginIds.add('rbac');
-      pluginIds.add('bola');
-      pluginIds.add('bfla');
-    }
-
-    // Database mentions -> SQL injection
-    if (notes.includes('database') || notes.includes('sql') || notes.includes('query')) {
-      pluginIds.add('sql-injection');
-    }
-
-    // Payment/PCI mentions -> PII plugins
-    if (notes.includes('payment') || notes.includes('pci') || notes.includes('card')) {
-      pluginIds.add('pii:direct');
-      pluginIds.add('pii:api-db');
-    }
-
-    // Session/state mentions -> cross-session
-    if (notes.includes('session') || notes.includes('persist') || notes.includes('history')) {
-      pluginIds.add('cross-session-leak');
-    }
-
-    // Shell/command execution
-    if (notes.includes('shell') || notes.includes('command') || notes.includes('exec')) {
-      pluginIds.add('shell-injection');
-    }
-  }
-
-  // Convert to plugin configs, adding configuration where needed
-  const plugins: RedteamPluginObject[] = [];
-  for (const id of pluginIds) {
-    if (id === 'prompt-extraction' && isValidSystemPrompt(result.systemPrompt)) {
-      // Configure prompt-extraction with the discovered system prompt
-      // This allows the grader to detect if the actual prompt was leaked
-      plugins.push({
-        id: 'prompt-extraction',
-        config: { systemPrompt: result.systemPrompt! },
-      });
-    } else {
-      // Convert string plugin IDs to plugin objects
-      plugins.push({ id });
-    }
-  }
-
-  return plugins;
+  return buildPluginObjects(pluginIds, result);
 }
 
 /**

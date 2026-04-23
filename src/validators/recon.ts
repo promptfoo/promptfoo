@@ -245,7 +245,10 @@ export const ReconErrorResponseSchema = z.object({
   /** Error message */
   error: z.string().describe('Error message describing what went wrong'),
   /** Optional additional details */
-  details: z.string().optional().describe('Additional error details'),
+  details: z
+    .union([z.string(), z.record(z.string(), z.array(z.string()).optional())])
+    .optional()
+    .describe('Additional error details'),
 });
 
 // =============================================================================

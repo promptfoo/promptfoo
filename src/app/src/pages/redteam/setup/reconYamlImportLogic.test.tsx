@@ -1,88 +1,12 @@
 /**
- * Tests for the recon YAML import logic in page.tsx (lines 408-465)
- * This logic handles importing recon-generated configs with structured metadata.
+ * Tests for recon YAML import logic.
+ * This handles importing recon-generated configs with structured metadata.
  */
 
 import { describe, expect, it } from 'vitest';
-import { countPopulatedFields } from './utils/applicationDefinition';
+import { applyReconYamlMetadata as processReconYamlImport } from './utils/reconYamlImport';
 
-import type { Config, ReconContext } from './types';
-
-/**
- * Helper function that mimics the recon YAML import logic from handleFileUpload
- * Extracted for testing purposes - tests the conditional branching and data transformation
- * This represents lines 408-465 of page.tsx
- */
-function processReconYamlImport(
-  yamlConfig: any,
-  mappedConfig: Config,
-): {
-  updatedConfig: Config;
-  reconContext: ReconContext | null;
-} {
-  // Check if this is a recon-generated config with structured metadata
-  const isReconConfig =
-    yamlConfig.metadata?.version === 1 && yamlConfig.metadata?.source === 'recon-cli';
-
-  const updatedConfig = { ...mappedConfig };
-  let reconContext: ReconContext | null = null;
-
-  // Import structured applicationDefinition from recon metadata if available
-  if (isReconConfig && yamlConfig.metadata?.applicationDefinition) {
-    const reconAppDef = yamlConfig.metadata.applicationDefinition;
-    updatedConfig.applicationDefinition = {
-      ...mappedConfig.applicationDefinition,
-      purpose: reconAppDef.purpose || mappedConfig.applicationDefinition.purpose,
-      features: reconAppDef.features,
-      industry: reconAppDef.industry,
-      systemPrompt: reconAppDef.systemPrompt,
-      hasAccessTo: reconAppDef.hasAccessTo,
-      doesNotHaveAccessTo: reconAppDef.doesNotHaveAccessTo,
-      userTypes: reconAppDef.userTypes,
-      securityRequirements: reconAppDef.securityRequirements,
-      sensitiveDataTypes: reconAppDef.sensitiveDataTypes,
-      exampleIdentifiers: reconAppDef.exampleIdentifiers,
-      criticalActions: reconAppDef.criticalActions,
-      forbiddenTopics: reconAppDef.forbiddenTopics,
-      attackConstraints: reconAppDef.attackConstraints,
-      competitors: reconAppDef.competitors,
-      connectedSystems:
-        reconAppDef.connectedSystems || mappedConfig.applicationDefinition.connectedSystems,
-      redteamUser: reconAppDef.redteamUser || mappedConfig.applicationDefinition.redteamUser,
-    };
-
-    // Set stateful flag from recon details if applicable
-    if (yamlConfig.metadata?.reconDetails?.stateful) {
-      if (typeof updatedConfig.target === 'object') {
-        updatedConfig.target.config = { ...updatedConfig.target.config, stateful: true };
-      }
-    }
-
-    // Import entities from recon details if not already set from redteam config
-    if (!updatedConfig.entities?.length && yamlConfig.metadata?.reconDetails?.entities?.length) {
-      updatedConfig.entities = yamlConfig.metadata.reconDetails.entities;
-    }
-  }
-
-  // Set reconContext for recon-generated configs so the banner displays
-  if (isReconConfig) {
-    const meaningfulFields = countPopulatedFields(updatedConfig.applicationDefinition);
-    // Parse generatedAt ISO string to Unix timestamp (ms), fallback to now if invalid
-    const generatedAt = yamlConfig.metadata?.generatedAt;
-    const timestamp = generatedAt ? new Date(generatedAt).getTime() : Date.now();
-    reconContext = {
-      source: 'recon-cli',
-      timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
-      codebaseDirectory: yamlConfig.metadata?.scannedDirectory,
-      keyFilesAnalyzed: yamlConfig.metadata?.reconDetails?.keyFiles?.length,
-      fieldsPopulated: meaningfulFields,
-      discoveredToolsCount: yamlConfig.metadata?.reconDetails?.discoveredTools?.length,
-      securityNotes: yamlConfig.metadata?.reconDetails?.securityNotes,
-    };
-  }
-
-  return { updatedConfig, reconContext };
-}
+import type { Config } from './types';
 
 describe('Recon YAML Import Logic', () => {
   const createBaseMappedConfig = (): Config => ({

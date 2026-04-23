@@ -46,8 +46,8 @@ function formatCodexEvent(event: any): string | null {
   switch (item.type) {
     case 'command_execution':
       // Extract the command being run
-      if (item.call?.command) {
-        const cmd = item.call.command;
+      if (typeof item.command === 'string' || typeof item.call?.command === 'string') {
+        const cmd = item.command ?? item.call.command;
         // Truncate long commands
         const display = cmd.length > 60 ? `${cmd.substring(0, 57)}...` : cmd;
         return `Running: ${display}`;

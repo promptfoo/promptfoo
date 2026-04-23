@@ -47,13 +47,10 @@ export const SECTION_HEADERS: Record<keyof ApplicationDefinition, string> = {
  */
 export const SECTION_HEADER_TO_FIELD: Record<string, keyof ApplicationDefinition> = Object.entries(
   SECTION_HEADERS,
-).reduce(
-  (acc, [field, header]) => {
-    acc[header] = field as keyof ApplicationDefinition;
-    return acc;
-  },
-  {} as Record<string, keyof ApplicationDefinition>,
-);
+).reduce<Record<string, keyof ApplicationDefinition>>((acc, [field, header]) => {
+  acc[header] = field as keyof ApplicationDefinition;
+  return acc;
+}, {});
 
 /**
  * List of all ApplicationDefinition field names.
@@ -68,10 +65,10 @@ export const APPLICATION_DEFINITION_FIELDS: (keyof ApplicationDefinition)[] = Ob
  * All fields are initialized to empty strings.
  */
 export const DEFAULT_APPLICATION_DEFINITION: ApplicationDefinition =
-  APPLICATION_DEFINITION_FIELDS.reduce((acc, field) => {
+  APPLICATION_DEFINITION_FIELDS.reduce<ApplicationDefinition>((acc, field) => {
     acc[field] = '';
     return acc;
-  }, {} as ApplicationDefinition);
+  }, {});
 
 /**
  * Checks if a field value is meaningful (not empty or a placeholder).

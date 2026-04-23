@@ -1,0 +1,108 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1120 500"
+  role="img"
+  aria-labelledby="title desc"
+>
+  <title id="title">Tiered production evaluation</title>
+  <desc id="desc">
+    A production evaluation pipeline starts with deterministic checks, then cheap judge checks, and
+    routes high-risk or borderline rows to an expensive judge.
+  </desc>
+  <defs>
+    <filter id="shadow" x="-10%" y="-18%" width="120%" height="140%">
+      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#0f172a" flood-opacity="0.11" />
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2 2 L10 6 L2 10 Z" fill="#64748b" />
+    </marker>
+    <style>
+      text {
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          sans-serif;
+      }
+      .title {
+        font-size: 20px;
+        font-weight: 800;
+        fill: #0f172a;
+      }
+      .cardTitle {
+        font-size: 18px;
+        font-weight: 800;
+        fill: #0f172a;
+      }
+      .body {
+        font-size: 13px;
+        fill: #475569;
+      }
+      .pill {
+        font-size: 12px;
+        font-weight: 800;
+        fill: #ffffff;
+      }
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        fill: #334155;
+      }
+    </style>
+  </defs>
+
+  <rect width="1120" height="500" rx="24" fill="#f8fafc" />
+  <text x="52" y="60" class="title">Tiered evaluation keeps cost proportional to risk</text>
+  <text x="52" y="86" class="body">
+    Run cheap checks everywhere, then reserve expensive judges for high-risk or borderline rows.
+  </text>
+
+  <g filter="url(#shadow)">
+    <rect x="72" y="150" width="250" height="184" rx="20" fill="#ffffff" stroke="#bfdbfe" />
+  </g>
+  <rect x="96" y="176" width="82" height="28" rx="14" fill="#2563eb" />
+  <text x="137" y="195" text-anchor="middle" class="pill">TIER 1</text>
+  <text x="96" y="234" class="cardTitle">Deterministic</text>
+  <text x="96" y="264" class="body">is-json, regex,</text>
+  <text x="96" y="286" class="body">JavaScript, Python</text>
+  <text x="96" y="316" class="mono">cheap + exact</text>
+
+  <path d="M322 242 L404 242" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <g filter="url(#shadow)">
+    <rect x="414" y="150" width="250" height="184" rx="20" fill="#ffffff" stroke="#a7f3d0" />
+  </g>
+  <rect x="438" y="176" width="82" height="28" rx="14" fill="#059669" />
+  <text x="479" y="195" text-anchor="middle" class="pill">TIER 2</text>
+  <text x="438" y="234" class="cardTitle">Cheap judge</text>
+  <text x="438" y="264" class="body">simple rubric,</text>
+  <text x="438" y="286" class="body">small grader model</text>
+  <text x="438" y="316" class="mono">broad coverage</text>
+
+  <path d="M664 242 L746 242" stroke="#64748b" stroke-width="2.5" marker-end="url(#arrow)" />
+
+  <g filter="url(#shadow)">
+    <rect x="756" y="150" width="292" height="184" rx="20" fill="#ffffff" stroke="#fed7aa" />
+  </g>
+  <rect x="780" y="176" width="82" height="28" rx="14" fill="#ea580c" />
+  <text x="821" y="195" text-anchor="middle" class="pill">TIER 3</text>
+  <text x="780" y="234" class="cardTitle">Expensive judge</text>
+  <text x="780" y="264" class="body">complex rubric, high-risk route,</text>
+  <text x="780" y="286" class="body">or borderline failure</text>
+  <text x="780" y="316" class="mono">--filter-metadata risk=high</text>
+
+  <path
+    d="M196 334 C196 410 902 410 902 340"
+    stroke="#64748b"
+    stroke-width="2"
+    fill="none"
+    stroke-dasharray="6 6"
+    marker-end="url(#arrow)"
+  />
+  <text x="560" y="434" text-anchor="middle" class="body">
+    Only selected rows need the most expensive model-graded evaluation.
+  </text>
+</svg>

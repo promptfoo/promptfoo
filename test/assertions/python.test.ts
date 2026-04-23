@@ -1,6 +1,6 @@
 import * as path from 'path';
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import * as pythonUtils from '../../src/python/pythonUtils';
@@ -44,14 +44,24 @@ vi.mock('path', async () => {
 
 // These tests can be slow on Windows due to heavy module imports
 describe('Python file references', { timeout: 15000 }, () => {
-  beforeEach(() => {
+  const resetPythonMocks = () => {
     vi.clearAllMocks();
     // Reset mocked implementations to avoid test interference
+    vi.mocked(path.resolve).mockReset();
+    vi.mocked(path.extname).mockReset();
     vi.mocked(runPythonCode).mockReset();
     vi.mocked(runPython).mockReset();
     // Reset Python state to avoid test interference
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
+  };
+
+  beforeEach(() => {
+    resetPythonMocks();
+  });
+
+  afterEach(() => {
+    resetPythonMocks();
   });
 
   it('should handle Python file reference with function name', async () => {
@@ -319,6 +329,96 @@ describe('Python file references', { timeout: 15000 }, () => {
   });
 
   it.each([
+    ['boolean', 'True', true, undefined, false, 0, 'Python code returned true'],
+    ['number', '0.25', 0.25, 0.5, true, 0.25, 'Assertion passed'],
+    [
+      'JSON-stringified GradingResult',
+      '{"pass": true, "score": 0.75, "reason": "Custom reason"}',
+      '{"pass": true, "score": 0.75, "reason": "Custom reason"}',
+      undefined,
+      false,
+      0.75,
+      'Python code returned true',
+    ],
+    [
+      'JSON-stringified GradingResult below threshold',
+      '{"pass": true, "score": 0.25, "reason": "Custom reason"}',
+      '{"pass": true, "score": 0.25, "reason": "Custom reason"}',
+      0.5,
+      true,
+      0.25,
+      'Assertion passed',
+    ],
+    [
+      'snake_case GradingResult object',
+      '{"pass_": true, "score": 0.6, "reason": "Custom reason"}',
+      {
+        pass_: true,
+        score: 0.6,
+        reason: 'Custom reason',
+      },
+      undefined,
+      false,
+      0.6,
+      'Python code returned true',
+    ],
+  ])('should honor inverse mode for inline not-python assertions with %s results', async (_type, assertionValue, pythonOutput, threshold, expectedPass, expectedScore, expectedReason) => {
+    const output = 'Expected output';
+
+    vi.mocked(runPythonCode).mockResolvedValueOnce(pythonOutput);
+
+    const pythonAssertion: Assertion = {
+      type: 'not-python',
+      value: assertionValue,
+      threshold,
+    };
+
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: pythonAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(result).toMatchObject({
+      assertion: pythonAssertion,
+      pass: expectedPass,
+      reason: expect.stringContaining(expectedReason),
+      score: expectedScore,
+    });
+  });
+
+  it('should not leak rendered template variables in failed inline python assertion reasons', async () => {
+    const output = 'Expected output';
+    vi.mocked(runPythonCode).mockResolvedValueOnce(false);
+
+    const pythonAssertion: Assertion = {
+      type: 'python',
+      value: "'{{secret}}' in output",
+    };
+
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: pythonAssertion,
+      test: {
+        vars: {
+          secret: 'sk-test-secret-123',
+        },
+      } as AtomicTestCase,
+      providerResponse: { output },
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain("'{{secret}}' in output");
+    expect(result.reason).not.toContain('sk-test-secret-123');
+  });
+
+  it.each([
     ['boolean', 'True', true, 'Assertion passed'],
     ['number', '0.5', true, 'Assertion passed'],
     ['boolean', true, true, 'Assertion passed'],
@@ -372,6 +472,62 @@ describe('Python file references', { timeout: 15000 }, () => {
     expect(result).toMatchObject({
       pass: expectedPass,
       reason: expect.stringContaining(expectedReason),
+    });
+    expect(runPython).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['boolean', true, undefined, false, 0, 'Python code returned true'],
+    ['number', 0.25, 0.5, true, 0.25, 'Assertion passed'],
+    [
+      'snake_case GradingResult object',
+      {
+        pass_: true,
+        score: 0.75,
+        reason: 'Custom reason',
+      },
+      undefined,
+      false,
+      0.75,
+      'Python code returned true',
+    ],
+  ])('should honor inverse mode when a file:// not-python assertion returns a %s', async (_type, pythonOutput, threshold, expectedPass, expectedScore, expectedReason) => {
+    const output = 'Expected output';
+    vi.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
+
+    const fileAssertion: Assertion = {
+      type: 'not-python',
+      value: 'file:///path/to/assert.py',
+      threshold,
+    };
+
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: fileAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
+      output,
+      {
+        prompt: 'Some prompt',
+        vars: {},
+        test: {},
+        provider,
+        providerResponse,
+      },
+    ]);
+    expect(result).toMatchObject({
+      assertion: fileAssertion,
+      pass: expectedPass,
+      reason: expect.stringContaining(expectedReason),
+      score: expectedScore,
     });
     expect(runPython).toHaveBeenCalledTimes(1);
   });
@@ -506,13 +662,11 @@ describe('Python file references', { timeout: 15000 }, () => {
     };
 
     beforeEach(() => {
-      vi.clearAllMocks();
-      // Reset mocked implementations to avoid test interference
-      vi.mocked(runPythonCode).mockReset();
-      vi.mocked(runPython).mockReset();
-      // Reset Python state to avoid test interference
-      pythonUtils.state.cachedPythonPath = null;
-      pythonUtils.state.validationPromise = null;
+      resetPythonMocks();
+    });
+
+    afterEach(() => {
+      resetPythonMocks();
     });
 
     it('should FAIL when score=0 and no threshold', async () => {

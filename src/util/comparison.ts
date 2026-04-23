@@ -40,7 +40,7 @@ export function isRuntimeVar(key: string): boolean {
  * - Being in the explicit list (e.g., sessionId for backward compatibility)
  */
 export function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
-  if (!vars) {
+  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
     return vars;
   }
   const filtered: Vars = {};
@@ -50,6 +50,25 @@ export function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
     }
   }
   return filtered;
+}
+
+/**
+ * Extracts only runtime variables from a vars object.
+ * This is the inverse of filterRuntimeVars.
+ *
+ * Used to restore runtime state when re-running filtered tests.
+ */
+export function extractRuntimeVars(vars: Vars | undefined): Vars | undefined {
+  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
+    return undefined;
+  }
+  const extracted: Vars = {};
+  for (const [key, value] of Object.entries(vars)) {
+    if (isRuntimeVar(key)) {
+      extracted[key] = value;
+    }
+  }
+  return Object.keys(extracted).length > 0 ? extracted : undefined;
 }
 
 export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {

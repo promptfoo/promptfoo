@@ -53,3 +53,13 @@ The responses are synthesized into a comprehensive profile to inform attack stra
 
 - [Codebase Recon](/docs/red-team/recon/) - White-box analysis of source code (when you have code access)
 - [Configuration](/docs/red-team/configuration/#purpose) - Manual purpose field configuration
+
+## Troubleshooting
+
+If `promptfoo redteam discover` fails with `Remote server returned HTTP 400: Unknown task: target-purpose-discovery` (or a similar 400/404 error), your client is most likely out of date. Update with `npm install -g promptfoo@latest` and rerun.
+
+Other common errors:
+
+- **HTTP 401 / 403** — Run `promptfoo auth login` and confirm your account has access to target discovery.
+- **HTTP 429** — You are being rate limited; wait a moment and try again.
+- **HTTP 5xx** — The remote generation service is temporarily unavailable. Retry in a few minutes.

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
-import PylonChat from '@app/components/PylonChat';
 import { Button } from '@app/components/ui/button';
 import {
   Dialog,
@@ -38,7 +37,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { customTargetOption, predefinedTargets } from './components/constants';
+import { customTargetOption, findPredefinedTarget } from './components/constants';
 import Plugins from './components/Plugins';
 import Purpose from './components/Purpose';
 import Review from './components/Review';
@@ -51,12 +50,12 @@ import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
 import { usePendingRecon } from './hooks/usePendingRecon';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
-import { countPopulatedFields } from './utils/applicationDefinition';
 import { purposeToApplicationDefinition } from './utils/purposeParser';
+import { applyReconYamlMetadata, isReconYamlConfig } from './utils/reconYamlImport';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, ReconContext, RedteamUITarget } from './types';
+import type { Config } from './types';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };
@@ -361,7 +360,7 @@ export default function RedTeamSetupPage() {
 
       // Convert string targets to objects
       if (typeof target === 'string') {
-        const targetType = predefinedTargets.find((t: RedteamUITarget) => t.value === target);
+        const targetType = findPredefinedTarget(target);
 
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
@@ -380,10 +379,6 @@ export default function RedTeamSetupPage() {
         }
       }
 
-      // Check if this is a recon-generated config with structured metadata
-      const isReconConfig =
-        yamlConfig.metadata?.version === 1 && yamlConfig.metadata?.source === 'recon-cli';
-
       // Parse applicationDefinition from purpose string or use explicit definition if available
       // Priority: 1) explicit applicationDefinition in YAML, 2) parse from purpose string, 3) empty defaults
       const applicationDefinition = yamlConfig.redteam?.applicationDefinition
@@ -398,6 +393,7 @@ export default function RedTeamSetupPage() {
         plugins: yamlConfig.redteam?.plugins || ['default'],
         strategies,
         purpose: yamlConfig.redteam?.purpose || '',
+        provider: yamlConfig.redteam?.provider,
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
@@ -407,63 +403,15 @@ export default function RedTeamSetupPage() {
         extensions: yamlConfig.extensions,
       };
 
-      // Import structured applicationDefinition from recon metadata if available
-      if (isReconConfig && yamlConfig.metadata?.applicationDefinition) {
-        const reconAppDef = yamlConfig.metadata.applicationDefinition;
-        mappedConfig.applicationDefinition = {
-          ...mappedConfig.applicationDefinition,
-          purpose: reconAppDef.purpose || mappedConfig.applicationDefinition.purpose,
-          features: reconAppDef.features,
-          industry: reconAppDef.industry,
-          systemPrompt: reconAppDef.systemPrompt,
-          hasAccessTo: reconAppDef.hasAccessTo,
-          doesNotHaveAccessTo: reconAppDef.doesNotHaveAccessTo,
-          userTypes: reconAppDef.userTypes,
-          securityRequirements: reconAppDef.securityRequirements,
-          sensitiveDataTypes: reconAppDef.sensitiveDataTypes,
-          exampleIdentifiers: reconAppDef.exampleIdentifiers,
-          criticalActions: reconAppDef.criticalActions,
-          forbiddenTopics: reconAppDef.forbiddenTopics,
-          attackConstraints: reconAppDef.attackConstraints,
-          competitors: reconAppDef.competitors,
-          connectedSystems:
-            reconAppDef.connectedSystems || mappedConfig.applicationDefinition.connectedSystems,
-          redteamUser: reconAppDef.redteamUser || mappedConfig.applicationDefinition.redteamUser,
-        };
-
-        // Set stateful flag from recon details if applicable
-        if (yamlConfig.metadata?.reconDetails?.stateful) {
-          if (typeof target === 'object') {
-            target.config = { ...target.config, stateful: true };
-            mappedConfig.target = target;
-          }
-        }
-
-        // Import entities from recon details if not already set from redteam config
-        if (!mappedConfig.entities?.length && yamlConfig.metadata?.reconDetails?.entities?.length) {
-          mappedConfig.entities = yamlConfig.metadata.reconDetails.entities;
-        }
-      }
+      const isReconConfig = isReconYamlConfig(yamlConfig);
+      const { updatedConfig, reconContext } = applyReconYamlMetadata(yamlConfig, mappedConfig);
 
       // Set reconContext for recon-generated configs so the banner displays
-      if (isReconConfig) {
-        const meaningfulFields = countPopulatedFields(mappedConfig.applicationDefinition);
-        // Parse generatedAt ISO string to Unix timestamp (ms), fallback to now if invalid
-        const generatedAt = yamlConfig.metadata?.generatedAt;
-        const timestamp = generatedAt ? new Date(generatedAt).getTime() : Date.now();
-        const reconContext: ReconContext = {
-          source: 'recon-cli',
-          timestamp: Number.isNaN(timestamp) ? Date.now() : timestamp,
-          codebaseDirectory: yamlConfig.metadata?.scannedDirectory,
-          keyFilesAnalyzed: yamlConfig.metadata?.reconDetails?.keyFiles?.length,
-          fieldsPopulated: meaningfulFields,
-          discoveredToolsCount: yamlConfig.metadata?.reconDetails?.discoveredTools?.length,
-          securityNotes: yamlConfig.metadata?.reconDetails?.securityNotes,
-        };
-        setFullConfig(mappedConfig, reconContext);
+      if (reconContext) {
+        setFullConfig(updatedConfig, reconContext);
         setStoreReconContext(reconContext);
       } else {
-        setFullConfig(mappedConfig);
+        setFullConfig(updatedConfig);
       }
       toast.showToast(
         isReconConfig
@@ -523,12 +471,15 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  // Calculate active strategy count (excluding 'basic' with enabled: false)
+  // Calculate active strategy count shown in the sidebar.
+  // Exclude hidden basic strategy and explicitly disabled entries.
   const activeStrategyCount = useMemo(() => {
     return config.strategies.filter((strategy) => {
       const id = typeof strategy === 'string' ? strategy : strategy.id;
-      // Skip 'basic' strategy if it has enabled: false
-      if (id === 'basic' && typeof strategy === 'object' && strategy.config?.enabled === false) {
+      if (id === 'basic') {
+        return false;
+      }
+      if (typeof strategy === 'object' && strategy.config?.enabled === false) {
         return false;
       }
       return true;
@@ -711,7 +662,6 @@ export default function RedTeamSetupPage() {
         </div>
 
         {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
-        <PylonChat />
 
         {/* Save Dialog */}
         <Dialog open={saveDialogOpen} onOpenChange={(open) => !open && setSaveDialogOpen(false)}>
