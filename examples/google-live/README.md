@@ -4,6 +4,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example google-live
+cd google-live
 ```
 
 This example demonstrates how to use promptfoo with Google's WebSocket-based Live API, which enables low-latency bidirectional interactions with Gemini models. The example includes four different configurations:
@@ -112,11 +113,12 @@ If you encounter errors, check that:
 
 ### Provider Configuration
 
-All examples use the `google:live:gemini-2.0-flash-exp` model with various configurations:
+All examples use the `google:live:gemini-2.5-flash-native-audio-preview-12-2025` model with various configurations:
 
 ```yaml
 providers:
-  - id: 'google:live:gemini-2.0-flash-exp'
+  # Using gemini-2.5-flash-native-audio for Live API (supports both text and audio)
+  - id: 'google:live:gemini-2.5-flash-native-audio-preview-12-2025'
     config:
       generationConfig:
         response_modalities: ['text']

@@ -1,4 +1,5 @@
 import * as path from 'path';
+
 import { ConfigurationError } from './errors';
 
 /**
@@ -51,14 +52,6 @@ export function validateFilePath(filePath: string, basePath?: string): void {
   if (isAbsolute && suspiciousPatterns.some((pattern) => pattern.test(normalizedPath))) {
     throw new ConfigurationError('Access to system directories is not allowed', filePath);
   }
-}
-
-/**
- * Escapes special regex characters in a string.
- * Use this when building regex patterns from user input to prevent ReDoS attacks.
- */
-export function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

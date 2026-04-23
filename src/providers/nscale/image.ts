@@ -4,12 +4,12 @@ import invariant from '../../util/invariant';
 import { callOpenAiImageApi, formatOutput, OpenAiImageProvider } from '../openai/image';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider } from '../../types/providers';
 import type { OpenAiSharedOptions } from '../openai/types';
 

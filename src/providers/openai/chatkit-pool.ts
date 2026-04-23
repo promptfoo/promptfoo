@@ -12,8 +12,9 @@
  *   - Pages are workflow-specific (different workflows get different pages)
  */
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import * as http from 'http';
+
+import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import logger from '../../logger';
 import { providerRegistry } from '../providerRegistry';
 
@@ -88,14 +89,9 @@ export class ChatKitBrowserPool {
     });
 
     process.on('exit', cleanup);
-    process.on('SIGINT', () => {
-      cleanup();
-      process.exit(130);
-    });
-    process.on('SIGTERM', () => {
-      cleanup();
-      process.exit(143);
-    });
+    // Note: SIGINT/SIGTERM handlers intentionally omitted.
+    // Cleanup happens via 'exit' handler above. Direct process.exit() calls
+    // bypass shutdownGracefully() in main.ts, causing WAL corruption issues.
   }
 
   /**
@@ -190,7 +186,7 @@ export class ChatKitBrowserPool {
     }
 
     // Prevent multiple concurrent initializations
-    if (this.initPromise) {
+    if (this.initPromise != null) {
       return this.initPromise;
     }
 

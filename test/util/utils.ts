@@ -1,4 +1,29 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { vi } from 'vitest';
+import type { MockInstance } from 'vitest';
+
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
+
+/**
+ * Creates a deferred promise that can be resolved or rejected externally.
+ * Useful for controlling async flow in tests.
+ */
+export function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
 
 export class TestGrader implements ApiProvider {
   async callApi(): Promise<ProviderResponse> {
@@ -49,4 +74,95 @@ export function createMockResponse(
 
 export function stripAnsi(value: string): string {
   return value.replace(/\u001b\[[0-9;]*m/g, '');
+}
+
+export type ConsoleMethod = 'debug' | 'error' | 'info' | 'log' | 'warn';
+
+export function mockConsole(
+  method: ConsoleMethod,
+  implementation: (...args: unknown[]) => void = () => {},
+): MockInstance {
+  return vi.spyOn(console, method).mockImplementation(implementation);
+}
+
+function replaceProcessEnv(nextEnv: Record<string, string | undefined>): void {
+  for (const key of Object.keys(process.env)) {
+    Reflect.deleteProperty(process.env, key);
+  }
+  Object.assign(process.env, nextEnv);
+}
+
+export function mockProcessEnv(
+  overrides: Record<string, string | undefined> = {},
+  options: { clear?: boolean } = {},
+): () => void {
+  const originalEnv = { ...process.env };
+
+  if (options.clear) {
+    replaceProcessEnv({});
+  }
+
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      Reflect.deleteProperty(process.env, key);
+    } else {
+      Object.assign(process.env, { [key]: value });
+    }
+  }
+
+  return () => {
+    replaceProcessEnv(originalEnv);
+  };
+}
+
+export const PROXY_ENV_KEYS = [
+  'HTTP_PROXY',
+  'http_proxy',
+  'HTTPS_PROXY',
+  'https_proxy',
+  'ALL_PROXY',
+  'all_proxy',
+  'NO_PROXY',
+  'no_proxy',
+  'NPM_CONFIG_PROXY',
+  'NPM_CONFIG_HTTP_PROXY',
+  'NPM_CONFIG_HTTPS_PROXY',
+  'npm_config_proxy',
+  'npm_config_http_proxy',
+  'npm_config_https_proxy',
+] as const;
+
+export function clearProxyEnv(): void {
+  for (const key of PROXY_ENV_KEYS) {
+    Reflect.deleteProperty(process.env, key);
+  }
+}
+
+export function mockGlobal<T>(name: string, value: T): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
+
+  Object.defineProperty(globalThis, name, {
+    configurable: true,
+    value,
+    writable: true,
+  });
+
+  return () => {
+    if (descriptor) {
+      Object.defineProperty(globalThis, name, descriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, name);
+    }
+  };
+}
+
+export function createTempDir(prefix = 'promptfoo-test-'): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+export function removeTempDir(tempDir: string | undefined): void {
+  if (!tempDir) {
+    return;
+  }
+  fs.rmSync(tempDir, { recursive: true, force: true });
 }

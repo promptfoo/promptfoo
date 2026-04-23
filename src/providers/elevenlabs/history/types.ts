@@ -2,8 +2,8 @@
  * ElevenLabs Conversation History Types
  */
 
-import type { ElevenLabsBaseConfig } from '../types';
 import type { ConversationTurn } from '../agents/types';
+import type { ElevenLabsBaseConfig } from '../types';
 
 /**
  * Configuration for conversation history provider

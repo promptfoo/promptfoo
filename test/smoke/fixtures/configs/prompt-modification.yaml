@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing prompt prefix/suffix
+description: 'Smoke test - prompt prefix and suffix'
+
+providers:
+  - echo
+
+prompts:
+  - 'MIDDLE'
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: MIDDLE

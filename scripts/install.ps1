@@ -12,7 +12,7 @@
 #
 # Requirements:
 #   - PowerShell 5.1+ or PowerShell Core 7+
-#   - Node.js 20+ (for now, until SEA binaries are available)
+#   - Node.js 20+ only when falling back to npm installation
 
 #Requires -Version 5.1
 $ErrorActionPreference = 'Stop'

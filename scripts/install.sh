@@ -14,7 +14,7 @@
 # Requirements:
 #   - curl or wget
 #   - tar (for extracting archives)
-#   - Node.js 20+ (for now, until SEA binaries are available)
+#   - Node.js 20+ only when falling back to npm installation
 
 set -euo pipefail
 
@@ -244,8 +244,7 @@ install_npm() {
   # Create installation directory
   mkdir -p "$BIN_DIR"
 
-  # For now, we install via npm since SEA binaries aren't ready yet
-  # This requires Node.js to be installed
+  # npm fallback requires Node.js to be installed.
   if ! command -v node &>/dev/null; then
     error "Node.js is required but not installed.\nPlease install Node.js 20+ from https://nodejs.org"
   fi
@@ -278,7 +277,7 @@ install_binary() {
   local archive_name download_url temp_file
 
   archive_name="promptfoo-${version}-${platform}.tar.gz"
-  download_url="${GITHUB_RELEASES}/download/${version}/${archive_name}"
+  download_url="${GITHUB_RELEASES}/download/v${version}/${archive_name}"
   temp_file="/tmp/${archive_name}"
 
   info "Installing promptfoo v$version for $platform..."

@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Base config for testing multiple config merging
+description: 'Base config'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'

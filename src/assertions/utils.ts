@@ -39,7 +39,8 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
 export async function loadFromJavaScriptFile(
   filePath: string,
   functionName: string | undefined,
-  args: any[],
+  args: unknown[],
+  // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
 ): Promise<any> {
   const requiredModule = await importModule(filePath, functionName);
   if (functionName && typeof requiredModule[functionName] === 'function') {

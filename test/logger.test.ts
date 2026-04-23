@@ -1,4 +1,5 @@
 import path from 'path';
+
 import chalk from 'chalk';
 import {
   afterEach,
@@ -6,10 +7,11 @@ import {
   describe,
   expect,
   it,
-  vi,
   type Mock,
   type MockInstance,
+  vi,
 } from 'vitest';
+import { mockProcessEnv } from './util/utils';
 import type { Logger } from 'winston';
 import type Transport from 'winston-transport';
 
@@ -142,9 +144,12 @@ describe('logger', () => {
     mockLogger.transports[0].level = 'info';
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     mockStdout.mockRestore();
     global.Error = originalError;
+    vi.restoreAllMocks();
+    vi.doUnmock('source-map-support');
+    await vi.dynamicImportSettled();
     vi.resetModules();
   });
 
@@ -199,7 +204,7 @@ describe('logger', () => {
     });
 
     it('should handle missing stack trace', () => {
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', { value: undefined });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
@@ -228,7 +233,7 @@ describe('logger', () => {
     });
 
     it('should handle empty stack trace', () => {
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', { value: '' });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
@@ -238,10 +243,10 @@ describe('logger', () => {
 
     it('should handle errors in stack trace parsing', () => {
       // Force an error in the try block by making stack.split throw
-      const mockError = new Error();
+      const mockError = new Error('test error');
       Object.defineProperty(mockError, 'stack', {
         get: () => {
-          throw new Error('Forced error');
+          throw new Error('Forced stack access error');
         },
       });
       vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
@@ -563,10 +568,10 @@ describe('logger', () => {
   });
 
   describe('initializeSourceMapSupport', () => {
-    it('should only call install once across multiple invocations', async () => {
+    it('should only call install once across concurrent and repeated invocations', async () => {
       // Save and clear LOG_LEVEL to prevent auto-initialization during import
       const originalLogLevel = process.env.LOG_LEVEL;
-      delete process.env.LOG_LEVEL;
+      mockProcessEnv({ LOG_LEVEL: undefined });
 
       try {
         // Reset modules and set up fresh mocks
@@ -577,32 +582,24 @@ describe('logger', () => {
           install: mockInstall,
         }));
 
-        // Import fresh logger with our mock (import needed for side effect)
-        await import('../src/logger');
-
-        // Clear any calls that happened during import
-        mockInstall.mockClear();
-
-        // Reset the initialized flag by reimporting with clean state
-        vi.resetModules();
-        vi.doMock('source-map-support', () => ({
-          install: mockInstall,
-        }));
         const cleanLogger = await import('../src/logger');
         mockInstall.mockClear();
 
-        // First explicit call should trigger install
-        await cleanLogger.initializeSourceMapSupport();
+        // Concurrent explicit calls should share one in-flight initialization.
+        await Promise.all([
+          cleanLogger.initializeSourceMapSupport(),
+          cleanLogger.initializeSourceMapSupport(),
+        ]);
         expect(mockInstall).toHaveBeenCalledTimes(1);
 
-        // Second call should NOT trigger install again (flag is set)
+        // A later call should not trigger install again once initialized.
         mockInstall.mockClear();
         await cleanLogger.initializeSourceMapSupport();
         expect(mockInstall).not.toHaveBeenCalled();
       } finally {
         // Restore LOG_LEVEL
         if (originalLogLevel !== undefined) {
-          process.env.LOG_LEVEL = originalLogLevel;
+          mockProcessEnv({ LOG_LEVEL: originalLogLevel });
         }
         vi.resetModules();
       }
@@ -611,7 +608,7 @@ describe('logger', () => {
     it('should handle errors gracefully when source-map-support fails', async () => {
       // Save and clear LOG_LEVEL
       const originalLogLevel = process.env.LOG_LEVEL;
-      delete process.env.LOG_LEVEL;
+      mockProcessEnv({ LOG_LEVEL: undefined });
 
       try {
         vi.resetModules();
@@ -628,7 +625,7 @@ describe('logger', () => {
       } finally {
         // Restore LOG_LEVEL
         if (originalLogLevel !== undefined) {
-          process.env.LOG_LEVEL = originalLogLevel;
+          mockProcessEnv({ LOG_LEVEL: originalLogLevel });
         }
         vi.resetModules();
       }
@@ -1243,9 +1240,10 @@ describe('logger', () => {
 
       const loggedMessage = mockLogger.debug.mock.calls[0][0].message;
       // When undefined is passed through sanitizeObject, it may be omitted or converted to null
-      // Just verify the log message exists and doesn't crash
+      // Verify the log envelope and stable serialized fields still exist without assuming requestBody shape.
       expect(loggedMessage).toContain('Api Request');
-      expect(loggedMessage).toContain('"url"');
+      expect(loggedMessage).toContain('"message": "API request"');
+      expect(loggedMessage).toContain('"url": "https://api.example.com/test"');
     });
 
     it('should handle response with empty body', async () => {
@@ -1326,6 +1324,270 @@ describe('logger', () => {
       expect(loggedMessage).toContain('"requestBody":');
       expect(loggedMessage).toContain('"status":');
       expect(loggedMessage).toContain('"response":');
+    });
+  });
+
+  describe('setStructuredLogging with custom logger', () => {
+    let customLogger: {
+      debug: ReturnType<typeof vi.fn>;
+      info: ReturnType<typeof vi.fn>;
+      warn: ReturnType<typeof vi.fn>;
+      error: ReturnType<typeof vi.fn>;
+    };
+
+    beforeEach(() => {
+      customLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      // Set custom logger to bypass default createLogMethod wrappers
+      logger.setLogger(customLogger);
+    });
+
+    afterEach(() => {
+      // Reset to default state after each test
+      logger.setStructuredLogging(false);
+    });
+
+    it('should pass structured object when enabled', () => {
+      logger.setStructuredLogging(true);
+
+      logger.default.info('test message', { userId: '123', action: 'test' });
+
+      // When structured logging is enabled, custom logger receives object
+      expect(customLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'test message',
+          userId: '123',
+          action: 'test',
+        }),
+      );
+    });
+
+    it('should pass string with appended JSON when disabled', () => {
+      logger.setStructuredLogging(false);
+
+      logger.default.info('test message', { userId: '123' });
+
+      // When structured logging is disabled, context is appended as JSON string
+      const call = customLogger.info.mock.calls[0][0];
+      expect(typeof call).toBe('string');
+      expect(call).toContain('test message');
+      expect(call).toContain('"userId"');
+      expect(call).toContain('123');
+    });
+
+    it('should include all context fields in structured output', () => {
+      logger.setStructuredLogging(true);
+
+      const context = {
+        userId: 'user-123',
+        requestId: 'req-456',
+        duration: 100,
+      };
+
+      logger.default.info('operation completed', context);
+
+      expect(customLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'operation completed',
+          userId: 'user-123',
+          requestId: 'req-456',
+          duration: 100,
+        }),
+      );
+    });
+
+    it('should pass plain string when no context provided', () => {
+      logger.setStructuredLogging(true);
+
+      logger.default.info('simple message');
+
+      // Without context, just pass the string regardless of structured logging setting
+      expect(customLogger.info).toHaveBeenCalledWith('simple message');
+    });
+  });
+
+  describe('setLogger', () => {
+    let customLogger: {
+      debug: ReturnType<typeof vi.fn>;
+      info: ReturnType<typeof vi.fn>;
+      warn: ReturnType<typeof vi.fn>;
+      error: ReturnType<typeof vi.fn>;
+    };
+
+    beforeEach(() => {
+      customLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+    });
+
+    afterEach(() => {
+      // Reset structured logging
+      logger.setStructuredLogging(false);
+    });
+
+    it('should route logs through custom logger', () => {
+      logger.setLogger(customLogger);
+
+      logger.default.info('test message');
+
+      expect(customLogger.info).toHaveBeenCalledWith('test message');
+    });
+
+    it('should pass structured objects to custom logger when structured logging enabled', () => {
+      logger.setLogger(customLogger);
+      logger.setStructuredLogging(true);
+
+      logger.default.info('test message', { requestId: 'req-123' });
+
+      expect(customLogger.info).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'test message',
+          requestId: 'req-123',
+        }),
+      );
+    });
+
+    it('should validate custom logger has required methods', () => {
+      expect(() => logger.setLogger(null as any)).toThrow(
+        'Custom logger must be a valid object with required logging methods',
+      );
+
+      expect(() => logger.setLogger({} as any)).toThrow(
+        'Custom logger is missing required methods',
+      );
+
+      expect(() => logger.setLogger({ info: vi.fn() } as any)).toThrow(
+        'Custom logger is missing required methods: debug, warn, error',
+      );
+    });
+
+    it('should work with winston-style loggers that accept objects', () => {
+      // Simulate a winston-style logger that handles object arguments
+      const winstonStyleLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+
+      logger.setLogger(winstonStyleLogger);
+      logger.setStructuredLogging(true);
+
+      logger.default.info('structured log', { key: 'value' });
+
+      expect(winstonStyleLogger.info).toHaveBeenCalledWith({
+        message: 'structured log',
+        key: 'value',
+      });
+    });
+  });
+
+  describe('logRequestResponse with structured logging', () => {
+    let mockResponse: Partial<Response>;
+    let customLogger: {
+      debug: ReturnType<typeof vi.fn>;
+      info: ReturnType<typeof vi.fn>;
+      warn: ReturnType<typeof vi.fn>;
+      error: ReturnType<typeof vi.fn>;
+    };
+
+    beforeEach(() => {
+      mockResponse = {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        clone: vi.fn().mockReturnValue({
+          text: vi.fn().mockResolvedValue('{"success": true}'),
+        }),
+      };
+      customLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+      // Set custom logger to test structured logging behavior
+      logger.setLogger(customLogger);
+    });
+
+    afterEach(() => {
+      logger.setStructuredLogging(false);
+    });
+
+    it('should pass structured object with all request details', async () => {
+      logger.setStructuredLogging(true);
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: { prompt: 'test prompt' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      expect(customLogger.debug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'API request',
+          url: 'https://api.example.com/test',
+          method: 'POST',
+          status: 200,
+          statusText: 'OK',
+        }),
+      );
+    });
+
+    it('should include response text in structured output', async () => {
+      logger.setStructuredLogging(true);
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: null,
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+      });
+
+      const callArg = customLogger.debug.mock.calls[0][0];
+      // Response text comes from the mock - exact format depends on mock implementation
+      expect(callArg).toHaveProperty('response');
+      expect(callArg.response).toContain('success');
+    });
+
+    it('should use error level when error flag is set', async () => {
+      logger.setStructuredLogging(true);
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test',
+        requestBody: null,
+        requestMethod: 'GET',
+        response: mockResponse as Response,
+        error: true,
+      });
+
+      expect(customLogger.error).toHaveBeenCalled();
+      expect(customLogger.debug).not.toHaveBeenCalled();
+    });
+
+    it('should sanitize sensitive data in structured output', async () => {
+      logger.setStructuredLogging(true);
+
+      await logger.logRequestResponse({
+        url: 'https://api.example.com/test?api_key=secret123',
+        requestBody: { password: 'secret', data: 'safe' },
+        requestMethod: 'POST',
+        response: mockResponse as Response,
+      });
+
+      const callArg = customLogger.debug.mock.calls[0][0];
+      // URL should have sensitive params redacted (may be URL-encoded as %5BREDACTED%5D)
+      expect(callArg.url).toMatch(/(\[REDACTED\]|%5BREDACTED%5D)/);
+      // Request body should have sensitive fields redacted
+      expect(JSON.stringify(callArg.requestBody)).toContain('[REDACTED]');
     });
   });
 });
