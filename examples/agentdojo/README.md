@@ -36,11 +36,11 @@ providers:
       force_rerun: true # bypass AgentDojo's local trace cache for fresh comparisons
 ```
 
-Custom GPT-5 models use Promptfoo's OpenAI wrapper with AgentDojo's defense-aware
-pipeline builder. The `tool_filter` defense is only supported for AgentDojo's
-registered OpenAI chat models, such as `gpt-4o-2024-05-13`.
+Custom GPT models use Promptfoo's OpenAI Responses wrapper with AgentDojo's
+defense-aware pipeline builder. The `tool_filter` defense is only supported for
+AgentDojo's registered OpenAI chat models, such as `gpt-4o-2024-05-13`.
 
-AgentDojo's model registry does not include GPT-5.4. For custom OpenAI models,
+AgentDojo's model registry does not include GPT-5.4. For custom GPT models,
 this example creates a custom AgentDojo pipeline and registers the configured
 model name so model-addressing attacks target the actual model under test. Use an
 AgentDojo-registered model ID when you need to reproduce the paper's published

@@ -279,17 +279,8 @@ def _set_span_attributes(span, attributes: dict[str, Any]):
         span.set_attribute(key, value)
 
 
-def _record_span_exception(span, error: Exception):
-    if span is None:
-        return
-    try:
-        span.record_exception(error)
-    except Exception:
-        logger.debug("Failed to record OpenTelemetry span exception", exc_info=True)
-
-
-class CustomOpenAILLM(BasePipelineElement):
-    """AgentDojo LLM wrapper for OpenAI models that need newer API surfaces."""
+class OpenAIResponsesLLM(BasePipelineElement):
+    """AgentDojo LLM wrapper for custom GPT models via OpenAI Responses."""
 
     def __init__(
         self,
@@ -297,13 +288,11 @@ class CustomOpenAILLM(BasePipelineElement):
         model: str,
         name: str,
         max_output_tokens: int,
-        use_responses_api: bool,
     ):
         self.client = llm_client
         self.model = model
         self.name = name
         self.max_output_tokens = max_output_tokens
-        self.use_responses_api = use_responses_api
 
     @staticmethod
     def _content_to_text(content: Any) -> str | None:
@@ -359,21 +348,11 @@ class CustomOpenAILLM(BasePipelineElement):
         return converted
 
     def _tool_to_openai(self, func) -> dict[str, Any]:
-        parameters = func.parameters.model_json_schema()
-        if self.use_responses_api:
-            return {
-                "type": "function",
-                "name": func.name,
-                "description": func.description,
-                "parameters": parameters,
-            }
         return {
             "type": "function",
-            "function": {
-                "name": func.name,
-                "description": func.description,
-                "parameters": parameters,
-            },
+            "name": func.name,
+            "description": func.description,
+            "parameters": func.parameters.model_json_schema(),
         }
 
     @staticmethod
@@ -435,27 +414,6 @@ class CustomOpenAILLM(BasePipelineElement):
                 )
         return text_content, tool_calls
 
-    def _call_chat_completions_api(self, messages, tools):
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools if tools else NOT_GIVEN,
-            tool_choice="auto" if tools else NOT_GIVEN,
-            max_completion_tokens=self.max_output_tokens,
-        )
-        _accumulate_tokens(response.usage)
-
-        message = response.choices[0].message
-        tool_calls = [
-            {
-                "id": tool_call.id,
-                "function_name": tool_call.function.name,
-                "arguments": tool_call.function.arguments,
-            }
-            for tool_call in (message.tool_calls or [])
-        ]
-        return message.content or "", tool_calls
-
     def query(
         self,
         query_str: str,
@@ -472,13 +430,7 @@ class CustomOpenAILLM(BasePipelineElement):
             extra_args = {}
         openai_messages = [self._message_to_openai(message) for message in messages]
         tools = [self._tool_to_openai(func) for func in runtime.functions.values()]
-
-        if self.use_responses_api:
-            text_content, tool_calls = self._call_responses_api(openai_messages, tools)
-        else:
-            text_content, tool_calls = self._call_chat_completions_api(
-                openai_messages, tools
-            )
+        text_content, tool_calls = self._call_responses_api(openai_messages, tools)
 
         assistant_tool_calls = [
             FunctionCall(
@@ -525,13 +477,18 @@ def _get_pipeline(
             _pipeline_cache[key] = AgentPipeline.from_config(config)
         else:
             import openai
-            from agentdojo.agent_pipeline.llms.openai_llm import OpenAILLM
 
             if defense == "tool_filter":
                 raise ValueError(
                     "tool_filter is only supported for AgentDojo-registered OpenAI "
                     "models. Use gpt-4o-2024-05-13 or choose a custom-model-safe "
                     "defense such as spotlighting_with_delimiting or repeat_user_prompt."
+                )
+            if not model.lower().startswith("gpt-"):
+                raise ValueError(
+                    f"Model {model!r} is not registered in AgentDojo. Use an "
+                    "AgentDojo-registered model ID or a custom GPT model via "
+                    "OpenAI Responses, such as gpt-5.4."
                 )
 
             client = (
@@ -541,24 +498,13 @@ def _get_pipeline(
             )
             _register_custom_model_name(model)
 
-            use_responses_api = "gpt-5" in model.lower()
-            use_custom_llm = use_responses_api or any(
-                family in model.lower() for family in ("o1", "o3")
-            )
-            if use_custom_llm:
-                llm = CustomOpenAILLM(
+            config = PipelineConfig(
+                llm=OpenAIResponsesLLM(
                     llm_client=client,
                     model=model,
                     name=model,
                     max_output_tokens=max_output_tokens,
-                    use_responses_api=use_responses_api,
-                )
-            else:
-                llm = OpenAILLM(client=client, model=model)
-                llm.name = model
-
-            config = PipelineConfig(
-                llm=llm,
+                ),
                 model_id=model,
                 defense=defense,
                 system_message_name=None,
@@ -875,80 +821,81 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     context = context or {}
     config = options.get("config", {})
     settings = _settings(options, context)
-    span_cm = _start_span(
-        config, context, "agentdojo.task", _start_attributes(settings, prompt, context)
-    )
-    span = span_cm.__enter__()
 
     try:
-        _reset_token_usage()
-        _setup_logger(settings.logdir)
+        with _start_span(
+            config,
+            context,
+            "agentdojo.task",
+            _start_attributes(settings, prompt, context),
+        ) as span:
+            _reset_token_usage()
+            _setup_logger(settings.logdir)
 
-        pipeline = _get_pipeline(
-            settings.model,
-            settings.defense,
-            request_timeout=settings.request_timeout,
-            max_output_tokens=settings.max_output_tokens,
-        )
-        suite = _get_suite(settings.suite_name, settings.version)
-        attack = _get_attack(settings.attack_name, suite, pipeline)
-        user_task = suite.user_tasks[settings.user_task_id]
-        _set_span_attributes(span, {"agentdojo.pipeline_name": pipeline.name})
+            pipeline = _get_pipeline(
+                settings.model,
+                settings.defense,
+                request_timeout=settings.request_timeout,
+                max_output_tokens=settings.max_output_tokens,
+            )
+            suite = _get_suite(settings.suite_name, settings.version)
+            attack = _get_attack(settings.attack_name, suite, pipeline)
+            user_task = suite.user_tasks[settings.user_task_id]
+            _set_span_attributes(span, {"agentdojo.pipeline_name": pipeline.name})
 
-        injection_tasks = (
-            [settings.injection_task_id] if settings.injection_task_id else None
-        )
-        utility_results, security_results = run_task_with_injection_tasks(
-            suite=suite,
-            agent_pipeline=pipeline,
-            user_task=user_task,
-            attack=attack,
-            logdir=settings.logdir,
-            force_rerun=settings.force_rerun,
-            injection_tasks=injection_tasks,
-            benchmark_version=settings.version,
-        )
-        utility, security = _select_result(settings, utility_results, security_results)
+            injection_tasks = (
+                [settings.injection_task_id] if settings.injection_task_id else None
+            )
+            utility_results, security_results = run_task_with_injection_tasks(
+                suite=suite,
+                agent_pipeline=pipeline,
+                user_task=user_task,
+                attack=attack,
+                logdir=settings.logdir,
+                force_rerun=settings.force_rerun,
+                injection_tasks=injection_tasks,
+                benchmark_version=settings.version,
+            )
+            utility, security = _select_result(
+                settings, utility_results, security_results
+            )
 
-        trace_log = _read_agentdojo_log(
-            logdir=settings.logdir,
-            pipeline_name=pipeline.name,
-            suite_name=settings.suite_name,
-            user_task_id=settings.user_task_id,
-            attack_name=settings.attack_name,
-            injection_task_id=settings.injection_task_id,
-        )
-        messages = _format_trace_messages(trace_log)
-        result = _result_payload(
-            settings,
-            pipeline.name,
-            utility,
-            security,
-            utility_results,
-            security_results,
-        )
+            trace_log = _read_agentdojo_log(
+                logdir=settings.logdir,
+                pipeline_name=pipeline.name,
+                suite_name=settings.suite_name,
+                user_task_id=settings.user_task_id,
+                attack_name=settings.attack_name,
+                injection_task_id=settings.injection_task_id,
+            )
+            messages = _format_trace_messages(trace_log)
+            result = _result_payload(
+                settings,
+                pipeline.name,
+                utility,
+                security,
+                utility_results,
+                security_results,
+            )
 
-        _set_span_attributes(
-            span,
-            {
-                "agentdojo.user_task_success": utility,
-                "agentdojo.injection_blocked": security,
-                "agentdojo.safe_utility": utility and security,
-                "llm.usage.prompt_tokens": _token_usage["prompt"],
-                "llm.usage.completion_tokens": _token_usage["completion"],
-                "llm.usage.total_tokens": _token_usage["total"],
-            },
-        )
+            _set_span_attributes(
+                span,
+                {
+                    "agentdojo.user_task_success": utility,
+                    "agentdojo.injection_blocked": security,
+                    "agentdojo.safe_utility": utility and security,
+                    "llm.usage.prompt_tokens": _token_usage["prompt"],
+                    "llm.usage.completion_tokens": _token_usage["completion"],
+                    "llm.usage.total_tokens": _token_usage["total"],
+                },
+            )
 
-        return {
-            "output": _last_assistant_response(messages) or json.dumps(result),
-            "metadata": _metadata(result, context, messages, trace_log),
-            "tokenUsage": _token_usage_payload(),
-        }
+            return {
+                "output": _last_assistant_response(messages) or json.dumps(result),
+                "metadata": _metadata(result, context, messages, trace_log),
+                "tokenUsage": _token_usage_payload(),
+            }
 
     except Exception as e:
-        _record_span_exception(span, e)
         logger.exception(f"AgentDojo provider error: {e}")
         return _error_response(settings, e)
-    finally:
-        span_cm.__exit__(None, None, None)
