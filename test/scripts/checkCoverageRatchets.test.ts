@@ -121,6 +121,26 @@ describe('coverage ratchets', () => {
     expect(result.skippedFiles).toEqual(['src/legacy.ts']);
   });
 
+  it('excludes terminal Ink UI sources from the backend ratchet', () => {
+    const file = 'src/ui/components/table/ResultsTable.tsx';
+    const result = evaluateCoverageRatchets({
+      changedFiles: [{ path: file, status: 'A' }],
+      coverageMap: {
+        [file]: coverageFile(file, {
+          branches: { covered: 0, total: 8 },
+          functions: { covered: 0, total: 4 },
+          statements: { covered: 1, total: 12 },
+        }),
+      },
+      repoRoot,
+      report: backendReport,
+    });
+
+    expect(result.checkedFiles).toEqual([]);
+    expect(result.failures).toEqual([]);
+    expect(result.skippedFiles).toEqual([]);
+  });
+
   it('enforces coverage floors for modified critical backend paths', () => {
     const file = 'src/assertions/contains.ts';
     const result = evaluateCoverageRatchets({

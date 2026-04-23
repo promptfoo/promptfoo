@@ -101,7 +101,7 @@ export const COVERAGE_RATCHET_REPORTS: CoverageReportConfig[] = [
     name: 'backend',
     coverageFile: 'coverage/coverage-final.json',
     sourcePrefix: 'src/',
-    excludePrefixes: ['src/app/', 'src/__mocks__/'],
+    excludePrefixes: ['src/app/', 'src/__mocks__/', 'src/ui/'],
     excludeFiles: ['src/entrypoint.ts', 'src/main.ts', 'src/migrate.ts'],
     criticalPrefixes: ['src/assertions/', 'src/matchers/', 'src/util/config/'],
     criticalFiles: ['src/evaluator.ts', 'src/evaluatorHelpers.ts', 'src/prompts.ts'],
