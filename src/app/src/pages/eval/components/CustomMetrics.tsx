@@ -91,21 +91,25 @@ function buildMetricResultLookup(componentResults: GradingResult[] | undefined):
     return lookup;
   }
 
-  // First pass: identify all results and their indices
   const indexedResults = componentResults.map((result, index) => ({ result, index }));
+  const childResultsByParentIndex = new Map<number, GradingResult[]>();
 
-  // Second pass: build the lookup
+  for (const { result } of indexedResults) {
+    const parentIndex = result?.metadata?.parentAssertSetIndex;
+    if (parentIndex === undefined) {
+      continue;
+    }
+
+    const children = childResultsByParentIndex.get(parentIndex) ?? [];
+    children.push(result);
+    childResultsByParentIndex.set(parentIndex, children);
+  }
+
   for (const { result, index } of indexedResults) {
     if (!result) {
       continue;
     }
 
-    // Skip child assertions - they'll be added to their parent
-    if (result.metadata?.parentAssertSetIndex !== undefined) {
-      continue;
-    }
-
-    // Get metric name
     const metric =
       result.assertion?.metric || result.metadata?.assertSetMetric || result.assertion?.type || '';
 
@@ -114,16 +118,7 @@ function buildMetricResultLookup(componentResults: GradingResult[] | undefined):
     }
 
     const isAssertSet = result.metadata?.isAssertSet === true;
-
-    // Find children for assert-sets
-    const childResults: GradingResult[] = [];
-    if (isAssertSet) {
-      for (const { result: childResult } of indexedResults) {
-        if (childResult?.metadata?.parentAssertSetIndex === index) {
-          childResults.push(childResult);
-        }
-      }
-    }
+    const childResults = isAssertSet ? (childResultsByParentIndex.get(index) ?? []) : [];
 
     lookup.set(metric, { result, isAssertSet, childResults });
   }

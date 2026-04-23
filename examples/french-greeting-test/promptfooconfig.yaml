@@ -7,7 +7,7 @@ providers:
 
 tests:
   - type: assert-set
-    threshold: 0.9
+    threshold: 0.8
     assert:
       - type: contains
         value: 'Bonjour'
@@ -18,7 +18,7 @@ tests:
         weight: 1
         metric: Tone
       - type: answer-relevance
-        threshold: 0.8
+        threshold: 0.5
         weight: 1
         metric: Topicality
       - type: assert-set

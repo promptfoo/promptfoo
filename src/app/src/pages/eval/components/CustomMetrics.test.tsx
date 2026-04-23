@@ -212,10 +212,6 @@ describe('CustomMetrics', () => {
     expect(screen.getByTestId('metric-value-metric2')).toHaveTextContent('50.00% (20.00/40.00)');
   });
 
-  it('should include a comment to fix the missing key prop warning', () => {
-    expect(true).toBe(true);
-  });
-
   it('correctly handles undefined metric values in lookup', () => {
     const lookupWithUndefined: Record<string, number | undefined> = {
       metric1: 10,
@@ -345,7 +341,7 @@ describe('CustomMetrics', () => {
       expect(screen.getByLabelText('Show assert-set details')).toBeInTheDocument();
     });
 
-    it('skips child assertions in lookup', () => {
+    it('uses hierarchy result data for child metrics that are shown separately', () => {
       const lookup = { parent: 1, child: 1 };
       const componentResults: GradingResult[] = [
         {
@@ -366,12 +362,10 @@ describe('CustomMetrics', () => {
 
       renderWithProviders(<CustomMetrics lookup={lookup} componentResults={componentResults} />);
 
-      // Only parent should be rendered as a chip, child is included in parent
       expect(screen.getByText('parent')).toBeInTheDocument();
-      // Child should not be rendered as a separate chip
-      const childChip = screen.queryByTestId('metric-child');
-      expect(childChip).toBeInTheDocument(); // Note: child IS in lookup, so it renders
-      // But when clicking parent chevron, child details appear in popover
+      expect(screen.getByText('child')).toBeInTheDocument();
+      expect(screen.queryByTestId('metric-name-child')).not.toBeInTheDocument();
+      expect(screen.getByTestId('assertion-chip-child')).toHaveClass('bg-emerald-50');
     });
 
     it('uses assertSetMetric from metadata as metric name', () => {

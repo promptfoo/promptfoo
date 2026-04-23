@@ -1065,10 +1065,7 @@ export function evalCommand(
       'Truncate console table cells to this length',
       '250',
     )
-    .option(
-      '--show-assertions',
-      'Show detailed assertion table for each result (auto-shown for failures)',
-    )
+    .option('--show-assertions', 'Show detailed assertion table for each result in CLI output')
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option('--no-share', 'Do not share, this overrides the config file')
     .option(
