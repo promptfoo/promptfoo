@@ -111,6 +111,7 @@ describe('RedteamGoatProvider', () => {
     mockFetch = vi.fn().mockImplementation(async function () {
       return {
         json: async () => ({
+          materializationHandled: true,
           message: { role: 'assistant', content: 'test response' },
         }),
 
@@ -264,6 +265,7 @@ describe('RedteamGoatProvider', () => {
 
     mockFetch.mockResolvedValue({
       json: async () => ({
+        materializationHandled: true,
         message: {
           role: 'user',
           content: JSON.stringify({
@@ -369,6 +371,7 @@ describe('RedteamGoatProvider', () => {
 
     mockFetch.mockResolvedValue({
       json: async () => ({
+        materializationHandled: true,
         message: {
           role: 'user',
           content: JSON.stringify({

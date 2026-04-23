@@ -21,6 +21,10 @@ import {
   shouldGenerateRemote,
 } from '../../remoteGeneration';
 import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializedInputVariables,
+} from '../../remoteMaterialization';
+import {
   applyRuntimeTransforms,
   type LayerConfig,
   type MediaData,
@@ -414,16 +418,32 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Extract input vars from the processed message for multi-input mode
+      if (this.config.inputs && shouldGenerateRemote()) {
+        assertRemoteMaterializationHandled(agentResp, 'Hydra multi-input generation');
+      }
       const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
-      const materializedInputVars =
-        currentInputVars && this.config.inputs
-          ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+      let materializedInputVars:
+        | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+        | undefined;
+      if (currentInputVars && this.config.inputs) {
+        if (shouldGenerateRemote()) {
+          materializedInputVars = buildRemoteMaterializedInputVariables(
+            agentResp,
+            currentInputVars,
+          );
+        } else {
+          materializedInputVars = await materializeInputVariablesWithMetadata(
+            currentInputVars,
+            this.config.inputs,
+            {
               materializationIndex: turn,
               pluginId: 'hydra',
               provider: this.agentProvider,
               purpose: test?.metadata?.purpose as string | undefined,
-            })
-          : undefined;
+            },
+          );
+        }
+      }
       const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
       // Add message to conversation history (without <Prompt> tags)

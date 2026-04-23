@@ -108,6 +108,18 @@ async function rematerializeStrategyInputVars(
     };
   }
 
+  const alreadyMaterialized =
+    Boolean(inputMaterialization) &&
+    Object.keys(inputs).every((key) =>
+      Object.prototype.hasOwnProperty.call(testCase.vars ?? {}, key),
+    );
+  if (alreadyMaterialized) {
+    return {
+      inputMaterialization,
+      vars: testCase.vars,
+    };
+  }
+
   try {
     const parsed = JSON.parse(String(testCase.vars[injectVar]));
     const materializedVars = await extractMaterializedVariablesFromJsonWithMetadata(
