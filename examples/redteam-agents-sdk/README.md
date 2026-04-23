@@ -6,6 +6,10 @@ The fixture imports the agentic runtime, runs a small SDK-backed probe, and emit
 
 ## Run
 
+```bash
+npx promptfoo@latest init --example redteam-agents-sdk
+```
+
 Set `AGENTS_SDK_REPO` to a local checkout of `openai-agents-python` and point `PROMPTFOO_PYTHON` at an environment that can import that checkout:
 
 ```bash
