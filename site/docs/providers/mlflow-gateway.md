@@ -30,9 +30,9 @@ Where `<endpoint-name>` is the name of the gateway endpoint you created in the M
 
 ## Environment variables
 
-| Variable               | Description                                          | Required |
-| ---------------------- | ---------------------------------------------------- | -------- |
-| `MLFLOW_GATEWAY_URL`   | MLflow server URL (e.g., `http://localhost:5000`)    | Yes      |
+| Variable                 | Description                                          | Required |
+| ------------------------ | ---------------------------------------------------- | -------- |
+| `MLFLOW_GATEWAY_URL`     | MLflow server URL (e.g., `http://localhost:5000`)    | Yes      |
 | `MLFLOW_GATEWAY_API_KEY` | API key (not validated by gateway, can be any value) | No       |
 
 ## Basic usage
@@ -72,11 +72,11 @@ providers:
       max_tokens: 500
 ```
 
-| Parameter    | Description                          | Default               |
-| ------------ | ------------------------------------ | --------------------- |
-| `gatewayUrl` | MLflow server URL                    | `MLFLOW_GATEWAY_URL`  |
-| `temperature`| Sampling temperature                 | Provider default      |
-| `max_tokens` | Maximum tokens to generate           | Provider default      |
+| Parameter     | Description                | Default              |
+| ------------- | -------------------------- | -------------------- |
+| `gatewayUrl`  | MLflow server URL          | `MLFLOW_GATEWAY_URL` |
+| `temperature` | Sampling temperature       | Provider default     |
+| `max_tokens`  | Maximum tokens to generate | Provider default     |
 
 All standard [OpenAI configuration options](/docs/providers/openai/#configuring-parameters) are supported since MLflow Gateway uses an OpenAI-compatible API.
 

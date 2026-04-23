@@ -1,4 +1,4 @@
-# MLflow AI Gateway Provider Example
+# provider-mlflow-gateway (MLflow AI Gateway)
 
 This example demonstrates how to use [MLflow AI Gateway](https://mlflow.org/docs/latest/genai/governance/ai-gateway/) as an LLM provider in promptfoo.
 
