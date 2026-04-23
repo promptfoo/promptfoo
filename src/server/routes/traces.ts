@@ -50,10 +50,13 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
     logger.debug(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
     const traceStore = getTraceStore();
-    const traces = await traceStore.getTracesByEvaluation(evaluationId);
+    const sanitize = shouldSanitizeTraces(req);
+    const traces = await traceStore.getTracesByEvaluation(evaluationId, {
+      sanitizeAttributes: false,
+    });
 
     logger.debug(`[TracesRoute] Found ${traces.length} traces for evaluation ${evaluationId}`);
-    if (shouldSanitizeTraces(req)) {
+    if (sanitize) {
       res.json({ traces: traces.map((t) => sanitizeTracePayload(t)) });
       return;
     }
@@ -77,7 +80,10 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
     logger.debug(`[TracesRoute] Fetching trace ${traceId}`);
 
     const traceStore = getTraceStore();
-    const trace = await traceStore.getTrace(traceId);
+    const sanitize = shouldSanitizeTraces(req);
+    const trace = await traceStore.getTrace(traceId, {
+      sanitizeAttributes: false,
+    });
 
     if (!trace) {
       res.status(404).json({ error: 'Trace not found' });
@@ -85,7 +91,7 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
     }
 
     logger.debug(`[TracesRoute] Found trace ${traceId} with ${trace.spans?.length || 0} spans`);
-    if (shouldSanitizeTraces(req)) {
+    if (sanitize) {
       res.json({ trace: sanitizeTracePayload(trace) });
       return;
     }
