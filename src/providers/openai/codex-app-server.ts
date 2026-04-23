@@ -344,6 +344,9 @@ const COMMON_OPTIONAL_PROCESS_ENV_KEYS = [
 ] as const;
 
 const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
+  // GPT-5.5 models. No discounted cached-input API rate is published yet.
+  'gpt-5.5': { input: 5.0, output: 30.0, cache_read: 5.0 },
+  'gpt-5.5-pro': { input: 30.0, output: 180.0, cache_read: 30.0 },
   'gpt-5.4': { input: 2.5, output: 15.0, cache_read: 0.25 },
   'gpt-5.4-pro': { input: 30.0, output: 180.0, cache_read: 30.0 },
   'gpt-5.3-codex': { input: 1.75, output: 14.0, cache_read: 0.175 },
@@ -1532,6 +1535,17 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
     this.initializingConnections.add(connection);
     try {
       await connection.initialize(config);
+      const apiKey = this.getApiKey(config);
+      if (apiKey) {
+        await connection.request(
+          'account/login/start',
+          {
+            type: 'apiKey',
+            apiKey,
+          },
+          { timeoutMs: this.getRequestTimeoutMs(config) },
+        );
+      }
       return connection;
     } catch (error) {
       await connection.close().catch((closeError) => {

@@ -4,6 +4,7 @@ import { PassThrough } from 'stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { mockProcessEnv } from '../util/utils';
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -102,7 +103,13 @@ async function waitForMessageWithoutTimers(
 }
 
 describe('OpenAICodexAppServerProvider', () => {
+  let originalOpenAiApiKey: string | undefined;
+  let originalCodexApiKey: string | undefined;
+
   beforeEach(() => {
+    originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+    originalCodexApiKey = process.env.CODEX_API_KEY;
+    mockProcessEnv({ OPENAI_API_KEY: undefined, CODEX_API_KEY: undefined });
     vi.clearAllMocks();
     mocks.spawn.mockReset();
   });
@@ -112,6 +119,7 @@ describe('OpenAICodexAppServerProvider', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey, CODEX_API_KEY: originalCodexApiKey });
   });
 
   it('initializes with safe defaults and validates config strictly', () => {
@@ -194,7 +202,7 @@ describe('OpenAICodexAppServerProvider', () => {
       config: {
         apiKey: 'test-api-key',
         codex_path_override: '/usr/local/bin/codex',
-        model: 'gpt-5.4',
+        model: 'gpt-5.5',
         service_tier: 'fast',
         model_reasoning_effort: 'none',
         reasoning_summary: 'detailed',
@@ -204,7 +212,7 @@ describe('OpenAICodexAppServerProvider', () => {
         collaboration_mode: {
           mode: 'plan',
           settings: {
-            model: 'gpt-5.4',
+            model: 'gpt-5.5',
             reasoning_effort: 'none',
             developer_instructions: null,
           },
@@ -221,6 +229,13 @@ describe('OpenAICodexAppServerProvider', () => {
     server.send({ id: initialize.id, result: { userAgent: 'codex-test' } });
 
     await waitForMessage(server, (message) => message.method === 'initialized');
+    const loginStart = await waitForMessage(
+      server,
+      (message) => message.method === 'account/login/start',
+    );
+    expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'test-api-key' });
+    server.send({ id: loginStart.id, result: { type: 'apiKey' } });
+
     const threadStart = await waitForMessage(
       server,
       (message) => message.method === 'thread/start',
@@ -229,7 +244,7 @@ describe('OpenAICodexAppServerProvider', () => {
       approvalPolicy: 'never',
       sandbox: 'read-only',
       ephemeral: true,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       serviceTier: 'fast',
       baseInstructions: 'You are evaluating repository quality.',
       developerInstructions: 'Return concise, actionable output.',
@@ -251,7 +266,7 @@ describe('OpenAICodexAppServerProvider', () => {
       threadId: 'thr_test',
       input: [{ type: 'text', text: 'Summarize this repo', text_elements: [] }],
       approvalPolicy: 'never',
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       serviceTier: 'fast',
       effort: 'none',
       summary: 'detailed',
@@ -259,7 +274,7 @@ describe('OpenAICodexAppServerProvider', () => {
       collaborationMode: {
         mode: 'plan',
         settings: {
-          model: 'gpt-5.4',
+          model: 'gpt-5.5',
           reasoning_effort: 'none',
           developer_instructions: null,
         },
@@ -333,11 +348,11 @@ describe('OpenAICodexAppServerProvider', () => {
       total: 15,
       cached: 2,
     });
-    expect(result.cost).toBeCloseTo(0.000095);
+    expect(result.cost).toBeCloseTo(0.0002);
     expect(result.metadata?.codexAppServer).toMatchObject({
       threadId: 'thr_test',
       turnId: 'turn_test',
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       sandboxMode: 'read-only',
       approvalPolicy: 'never',
       itemCounts: { agentMessage: 1 },
@@ -4189,6 +4204,13 @@ describe('OpenAICodexAppServerProvider', () => {
     const spawnEnv = mocks.spawn.mock.calls[0][2].env;
     expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
     expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
+
+    const loginStart = await waitForMessage(
+      server,
+      (message) => message.method === 'account/login/start',
+    );
+    expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'test-key' });
+    server.send({ id: loginStart.id, result: { type: 'apiKey' } });
 
     const threadStart = await waitForMessage(
       server,

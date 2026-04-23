@@ -88,6 +88,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
+    // GPT-5.5 models
+    'gpt-5.5',
+    'gpt-5.5-2026-04-23',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
