@@ -21,6 +21,7 @@ import {
   REDTEAM_ROUTES,
   ROUTES,
 } from './constants/routes';
+import { EvalHistoryProvider } from './contexts/EvalHistoryContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 
@@ -31,6 +32,7 @@ const EvalsIndexPage = lazy(() => import('./pages/evals/page'));
 const HistoryPage = lazy(() => import('./pages/history/page'));
 const LauncherPage = lazy(() => import('./pages/launcher/page'));
 const LoginPage = lazy(() => import('./pages/login'));
+const MediaPage = lazy(() => import('./pages/media/page'));
 const ModelAuditHistoryPage = lazy(() => import('./pages/model-audit-history/page'));
 const ModelAuditLatestPage = lazy(() => import('./pages/model-audit-latest/page'));
 const ModelAuditResultPage = lazy(() => import('./pages/model-audit-result/page'));
@@ -121,6 +123,15 @@ const router = createBrowserRouter(
             element={
               <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
                 <HistoryPage />
+              </Suspense>
+            }
+          />
+
+          <Route
+            path={ROUTES.MEDIA}
+            element={
+              <Suspense fallback={<Spinner size="lg" className="h-screen" />}>
+                <MediaPage />
               </Suspense>
             }
           />
@@ -241,9 +252,11 @@ function App() {
   return (
     <TooltipProvider delayDuration={300} skipDelayDuration={0}>
       <ToastProvider>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-        </QueryClientProvider>
+        <EvalHistoryProvider>
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+          </QueryClientProvider>
+        </EvalHistoryProvider>
       </ToastProvider>
     </TooltipProvider>
   );

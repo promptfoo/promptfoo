@@ -1,9 +1,18 @@
+import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
+import { mockCallApiRoutes, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
+import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
+
+const renderWithProvider = (ui: React.ReactElement) => {
+  return render(<EvalHistoryProvider>{ui}</EvalHistoryProvider>);
+};
+
+const mockShowToast = vi.fn();
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
@@ -13,38 +22,57 @@ vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
 }));
 
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: mockShowToast,
+  }),
+}));
+
 describe('RunTestSuiteButton', () => {
+  let timers: TestTimers;
+
   beforeEach(() => {
     useStore.getState().reset();
-    vi.clearAllMocks();
-    vi.useFakeTimers();
+    resetCallApiMock();
+    mockShowToast.mockReset();
+    timers = useTestTimers();
   });
 
   afterEach(() => {
-    try {
-      vi.runOnlyPendingTimers();
-    } catch {
-      // Ignore if not using fake timers
-    }
-    vi.useRealTimers();
+    timers.restore({ runPending: true });
   });
 
+  const clickRunButton = async () => {
+    const button = screen.getByRole('button', { name: 'Run Eval' });
+
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+  };
+
+  const advancePollingInterval = async () => {
+    await act(async () => {
+      await timers.advanceByAsync(1500);
+    });
+  };
+
   it('should be disabled when there are no prompts or tests', () => {
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
   });
 
   it('should be disabled when there are prompts but no tests', () => {
     useStore.getState().updateConfig({ prompts: ['prompt 1'] });
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
   });
 
   it('should be disabled when there are tests but no prompts', () => {
     useStore.getState().updateConfig({ tests: [{ vars: { foo: 'bar' } }] });
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).toBeDisabled();
   });
@@ -55,23 +83,22 @@ describe('RunTestSuiteButton', () => {
       providers: ['openai:gpt-4'],
       tests: [{ vars: { foo: 'bar' } }],
     });
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).not.toBeDisabled();
   });
 
   it('should handle progress API failure after job creation', async () => {
     const mockJobId = '123';
-    const mockCallApi = vi.mocked(callApi);
-    const mockAlert = vi.spyOn(window, 'alert').mockImplementation(() => {});
-
-    mockCallApi
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockJobId }) } as any)
-      .mockResolvedValueOnce({
+    mockCallApiRoutes([
+      { method: 'POST', path: '/eval/job', response: { id: mockJobId } },
+      {
+        path: `/eval/job/${mockJobId}/`,
         ok: false,
         status: 500,
-        json: async () => ({ message: 'Progress API failed' }),
-      } as any);
+        response: { message: 'Progress API failed' },
+      },
+    ]);
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
@@ -79,32 +106,33 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
     expect(button).not.toBeDisabled();
 
     // Click the button with fake timers active to control the interval
     await act(async () => {
-      fireEvent.click(button);
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
     });
 
     // Advance timers to trigger the polling interval (1000ms in the component)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500);
+      await timers.advanceByAsync(1500);
     });
 
-    expect(mockAlert).toHaveBeenCalledWith(`An error occurred: HTTP error! status: 500`);
-
-    mockAlert.mockRestore();
+    expect(mockShowToast).toHaveBeenCalledWith(
+      'An error occurred: HTTP error! status: 500',
+      'error',
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('HTTP error! status: 500');
   });
 
   it('should revert to non-running state and display an error message when the initial API call fails', async () => {
     const errorMessage = 'Failed to submit test suite';
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     // Mock callApi to reject with an error
-    vi.mocked(callApi).mockRejectedValue(new Error(errorMessage));
+    rejectCallApi(new Error(errorMessage));
 
     useStore.getState().updateConfig({
       prompts: ['prompt 1'],
@@ -112,28 +140,23 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    render(<RunTestSuiteButton />);
+    renderWithProvider(<RunTestSuiteButton />);
     const button = screen.getByRole('button', { name: 'Run Eval' });
 
     // Use real timers for the click and wait for async operations
-    vi.useRealTimers();
+    timers.useRealTimers();
     await userEvent.click(button);
 
-    // Wait for the alert to be called
+    // Wait for toast + inline error to update
     await waitFor(() => {
-      expect(alertMock).toHaveBeenCalledWith(`An error occurred: ${errorMessage}`);
+      expect(mockShowToast).toHaveBeenCalledWith(`An error occurred: ${errorMessage}`, 'error');
+      expect(screen.getByRole('alert')).toHaveTextContent(errorMessage);
     });
 
     expect(screen.getByRole('button', { name: 'Run Eval' })).toBeInTheDocument();
-
-    alertMock.mockRestore();
-    consoleErrorSpy.mockRestore();
-    vi.useFakeTimers();
   });
 
   it('clears the polling interval on unmount', async () => {
-    vi.useRealTimers();
-
     const mockCallApi = vi.mocked(callApi);
     const setIntervalSpy = vi.spyOn(global, 'setInterval');
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
@@ -152,18 +175,10 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    const { unmount } = render(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const { unmount } = renderWithProvider(<RunTestSuiteButton />);
+    await clickRunButton();
 
-    await userEvent.click(button);
-
-    // Wait for the interval to be set up
-    await waitFor(
-      () => {
-        expect(setIntervalSpy).toHaveBeenCalled();
-      },
-      { timeout: 2000 },
-    );
+    expect(setIntervalSpy).toHaveBeenCalled();
 
     unmount();
 
@@ -174,8 +189,6 @@ describe('RunTestSuiteButton', () => {
   });
 
   it('clears polling interval when job completes', async () => {
-    vi.useRealTimers();
-
     const mockCallApi = vi.mocked(callApi);
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
 
@@ -193,35 +206,25 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    render(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    renderWithProvider(<RunTestSuiteButton />);
+    await clickRunButton();
+    await advancePollingInterval();
 
-    await userEvent.click(button);
-
-    // Wait for the job to complete and interval to be cleared
-    await waitFor(
-      () => {
-        expect(clearIntervalSpy).toHaveBeenCalled();
-      },
-      { timeout: 3000 },
-    );
+    expect(clearIntervalSpy).toHaveBeenCalled();
 
     clearIntervalSpy.mockRestore();
   });
 
   it('clears polling interval when job fails', async () => {
-    vi.useRealTimers();
-
     const mockCallApi = vi.mocked(callApi);
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     // First call creates the job, second returns failed status
     mockCallApi
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'job-fail' }) } as any)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ status: 'failed', logs: ['Job failed'] }),
+        json: async () => ({ status: 'error', logs: ['Job failed'] }),
       } as any);
 
     useStore.getState().updateConfig({
@@ -230,29 +233,18 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    render(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    renderWithProvider(<RunTestSuiteButton />);
+    await clickRunButton();
+    await advancePollingInterval();
 
-    await userEvent.click(button);
-
-    // Wait for the job to fail and interval to be cleared
-    await waitFor(
-      () => {
-        expect(clearIntervalSpy).toHaveBeenCalled();
-      },
-      { timeout: 3000 },
-    );
+    expect(clearIntervalSpy).toHaveBeenCalled();
 
     clearIntervalSpy.mockRestore();
-    alertMock.mockRestore();
   });
 
   it('clears polling interval when polling request fails', async () => {
-    vi.useRealTimers();
-
     const mockCallApi = vi.mocked(callApi);
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
-    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
 
     // First call creates the job, second returns HTTP error
     mockCallApi
@@ -265,26 +257,16 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    render(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    renderWithProvider(<RunTestSuiteButton />);
+    await clickRunButton();
+    await advancePollingInterval();
 
-    await userEvent.click(button);
-
-    // Wait for the polling error and interval to be cleared
-    await waitFor(
-      () => {
-        expect(clearIntervalSpy).toHaveBeenCalled();
-      },
-      { timeout: 3000 },
-    );
+    expect(clearIntervalSpy).toHaveBeenCalled();
 
     clearIntervalSpy.mockRestore();
-    alertMock.mockRestore();
   });
 
   it('can be called multiple times without errors', async () => {
-    vi.useRealTimers();
-
     const mockCallApi = vi.mocked(callApi);
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
 
@@ -302,18 +284,11 @@ describe('RunTestSuiteButton', () => {
       tests: [{ vars: { foo: 'bar' } }],
     });
 
-    const { unmount } = render(<RunTestSuiteButton />);
-    const button = screen.getByRole('button', { name: 'Run Eval' });
+    const { unmount } = renderWithProvider(<RunTestSuiteButton />);
+    await clickRunButton();
+    await advancePollingInterval();
 
-    await userEvent.click(button);
-
-    // Wait for completion
-    await waitFor(
-      () => {
-        expect(clearIntervalSpy).toHaveBeenCalled();
-      },
-      { timeout: 3000 },
-    );
+    expect(clearIntervalSpy).toHaveBeenCalled();
 
     const clearCount = clearIntervalSpy.mock.calls.length;
 

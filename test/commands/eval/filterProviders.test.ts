@@ -253,7 +253,7 @@ describe('filterProviderConfigs', () => {
             headers: {
               Accept: '{{acceptHeader}}',
               'Content-Type': 'application/json',
-              'X-Assistant-Model': 'openrouter:haiku-4.5',
+              'X-Assistant-Model': 'openrouter:anthropic/claude-haiku-4.5',
               'X-Conversation-ID': '{{conversationId}}',
               'X-System-ID': '{{systemId}}',
             },

@@ -1,0 +1,95 @@
+.quoteGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin: 2.5rem 0 0;
+  padding: 1.5rem 0 0;
+  border-top: 1px solid var(--ifm-toc-border-color);
+}
+
+.quote {
+  margin: 0;
+  padding: 1.5rem;
+  border-radius: 12px;
+  background: var(--ifm-color-emphasis-100);
+  display: flex;
+  flex-direction: column;
+}
+
+[data-theme='dark'] .quote {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.quoteText {
+  margin: 0;
+  padding: 0;
+  border: none;
+  color: var(--ifm-color-emphasis-800);
+  font-size: 1rem;
+  font-style: italic;
+  line-height: 1.75;
+  text-wrap: pretty;
+  flex: 1;
+}
+
+.quoteAttribution {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.quoteAvatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.quoteAuthor {
+  color: var(--ifm-font-color-base);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.quoteRole {
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.78rem;
+  margin-top: 0.1rem;
+}
+
+.signature {
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+.signatureName {
+  color: var(--ifm-font-color-base);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.signatureTitle {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+  margin-top: 0.15rem;
+}
+
+.legalNote {
+  margin-top: 1.5rem;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 768px) {
+  .quoteGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .signature {
+    width: 100%;
+  }
+}

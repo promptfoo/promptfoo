@@ -17,6 +17,7 @@ import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './sto
 import './Eval.css';
 
 import { useToast } from '@app/hooks/useToast';
+import logger from '../../../../../logger';
 import { useFilterMode } from './FilterModeProvider';
 
 interface EvalOptions {
@@ -24,6 +25,43 @@ interface EvalOptions {
    * ID of a specific eval to load.
    */
   fetchId: string | null;
+}
+
+function parseResultsFilters(filtersParam: string | null) {
+  if (!filtersParam) {
+    return { filters: [], valid: true };
+  }
+
+  try {
+    return { filters: JSON.parse(filtersParam) as ResultsFilter[], valid: true };
+  } catch {
+    return { filters: [], valid: false };
+  }
+}
+
+function getSocketConnectionOptions(apiBaseUrl: string | null | undefined) {
+  let socketPath = '/socket.io';
+  let socketUrl = '';
+
+  if (apiBaseUrl) {
+    try {
+      const url = new URL(apiBaseUrl, window.location.origin);
+      const isSameOrigin = url.origin === window.location.origin;
+      if (isSameOrigin && url.pathname !== '/') {
+        socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
+      }
+      socketUrl = isSameOrigin ? '' : apiBaseUrl;
+    } catch {
+      // Invalid URL, fall back to defaults.
+    }
+  } else {
+    const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+    if (basePath) {
+      socketPath = `${basePath}/socket.io`;
+    }
+  }
+
+  return { socketPath, socketUrl };
 }
 
 export default function Eval({ fetchId }: EvalOptions) {
@@ -188,29 +226,19 @@ export default function Eval({ fetchId }: EvalOptions) {
 
     doResetFilters();
 
-    // Read search params
-    const filtersParam = _searchParams.get('filter');
-
-    if (filtersParam) {
-      let filters: ResultsFilter[] = [];
-      try {
-        filters = JSON.parse(filtersParam) as ResultsFilter[];
-      } catch {
-        showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
-        return;
-      }
-      filters.forEach((filter: ResultsFilter) => {
-        doAddFilter(filter);
-      });
+    const parsedFilters = parseResultsFilters(_searchParams.get('filter'));
+    if (!parsedFilters.valid) {
+      showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
+      return;
     }
+    parsedFilters.filters.forEach((filter) => doAddFilter(filter));
 
-    // Reset comparison mode for ALL branches (including websocket)
-    console.log('Eval init: Resetting comparison mode');
+    logger.debug('[Eval] Resetting comparison mode', {});
     setInComparisonMode(false);
     setComparisonEvalIds([]);
 
     if (fetchId) {
-      console.log('Eval init: Fetching eval by id', { fetchId });
+      logger.debug('[Eval] Fetching eval by id', { fetchId });
       const run = async () => {
         const success = await loadEvalById(fetchId);
         if (success) {
@@ -222,45 +250,17 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
       run();
     } else if (IS_RUNNING_LOCALLY) {
-      console.log('Eval init: Using local server websocket');
+      logger.debug('[Eval] Using local server websocket', {});
 
-      // Determine socket path based on deployment configuration:
-      // - If apiBaseUrl points to a different origin, use default /socket.io (remote server manages its own)
-      // - If apiBaseUrl has a path component on same origin, derive socket path from it
-      // - If no apiBaseUrl, use VITE_PUBLIC_BASENAME for same-origin reverse proxy deployments
-      let socketPath = '/socket.io';
-      let socketUrl = '';
-
-      if (apiBaseUrl) {
-        try {
-          const url = new URL(apiBaseUrl, window.location.origin);
-          const isSameOrigin = url.origin === window.location.origin;
-          if (isSameOrigin && url.pathname !== '/') {
-            // Same origin with path prefix - derive socket path from API base
-            socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
-          }
-          // For different origins, use default /socket.io and connect to that host
-          socketUrl = isSameOrigin ? '' : apiBaseUrl;
-        } catch {
-          // Invalid URL, fall back to defaults
-        }
-      } else {
-        // No apiBaseUrl - use build-time base path for same-origin deployment
-        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        if (basePath) {
-          socketPath = `${basePath}/socket.io`;
-        }
-      }
-
+      const { socketPath, socketUrl } = getSocketConnectionOptions(apiBaseUrl);
       socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
-       * Populates the table store with the most recent eval result.
+       * Populates the table store with the most recent eval result by fetching the data by eval ID
        */
-      const handleResultsFile = async (data: ResultsFile | null) => {
-        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
+      const handleResultsFile = async (data: ResultsFile | { evalId?: string } | null) => {
         if (!data) {
-          console.log('No eval data available');
+          logger.debug('[Eval] No eval data available', {});
           setTable(null);
           setConfig(null);
           setEvalId('');
@@ -269,7 +269,6 @@ export default function Eval({ fetchId }: EvalOptions) {
           return;
         }
 
-        // Set streaming state when we start receiving data
         setIsStreaming(true);
 
         const newRecentEvals = await fetchRecentFileEvals(controller.signal);
@@ -277,16 +276,15 @@ export default function Eval({ fetchId }: EvalOptions) {
           const newId = newRecentEvals[0].evalId;
           setDefaultEvalId(newId);
           setEvalId(newId);
-          await loadEvalById(newId, true); // Pass true for isBackgroundUpdate since this is from socket
+          await loadEvalById(newId, true);
         }
 
-        // Clear streaming state after update is complete
         setIsStreaming(false);
       };
 
       socket
         .on('init', async (data) => {
-          console.log('Initialized socket connection', data);
+          logger.debug('[Eval] Initialized socket connection', { data });
           await handleResultsFile(data);
         })
         /**
@@ -294,7 +292,7 @@ export default function Eval({ fetchId }: EvalOptions) {
          * result has been received.
          */
         .on('update', async (data) => {
-          console.log('Received data update', data);
+          logger.debug('[Eval] Received data update', { data });
           await handleResultsFile(data);
         });
 
@@ -308,7 +306,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         setIsStreaming(false);
       };
     } else {
-      console.log('Eval init: Fetching eval via recent');
+      logger.debug('[Eval] Fetching eval via recent', {});
       // Fetch from server
       const run = async () => {
         const evals = await fetchRecentFileEvals(controller.signal);
@@ -395,11 +393,7 @@ export default function Eval({ fetchId }: EvalOptions) {
 
   return (
     <ShiftKeyProvider>
-      {isRedteam && evalId && (
-        <div className="mb-4 mt-4 mx-4">
-          <EnterpriseBanner evalId={evalId} />
-        </div>
-      )}
+      {isRedteam && evalId && <EnterpriseBanner evalId={evalId} className="mb-4 mt-4 mx-4" />}
       <ResultsView
         defaultEvalId={defaultEvalId}
         recentEvals={recentEvals}

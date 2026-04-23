@@ -334,6 +334,73 @@ describe('ProviderRateLimitState', () => {
 
       expect(events.length).toBe(1); // Still 1, not 2
     });
+
+    it('should not call markRateLimited for successful responses with retry-after headers', async () => {
+      // If a provider or proxy includes retry-after headers in successful (200) responses,
+      // the queue should NOT be blocked. Only rate-limited responses should trigger blocking.
+      const state2 = new ProviderRateLimitState({
+        rateLimitKey: 'test-no-block',
+        maxConcurrency: 5,
+        minConcurrency: 1,
+        retryPolicy: FAST_RETRY_POLICY,
+      });
+
+      // First request: successful response with retry-after-ms header
+      await state2.executeWithRetry('req-1', async () => 'success', {
+        getHeaders: () => ({
+          'retry-after-ms': '5000',
+          'x-ratelimit-remaining-requests': '50',
+          'x-ratelimit-limit-requests': '100',
+        }),
+        isRateLimited: () => false, // Response is NOT rate-limited
+      });
+
+      // Second request should succeed immediately without being blocked
+      // If markRateLimited was incorrectly called, remainingRequests would be 0
+      // and the queue would block until the reset timer fires
+      const result = await state2.executeWithRetry('req-2', async () => 'second-success', {
+        getHeaders: () => ({
+          'x-ratelimit-remaining-requests': '49',
+          'x-ratelimit-limit-requests': '100',
+        }),
+        isRateLimited: () => false,
+      });
+
+      expect(result).toBe('second-success');
+      const metrics = state2.getMetrics();
+      expect(metrics.completedRequests).toBe(2);
+      expect(metrics.rateLimitHits).toBe(0);
+      state2.dispose();
+    });
+
+    it('should call markRateLimited for rate-limited responses with retry-after headers', async () => {
+      const state2 = new ProviderRateLimitState({
+        rateLimitKey: 'test-block-on-429',
+        maxConcurrency: 5,
+        minConcurrency: 1,
+        retryPolicy: { maxRetries: 0, baseDelayMs: 1, maxDelayMs: 1, jitterFactor: 0 },
+      });
+
+      const hitEvents: any[] = [];
+      state2.on('ratelimit:hit', (data) => hitEvents.push(data));
+
+      // Rate-limited response with retry-after-ms header
+      try {
+        await state2.executeWithRetry('req-1', async () => 'rate-limited-result', {
+          getHeaders: () => ({
+            'retry-after-ms': '5000',
+          }),
+          isRateLimited: () => true, // Response IS rate-limited
+        });
+      } catch {
+        // Expected - rate limit exhausted with maxRetries=0
+      }
+
+      expect(hitEvents.length).toBe(1);
+      expect(hitEvents[0].retryAfterMs).toBeUndefined(); // getRetryAfter not provided
+      expect(state2.getMetrics().rateLimitHits).toBe(1);
+      state2.dispose();
+    });
   });
 
   describe('Adaptive concurrency', () => {

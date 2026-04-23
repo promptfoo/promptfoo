@@ -32,6 +32,10 @@ Conversational:
 
 - [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded/conversation-relevance) - ensure that responses remain relevant throughout a conversation
 
+Trajectory-based:
+
+- [`trajectory:goal-success`](#trajectorygoal-success) - uses an LLM judge to decide whether a traced agent run achieved its goal
+
 Context-based assertions are particularly useful for evaluating RAG systems. For complete RAG evaluation examples, see the [RAG Evaluation Guide](/docs/guides/evaluate-rag).
 
 ## Examples (output-based)
@@ -53,6 +57,34 @@ assert:
     # Make sure the LLM output is consistent with this statement:
     value: Sacramento is the capital of California
 ```
+
+## trajectory:goal-success {#trajectorygoal-success}
+
+Use `trajectory:goal-success` when you care about whether an agent actually completed a task, not just whether it used a specific tool or produced a plausible final sentence.
+
+This assertion requires trace data. Promptfoo summarizes the traced trajectory, includes the final output, and asks a grading model whether the run achieved the goal you specify.
+
+```yaml
+tests:
+  - vars:
+      order_id: '123'
+    assert:
+      - type: trajectory:goal-success
+        value: 'Determine the shipping status for order {{ order_id }} and tell the user whether it has shipped'
+```
+
+Like other model-graded assertions, you can set `threshold`, `provider`, or `rubricPrompt`:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:goal-success
+        value: Resolve the user's issue and provide the correct next step
+        threshold: 0.8
+        provider: openai:gpt-5-mini
+```
+
+This works best alongside deterministic trajectory checks such as [`trajectory:tool-used`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-used), [`trajectory:tool-args-match`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-args-match), or [`trajectory:tool-sequence`](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence) when the exact path through the task also matters.
 
 Example of pi scorer:
 
@@ -107,7 +139,7 @@ This produces German reasoning: `{"reason": "Die Antwort ist hilfreich und klar.
 
 For more language options and alternative approaches, see the [llm-rubric language guide](/docs/configuration/expected-outputs/model-graded/llm-rubric#non-english-evaluation).
 
-Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/self-grading)):
+Here's an example output that indicates PASS/FAIL based on LLM assessment ([see example setup and outputs](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-self-grading)):
 
 [![LLM prompt quality evaluation with PASS/FAIL expectations](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)](https://user-images.githubusercontent.com/310310/236690475-b05205e8-483e-4a6d-bb84-41c2b06a1247.png)
 
@@ -221,14 +253,24 @@ By default, model-graded asserts use `gpt-5` for grading. If you do not have acc
            provider: openai:gpt-5-mini
    ```
 
-Use the `provider.config` field to set custom parameters:
+Use the `provider.config` field to set custom parameters such as `temperature`, `max_tokens`, or API host:
 
 ```yaml
-provider:
-  - id: openai:gpt-5-mini
-    config:
-      temperature: 0
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Is not apologetic and provides a clear, concise answer
+        provider:
+          id: openai:gpt-5-mini
+          config:
+            temperature: 0
 ```
+
+This works at every level where a grader can be set — per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
+
+:::note
+The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. GPT-5 series reasoning models ignore `temperature` entirely.
+:::
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.
 
@@ -292,7 +334,7 @@ defaultTest:
       ]
 ```
 
-See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/custom-grading-prompt/promptfooconfig.yaml).
+See the [full example](https://github.com/promptfoo/promptfoo/blob/main/examples/eval-custom-grading-prompt/promptfooconfig.yaml).
 
 ### Image-based rubric prompts
 

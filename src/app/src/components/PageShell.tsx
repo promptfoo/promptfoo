@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense } from 'react';
 
 import Navigation from '@app/components/Navigation';
 import { PostHogProvider } from '@app/components/PostHogProvider';
@@ -12,44 +12,10 @@ function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function PageShell() {
-  const [darkMode, setDarkMode] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    // Initialize from localStorage, fallback to system preference
-    const savedMode = localStorage.getItem('darkMode');
-    const prefersDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    setDarkMode(savedMode === null ? prefersDarkMode : savedMode === 'true');
-  }, []);
-
-  const toggleDarkMode = useCallback(() => {
-    setDarkMode((prevMode) => {
-      const newMode = !prevMode;
-      localStorage.setItem('darkMode', String(newMode));
-      return newMode;
-    });
-  }, []);
-
-  useEffect(() => {
-    if (darkMode === null) {
-      return;
-    }
-
-    if (darkMode) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-    }
-  }, [darkMode]);
-
-  // Render null until darkMode is determined
-  if (darkMode === null) {
-    return null;
-  }
-
   return (
     <PostHogProvider>
       <Layout>
-        <Navigation onToggleDarkMode={toggleDarkMode} />
+        <Navigation />
         <UpdateBanner />
         <Suspense fallback={<Spinner size="lg" className="h-[calc(100vh-4rem)]" />}>
           <Outlet />

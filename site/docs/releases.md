@@ -23,7 +23,6 @@ This month we shipped **adaptive rate limiting**, **Transformers.js for local in
 - **[Transformers.js](/docs/providers/transformers/)** - Run models locally in Node.js or browser using Hugging Face's Transformers.js
 - **[Vercel AI Gateway](/docs/providers/vercel/)** - Route requests through Vercel's AI gateway
 - **[Cloudflare AI Gateway](/docs/providers/cloudflare-gateway/)** - Route requests through Cloudflare's AI gateway
-- **[QuiverAI](/docs/providers/quiverai/)** - QuiverAI model provider
 
 ##### Video Generation
 
@@ -398,7 +397,7 @@ Plugin-specific grading rules:
 
 - **[Wordplay](/docs/red-team/plugins/wordplay/)** - Tests if systems can be tricked into generating profanity through wordplay like riddles and rhyming games
 - **[COPPA](/docs/red-team/plugins/coppa/)** - Tests if AI systems collect personal information from children without parental consent or age verification
-- **[GDPR preset](/docs/red-team/gdpr/)** - GDPR and data privacy compliance testing
+- **[Data protection preset](/docs/red-team/gdpr/)** - Privacy and personal data handling tests
 
 #### Other Strategies
 

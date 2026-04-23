@@ -1,8 +1,10 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetTypeSelection from './TargetTypeSelection';
+
+import type { ProviderOptions } from '../../types';
 
 const mockUpdateConfig = vi.fn();
 const mockUseRedTeamConfig = vi.fn();
@@ -24,6 +26,47 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 
 vi.mock('../LoadExampleButton', () => ({
   default: () => <button>Load Example</button>,
+}));
+
+vi.mock('./ProviderTypeSelector', () => ({
+  default: ({
+    provider,
+    setProvider,
+  }: {
+    provider: ProviderOptions;
+    setProvider: (provider: ProviderOptions, providerType: string) => void;
+  }) => (
+    <div>
+      <div
+        role="button"
+        className="cursor-pointer"
+        onClick={() =>
+          setProvider({ id: 'openai:gpt-4.1', label: provider.label ?? '', config: {} }, 'openai')
+        }
+      >
+        OpenAI
+      </div>
+      <div
+        role="button"
+        className="cursor-pointer"
+        onClick={() =>
+          setProvider(
+            { id: 'anthropic:messages:claude-sonnet-4', label: provider.label ?? '', config: {} },
+            'anthropic',
+          )
+        }
+      >
+        Anthropic
+      </div>
+      <div
+        role="button"
+        className="cursor-pointer"
+        onClick={() => setProvider({ id: '', label: provider.label ?? '', config: {} }, 'custom')}
+      >
+        LangChain
+      </div>
+    </div>
+  ),
 }));
 
 describe('TargetTypeSelection', () => {
@@ -133,6 +176,7 @@ describe('TargetTypeSelection', () => {
   });
 
   it('should update the selectedTarget and providerType when a new provider type is selected and record telemetry event', async () => {
+    const user = userEvent.setup();
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
       config: {
@@ -150,12 +194,14 @@ describe('TargetTypeSelection', () => {
     renderComponent();
 
     const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
-    fireEvent.change(nameInput, { target: { value: 'My Test API' } });
+    await user.click(nameInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('My Test API');
 
     const inlineNextButton = await screen.findByRole('button', {
       name: 'Continue',
     });
-    fireEvent.click(inlineNextButton);
+    await user.click(inlineNextButton);
 
     await waitFor(() => {
       expect(screen.getByText('Select Target Type')).toBeInTheDocument();
@@ -163,7 +209,7 @@ describe('TargetTypeSelection', () => {
 
     // Provider list is expanded - select OpenAI
     const openAICard = await screen.findByText('OpenAI');
-    fireEvent.click(openAICard.closest('.cursor-pointer') as HTMLElement);
+    await user.click(openAICard.closest('.cursor-pointer') as HTMLElement);
 
     await waitFor(() => {
       expect(mockUpdateConfig).toHaveBeenCalledWith(
@@ -183,15 +229,18 @@ describe('TargetTypeSelection', () => {
   });
 
   it('should disable Next button after entering a target name, revealing the target type section, and then deleting the target name', async () => {
+    const user = userEvent.setup();
     renderComponent();
 
     const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
-    fireEvent.change(nameInput, { target: { value: 'My Test API' } });
+    await user.click(nameInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('My Test API');
 
     const inlineNextButton = await screen.findByRole('button', {
       name: 'Continue',
     });
-    fireEvent.click(inlineNextButton);
+    await user.click(inlineNextButton);
 
     await waitFor(() => {
       expect(screen.getByText('Select Target Type')).toBeInTheDocument();
@@ -200,7 +249,7 @@ describe('TargetTypeSelection', () => {
     // Now the footer Next button should be present
     await screen.findByRole('button', { name: /^Next$/i });
 
-    fireEvent.change(nameInput, { target: { value: '' } });
+    await user.clear(nameInput);
 
     // The button should be disabled because the target name is now empty
     await waitFor(() => {
@@ -210,6 +259,7 @@ describe('TargetTypeSelection', () => {
   });
 
   it('should maintain revealed provider type section and validate new name when target name is changed', async () => {
+    const user = userEvent.setup();
     // Start with a saved config so the Next button can be enabled
     const mockSetProviderType = vi.fn();
     mockUseRedTeamConfig.mockReturnValue({
@@ -237,13 +287,15 @@ describe('TargetTypeSelection', () => {
     expect(footerNextButton).toBeEnabled();
 
     const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
-    fireEvent.change(nameInput, { target: { value: 'New Target Name' } });
+    await user.click(nameInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('New Target Name');
 
     expect(screen.getByText('Select Target Type')).toBeInTheDocument();
 
     expect(screen.getByRole('button', { name: /^Next$/i })).toBeEnabled();
 
-    fireEvent.change(nameInput, { target: { value: '' } });
+    await user.clear(nameInput);
 
     // The button should be disabled because the target name is now empty
     await waitFor(() => {

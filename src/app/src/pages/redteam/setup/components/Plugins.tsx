@@ -62,7 +62,8 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
     <p>
       <span>
         Intents are seed phrases for attack generation, for example "teach me how to cook meth".
-        Promptfoo transforms each intent into a sophisticated attacks using jailbreak strategies.
+        Promptfoo can apply jailbreak strategies to single-turn intents; multi-step sequences run as
+        authored.
       </span>{' '}
       <Tooltip>
         <TooltipTrigger asChild>
@@ -97,6 +98,78 @@ const DESCRIPTIONS_BY_TAB: Record<string, React.ReactNode> = {
     </p>
   ),
 };
+
+type PluginEntry = Config['plugins'][number];
+
+function getPluginId(plugin: PluginEntry): string {
+  return typeof plugin === 'string' ? plugin : plugin.id;
+}
+
+function hasPolicyText(policy: unknown): boolean {
+  if (typeof policy === 'string') {
+    return policy.trim().length > 0;
+  }
+
+  return (
+    typeof policy === 'object' &&
+    policy !== null &&
+    'text' in policy &&
+    typeof policy.text === 'string' &&
+    policy.text.trim().length > 0
+  );
+}
+
+function hasConfiguredPluginContent(plugin: PluginEntry): boolean {
+  const id = getPluginId(plugin);
+
+  if (id !== 'policy' && id !== 'intent') {
+    return true;
+  }
+
+  if (typeof plugin !== 'object') {
+    return false;
+  }
+
+  if (id === 'policy') {
+    return hasPolicyText(plugin.config?.policy);
+  }
+
+  const intents = plugin.config?.intent;
+  return Array.isArray(intents) && intents.length > 0;
+}
+
+function isPluginConfigValueValid(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.length > 0;
+  }
+
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+
+  return true;
+}
+
+function isPluginEntryConfigValid(plugin: PluginEntry): boolean {
+  const id = getPluginId(plugin);
+  if (!PLUGINS_REQUIRING_CONFIG.includes(id)) {
+    return true;
+  }
+
+  const configForPlugin = typeof plugin === 'object' ? plugin.config : undefined;
+  if (!configForPlugin || Object.keys(configForPlugin).length === 0) {
+    return false;
+  }
+
+  return Object.values(configForPlugin).every(isPluginConfigValueValid);
+}
+
+function getPluginSelectionState(plugins: Config['plugins']) {
+  return {
+    hasAnyPluginsConfigured: plugins.some(hasConfiguredPluginContent),
+    isConfigValid: plugins.every(isPluginEntryConfigValid),
+  };
+}
 
 export default function Plugins({ onNext, onBack }: PluginsProps) {
   const { config, updatePlugins } = useRedTeamConfig();
@@ -235,51 +308,10 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
     [config.plugins, updatePlugins],
   );
 
-  const { isConfigValid, hasAnyPluginsConfigured } = useMemo(() => {
-    let hasAny = false;
-    let allValid = true;
-
-    for (const plugin of config.plugins) {
-      const id = typeof plugin === 'string' ? plugin : plugin.id;
-
-      if (id !== 'policy' && id !== 'intent') {
-        hasAny = true;
-      }
-
-      if (id === 'policy') {
-        const policy = typeof plugin === 'object' ? plugin.config?.policy : undefined;
-        if (typeof policy === 'string' && policy.trim().length > 0) {
-          hasAny = true;
-        }
-      }
-
-      if (id === 'intent') {
-        const intents = typeof plugin === 'object' ? plugin.config?.intent : undefined;
-        if (Array.isArray(intents) && intents.length > 0) {
-          hasAny = true;
-        }
-      }
-
-      if (PLUGINS_REQUIRING_CONFIG.includes(id)) {
-        const configForPlugin = typeof plugin === 'object' ? plugin.config : undefined;
-        if (!configForPlugin || Object.keys(configForPlugin).length === 0) {
-          allValid = false;
-          continue;
-        }
-        for (const key in configForPlugin) {
-          const value = configForPlugin[key as keyof PluginConfig];
-          if (Array.isArray(value) && value.length === 0) {
-            allValid = false;
-          }
-          if (typeof value === 'string' && value.trim() === '') {
-            allValid = false;
-          }
-        }
-      }
-    }
-
-    return { isConfigValid: allValid, hasAnyPluginsConfigured: hasAny };
-  }, [config.plugins]);
+  const { isConfigValid, hasAnyPluginsConfigured } = useMemo(
+    () => getPluginSelectionState(config.plugins),
+    [config.plugins],
+  );
 
   const isPluginConfigured = useCallback(
     (plugin: Plugin) => {

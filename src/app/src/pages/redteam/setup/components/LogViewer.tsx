@@ -25,6 +25,13 @@ export function LogViewer({ logs }: LogViewerProps) {
   // Track RAF IDs for cleanup
   const rafIdsRef = useRef<number[]>([]);
 
+  const cancelPendingAnimationFrames = useCallback(() => {
+    for (const id of rafIdsRef.current) {
+      cancelAnimationFrame(id);
+    }
+    rafIdsRef.current = [];
+  }, []);
+
   // Detect dark mode from data-theme attribute with reactive updates
   const [isDarkMode, setIsDarkMode] = useState(
     () => typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark',
@@ -80,10 +87,7 @@ export function LogViewer({ logs }: LogViewerProps) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     // Cancel any pending RAF callbacks from previous renders
-    for (const id of rafIdsRef.current) {
-      cancelAnimationFrame(id);
-    }
-    rafIdsRef.current = [];
+    cancelPendingAnimationFrames();
 
     if (shouldAutoScroll) {
       if (logsContainerRef.current) {
@@ -119,11 +123,7 @@ export function LogViewer({ logs }: LogViewerProps) {
     }
 
     // Cleanup: cancel all pending RAF callbacks on unmount
-    return () => {
-      for (const id of rafIdsRef.current) {
-        cancelAnimationFrame(id);
-      }
-    };
+    return cancelPendingAnimationFrames;
   }, [logs, shouldAutoScroll]);
 
   const scrollToBottom = useCallback((containerRef: React.RefObject<HTMLDivElement | null>) => {
@@ -203,12 +203,12 @@ export function LogViewer({ logs }: LogViewerProps) {
         ref={containerRef}
         onScroll={onScroll}
         className={cn(
-          'overflow-auto rounded-md border border-border bg-muted/50 p-4 font-mono text-sm dark:bg-zinc-900',
+          'overflow-y-auto overflow-x-hidden rounded-md border border-border bg-muted/50 p-4 font-mono text-sm dark:bg-zinc-900',
           className,
         )}
       >
         <div
-          className="min-w-max whitespace-pre"
+          className="w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
           dangerouslySetInnerHTML={{
             __html: logs.map((log) => convertAnsiToHtml(log)).join('<br/>'),
           }}

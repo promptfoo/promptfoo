@@ -3,14 +3,14 @@ description: 'Claude Thinking Example'
 prompts:
   - file://prompts.txt
 providers:
-  - id: anthropic:claude-sonnet-4-5-20250929
+  - id: anthropic:claude-sonnet-4-6
     config:
       stream: true # Required for thinking operations
       thinking:
         type: 'enabled'
         budget_tokens: 16000
       max_tokens: 32000
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-4-6
     config:
       stream: true # Required for thinking operations
       thinking:
