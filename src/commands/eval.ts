@@ -861,12 +861,16 @@ export async function doEval(
             }
 
             const waitForCompletionState = async () => {
+              let completionTimeout: NodeJS.Timeout | number | undefined;
               const completionOutcome = await Promise.race([
                 inkSession.renderResult.waitUntilExit().then(() => 'exit' as const),
-                new Promise<'timeout'>((resolve) =>
-                  setTimeout(resolve, pendingInkShare === null ? 15000 : 30000),
-                ),
+                new Promise<'timeout'>((resolve) => {
+                  completionTimeout = setTimeout(resolve, pendingInkShare === null ? 15000 : 30000);
+                }),
               ]);
+              if (completionTimeout) {
+                clearTimeout(completionTimeout);
+              }
 
               if (
                 pendingInkShare !== null &&

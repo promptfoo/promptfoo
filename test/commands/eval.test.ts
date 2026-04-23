@@ -106,9 +106,8 @@ describe('evalCommand', () => {
 
   beforeEach(() => {
     program = new Command();
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.mocked(shouldUseInkUI).mockReturnValue(false);
-    vi.mocked(initInkEval).mockReset();
     vi.mocked(TokenUsageTracker.getInstance).mockReturnValue({
       getProviderIds: vi.fn().mockReturnValue([]),
       getProviderUsage: vi.fn(),
@@ -119,9 +118,10 @@ describe('evalCommand', () => {
       setLabelMap: vi.fn(),
       cleanup: vi.fn(),
     } as any);
-    vi.mocked(cloudConfig.getSharing).mockReset();
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
-    vi.mocked(getEvalConfigFromCloud).mockReset();
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -130,9 +130,14 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
+    vi.mocked(runDbMigrations).mockResolvedValue(undefined);
     vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
+    vi.mocked(checkCloudPermissions).mockResolvedValue(undefined);
+    vi.mocked(isSharingEnabled).mockReturnValue(false);
+    vi.mocked(createShareableUrl).mockResolvedValue('http://share.url');
+    vi.mocked(ensureShareAuthorEmail).mockResolvedValue();
   });
 
   it('should create eval command with correct options', () => {
