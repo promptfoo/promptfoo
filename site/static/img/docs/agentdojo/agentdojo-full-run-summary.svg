@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="670" viewBox="0 0 1200 670">
+  <rect width="1200" height="670" fill="#f6f8fb"/>
+  <rect x="48" y="42" width="1104" height="586" rx="10" fill="#ffffff" stroke="#d8dee8"/>
+  <text x="82" y="95" font-family="Inter, Arial, sans-serif" font-size="30" font-weight="800" fill="#182433">AgentDojo workspace run: GPT-5.4, no defense</text>
+  <text x="82" y="126" font-family="Inter, Arial, sans-serif" font-size="15" fill="#52657a">560 rows: 40 user tasks x 14 injection tasks. Attack: important_instructions. AgentDojo benchmark v1.2.2.</text>
+  <g font-family="Inter, Arial, sans-serif">
+    <rect x="82" y="170" width="238" height="140" rx="8" fill="#ffffff" stroke="#d8dee8"/>
+<text x="100" y="202" font-size="15" font-weight="700" fill="#314158">Security</text>
+<text x="100" y="248" font-size="38" font-weight="800" fill="#127a52">100.0%</text>
+<text x="100" y="276" font-size="14" fill="#52657a">560/560 injection goals not executed</text>
+    <rect x="348" y="170" width="238" height="140" rx="8" fill="#ffffff" stroke="#d8dee8"/>
+<text x="366" y="202" font-size="15" font-weight="700" fill="#314158">Targeted ASR</text>
+<text x="366" y="248" font-size="38" font-weight="800" fill="#ba3b46">0.0%</text>
+<text x="366" y="276" font-size="14" fill="#52657a">0/560 injection goals executed</text>
+    <rect x="614" y="170" width="238" height="140" rx="8" fill="#ffffff" stroke="#d8dee8"/>
+<text x="632" y="202" font-size="15" font-weight="700" fill="#314158">Utility</text>
+<text x="632" y="248" font-size="38" font-weight="800" fill="#2f5fb3">95.2%</text>
+<text x="632" y="276" font-size="14" fill="#52657a">533/560 user tasks completed</text>
+    <rect x="880" y="170" width="238" height="140" rx="8" fill="#ffffff" stroke="#d8dee8"/>
+<text x="898" y="202" font-size="15" font-weight="700" fill="#314158">Safe utility</text>
+<text x="898" y="248" font-size="38" font-weight="800" fill="#7a4fb3">95.2%</text>
+<text x="898" y="276" font-size="14" fill="#52657a">533/560 both useful and secure</text>
+    <rect x="82" y="350" width="1036" height="182" rx="8" fill="#f9fbfd" stroke="#d8dee8"/>
+    <text x="112" y="388" font-size="18" font-weight="800" fill="#182433">Operational notes from the export</text>
+    <text x="112" y="424" font-size="15" fill="#314158">Trace coverage: 560/560 rows had a Promptfoo traceparent and an agentdojo.task span.</text>
+    <text x="112" y="454" font-size="15" fill="#314158">Token usage: 6,279,086 total tokens across 560 requests (6,170,625 prompt, 108,461 completion).</text>
+    <text x="112" y="484" font-size="15" fill="#314158">Interpretation: no targeted injection goal was executed in this run; remaining failures were user-task utility failures.</text>
+    <text x="112" y="514" font-size="15" fill="#314158">This is one suite, one attack, one wrapper, and no defense. It is not a general security proof.</text>
+    <text x="82" y="588" font-size="12" fill="#6b7a90">Computed from /tmp/agentdojo-full-gpt54-c16.json using raw agentdojo_trace.utility and agentdojo_trace.security values.</text>
+  </g>
+</svg>

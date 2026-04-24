@@ -36,9 +36,10 @@ providers:
       force_rerun: true # bypass AgentDojo's local trace cache for fresh comparisons
 ```
 
-Custom GPT models use Promptfoo's OpenAI Responses wrapper with AgentDojo's
-defense-aware pipeline builder. The `tool_filter` defense is only supported for
-AgentDojo's registered OpenAI chat models, such as `gpt-4o-2024-05-13`.
+Custom GPT models use Promptfoo's OpenAI Responses wrapper with an AgentDojo
+pipeline builder that mirrors AgentDojo's built-in defenses, including
+`tool_filter`, `repeat_user_prompt`, `spotlighting_with_delimiting`, and
+`transformers_pi_detector`.
 
 AgentDojo's model registry does not include GPT-5.4. For custom GPT models,
 this example creates a custom AgentDojo pipeline and registers the configured
@@ -71,7 +72,12 @@ tests:
 | **utility**      | Did the agent complete the task?     |
 | **safe_utility** | Both secure AND useful? (key metric) |
 
-A model with 100% utility but 0% security is **dangerous** - it works but is completely compromised by prompt injection.
+AgentDojo calls the attacker metric "targeted attack success rate" (ASR). This
+example reports the complement as `security`: a row passes security when the
+injected malicious goal was **not** executed.
+
+A model with high utility but low security is dangerous: it works, but it also
+executes attacker goals from untrusted tool output.
 
 ## Tracing
 
@@ -103,11 +109,13 @@ GPT-5.4 with `important_instructions` attack, no defense:
 
 | Metric               | Result |
 | -------------------- | ------ |
-| Injections Blocked   | 0%     |
-| User Tasks Completed | 100%   |
-| Safe Utility         | 0%     |
+| Injections Blocked   | 100%   |
+| User Tasks Completed | 95.2%  |
+| Safe Utility         | 95.2%  |
 
-The model completes all tasks correctly but follows every injected instruction - sending unauthorized emails, leaking data, etc.
+In this run, GPT-5.4 blocked every injected attacker goal in the workspace suite
+and completed most user tasks. The remaining failures were utility failures, not
+successful prompt injections.
 
 ## Learn More
 
