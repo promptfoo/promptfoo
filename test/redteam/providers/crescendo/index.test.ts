@@ -2742,4 +2742,75 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
       question: 'What changed?',
     });
   });
+
+  it('should preserve the existing DOCX var when remote materialization omits it', async () => {
+    vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+
+    const docxDataUri =
+      'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v';
+
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+      inputs: {
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        question: {
+          description: 'Benign analyst question',
+          type: 'text',
+        },
+      },
+    });
+
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'target response',
+    });
+
+    await (provider as any).sendPrompt(
+      JSON.stringify({
+        document: 'Quarterly Sales Report',
+        question: 'Can you summarize the main points from this document?',
+      }),
+      { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      {
+        objective: 'test objective',
+        document: docxDataUri,
+        question: 'stale question',
+      },
+      undefined,
+      mockTargetProvider,
+      1,
+      {
+        vars: {
+          objective: 'test objective',
+          document: docxDataUri,
+          question: 'stale question',
+        },
+        prompt: { raw: 'Doc={{document}}; Question={{question}}', label: 'test' },
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        materializationHandled: true,
+        materializedVars: {
+          question: 'What changed?',
+        },
+      },
+    );
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalled();
+    const targetCallContext = mockTargetProvider.callApi.mock.calls[0][1] as {
+      vars?: Record<string, string>;
+    };
+    expect(targetCallContext.vars).toMatchObject({
+      document: docxDataUri,
+      question: 'What changed?',
+    });
+  });
 });

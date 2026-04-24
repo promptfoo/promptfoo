@@ -98,6 +98,43 @@ describe('remoteMaterialization', () => {
     });
   });
 
+  it('preserves only text fallback vars when typed remote materialized vars are missing', () => {
+    const inputs = {
+      document: {
+        description: 'Uploaded planning document',
+        type: 'docx',
+      },
+      question: {
+        description: 'Question to answer',
+        type: 'text',
+      },
+    } satisfies Inputs;
+
+    const result = buildRemoteMaterializedInputVariables(
+      {
+        inputMaterialization: {
+          document: {
+            injectionPlacement: 'comment',
+          },
+        },
+      },
+      {
+        document: 'fallback document',
+        question: 'fallback question',
+      },
+      inputs,
+    );
+
+    expect(result.vars).toEqual({
+      question: 'fallback question',
+    });
+    expect(result.metadata).toEqual({
+      document: {
+        injectionPlacement: 'comment',
+      },
+    });
+  });
+
   it('filters fallback vars to declared input keys when remote materialized vars are missing', () => {
     const inputs = {
       document: {
@@ -121,9 +158,7 @@ describe('remoteMaterialization', () => {
       inputs,
     );
 
-    expect(result.vars).toEqual({
-      document: 'fallback document',
-    });
+    expect(result.vars).toEqual({});
     expect(result.metadata).toEqual({
       document: {
         injectionPlacement: 'comment',

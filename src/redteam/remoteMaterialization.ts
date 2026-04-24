@@ -1,7 +1,7 @@
+import { getInputType, type Inputs } from '../types/shared';
 import { getRemoteGenerationUrl } from './remoteGeneration';
 
 import type { VarValue } from '../types';
-import type { Inputs } from '../types/shared';
 import type { MaterializedInputMetadata, MaterializedInputVariablesResult } from './inputVariables';
 
 export const REMOTE_MATERIALIZATION_CONTEXT_VAR = '__promptfooRemoteMaterialization';
@@ -23,13 +23,26 @@ export interface RemoteMaterializationResponse {
 function filterMaterializedVarsToInputs(
   vars: Record<string, string>,
   inputs: Inputs | undefined,
+  options?: {
+    textOnly?: boolean;
+  },
 ): Record<string, string> {
   if (!inputs || Object.keys(inputs).length === 0) {
     return vars;
   }
 
   return Object.fromEntries(
-    Object.entries(vars).filter(([key]) => Object.prototype.hasOwnProperty.call(inputs, key)),
+    Object.entries(vars).filter(([key]) => {
+      if (!Object.prototype.hasOwnProperty.call(inputs, key)) {
+        return false;
+      }
+
+      if (!options?.textOnly) {
+        return true;
+      }
+
+      return getInputType(inputs[key]) === 'text';
+    }),
   );
 }
 
@@ -38,7 +51,12 @@ export function buildRemoteMaterializedInputVariables(
   fallbackVars: Record<string, string>,
   inputs?: Inputs,
 ): MaterializedInputVariablesResult {
-  const filteredFallbackVars = filterMaterializedVarsToInputs(fallbackVars, inputs);
+  const filteredFallbackVars = filterMaterializedVarsToInputs(fallbackVars, inputs, {
+    // Raw fallback values are only safe for text inputs. Typed inputs such as DOCX/PDF/image
+    // must come from remote materialization, otherwise we should preserve the caller's existing
+    // materialized value instead of overwriting it with plain text.
+    textOnly: true,
+  });
   const filteredMaterializedVars = filterMaterializedVarsToInputs(
     response.materializedVars ?? {},
     inputs,
