@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.7](https://github.com/promptfoo/promptfoo/compare/0.121.6...0.121.7) (2026-04-22)
+
+### Features
+
+- add promptfoo codex skills ([#8790](https://github.com/promptfoo/promptfoo/issues/8790)) ([d794c0d](https://github.com/promptfoo/promptfoo/commit/d794c0d3e2e3aa917882df97fd5d74492aaa89b5))
+- harmbench plugin filter by category ([#8827](https://github.com/promptfoo/promptfoo/issues/8827)) ([73533f4](https://github.com/promptfoo/promptfoo/commit/73533f4781f523043ce03c0ce7936d7355f9ef1f))
+- **openai:** add gpt-image-2 support ([#8835](https://github.com/promptfoo/promptfoo/issues/8835)) ([ac5ff4c](https://github.com/promptfoo/promptfoo/commit/ac5ff4cae8c901864f3fb840882653ec7a69f300))
+- **providers:** add google:embedding: AI Studio embeddings ([#8825](https://github.com/promptfoo/promptfoo/issues/8825)) ([cb67352](https://github.com/promptfoo/promptfoo/commit/cb673527298d3d74f93b3ac1c4c22f5d9a5abdd7))
+- **redteam:** add DOCX input wrapper generation ([#8506](https://github.com/promptfoo/promptfoo/issues/8506)) ([5bba957](https://github.com/promptfoo/promptfoo/commit/5bba9578492b26e48d09a8c8980d2e48e982086d))
+- **webui:** virtualize shared data tables ([#8537](https://github.com/promptfoo/promptfoo/issues/8537)) ([ae756c9](https://github.com/promptfoo/promptfoo/commit/ae756c90d6e32bcf1188327b06e88050a143fcd3))
+
+### Bug Fixes
+
+- **assertions:** support Vercel AI SDK tool-call spans ([#8800](https://github.com/promptfoo/promptfoo/issues/8800)) ([642e925](https://github.com/promptfoo/promptfoo/commit/642e925de3d70aff599fb969af88839835bab995))
+- **auth:** log file auth refresh lifecycle ([#8833](https://github.com/promptfoo/promptfoo/issues/8833)) ([0da6c6a](https://github.com/promptfoo/promptfoo/commit/0da6c6a1c2661409895e5c716f1b0550fea8baf3))
+- **cache:** hash mistral cache keys ([#8643](https://github.com/promptfoo/promptfoo/issues/8643)) ([869f98d](https://github.com/promptfoo/promptfoo/commit/869f98daea59a5718b019e582148dda572630d56))
+- **cache:** hash moderation cache inputs ([#8641](https://github.com/promptfoo/promptfoo/issues/8641)) ([2c36415](https://github.com/promptfoo/promptfoo/commit/2c364152c134e271cba5b2f374705e5bba910df7))
+- **cache:** hash replicate cache keys ([#8647](https://github.com/promptfoo/promptfoo/issues/8647)) ([495e09e](https://github.com/promptfoo/promptfoo/commit/495e09ed061da5c31027ef2ed70178f2c1986313))
+- **cache:** hash watsonx cache keys ([#8649](https://github.com/promptfoo/promptfoo/issues/8649)) ([1461b6f](https://github.com/promptfoo/promptfoo/commit/1461b6ffa225219e2582ded9ce619c135ee77800))
+- **cache:** isolate fetch cache by request identity ([e0da9dd](https://github.com/promptfoo/promptfoo/commit/e0da9dddefa0c3683c35f52ab4d00aa5a9581400))
+- **deps:** update DOMPurify to 3.4.1 ([#8844](https://github.com/promptfoo/promptfoo/issues/8844)) ([29045ed](https://github.com/promptfoo/promptfoo/commit/29045eddf9ce8cfe9251b9aa648bbba0ed34803d))
+- **deps:** update opentelemetry ([#8851](https://github.com/promptfoo/promptfoo/issues/8851)) ([4370216](https://github.com/promptfoo/promptfoo/commit/437021640e327688d966e21d279bd751ec336b4d))
+- **eval:** scope result ratings to eval ([33be399](https://github.com/promptfoo/promptfoo/commit/33be39997e84f0a13a36f67cde92d433865ab706))
+- **eval:** show rendered assertion values instead of raw templates in UI ([#7976](https://github.com/promptfoo/promptfoo/issues/7976)) ([dde71c9](https://github.com/promptfoo/promptfoo/commit/dde71c9856263677216a10ab4274de2d277ad246))
+- **providers:** convert OpenCode permissions to v2 PermissionRuleset ([#8808](https://github.com/promptfoo/promptfoo/issues/8808)) ([335149a](https://github.com/promptfoo/promptfoo/commit/335149acdc9313b7e5a8abfb667414621fb601b4))
+- **providers:** honor OpenRouter config overrides and refresh model references ([#8804](https://github.com/promptfoo/promptfoo/issues/8804)) ([432d1a8](https://github.com/promptfoo/promptfoo/commit/432d1a87b3b2b6490be9ee205c410747066cc814))
+- **redteam:** support named custom policy configs ([#8836](https://github.com/promptfoo/promptfoo/issues/8836)) ([b035d66](https://github.com/promptfoo/promptfoo/commit/b035d662f79cef93713c3bfbefd6f6e2c4ca85e4))
+- **server:** handle large eval table payloads ([#8745](https://github.com/promptfoo/promptfoo/issues/8745)) ([92d5929](https://github.com/promptfoo/promptfoo/commit/92d59297264b4b3e0ba66fc6cf49f3cbfa47c7c3))
+- **server:** redact route debug bodies ([#8639](https://github.com/promptfoo/promptfoo/issues/8639)) ([d160e4c](https://github.com/promptfoo/promptfoo/commit/d160e4cb47adb59d0f7e504baed83756081aba54))
+- **vertex:** align VertexEmbeddingProvider constructor with ProviderOptions ([#8843](https://github.com/promptfoo/promptfoo/issues/8843)) ([f29cfef](https://github.com/promptfoo/promptfoo/commit/f29cfefdbd3443e2b720e5ffd8b67e2cf40d72a0))
+
 ## [0.121.6](https://github.com/promptfoo/promptfoo/compare/0.121.5...0.121.6) (2026-04-18)
 
 ### Features

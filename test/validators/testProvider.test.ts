@@ -279,6 +279,17 @@ describe('testProviderConnectivity', () => {
     expect(vars).not.toHaveProperty('sessionId');
   });
 
+  it('should set sessionId var when provider has no sessionParser config', async () => {
+    const provider = createMockProvider();
+
+    await testProviderConnectivity({ provider });
+
+    expect(mockEvaluate).toHaveBeenCalled();
+    const callArgs = mockEvaluate.mock.calls[0];
+    const vars = callArgs[0].tests[0].vars;
+    expect(vars).toHaveProperty('sessionId');
+  });
+
   it('should use default prompt when none provided', async () => {
     const provider = createMockProvider();
     await testProviderConnectivity({ provider });
