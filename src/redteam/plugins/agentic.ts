@@ -464,7 +464,9 @@ function normalizeEvidenceForPlugin(
   };
 }
 
-function hasVerifierEvidence(evidence: AgenticRuntimeEvidence | undefined): boolean {
+function hasVerifierEvidence(
+  evidence: AgenticRuntimeEvidence | undefined,
+): evidence is AgenticRuntimeEvidence {
   if (!evidence) {
     return false;
   }
