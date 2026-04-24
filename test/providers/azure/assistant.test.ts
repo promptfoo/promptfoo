@@ -243,6 +243,79 @@ describe('Azure Assistant Provider', () => {
       expect(firstCacheKey).not.toContain('Shared assistant prompt');
       expect(firstCacheKey).not.toContain('tenant.azure.com');
     });
+
+    it('should canonicalize nested assistant config order in cache keys', async () => {
+      const cacheGet = vi.fn().mockResolvedValue({ output: 'Cached assistant output' });
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: cacheGet,
+        set: vi.fn(),
+      } as any);
+
+      provider.assistantConfig.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'canonical_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              answer: { type: 'string' },
+              confidence: { type: 'number' },
+            },
+            required: ['answer', 'confidence'],
+            additionalProperties: false,
+          },
+        },
+      };
+      await provider.callApi('Shared canonical assistant prompt');
+
+      provider.assistantConfig.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'canonical_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              confidence: { type: 'number' },
+              answer: { type: 'string' },
+            },
+            required: ['answer', 'confidence'],
+            additionalProperties: false,
+          },
+        },
+      };
+      await provider.callApi('Shared canonical assistant prompt');
+
+      expect(cacheGet.mock.calls[0][0]).toBe(cacheGet.mock.calls[1][0]);
+    });
+
+    it('should reject unserializable assistant cache key inputs', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: vi.fn(),
+        set: vi.fn(),
+      } as any);
+      provider.assistantConfig.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'unserializable_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              answer: { type: 'string', default: BigInt(1) },
+            },
+            additionalProperties: false,
+          },
+        },
+      } as any;
+
+      await expect(provider.callApi('prompt with unserializable config')).rejects.toThrow(
+        'Azure Assistant cache key input contains values that cannot be serialized',
+      );
+    });
   });
 
   describe('error handling', () => {
