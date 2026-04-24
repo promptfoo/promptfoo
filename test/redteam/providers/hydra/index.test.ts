@@ -1512,9 +1512,14 @@ describe('HydraProvider', () => {
       const request = JSON.parse(agentCall[0] as string);
 
       expect(request.inputs).toEqual({
-        document:
-          'Uploaded planning document (format: DOCX document; provide the text or instructions that should be embedded in the file)',
-        question: 'Benign analyst question',
+        document: {
+          description: 'Uploaded planning document',
+          type: 'docx',
+        },
+        question: {
+          description: 'Benign analyst question',
+          type: 'text',
+        },
       });
     });
 

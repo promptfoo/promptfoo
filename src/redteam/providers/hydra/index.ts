@@ -9,7 +9,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../../tracing/traceContext';
-import { buildInputPromptDescription } from '../../../types/shared';
 import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
@@ -123,18 +122,6 @@ interface HydraConfig {
    * or structured typed configs with fields like description, type, and config.
    */
   inputs?: Inputs;
-}
-
-function buildAgentInputDescriptions(
-  inputs: Inputs | undefined,
-): Record<string, string> | undefined {
-  if (!inputs || Object.keys(inputs).length === 0) {
-    return undefined;
-  }
-
-  return Object.fromEntries(
-    Object.entries(inputs).map(([key, input]) => [key, buildInputPromptDescription(input)]),
-  );
 }
 
 function scrubOutputForHistory(output: string): string {
@@ -340,7 +327,6 @@ export class HydraProvider implements ApiProvider {
 
     for (let turn = 1; turn <= this.maxTurns; turn++) {
       logger.debug(`[Hydra] Turn ${turn}/${this.maxTurns}`);
-      const agentInputDescriptions = buildAgentInputDescriptions(this.config.inputs);
 
       // Build request for cloud agent
       // Conditionally exclude target outputs from conversation history for privacy
@@ -361,7 +347,7 @@ export class HydraProvider implements ApiProvider {
         purpose: test?.metadata?.purpose,
         modifiers: test?.metadata?.modifiers,
         conversationHistory: conversationHistoryForCloud,
-        ...(agentInputDescriptions && { inputs: agentInputDescriptions }),
+        ...(this.config.inputs && { inputs: this.config.inputs }),
         lastGraderResult:
           turn > 1 && storedGraderResult
             ? {
