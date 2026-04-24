@@ -4,7 +4,7 @@ import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
-import type { RedteamGradingContext } from '../redteam/plugins/base';
+import type { RedteamGradingContext } from '../redteam/grading/types';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
@@ -91,7 +91,8 @@ export const handleRedteam = async ({
 
   const grader = getGraderById(assertion.type);
   invariant(grader, `Unknown grader: ${baseType}`);
-  invariant(prompt, `Grader ${baseType} must have a prompt`);
+  const effectivePrompt = getRedteamPrompt(prompt, test);
+  invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
 
   // Build grading context from provider response metadata, test metadata, and locally
   // captured assertion trace data. Keep raw trace data in-process for deterministic
@@ -131,7 +132,7 @@ export const handleRedteam = async ({
 
   try {
     const { grade, rubric, suggestions } = await grader.getResult(
-      prompt,
+      effectivePrompt,
       outputString,
       test,
       provider,

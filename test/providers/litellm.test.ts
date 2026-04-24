@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/cache', async (importOriginal) => {
   return {
@@ -28,7 +29,7 @@ const originalOpenAiTemperature = process.env.OPENAI_TEMPERATURE;
 describe('LiteLLM Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.OPENAI_TEMPERATURE;
+    mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
   });
 
   afterEach(() => {
@@ -36,9 +37,9 @@ describe('LiteLLM Provider', () => {
     mockFetch.mockReset();
     vi.unstubAllEnvs();
     if (originalOpenAiTemperature === undefined) {
-      delete process.env.OPENAI_TEMPERATURE;
+      mockProcessEnv({ OPENAI_TEMPERATURE: undefined });
     } else {
-      process.env.OPENAI_TEMPERATURE = originalOpenAiTemperature;
+      mockProcessEnv({ OPENAI_TEMPERATURE: originalOpenAiTemperature });
     }
   });
   describe('createLiteLLMProvider', () => {
@@ -102,7 +103,7 @@ describe('LiteLLM Provider', () => {
 
     it('should work with LITELLM_API_KEY environment variable', () => {
       const originalEnv = process.env.LITELLM_API_KEY;
-      process.env.LITELLM_API_KEY = 'test-litellm-key';
+      mockProcessEnv({ LITELLM_API_KEY: 'test-litellm-key' });
 
       try {
         const provider = createLiteLLMProvider('litellm:gpt-4', {
@@ -122,9 +123,9 @@ describe('LiteLLM Provider', () => {
         expect(wrappedProvider.getApiKey()).toBe('test-litellm-key');
       } finally {
         if (originalEnv === undefined) {
-          delete process.env.LITELLM_API_KEY;
+          mockProcessEnv({ LITELLM_API_KEY: undefined });
         } else {
-          process.env.LITELLM_API_KEY = originalEnv;
+          mockProcessEnv({ LITELLM_API_KEY: originalEnv });
         }
       }
     });
@@ -295,7 +296,7 @@ describe('LiteLLM Provider', () => {
 
     it('should be recognized as a valid embedding provider', () => {
       const provider = createLiteLLMProvider('litellm:embedding:text-embedding-3-small', {});
-      // Check that it has either callEmbeddingApi or callSimilarityApi (matching the validation in matchers.ts)
+      // Check that it has either callEmbeddingApi or callSimilarityApi (matching matcher provider validation)
       const isValidEmbeddingProvider =
         'callEmbeddingApi' in provider || 'callSimilarityApi' in provider;
       expect(isValidEmbeddingProvider).toBe(true);
@@ -440,7 +441,7 @@ describe('LiteLLM Provider', () => {
 
     it('should use OPENAI_TEMPERATURE env var when set', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
-      process.env.OPENAI_TEMPERATURE = '0.5';
+      mockProcessEnv({ OPENAI_TEMPERATURE: '0.5' });
 
       const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
         config: {

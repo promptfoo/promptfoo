@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesTrajectoryGoalSuccess } from '../../src/matchers';
+import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
 import type { Assertion, GradingConfig } from '../../src/types/index';
 
@@ -9,13 +10,12 @@ describe('matchesTrajectoryGoalSuccess', () => {
   });
 
   it('renders the goal, trajectory, and output into the grading prompt', async () => {
-    const provider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const provider = createMockProvider({
+      response: createProviderResponse({
         output: JSON.stringify({ pass: true, score: 0.85, reason: 'Goal achieved' }),
         tokenUsage: { total: 9, prompt: 5, completion: 4 },
       }),
-    };
+    });
 
     const grading: GradingConfig = {
       provider,
@@ -77,13 +77,12 @@ describe('matchesTrajectoryGoalSuccess', () => {
   });
 
   it('applies assertion thresholds to the returned score', async () => {
-    const provider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const provider = createMockProvider({
+      response: createProviderResponse({
         output: JSON.stringify({ pass: true, score: 0.6, reason: 'Partial progress' }),
         tokenUsage: { total: 4, prompt: 2, completion: 2 },
       }),
-    };
+    });
 
     const grading: GradingConfig = {
       provider,
@@ -115,13 +114,12 @@ describe('matchesTrajectoryGoalSuccess', () => {
   });
 
   it('does not allow caller vars to override goal, trajectory, or output', async () => {
-    const provider = {
-      id: () => 'test-provider',
-      callApi: vi.fn().mockResolvedValue({
+    const provider = createMockProvider({
+      response: createProviderResponse({
         output: JSON.stringify({ pass: true, score: 1, reason: 'Goal achieved' }),
         tokenUsage: { total: 6, prompt: 3, completion: 3 },
       }),
-    };
+    });
 
     const grading: GradingConfig = {
       provider,

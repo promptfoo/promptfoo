@@ -1,13 +1,13 @@
 ---
 sidebar_label: 'Comparing open-source models'
-description: 'Compare Mistral, Mixtral, Gemma, Llama, and Phi performance on your custom datasets using automated benchmarks to select the best open-source model for your use case'
+description: 'Compare DeepSeek, Mistral, Qwen, and Llama performance on your custom datasets using automated benchmarks to select the best open-source model for your use case'
 ---
 
 # Comparing Open-Source Models: Benchmark on Your Own Data
 
 When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks.
 
-This guide describes how to compare open-source models like Mistral, Mixtral, Gemma, Llama, and Phi using the `promptfoo` CLI. You can mix and match any combination of these models — just include the providers you want to test.
+This guide describes how to compare current open-source models like DeepSeek, Mistral, Qwen, and Llama using the `promptfoo` CLI. You can mix and match any combination of these models — just include the providers you want to test.
 
 The end result is a view that compares the performance of your chosen models side-by-side:
 
@@ -29,10 +29,10 @@ Now let's start editing `promptfooconfig.yaml`. Create a list of models we'd lik
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openrouter:mistralai/mistral-nemo
-  - openrouter:mistralai/mixtral-8x22b-instruct
-  - openrouter:meta-llama/llama-4-scout-17b-16e-instruct
-  - openrouter:google/gemma-2-27b-it
+  - openrouter:deepseek/deepseek-v3.2
+  - openrouter:mistralai/mistral-small-3.2-24b-instruct
+  - openrouter:meta-llama/llama-4-maverick
+  - openrouter:qwen/qwen3-32b
 ```
 
 We're using OpenRouter for convenience because it wraps everything in an OpenAI-compatible chat format, but you can use any [provider](/docs/providers) that supplies these models, including HuggingFace, Replicate, Groq, and more.
@@ -62,55 +62,16 @@ prompts:
 
 <summary>Advanced: Click here to see how to format prompts differently for each model</summary>
 
-If you're using different APIs that give you direct access to the raw model, you may have to format prompts differently.
+If you're using OpenRouter, you can skip model-specific prompt templates because OpenRouter normalizes requests into an OpenAI-compatible chat format.
 
-Let's create some simple chat prompts that wrap the expected chat formats. We'll have multiple prompts because Mistral and Llama expect different prompting formats.
+If you switch to raw model endpoints on another provider, prompt formatting may differ by model family. In that setup:
 
-First, we'll put the Mistral chat prompt in `prompts/mistral_prompt.txt` using the special `<s>` and `[INST]` tokens that the model was fine-tuned on:
-
-```title="prompts/mistral_prompt.txt"
-<s>[INST] {{message}} [/INST]
-```
-
-Next, we'll put the slightly different Llama chat prompt in `prompts/llama_prompt.txt`:
-
-```title="prompts/llama_prompt.txt"
-<|begin_of_text|><|start_header_id|>user<|end_header_id|>
-
-{{message}}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
-```
-
-Gemma uses its own format with `<start_of_turn>` and `<end_of_turn>` tags. You can handle this via the provider's `prompt` config:
-
-```yaml
-- id: replicate:google-deepmind/gemma-2-27b-it
-  config:
-    prompt:
-      prefix: "<start_of_turn>user\n"
-      suffix: "<end_of_turn>\n<start_of_turn>model"
-```
-
-Now, go back to `promptfooconfig.yaml` and assign prompts to providers:
-
-```yaml title="promptfooconfig.yaml"
-prompts:
-  file://prompts/mistral_prompt.txt: mistral_prompt
-  file://prompts/llama_prompt.txt: llama_prompt
-
-providers:
-  - id: replicate:mistralai/mistral-nemo
-    prompts:
-      - mistral_prompt
-  - id: replicate:mistralai/mixtral-8x22b-instruct-v0.1
-    prompts:
-      - mistral_prompt
-  - id: replicate:meta/meta-llama-4-scout-17b-16e-instruct
-    prompts:
-      - llama_prompt
-```
+- keep one prompt template per family
+- assign templates to providers with labels
+- confirm the expected chat format in the model card or provider runtime docs
 
 :::tip
-These prompt files are [Nunjucks templates](https://mozilla.github.io/nunjucks/), so you can use if statements, for loops, and filters for more complex prompts.
+If you do use external prompt files, they are [Nunjucks templates](https://mozilla.github.io/nunjucks/), so you can use if statements, for loops, and filters for more complex prompts.
 :::
 
 </details>
@@ -121,16 +82,16 @@ Each model has a `config` field where you can specify additional parameters. Let
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openrouter:mistralai/mistral-nemo
+  - id: openrouter:deepseek/deepseek-v3.2
     config:
       temperature: 0.5
-  - id: openrouter:mistralai/mixtral-8x22b-instruct
+  - id: openrouter:mistralai/mistral-small-3.2-24b-instruct
     config:
       temperature: 0.5
-  - id: openrouter:meta-llama/llama-4-scout-17b-16e-instruct
+  - id: openrouter:meta-llama/llama-4-maverick
     config:
       temperature: 0.5
-  - id: openrouter:google/gemma-2-27b-it
+  - id: openrouter:qwen/qwen3-32b
     config:
       temperature: 0.5
 ```
@@ -241,12 +202,12 @@ After running the evaluation, look for patterns in the results:
 - Are there noticeable differences in how they handle certain types of questions?
 - Consider the implications of these results for your specific application or use case.
 
-Here are a few observations from our tests:
+Common differences worth tracking:
 
-- All models handled simple greetings and factual questions well, but diverged on hallucination-prone queries (e.g. hippo swimming ability, Henry VIII's grandchildren)
-- Mistral Nemo hallucinated confidently on the weather question, while Gemma and Llama correctly declined to answer
-- Gemma and Mixtral used heavier markdown formatting (bold headers, nested bullet points), while Mistral Nemo was more concise
-- Mixtral produced the most detailed responses overall, often adding numbered lists and sub-sections unprompted
+- which model refuses unsupported real-time or unverifiable claims
+- which model is most concise versus most verbose
+- how often each model follows formatting instructions without drift
+- whether code and reasoning tasks trade off against conversational quality
 
 ## Running Locally with Ollama
 

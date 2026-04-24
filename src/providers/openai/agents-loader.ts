@@ -13,7 +13,7 @@ import type { AgentDefinition, HandoffDefinition, ToolDefinition } from './agent
  * Load agent definition from file path or return inline definition
  */
 export async function loadAgentDefinition(
-  agentConfig: Agent<any, any> | string | AgentDefinition,
+  agentConfig: Agent<any, any> | string | AgentDefinition | null | undefined,
 ): Promise<Agent<any, any>> {
   // If it's already an Agent instance, return it
   if (isAgentInstance(agentConfig)) {
@@ -28,9 +28,9 @@ export async function loadAgentDefinition(
   }
 
   // If it's an inline definition, convert to Agent
-  if (typeof agentConfig === 'object') {
+  if (agentConfig !== null && typeof agentConfig === 'object' && !Array.isArray(agentConfig)) {
     logger.debug('[AgentsLoader] Creating agent from inline definition');
-    return await createAgentFromDefinition(agentConfig as AgentDefinition);
+    return await createAgentFromDefinition(agentConfig);
   }
 
   logger.debug('[AgentsLoader] Invalid agent configuration', {

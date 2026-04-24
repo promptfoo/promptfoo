@@ -17,6 +17,7 @@ Learn how to measure specific aspects of LLM output quality.
 - [Evaluating JSON Outputs](/docs/guides/evaluate-json) — Validate structured LLM outputs against schemas
 - [Evaluating Coding Agents](/docs/guides/evaluate-coding-agents) — Test AI coding assistants
 - [Evaluating Factuality](/docs/guides/factuality-eval) — Score responses for factual accuracy
+- [LLM as a Judge](/docs/guides/llm-as-a-judge) — Build reliable model-graded evals with rubrics, calibration, and multi-judge checks
 - [Testing LLM Chains](/docs/configuration/testing-llm-chains) — Evaluate multi-step LLM pipelines
 - [Choosing the Right Temperature](/docs/guides/evaluate-llm-temperature) — Find the optimal temperature setting for your use case
 - [Evaluating Text-to-SQL](/docs/guides/text-to-sql-evaluation) — Measure SQL generation accuracy
@@ -32,7 +33,7 @@ Compare LLM performance on your own data to make informed model selection decisi
 - [Choosing the Best GPT Model](/docs/guides/choosing-best-gpt-model) — Pick the right GPT variant for your workload
 - [GPT-5.2 vs o3](/docs/guides/gpt-vs-reasoning-model) — Compare standard vs reasoning models
 - [Comparing Open-Source Models](/docs/guides/compare-open-source-models) — Evaluate Mistral, Llama, Gemma, and Phi on custom datasets
-- [GPT-5 vs GPT-5-mini MMLU](/docs/guides/gpt-mmlu-comparison) — Measure GPT performance on the MMLU benchmark
+- [GPT Model Tiers MMLU-Pro](/docs/guides/gpt-mmlu-comparison) — Measure GPT model tier performance on MMLU-Pro
 - [Qwen vs Llama vs GPT](/docs/guides/qwen-benchmark) — Run a custom benchmark across model families
 - [OpenAI vs Azure Benchmark](/docs/guides/azure-vs-openai) — Test whether Azure-hosted models match OpenAI directly
 - [Mixtral vs GPT](/docs/guides/mixtral-vs-gpt) — Pit Mixtral against GPT on real tasks

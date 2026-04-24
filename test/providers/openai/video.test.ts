@@ -9,6 +9,8 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
+import { mockProcessEnv } from '../../util/utils';
+import { getOpenAiMissingApiKeyMessage } from './shared';
 
 // Hoist mock functions so they're available in vi.mock factories
 const {
@@ -356,41 +358,74 @@ describe('OpenAiVideoProvider', () => {
     });
 
     it('should handle polling timeout', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', {
-        config: {
-          apiKey: 'test-key',
-          poll_interval_ms: 10,
-          max_poll_time_ms: 50,
-        },
-      });
+      vi.useFakeTimers();
+      try {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: {
+            apiKey: 'test-key',
+            poll_interval_ms: 10,
+            max_poll_time_ms: 50,
+          },
+        });
 
-      // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'queued' }),
-      });
+        // Mock job creation
+        mockFetchWithProxy.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_123', status: 'queued' }),
+        });
 
-      // Always return in_progress to trigger timeout
-      mockFetchWithProxy.mockResolvedValue({
-        ok: true,
-        json: async () => ({ id: 'video_123', status: 'in_progress', progress: 10 }),
-      });
+        // Always return in_progress to trigger timeout
+        mockFetchWithProxy.mockResolvedValue({
+          ok: true,
+          json: async () => ({ id: 'video_123', status: 'in_progress', progress: 10 }),
+        });
 
-      const result = await provider.callApi('test prompt');
+        const resultPromise = provider.callApi('test prompt');
+        await vi.runAllTimersAsync();
+        const result = await resultPromise;
 
-      expect(result.error).toContain('timed out');
+        expect(result.error).toContain('timed out');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should throw error if API key is not set', async () => {
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiVideoProvider('sora-2');
 
-        await expect(provider.callApi('test prompt')).rejects.toThrow('OpenAI API key is not set');
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage(),
+        );
       } finally {
-        process.env.OPENAI_API_KEY = originalEnv;
+        restoreEnv();
+      }
+    });
+
+    it('should use custom apiKeyEnvar in missing API key errors', async () => {
+      const restoreEnv = mockProcessEnv({
+        OPENAI_API_KEY: undefined,
+        CUSTOM_VIDEO_API_KEY: undefined,
+      });
+
+      try {
+        const provider = new OpenAiVideoProvider('sora-2', {
+          config: {
+            apiKeyEnvar: 'CUSTOM_VIDEO_API_KEY',
+          },
+          env: {
+            OPENAI_API_KEY: undefined,
+            CUSTOM_VIDEO_API_KEY: undefined,
+          },
+        });
+
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('CUSTOM_VIDEO_API_KEY'),
+        );
+      } finally {
+        restoreEnv();
       }
     });
 

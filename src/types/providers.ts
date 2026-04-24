@@ -4,12 +4,20 @@ import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
+import type { TransformFunction } from './transform';
 
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
 export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;
+export type ProviderConfig =
+  | ProviderId
+  | ProviderFunction
+  | ApiProvider
+  | ProviderOptions
+  | ProviderOptionsMap;
+export type ProvidersConfig = ProviderId | ProviderFunction | ApiProvider | ProviderConfig[];
 
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
@@ -19,6 +27,14 @@ export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool' | 'function';
   content: string;
+}
+
+export interface SkillCallEntry {
+  name: string;
+  input?: unknown;
+  path?: string;
+  source?: 'heuristic' | 'tool';
+  is_error?: boolean;
 }
 
 export type ProviderTypeMap = Partial<Record<ProviderType, string | ProviderOptions | ApiProvider>>;
@@ -52,7 +68,7 @@ export interface ProviderOptions {
   label?: ProviderLabel;
   config?: any;
   prompts?: string[];
-  transform?: string;
+  transform?: string | TransformFunction;
   delay?: number;
   env?: EnvOverrides;
   inputs?: Inputs;
@@ -109,12 +125,12 @@ export interface ApiProvider {
   getSessionId?: () => string;
   inputs?: Inputs;
   label?: ProviderLabel;
-  transform?: string;
+  transform?: string | TransformFunction;
   toJSON?: () => any;
   /**
-   * Cleanup method called when a provider call is aborted (e.g., due to timeout)
-   * Providers should implement this to clean up any resources they might have
-   * allocated, such as file handles, network connections, etc.
+   * Provider-wide cleanup hook for releasing long-lived resources such as worker
+   * processes, browser sessions, or pooled connections at eval shutdown.
+   * Request-scoped cancellation should be implemented with `abortSignal`.
    */
   cleanup?: () => void | Promise<void>;
 }
@@ -146,6 +162,15 @@ export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
   error?: string;
+  /**
+   * Indicates that a remote Promptfoo server already materialized multi-input vars
+   * for this response. When true, callers must not re-materialize locally.
+   */
+  materializationHandled?: boolean;
+  /**
+   * Materialized per-input vars returned by a remote Promptfoo server.
+   */
+  materializedVars?: Record<string, string>;
   /**
    * Indicates that `output` contains base64-encoded binary data (often as JSON like OpenAI `b64_json`).
    * Used to enable blob externalization and avoid token bloat in downstream grading/agentic strategies.
@@ -179,6 +204,10 @@ export interface ProviderResponse {
   prompt?: string | ChatMessage[];
   raw?: string | any;
   output?: string | any;
+  /**
+   * Input materialization metadata returned by a remote Promptfoo server.
+   */
+  inputMaterialization?: Record<string, unknown>;
   /**
    * Output after provider-level transform. Used by contextTransform to ensure
    * it operates on provider-normalized output, independent of test transforms.
@@ -274,7 +303,9 @@ export function isApiProvider(provider: any): provider is ApiProvider {
     typeof provider === 'object' &&
     provider != null &&
     'id' in provider &&
-    typeof provider.id === 'function'
+    typeof provider.id === 'function' &&
+    'callApi' in provider &&
+    typeof provider.callApi === 'function'
   );
 }
 
