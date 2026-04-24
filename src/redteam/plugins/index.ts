@@ -16,10 +16,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
-import {
-  buildPromptInputDescriptions,
-  materializeInputVariablesWithMetadata,
-} from '../inputVariables';
+import { buildPromptInputDescriptions } from '../inputVariables';
 import {
   getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationUrl,
@@ -28,11 +25,16 @@ import {
   shouldGenerateRemote,
 } from '../remoteGeneration';
 import {
+  assertRemoteMaterializationHandled,
+  type RemoteMaterializationResponse,
+  requiresRemoteMaterialization,
+} from '../remoteMaterialization';
+import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
   MAX_CHARS_PER_MESSAGE_MODIFIER_KEY,
 } from '../shared/promptLength';
-import { extractInputVarsFromPrompt, getShortPluginId } from '../util';
+import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
@@ -374,7 +376,7 @@ async function fetchRemoteTestCases(
     email: getUserEmail(),
   });
 
-  interface PluginGenerationResponse {
+  interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
     message?: string;
   }
@@ -395,6 +397,9 @@ async function fetchRemoteTestCases(
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return { testCases: [] };
     }
+    if (requiresRemoteMaterialization(config?.inputs)) {
+      assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
+    }
     const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return { testCases: ret, message: data.message };
@@ -402,58 +407,6 @@ async function fetchRemoteTestCases(
     logger.error(`Error generating test cases for ${key}: ${err}`);
     return { testCases: [] };
   }
-}
-
-async function materializeRemoteTestCaseInputs({
-  config,
-  injectVar,
-  pluginId,
-  provider,
-  purpose,
-  testCases,
-}: {
-  config: PluginConfig;
-  injectVar: string;
-  pluginId: string;
-  provider: ApiProvider;
-  purpose: string;
-  testCases: TestCase[];
-}): Promise<TestCase[]> {
-  const inputs = config.inputs;
-  if (!inputs || Object.keys(inputs).length === 0) {
-    return testCases;
-  }
-
-  return Promise.all(
-    testCases.map(async (testCase, materializationIndex) => {
-      const inputVars = extractInputVarsFromPrompt(
-        String(testCase.vars?.[injectVar] ?? ''),
-        inputs,
-      );
-      if (!inputVars) {
-        return testCase;
-      }
-
-      const materializedVars = await materializeInputVariablesWithMetadata(inputVars, inputs, {
-        materializationIndex,
-        pluginId,
-        provider,
-        purpose,
-      });
-
-      return {
-        ...testCase,
-        vars: {
-          ...(testCase.vars || {}),
-          ...materializedVars.vars,
-        },
-        metadata: {
-          ...(testCase.metadata || {}),
-          ...(materializedVars.metadata ? { inputMaterialization: materializedVars.metadata } : {}),
-        },
-      };
-    }),
-  );
 }
 
 function createPluginFactory<T extends PluginConfig>(
@@ -482,14 +435,7 @@ function createPluginFactory<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
       );
-      const testCases = await materializeRemoteTestCaseInputs({
-        config: configWithDefaults ?? {},
-        injectVar,
-        pluginId,
-        provider,
-        purpose,
-        testCases: remoteGeneration.testCases,
-      });
+      const testCases = remoteGeneration.testCases;
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
       return testCases.map((testCase) => ({
@@ -616,14 +562,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         params.n,
         params.config ?? {},
       );
-      const testCases = await materializeRemoteTestCaseInputs({
-        config: params.config ?? {},
-        injectVar: params.injectVar,
-        pluginId,
-        provider: params.provider,
-        purpose: params.purpose,
-        testCases: remoteGeneration.testCases,
-      });
+      const testCases = remoteGeneration.testCases;
       const computedModifiers = computeModifiersFromConfig(params.config);
       return testCases.map((testCase) => ({
         ...testCase,
@@ -666,14 +605,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       params.n,
       params.config ?? {},
     );
-    const testCases = await materializeRemoteTestCaseInputs({
-      config: params.config ?? {},
-      injectVar: params.injectVar,
-      pluginId,
-      provider: params.provider,
-      purpose: params.purpose,
-      testCases: remoteGeneration.testCases,
-    });
+    const testCases = remoteGeneration.testCases;
     const computedModifiers = computeModifiersFromConfig(params.config);
     return testCases.map((testCase) => ({
       ...testCase,
@@ -697,7 +629,7 @@ function createRemotePlugin<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ provider, purpose, injectVar, n, config }: PluginActionParams) => {
+    action: async ({ purpose, injectVar, n, config }: PluginActionParams) => {
       const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
       if (neverGenerateRemote()) {
@@ -712,14 +644,7 @@ function createRemotePlugin<T extends PluginConfig>(
         n,
         configWithDefaults ?? {},
       );
-      const testCases: TestCase[] = await materializeRemoteTestCaseInputs({
-        config: configWithDefaults ?? {},
-        injectVar,
-        pluginId,
-        provider,
-        purpose,
-        testCases: remoteGeneration.testCases,
-      });
+      const testCases = remoteGeneration.testCases;
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
       const testsWithMetadata = testCases.map((testCase) => ({
         ...testCase,

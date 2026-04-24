@@ -548,6 +548,15 @@ export interface ClaudeCodeOptions {
   session_id?: string;
 
   /**
+   * Custom title for a new session. When set, the session uses this title instead
+   * of auto-generating one from the first user message. Useful for locating an
+   * eval run in `~/.claude/projects/` or in Claude Code's session list.
+   *
+   * When resuming via `resume`/`continue`, the persisted title takes precedence.
+   */
+  title?: string;
+
+  /**
    * Enable debug mode for the Claude Code process.
    * When true, enables verbose debug logging (equivalent to --debug CLI flag).
    */
@@ -981,6 +990,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       );
     }
 
+    // `title` only applies to new sessions; the SDK silently keeps the
+    // persisted title on resume/continue. Warn so users don't wonder why their
+    // custom title didn't stick.
+    if (config.title && (config.resume || config.continue)) {
+      logger.warn(
+        '[ClaudeAgentSDK] `title` is ignored when `resume` or `continue` is set; the persisted session title is used instead.',
+      );
+    }
+
     // De-dupe and sort allowed/disallowed tools for cache key consistency
     const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
 
@@ -1017,6 +1035,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
+    // Keys listed here are excluded from the cache key because they're either
+    // callbacks/runtime controllers (hashing them is pointless) or pure session
+    // metadata that doesn't influence the model's output (`title`).
     const cacheKeyQueryOptions: Omit<
       QueryOptions,
       | 'abortController'
@@ -1026,6 +1047,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       | 'onElicitation'
       | 'spawnClaudeCodeProcess'
       | 'stderr'
+      | 'title'
     > = {
       maxTurns: config.max_turns,
       model: config.model,
@@ -1160,6 +1182,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
       canUseTool,
       onElicitation: config.on_elicitation,
+      // Session metadata — excluded from cache key so cosmetic changes don't
+      // force cache misses. The SDK ignores `title` on resumed sessions
+      // (the persisted title wins), so we warn above when both are set.
+      title: config.title,
     };
     const queryParams = { prompt, options };
 
