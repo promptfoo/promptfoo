@@ -201,8 +201,8 @@ After running an evaluation, view traces in the web UI:
    promptfoo view
    ```
 
-3. Click the magnifying glass (🔎) icon on any test result
-4. Scroll to the "Trace Timeline" section
+3. Open any test result
+4. Switch to the **Traces** tab in the details panel
 
 ### 4. Assert on Traced Workflows
 
@@ -705,6 +705,7 @@ For more details on red team testing with tracing, see [How to Red Team LLM Agen
 
 ## Next Steps
 
+- Follow the [Trace-Based Agent Evals guide](/docs/guides/trace-based-agent-evals) to turn traces into trajectory and trace assertions
 - Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
 - Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python) - uses protobuf format
 - Try the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example)

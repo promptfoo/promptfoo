@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Trace-based agent eval guide
+
+prompts:
+  - 'Explain how {{topic}} works in simple terms'
+
+providers:
+  - file://provider-simple-traced.js
+
+tests:
+  - description: RAG agent retrieves documents, reasons, and composes an answer
+    vars:
+      topic: quantum computing
+    metadata:
+      tracingEnabled: true
+      testCaseId: trace-guide-rag-agent
+    assert:
+      - type: contains
+        value: Based on my analysis of 3 technical documents
+
+      - type: trace-span-count
+        value:
+          pattern: rag_agent_workflow
+          min: 1
+          max: 1
+
+      - type: trace-span-count
+        value:
+          pattern: retrieve_document_*
+          min: 3
+          max: 3
+
+      - type: trace-span-duration
+        value:
+          pattern: retrieve_document_*
+          max: 350
+          percentile: 95
+
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
+      - type: trajectory:tool-used
+        value:
+          pattern: search_*
+          min: 3
+          max: 3
+
+      - type: trajectory:tool-used
+        value: compose_answer
+
+      - type: not-trajectory:tool-used
+        value: issue_refund
+
+      - type: trajectory:tool-args-match
+        value:
+          name: search_corpus
+          args:
+            query: quantum computing classical computing
+          mode: partial
+
+      - type: trajectory:tool-sequence
+        value:
+          mode: in_order
+          steps:
+            - search_corpus
+            - compose_answer
+
+      - type: trajectory:step-count
+        value:
+          type: reasoning
+          min: 4
+          max: 4
+
+      - type: trajectory:goal-success
+        provider: openai:chat:gpt-5.4-mini
+        value: The agent explained {{ topic }} using retrieved context, cited multiple documents, and composed a final answer after reasoning.
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      host: '127.0.0.1'
+      port: 4318
+      acceptFormats: ['json']

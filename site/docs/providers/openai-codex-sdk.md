@@ -363,7 +363,65 @@ When streaming is enabled, the provider processes events like `item.completed` a
 
 ## Tracing and Observability
 
-The Codex SDK provider supports two levels of tracing:
+The Codex SDK provider can expose three layers of evidence for each Codex turn:
+
+1. A normal Promptfoo GenAI span for the whole provider call when `tracing.enabled: true`
+2. Provider-created Codex item spans when `enable_streaming: true`
+3. Native Codex CLI/OpenTelemetry spans when `deep_tracing: true`
+
+Use the first layer for latency, token usage, session IDs, and final output. Add streaming mode when you want to see the steps Codex reported through the SDK, such as shell commands, MCP calls, web searches, file changes, reasoning items, and agent messages. Add deep tracing only when you also want the Codex CLI process to export its own OTEL telemetry into Promptfoo's receiver.
+
+Open an eval row in the web UI to inspect the resulting Trace Timeline. The same viewer is used for Codex item spans, CLI spans, and custom provider spans:
+
+![Promptfoo Trace Timeline showing nested operation spans](/img/docs/tracing/trace-guide-timeline.png)
+
+### Recommended Configuration
+
+Start with streaming mode. It gives Promptfoo normalized spans for trajectory assertions and works even if the Codex CLI does not emit native OTEL spans:
+
+```yaml title="promptfooconfig.yaml"
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      host: '127.0.0.1'
+      port: 4318
+      acceptFormats: ['json']
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.4
+      sandbox_mode: read-only
+      enable_streaming: true
+
+prompts:
+  - 'Inspect this repo and list the files you read before answering.'
+
+tests:
+  - assert:
+      - type: trace-span-count
+        value:
+          pattern: '*'
+          min: 1
+      - type: trajectory:step-count
+        value:
+          type: command
+          min: 1
+```
+
+Then enable `deep_tracing` if you need CLI-side telemetry as child spans of the same Promptfoo trace:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      enable_streaming: true
+      deep_tracing: true
+```
+
+The `host: '127.0.0.1'` setting keeps the local OTLP receiver bound to loopback for a single-machine eval. Omit it when your Codex subprocess or external providers need to reach the receiver from another host/container.
 
 ### Streaming Mode Tracing
 
@@ -385,18 +443,22 @@ providers:
       enable_streaming: true
 ```
 
-With streaming enabled, the provider creates spans for:
+With streaming enabled, the provider calls `thread.runStreamed()` and creates one span per completed Codex stream item. Promptfoo still waits for the turn to finish before returning `response.output`; streaming is used for event visibility, not token-by-token assertions.
 
-- **Provider-level calls** - Overall request timing and token usage
-- **Agent responses** - Individual message completions
-- **Reasoning steps** - Model reasoning captured in span events
-- **Command executions** - Shell commands with exit codes and output
-- **File changes** - File modifications with paths and change types
-- **MCP tool calls** - External tool invocations
+- **Provider call** - Overall request timing, requested model, token usage, session ID, and item counts
+- **Agent messages** - Spans named `agent response` with sanitized `codex.message` attributes
+- **Reasoning items** - Spans named `reasoning` with sanitized reasoning attributes/events
+- **Shell commands** - Spans named `exec <command>` with `codex.command`, `codex.exit_code`, `codex.status`, and sanitized output
+- **File changes** - Spans named `file <change>` with changed file paths and counts
+- **MCP tool calls** - Spans named `mcp <server>/<tool>` with server, tool, input, status, and error attributes
+- **Web searches** - Spans named `search "<query>"` with a sanitized `codex.search.query`
+- **Collaboration events** - Spans for spawn/send/wait items when collaboration mode is enabled
+
+Promptfoo also derives `response.metadata.skillCalls` from successful Codex command items that directly read a local `SKILL.md` file. That detection is heuristic, so keep `enable_streaming: true` on skill evals when you want both trace evidence and `skill-used` assertions.
 
 ### Deep Tracing
 
-To propagate OTEL context into the Codex CLI process and capture CLI-side spans when the installed Codex SDK supports them, enable `deep_tracing`:
+To propagate OTEL context into the Codex CLI process and capture CLI-side spans when the installed Codex SDK/runtime emits them, enable `deep_tracing`:
 
 ```yaml
 providers:
@@ -406,7 +468,17 @@ providers:
       enable_streaming: true
 ```
 
-Deep tracing injects OpenTelemetry environment variables (`OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACEPARENT`, etc.) into the Codex CLI process. Promptfoo uses a fresh SDK client/thread per call in this mode so child spans link to the correct parent request span.
+Deep tracing injects OpenTelemetry environment variables into the Codex CLI process:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` defaults to `http://127.0.0.1:4318`
+- `OTEL_EXPORTER_OTLP_PROTOCOL` defaults to `http/json`
+- `OTEL_SERVICE_NAME` defaults to `codex-cli`
+- `OTEL_TRACES_EXPORTER` defaults to `otlp`
+- `TRACEPARENT` is set from the active Promptfoo provider span when available
+
+Override those values with `cli_env` if you need a different collector, protocol, or service name. When `deep_tracing` is disabled, Promptfoo removes any inherited `TRACEPARENT` from the Codex CLI environment so unrelated parent traces do not accidentally link into eval results.
+
+Promptfoo uses a fresh SDK client/thread per call in deep tracing mode so CLI child spans link to the correct parent request span.
 
 :::warning
 
@@ -425,13 +497,57 @@ That sanitizer applies to spans promptfoo creates from Codex stream events. If `
 
 :::
 
+### Assert on Codex Trajectories
+
+Streaming spans are normalized into trajectory steps. Use command assertions for shell activity, tool assertions for MCP calls, and raw trace assertions for timing or error checks.
+
+```yaml
+tests:
+  - assert:
+      # Did Codex run at least one shell command?
+      - type: trajectory:step-count
+        value:
+          type: command
+          min: 1
+
+      # Did Codex read a particular skill file?
+      - type: trajectory:step-count
+        value:
+          type: command
+          pattern: '*token-skill/SKILL.md*'
+          min: 1
+
+      # Did Codex call an MCP tool named search_repo?
+      - type: trajectory:tool-used
+        value: search_repo
+
+      # Did any spans report errors?
+      - type: trace-error-spans
+        value: 0
+
+      # Did the final answer match what the trajectory shows?
+      - type: trajectory:goal-success
+        value: 'Identify the files relevant to the bug and explain the fix without editing files'
+        provider: openai:gpt-5-mini
+```
+
+For shell commands, match on `type: command` because Codex command spans are normalized from `codex.command`. For MCP calls, use `trajectory:tool-used` or `trajectory:tool-args-match`; MCP spans are normalized from `mcp <server>/<tool>` plus `codex.mcp.input`.
+
 ### Viewing Traces
 
-Run your eval and view traces in your OTLP-compatible backend (Jaeger, Zipkin, etc.):
+Run the eval with tracing enabled:
 
 ```bash
 promptfoo eval -c promptfooconfig.yaml
 ```
+
+Then inspect traces in any of these places:
+
+- **Promptfoo Web UI**: run `promptfoo view`, open a result details panel, and scroll to Trace Timeline
+- **Exported eval JSON**: add `-o output.json` and inspect each result's trace-backed assertion scores and reasons
+- **External OTLP backend**: set Promptfoo tracing forwarding or override `cli_env.OTEL_EXPORTER_OTLP_ENDPOINT` for Codex CLI native spans
+
+For general OTEL receiver setup and UI details, see [Tracing](/docs/tracing/). If the trace exists but has no Codex item spans, check `enable_streaming: true`. If deep tracing spans are missing, check that `tracing.otlp.http.enabled: true`, the receiver port matches `OTEL_EXPORTER_OTLP_ENDPOINT`, and `acceptFormats` includes `json`.
 
 ## Git Repository Requirement
 

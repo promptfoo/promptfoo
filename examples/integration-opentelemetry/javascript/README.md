@@ -18,9 +18,15 @@ To run the trajectory assertion variant from this directory, use:
 npx promptfoo@latest eval -c promptfooconfig.trajectory.yaml --no-cache
 ```
 
+To run the complete trace-based agent eval guide variant, including the model-graded `trajectory:goal-success` assertion, set `OPENAI_API_KEY` and run:
+
+```bash
+OPENAI_API_KEY="your-api-key" npx promptfoo@latest eval -c promptfooconfig.trace-guide.yaml --no-cache
+```
+
 ## Environment Variables
 
-This example requires no API keys - it uses a simulated provider that demonstrates tracing patterns.
+The base tracing example requires no API keys - it uses a simulated provider that demonstrates tracing patterns. The `promptfooconfig.trace-guide.yaml` variant requires `OPENAI_API_KEY` for its `trajectory:goal-success` judge assertion.
 
 ## Overview
 
@@ -42,12 +48,13 @@ Promptfoo's OpenTelemetry integration allows you to:
 
 ## Files in This Example
 
-| File                        | Description                                           |
-| --------------------------- | ----------------------------------------------------- |
-| `promptfooconfig.yaml`      | Evaluation config with tracing enabled and assertions |
-| `provider-simple-traced.js` | Simulated RAG provider with comprehensive tracing     |
-| `trace-assertions.js`       | Custom JavaScript assertion for trace validation      |
-| `package.json`              | OpenTelemetry dependencies (v2.x API)                 |
+| File                               | Description                                           |
+| ---------------------------------- | ----------------------------------------------------- |
+| `promptfooconfig.yaml`             | Evaluation config with tracing enabled and assertions |
+| `provider-simple-traced.js`        | Simulated RAG provider with comprehensive tracing     |
+| `promptfooconfig.trace-guide.yaml` | Complete trace and trajectory assertion guide config  |
+| `trace-assertions.js`              | Custom JavaScript assertion for trace validation      |
+| `package.json`                     | OpenTelemetry dependencies (v2.x API)                 |
 
 ## Tracing Configuration
 
