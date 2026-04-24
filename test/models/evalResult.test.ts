@@ -135,6 +135,35 @@ describe('EvalResult', () => {
       expect(retrieved).toBeNull();
     });
 
+    it('should preserve response headers when persist option is false', async () => {
+      const result = await EvalResult.createFromEvaluateResult(
+        'test-eval-non-persisted-headers',
+        {
+          ...mockEvaluateResult,
+          response: createProviderResponse({
+            output: 'test',
+            metadata: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  'content-type': 'application/json',
+                  'x-request-id': 'req_in_memory',
+                },
+              },
+            },
+          }),
+        },
+        { persist: false },
+      );
+
+      expect(result.persisted).toBe(false);
+      expect(result.response?.metadata?.http?.headers).toEqual({
+        'content-type': 'application/json',
+        'x-request-id': 'req_in_memory',
+      });
+    });
+
     it('should properly handle circular references in provider', async () => {
       const evalId = 'test-eval-id';
 
@@ -322,6 +351,110 @@ describe('EvalResult', () => {
         expect(JSON.stringify(retrieved?.prompt)).not.toContain(
           'sk-ant-api03-PROMPT-SHOULD-BE-REDACTED',
         );
+      });
+
+      it('redacts sensitive provider response headers without changing output', async () => {
+        const evalId = 'test-eval-redact-response-headers';
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            metadata: {
+              http: {
+                status: 200,
+                statusText: 'OK',
+                headers: {
+                  'openai-project': 'metadata_proj_should_not_persist',
+                  'set-cookie': 'metadata-session=secret',
+                  'x-ratelimit-remaining-requests': '199',
+                },
+              },
+            },
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'ok',
+                  metadata: {
+                    http: {
+                      status: 200,
+                      statusText: 'OK',
+                      headers: {
+                        'openai-project': 'grading_proj_should_not_persist',
+                        'set-cookie': 'grading-session=secret',
+                        'x-ratelimit-remaining-requests': '2399',
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+            response: createProviderResponse({
+              output: {
+                password: 'model output should stay intact',
+              },
+              metadata: {
+                http: {
+                  status: 200,
+                  statusText: 'OK',
+                  headers: {
+                    'content-type': 'application/json',
+                    'openai-project': 'proj_should_not_persist',
+                    'set-cookie': 'session=secret',
+                    'x-ratelimit-remaining-requests': '199',
+                    'x-request-id': 'req_should_not_persist',
+                  },
+                  requestHeaders: {
+                    authorization: 'Bearer sk-should-not-persist',
+                    'x-safe-debug': 'keep-me',
+                  },
+                },
+              },
+            }),
+          },
+          { persist: true },
+        );
+
+        expect(result.response?.output).toEqual({ password: 'model output should stay intact' });
+        expect(result.response?.metadata?.http?.headers).toEqual({
+          'content-type': 'application/json',
+          'openai-project': '[REDACTED]',
+          'set-cookie': '[REDACTED]',
+          'x-ratelimit-remaining-requests': '[REDACTED]',
+          'x-request-id': '[REDACTED]',
+        });
+        expect(result.response?.metadata?.http?.requestHeaders).toEqual({
+          authorization: '[REDACTED]',
+          'x-safe-debug': 'keep-me',
+        });
+        expect(result.metadata?.http?.headers).toEqual({
+          'openai-project': '[REDACTED]',
+          'set-cookie': '[REDACTED]',
+          'x-ratelimit-remaining-requests': '[REDACTED]',
+        });
+        expect(result.gradingResult?.componentResults?.[0].metadata?.http?.headers).toEqual({
+          'openai-project': '[REDACTED]',
+          'set-cookie': '[REDACTED]',
+          'x-ratelimit-remaining-requests': '[REDACTED]',
+        });
+
+        const retrieved = await EvalResult.findById(result.id);
+        expect(JSON.stringify(retrieved?.response)).not.toContain('proj_should_not_persist');
+        expect(JSON.stringify(retrieved?.response)).not.toContain('session=secret');
+        expect(JSON.stringify(retrieved?.response)).not.toContain('req_should_not_persist');
+        expect(JSON.stringify(retrieved?.response)).not.toContain('sk-should-not-persist');
+        expect(JSON.stringify(retrieved?.metadata)).not.toContain(
+          'metadata_proj_should_not_persist',
+        );
+        expect(JSON.stringify(retrieved?.metadata)).not.toContain('metadata-session=secret');
+        expect(JSON.stringify(retrieved?.gradingResult)).not.toContain(
+          'grading_proj_should_not_persist',
+        );
+        expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
       });
 
       it('redacts credentials from an instantiated provider object embedded in testCase.options.provider', async () => {

@@ -334,6 +334,31 @@ describe('Cloud blob upload', () => {
     expect(result?.images?.[0].blobRef?.uri).toContain('promptfoo://blob/');
   });
 
+  it('should reuse the same image blob when output and images contain identical data URIs', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const dataUri = `data:image/png;base64,${largeBase64}`;
+    const response: ProviderResponse = {
+      output: dataUri,
+      images: [{ data: dataUri, mimeType: 'image/png' }],
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.output).toBe(result?.images?.[0].blobRef?.uri);
+    expect(result?.images?.[0].data).toBeUndefined();
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/png',
+      expect.objectContaining({
+        location: 'response.images[0].data',
+        kind: 'image',
+      }),
+    );
+  });
+
   it('should pass through images without data URIs unchanged', async () => {
     mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
 
@@ -404,6 +429,72 @@ describe('Cloud blob upload', () => {
       'audio/wav',
       expect.objectContaining({
         location: 'response.audio.data',
+        kind: 'audio',
+      }),
+    );
+  });
+
+  it('should reuse the top-level audio blob for mirrored realtime metadata audio data', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: 'test',
+      audio: {
+        data: largeBase64,
+        format: 'wav',
+        transcript: 'hello',
+      },
+      metadata: {
+        audio: {
+          data: largeBase64,
+          format: 'wav',
+          transcript: 'hello',
+        },
+      },
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.audio?.data).toBeUndefined();
+    expect(result?.audio?.blobRef).toBeDefined();
+    expect(result?.metadata?.audio?.data).toBeUndefined();
+    expect(result?.metadata?.audio?.blobRef).toEqual(result?.audio?.blobRef);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'audio/wav',
+      expect.objectContaining({
+        location: 'response.audio.data',
+        kind: 'audio',
+      }),
+    );
+  });
+
+  it('should externalize metadata-only audio data', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: 'test',
+      metadata: {
+        audio: {
+          data: largeBase64,
+          format: 'wav',
+        },
+      },
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.metadata?.audio?.data).toBeUndefined();
+    expect(result?.metadata?.audio?.blobRef).toBeDefined();
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'audio/wav',
+      expect.objectContaining({
+        location: 'response.metadata.audio.data',
         kind: 'audio',
       }),
     );

@@ -19,7 +19,7 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { sanitizeObject } from '../util/sanitizer';
+import { REDACTED, sanitizeObject } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
@@ -126,6 +126,60 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
   }) as T;
 }
 
+const SENSITIVE_RESPONSE_HEADER_REGEX =
+  /^(authorization|proxy-authorization|cookie|set-cookie|openai-organization|openai-project|x-request-id|cf-ray|x-openai-proxy-wasm|x-ratelimit-.*)$/i;
+
+function sanitizeResponseHeadersForDb<T>(headers: T): T {
+  const sanitizedHeaders = sanitizeForDbWithSecrets(headers);
+  if (
+    !sanitizedHeaders ||
+    typeof sanitizedHeaders !== 'object' ||
+    Array.isArray(sanitizedHeaders)
+  ) {
+    return sanitizedHeaders;
+  }
+
+  const redactedHeaders = { ...(sanitizedHeaders as Record<string, unknown>) };
+  for (const key of Object.keys(redactedHeaders)) {
+    if (SENSITIVE_RESPONSE_HEADER_REGEX.test(key)) {
+      redactedHeaders[key] = REDACTED;
+    }
+  }
+  return redactedHeaders as T;
+}
+
+function redactHttpHeadersDeep(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(redactHttpHeadersDeep);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const nextValue: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (key === 'http' && child && typeof child === 'object' && !Array.isArray(child)) {
+      const http = { ...(child as Record<string, unknown>) };
+      http.headers = sanitizeResponseHeadersForDb(http.headers);
+      http.requestHeaders = sanitizeResponseHeadersForDb(http.requestHeaders);
+      nextValue[key] = redactHttpHeadersDeep(http);
+    } else {
+      nextValue[key] = redactHttpHeadersDeep(child);
+    }
+  }
+
+  return nextValue;
+}
+
+function sanitizeHttpForDb<T>(value: T): T {
+  return redactHttpHeadersDeep(sanitizeForDb(value)) as T;
+}
+
+function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {
+  return sanitizeHttpForDb(response);
+}
+
 export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
@@ -192,6 +246,9 @@ export default class EvalResult {
     if (persist) {
       const db = getDb();
 
+      args.response = sanitizeResponseForDb(args.response);
+      args.gradingResult = sanitizeHttpForDb(args.gradingResult);
+      args.metadata = sanitizeHttpForDb(args.metadata);
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
       return new EvalResult({ ...dbResult[0], persisted: true });
     }
@@ -222,10 +279,10 @@ export default class EvalResult {
           ...result,
           testCase: sanitizeForDbWithSecrets(result.testCase),
           prompt: sanitizeForDbWithSecrets(result.prompt),
-          response: sanitizeForDb(result.response),
-          gradingResult: sanitizeForDb(result.gradingResult),
+          response: sanitizeResponseForDb(result.response),
+          gradingResult: sanitizeHttpForDb(result.gradingResult),
           namedScores: sanitizeForDb(result.namedScores),
-          metadata: sanitizeForDb(result.metadata),
+          metadata: sanitizeHttpForDb(result.metadata),
           provider: result.provider ? sanitizeProvider(result.provider) : result.provider,
         };
         const dbResult = db
