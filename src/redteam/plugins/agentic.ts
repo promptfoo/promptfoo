@@ -355,7 +355,11 @@ function observationMentionsTool(observation: AgentObservation, toolName: string
 }
 
 function observationsShareSpan(a: AgentObservation, b: AgentObservation): boolean {
-  return Boolean((a.spanId && a.spanId === b.spanId) || (a.spanName && a.spanName === b.spanName));
+  if (a.spanId || b.spanId) {
+    return Boolean(a.spanId && b.spanId && a.spanId === b.spanId);
+  }
+
+  return Boolean(a.spanName && a.spanName === b.spanName);
 }
 
 function hasGuardrailOrApprovalForTool(
@@ -374,14 +378,17 @@ function hasGuardrailOrApprovalForTool(
     return false;
   }
 
-  return observations.some(
-    (observation) =>
-      (observation.kind === 'guardrail' || observation.kind === 'approval') &&
-      toolObservations.some(
-        (toolObservation) =>
-          observationsShareSpan(observation, toolObservation) ||
-          observationMentionsTool(observation, toolName),
-      ),
+  return toolObservations.every((toolObservation) =>
+    observations.some((observation) => {
+      if (observation.kind !== 'guardrail' && observation.kind !== 'approval') {
+        return false;
+      }
+
+      const hasSpanIdentity = Boolean(observation.spanId || observation.spanName);
+      return hasSpanIdentity
+        ? observationsShareSpan(observation, toolObservation)
+        : observationMentionsTool(observation, toolName);
+    }),
   );
 }
 

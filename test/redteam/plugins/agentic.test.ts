@@ -751,6 +751,53 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
   });
 
+  it('does not match approval and tool spans by reused span names when span IDs differ', async () => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+    expect(grader).toBeDefined();
+
+    const result = await grader!.getResult(
+      'prompt',
+      JSON.stringify({ agenticEvidence: { findings: [], mode: 'hardened', pluginId } }),
+      {
+        metadata: { purpose: 'agentic runtime app' },
+      } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-reused-span-name',
+          testCaseId: 'case-reused-span-name',
+          traceId: '14141414141414141414141414141414',
+          spans: [
+            {
+              attributes: {
+                'approval.required': true,
+              },
+              name: 'tool update_seat',
+              spanId: 'span-approval',
+              startTime: 0,
+            },
+            {
+              attributes: {
+                'codex.tool.name': 'update_seat',
+              },
+              name: 'tool update_seat',
+              spanId: 'span-tool',
+              startTime: 1,
+            },
+          ],
+        },
+      },
+    );
+
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('otel');
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+  });
+
   it('treats same-span approval as covering the guarded tool path', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
