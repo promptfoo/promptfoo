@@ -21,6 +21,7 @@ import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Sequence
 from contextlib import nullcontext
@@ -147,6 +148,28 @@ def _otel_endpoint(config: dict) -> str:
     return f"{endpoint}/v1/traces"
 
 
+def _otel_headers(config: dict) -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    raw_headers = (
+        config.get("otel_headers")
+        or os.getenv("OTEL_EXPORTER_OTLP_TRACES_HEADERS")
+        or os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
+    )
+    if isinstance(raw_headers, dict):
+        headers.update({str(key): str(value) for key, value in raw_headers.items()})
+        return headers
+    if isinstance(raw_headers, str):
+        for item in raw_headers.split(","):
+            if "=" not in item:
+                continue
+            key, value = item.split("=", 1)
+            key = urllib.parse.unquote(key.strip())
+            value = urllib.parse.unquote(value.strip())
+            if key:
+                headers[key] = value
+    return headers
+
+
 def _span_attributes(attributes: dict[str, Any]) -> dict[str, Any]:
     """Drop None values because OTEL attributes cannot be null."""
     return {key: value for key, value in attributes.items() if value is not None}
@@ -182,6 +205,7 @@ class OtlpJsonSpan:
         traceparent: str,
         name: str,
         attributes: dict[str, Any],
+        headers: dict[str, str],
     ):
         match = _TRACEPARENT_RE.match(traceparent)
         if match is None:
@@ -192,6 +216,7 @@ class OtlpJsonSpan:
         self.span_id = os.urandom(8).hex()
         self.name = name
         self.attributes = _span_attributes(attributes)
+        self.headers = headers
         self.start_time_ns = 0
         self.end_time_ns = 0
         self.status = {"code": 1}
@@ -256,7 +281,7 @@ class OtlpJsonSpan:
         request = urllib.request.Request(
             self.endpoint,
             data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=self.headers,
             method="POST",
         )
         timeout = float(os.getenv("OTEL_EXPORTER_OTLP_TIMEOUT", "5"))
@@ -281,6 +306,7 @@ def _start_span(config: dict, context: dict, name: str, attributes: dict[str, An
         traceparent=traceparent,
         name=name,
         attributes=attributes,
+        headers=_otel_headers(config),
     )
 
 
