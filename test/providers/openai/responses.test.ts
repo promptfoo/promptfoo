@@ -87,6 +87,8 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
       'gpt-5.4-pro-2026-03-05',
     );
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.5');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.5-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-nano');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-mini');
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
@@ -2897,6 +2899,9 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
       'gpt-5.4-pro-2026-03-05',
     );
+    // GPT-5.5 models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.5');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.5-pro');
     // Deep research models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
@@ -3116,6 +3121,43 @@ describe('OpenAiResponsesProvider', () => {
       });
 
       const provider = new OpenAiResponsesProvider('gpt-5.4-pro', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      await provider.callApi('Test prompt');
+
+      expect(cache.fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        LONG_RUNNING_MODEL_TIMEOUT_MS,
+        'json',
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should use longer timeout for gpt-5.5-pro models', async () => {
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Response complete' }],
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 200 },
+      };
+
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
+        data: mockData,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new OpenAiResponsesProvider('gpt-5.5-pro', {
         config: {
           apiKey: 'test-key',
         },

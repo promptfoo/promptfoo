@@ -540,7 +540,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'openai') {
       setProvider(
         {
-          id: 'openai:gpt-5.2',
+          id: 'openai:gpt-5.5',
           config: {},
           label: currentLabel,
         },

@@ -61,6 +61,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
+ * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
@@ -74,7 +76,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
  */
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -434,6 +436,10 @@ async function loadCodexSDK(): Promise<any> {
 // Pricing per 1M tokens
 // See: https://openai.com/pricing
 const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
+  // GPT-5.5 models
+  // Cached-input pricing was not published at launch, so charge cached tokens at standard input.
+  'gpt-5.5': { input: 5.0, output: 30.0, cache_read: 5.0 },
+  'gpt-5.5-pro': { input: 30.0, output: 180.0, cache_read: 30.0 },
   // GPT-5.4 models
   'gpt-5.4': { input: 2.5, output: 15.0, cache_read: 0.25 },
   // gpt-5.4-pro does not have discounted cached-input pricing.
@@ -456,6 +462,9 @@ const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.5 models
+    'gpt-5.5',
+    'gpt-5.5-pro',
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-pro',
