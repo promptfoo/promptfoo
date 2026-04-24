@@ -321,7 +321,7 @@ const TestSuites = ({
       {
         accessorKey: 'riskScore',
         header: 'Risk Score',
-        size: 100,
+        size: 160,
         cell: ({ row }) => {
           const value = row.original.riskScore;
           return (
@@ -359,7 +359,7 @@ const TestSuites = ({
       {
         accessorKey: 'complexityScore',
         header: 'Complexity',
-        size: 100,
+        size: 170,
         cell: ({ row }) => {
           const value = row.original.complexityScore;
           return (
@@ -393,7 +393,7 @@ const TestSuites = ({
       {
         accessorKey: 'successfulAttacks',
         header: 'Successful Attacks',
-        size: 110,
+        size: 220,
       },
       {
         accessorKey: 'attackSuccessRate',
@@ -405,7 +405,7 @@ const TestSuites = ({
             <TooltipContent>Attack Success Rate</TooltipContent>
           </Tooltip>
         ),
-        size: 80,
+        size: 120,
         cell: ({ row }) => {
           const value = row.original.attackSuccessRate;
           const passRateWithFilter = row.original.passRateWithFilter;
@@ -425,7 +425,7 @@ const TestSuites = ({
       {
         accessorKey: 'severity',
         header: 'Severity',
-        size: 90,
+        size: 150,
         cell: ({ getValue }) => {
           const value = getValue<Severity>();
           return severityDisplayNames[value] || 'Unknown';
