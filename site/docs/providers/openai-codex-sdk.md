@@ -371,9 +371,9 @@ The Codex SDK provider can expose three layers of evidence for each Codex turn:
 
 Use the first layer for latency, token usage, session IDs, and final output. Add streaming mode when you want to see the steps Codex reported through the SDK, such as shell commands, MCP calls, web searches, file changes, reasoning items, and agent messages. Add deep tracing only when you also want the Codex CLI process to export its own OTEL telemetry into Promptfoo's receiver.
 
-Open an eval row in the web UI to inspect the resulting Trace Timeline. The same viewer is used for Codex item spans, CLI spans, and custom provider spans:
+Open an eval result in the web UI, then switch to the **Traces** tab in the details panel to inspect the spans for that turn. Within the Traces tab, the timeline viewer shows Codex item spans, CLI spans, and custom provider spans together:
 
-![Promptfoo Trace Timeline showing nested operation spans](/img/docs/tracing/trace-guide-timeline.png)
+![Promptfoo Traces tab showing nested operation spans in the timeline viewer](/img/docs/tracing/trace-guide-timeline.png)
 
 ### Recommended Configuration
 
@@ -454,7 +454,7 @@ With streaming enabled, the provider calls `thread.runStreamed()` and creates on
 - **Web searches** - Spans named `search "<query>"` with a sanitized `codex.search.query`
 - **Collaboration events** - Spans for spawn/send/wait items when collaboration mode is enabled
 
-Promptfoo also derives `response.metadata.skillCalls` from successful Codex command items that directly read a local `SKILL.md` file. That detection is heuristic, so keep `enable_streaming: true` on skill evals when you want both trace evidence and `skill-used` assertions.
+Promptfoo also derives `response.metadata.skillCalls` heuristically from Codex command items that reference a local `.../skills/<name>/SKILL.md` path. That detection does not verify that the command actually read the file, so keep `enable_streaming: true` on skill evals when you want both trace evidence and `skill-used` assertions.
 
 ### Deep Tracing
 
@@ -543,7 +543,7 @@ promptfoo eval -c promptfooconfig.yaml
 
 Then inspect traces in any of these places:
 
-- **Promptfoo Web UI**: run `promptfoo view`, open a result details panel, and scroll to Trace Timeline
+- **Promptfoo Web UI**: run `promptfoo view`, open a result details panel, and switch to the **Traces** tab
 - **Exported eval JSON**: add `-o output.json` and inspect each result's trace-backed assertion scores and reasons
 - **External OTLP backend**: set Promptfoo tracing forwarding or override `cli_env.OTEL_EXPORTER_OTLP_ENDPOINT` for Codex CLI native spans
 
