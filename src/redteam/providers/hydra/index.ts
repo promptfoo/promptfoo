@@ -442,16 +442,29 @@ export class HydraProvider implements ApiProvider {
       let materializedInputVars:
         | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
         | undefined;
-      if (currentInputVars && this.config.inputs) {
+      if (
+        this.config.inputs &&
+        shouldGenerateRemote() &&
+        !currentInputVars &&
+        !agentResp.materializedVars
+      ) {
+        logger.warn('[Hydra] Remote multi-input generation returned an invalid prompt format', {
+          turn,
+          messagePreview: processedMessage.slice(0, 200),
+        });
+        agentFailureError = 'Hydra remote multi-input generation returned an invalid prompt format';
+        continue;
+      }
+      if ((currentInputVars || agentResp.materializedVars) && this.config.inputs) {
         if (shouldGenerateRemote()) {
           materializedInputVars = buildRemoteMaterializedInputVariables(
             agentResp,
-            currentInputVars,
+            currentInputVars ?? {},
             this.config.inputs,
           );
         } else {
           materializedInputVars = await materializeInputVariablesWithMetadata(
-            currentInputVars,
+            currentInputVars!,
             this.config.inputs,
             {
               materializationIndex: turn,

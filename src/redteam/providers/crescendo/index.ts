@@ -977,16 +977,24 @@ export class CrescendoProvider implements ApiProvider {
     let materializedInputVars:
       | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
       | undefined;
-    if (currentInputVars && this.config.inputs) {
+    if (
+      this.config.inputs &&
+      shouldGenerateRemote() &&
+      !currentInputVars &&
+      !remoteMaterialization?.materializedVars
+    ) {
+      throw new Error('Crescendo remote multi-input generation returned an invalid prompt format');
+    }
+    if ((currentInputVars || remoteMaterialization?.materializedVars) && this.config.inputs) {
       if (shouldGenerateRemote()) {
         materializedInputVars = buildRemoteMaterializedInputVariables(
           remoteMaterialization ?? {},
-          currentInputVars,
+          currentInputVars ?? {},
           this.config.inputs,
         );
       } else {
         materializedInputVars = await materializeInputVariablesWithMetadata(
-          currentInputVars,
+          currentInputVars!,
           this.config.inputs,
           {
             materializationIndex: _roundNum,
