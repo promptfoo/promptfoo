@@ -29,9 +29,8 @@ import type { FetchOptions } from './types';
 // Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
 // creation time. This is acceptable because these env vars don't change
 // mid-process. If that assumption changes, add cache-invalidation logic.
-const cachedAgents: Map<number, Agent> = new Map();
-const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
 const dispatcher1Wrappers: WeakMap<object, unknown> = new WeakMap();
+const dispatcher1WrapperInstances: WeakSet<object> = new WeakSet();
 
 function getDispatcher1Wrapper(): (new (dispatcher: unknown) => unknown) | undefined {
   const Dispatcher1Wrapper = (
@@ -41,12 +40,20 @@ function getDispatcher1Wrapper(): (new (dispatcher: unknown) => unknown) | undef
 }
 
 function wrapDispatcherForGlobalFetch(dispatcher: unknown): unknown {
-  if (!dispatcher || typeof dispatcher !== 'object') {
+  if (
+    !dispatcher ||
+    typeof dispatcher !== 'object' ||
+    typeof (dispatcher as { dispatch?: unknown }).dispatch !== 'function'
+  ) {
     return dispatcher;
   }
 
   const Dispatcher1Wrapper = getDispatcher1Wrapper();
-  if (!Dispatcher1Wrapper || dispatcher instanceof Dispatcher1Wrapper) {
+  if (
+    !Dispatcher1Wrapper ||
+    dispatcher instanceof Dispatcher1Wrapper ||
+    dispatcher1WrapperInstances.has(dispatcher)
+  ) {
     return dispatcher;
   }
 
@@ -56,9 +63,15 @@ function wrapDispatcherForGlobalFetch(dispatcher: unknown): unknown {
   }
 
   const wrappedDispatcher = new Dispatcher1Wrapper(dispatcher);
+  if (wrappedDispatcher && typeof wrappedDispatcher === 'object') {
+    dispatcher1WrapperInstances.add(wrappedDispatcher);
+  }
   dispatcher1Wrappers.set(dispatcher, wrappedDispatcher);
   return wrappedDispatcher;
 }
+
+const cachedAgents: Map<number, Agent> = new Map();
+const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
 
 /**
  * Get the connection pool size for HTTP agents.
