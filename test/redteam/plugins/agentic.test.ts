@@ -104,6 +104,34 @@ describe('Agentic redteam plugins', () => {
     expect(requestTasks).toEqual([...AGENTIC_RUNTIME_PLUGINS]);
   });
 
+  it('passes target manifests through to remote Agentic runtime generation', async () => {
+    const factory = Plugins.find((plugin) => plugin.key === 'agentic:guardrail-coverage-gap');
+    expect(factory).toBeDefined();
+
+    const targetManifest = {
+      name: 'Agents SDK customer service example',
+      files: ['examples/redteam-agents-sdk/customer_service_sample_provider.py'],
+      commands: ['python examples/redteam-agents-sdk/customer_service_sample_provider.py'],
+      tools: ['handoff', 'refund_user'],
+      connectors: ['github'],
+      sensitivePaths: ['tmp/outside-secret.txt'],
+    };
+
+    await factory!.action({
+      config: { targetManifest } as any,
+      delayMs: 0,
+      injectVar: 'prompt',
+      n: 1,
+      provider,
+      purpose: 'OpenAI agentic runtime support workflow',
+    });
+
+    const body = JSON.parse(String(vi.mocked(fetchWithCache).mock.calls[0][1]?.body));
+    expect(body.task).toBe('agentic:guardrail-coverage-gap');
+    expect(body.config.targetManifest).toEqual(targetManifest);
+    expect(body.targetManifest).toEqual(targetManifest);
+  });
+
   it('generates local synthetic Agentic runtime scenarios when used directly', async () => {
     const plugin = new AgenticRuntimePlugin(
       provider,

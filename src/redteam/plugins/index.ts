@@ -355,6 +355,7 @@ async function fetchRemoteTestCases(
   // Strip graderExamples before sending - they're not used during generation,
   // only during grading. The CLI re-attaches the full config to test case metadata after.
   const { graderExamples, ...configForRemote } = config ?? {};
+  const targetManifest = (configForRemote as Record<string, unknown>).targetManifest;
   const maxCharsModifier = getMaxCharsPerMessageModifierValue(config?.maxCharsPerMessage);
   if (maxCharsModifier) {
     configForRemote.modifiers = {
@@ -372,6 +373,7 @@ async function fetchRemoteTestCases(
     task: key,
     version: VERSION,
     email: getUserEmail(),
+    ...(targetManifest && typeof targetManifest === 'object' ? { targetManifest } : {}),
   });
 
   interface PluginGenerationResponse {
