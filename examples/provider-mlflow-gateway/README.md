@@ -34,5 +34,6 @@ promptfoo eval -c promptfooconfig.yaml
 ## Configuration
 
 Update `my-chat-endpoint` in `promptfooconfig.yaml` with the name of the gateway endpoint you created.
+The example also uses that endpoint as the `llm-rubric` grader, so it runs without a separate OpenAI API key.
 
 See the [MLflow Gateway provider docs](https://www.promptfoo.dev/docs/providers/mlflow-gateway/) for all configuration options.

@@ -86,7 +86,7 @@ providers:
 | `temperature` | Sampling temperature       | Provider default     |
 | `max_tokens`  | Maximum tokens to generate | Provider default     |
 
-All standard [OpenAI configuration options](/docs/providers/openai/#configuring-parameters) are supported since MLflow Gateway uses an OpenAI-compatible API.
+Most standard [OpenAI chat completion parameters](/docs/providers/openai/#configuring-parameters) are supported since MLflow Gateway uses an OpenAI-compatible API. Authentication and endpoint URL settings are MLflow-specific and do not inherit `OPENAI_API_KEY`, `OPENAI_ORGANIZATION`, or OpenAI base URL variables.
 
 ## Multiple endpoints
 
@@ -104,6 +104,20 @@ prompts:
 tests:
   - vars:
       text: 'MLflow AI Gateway provides unified access to LLMs...'
+```
+
+## Model-graded assertions
+
+If your eval uses model-graded assertions such as `llm-rubric`, configure a text grader explicitly so promptfoo does not fall back to its default OpenAI grader:
+
+```yaml
+providers:
+  - id: mlflow-gateway:my-chat-endpoint
+
+defaultTest:
+  options:
+    provider:
+      text: mlflow-gateway:my-chat-endpoint
 ```
 
 ## Gateway features

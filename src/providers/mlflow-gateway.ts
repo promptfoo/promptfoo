@@ -6,6 +6,23 @@ import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 import type { OpenAiCompletionOptions } from './openai/types';
 
+const MLFLOW_GATEWAY_URL_ENV_VAR = 'MLFLOW_GATEWAY_URL';
+const MLFLOW_GATEWAY_API_KEY_ENV_VAR = 'MLFLOW_GATEWAY_API_KEY';
+const MLFLOW_GATEWAY_API_PATH = '/gateway/mlflow/v1';
+
+function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
+  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
+    const value = env[key as keyof EnvOverrides];
+    return value === undefined ? undefined : String(value);
+  }
+  return undefined;
+}
+
+function normalizeGatewayUrl(gatewayUrl: string | undefined): string | undefined {
+  const trimmedGatewayUrl = gatewayUrl?.trim();
+  return trimmedGatewayUrl ? trimmedGatewayUrl.replace(/\/+$/, '') : undefined;
+}
+
 /**
  * MLflow AI Gateway configuration options
  *
@@ -50,21 +67,23 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
       );
     }
 
-    const gatewayUrl = providerOptions.config?.gatewayUrl || getEnvString('MLFLOW_GATEWAY_URL');
+    const gatewayUrl =
+      normalizeGatewayUrl(providerOptions.config?.gatewayUrl) ??
+      normalizeGatewayUrl(getProviderEnvString(providerOptions.env, MLFLOW_GATEWAY_URL_ENV_VAR)) ??
+      normalizeGatewayUrl(getEnvString(MLFLOW_GATEWAY_URL_ENV_VAR));
 
     if (!gatewayUrl) {
       throw new Error(
         'MLflow Gateway URL is required. Set it in the provider config or via the ' +
-          'MLFLOW_GATEWAY_URL environment variable (e.g., http://localhost:5000).',
+          `${MLFLOW_GATEWAY_URL_ENV_VAR} environment variable (e.g., http://localhost:5000).`,
       );
     }
 
-    const cleanGatewayUrl = gatewayUrl.replace(/\/$/, '');
-    const apiBaseUrl = `${cleanGatewayUrl}/gateway/openai/v1`;
+    const apiBaseUrl = `${gatewayUrl}${MLFLOW_GATEWAY_API_PATH}`;
 
     const mergedConfig: MlflowGatewayCompletionOptions = {
       ...providerOptions.config,
-      apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'MLFLOW_GATEWAY_API_KEY',
+      apiKeyEnvar: providerOptions.config?.apiKeyEnvar || MLFLOW_GATEWAY_API_KEY_ENV_VAR,
       apiBaseUrl,
       apiKeyRequired: providerOptions.config?.apiKeyRequired ?? false,
     };
@@ -83,15 +102,23 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
   // would leak that credential in the Authorization header.
   getApiKey(): string | undefined {
     const envar = this.config?.apiKeyEnvar as EnvVarKey | undefined;
-    return (
-      this.config.apiKey ||
-      (envar ? getEnvString(envar) || this.env?.[envar as keyof EnvOverrides] : undefined)
-    );
+    if (this.config.apiKey !== undefined) {
+      return this.config.apiKey;
+    }
+    if (!envar) {
+      return undefined;
+    }
+
+    return getProviderEnvString(this.env, envar) ?? getEnvString(envar);
+  }
+
+  getOrganization(): undefined {
+    return undefined;
   }
 
   protected getMissingApiKeyErrorMessage(): string {
     return (
-      `MLflow Gateway API key is not set. Set the ${this.config.apiKeyEnvar || 'MLFLOW_GATEWAY_API_KEY'} ` +
+      `MLflow Gateway API key is not set. Set the ${this.config.apiKeyEnvar || MLFLOW_GATEWAY_API_KEY_ENV_VAR} ` +
       'environment variable or add `apiKey` to the provider config. The gateway does not ' +
       'validate the key; any non-empty value is accepted.'
     );

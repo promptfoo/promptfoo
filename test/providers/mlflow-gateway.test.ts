@@ -14,6 +14,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
         MLFLOW_GATEWAY_URL: undefined,
         MLFLOW_GATEWAY_API_KEY: undefined,
         OPENAI_API_KEY: undefined,
+        OPENAI_ORGANIZATION: undefined,
       },
       { clear: false },
     );
@@ -27,7 +28,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
       config: { gatewayUrl: 'http://localhost:5000' },
     });
-    expect(provider.config.apiBaseUrl).toBe('http://localhost:5000/gateway/openai/v1');
+    expect(provider.config.apiBaseUrl).toBe('http://localhost:5000/gateway/mlflow/v1');
   });
 
   it('should construct with MLFLOW_GATEWAY_URL env var', () => {
@@ -35,14 +36,31 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
       config: {},
     });
-    expect(provider.config.apiBaseUrl).toBe('http://gateway.example.com/gateway/openai/v1');
+    expect(provider.config.apiBaseUrl).toBe('http://gateway.example.com/gateway/mlflow/v1');
+  });
+
+  it('should construct with provider env MLFLOW_GATEWAY_URL', () => {
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: {},
+      env: { MLFLOW_GATEWAY_URL: 'http://provider-env.example.com' },
+    });
+    expect(provider.config.apiBaseUrl).toBe('http://provider-env.example.com/gateway/mlflow/v1');
+  });
+
+  it('should prefer provider env gateway URL over process env', () => {
+    mockProcessEnv({ MLFLOW_GATEWAY_URL: 'http://process-env.example.com' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: {},
+      env: { MLFLOW_GATEWAY_URL: 'http://provider-env.example.com' },
+    });
+    expect(provider.config.apiBaseUrl).toBe('http://provider-env.example.com/gateway/mlflow/v1');
   });
 
   it('should strip trailing slash from gateway URL', () => {
     const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
-      config: { gatewayUrl: 'http://localhost:5000/' },
+      config: { gatewayUrl: ' http://localhost:5000/// ' },
     });
-    expect(provider.config.apiBaseUrl).toBe('http://localhost:5000/gateway/openai/v1');
+    expect(provider.config.apiBaseUrl).toBe('http://localhost:5000/gateway/mlflow/v1');
   });
 
   it('should throw if no gateway URL is provided', () => {
@@ -128,7 +146,7 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
       config: { gatewayUrl: 'http://from-config.com' },
     });
-    expect(provider.config.apiBaseUrl).toBe('http://from-config.com/gateway/openai/v1');
+    expect(provider.config.apiBaseUrl).toBe('http://from-config.com/gateway/mlflow/v1');
   });
 
   it('should read the API key from MLFLOW_GATEWAY_API_KEY', () => {
@@ -147,6 +165,24 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     expect(provider.getApiKey()).toBe('from-config');
   });
 
+  it('should prefer provider env API key over process env', () => {
+    mockProcessEnv({ MLFLOW_GATEWAY_API_KEY: 'from-process-env' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+      env: { MLFLOW_GATEWAY_API_KEY: 'from-provider-env' },
+    });
+    expect(provider.getApiKey()).toBe('from-provider-env');
+  });
+
+  it('should allow provider env to clear the process env API key', () => {
+    mockProcessEnv({ MLFLOW_GATEWAY_API_KEY: 'from-process-env' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+      env: { MLFLOW_GATEWAY_API_KEY: '' },
+    });
+    expect(provider.getApiKey()).toBe('');
+  });
+
   it('should NOT fall back to OPENAI_API_KEY when MLFLOW_GATEWAY_API_KEY is unset', () => {
     // Regression test: forwarding a user's OPENAI_API_KEY as a Bearer token to
     // an MLflow gateway URL would leak their cloud OpenAI credentials.
@@ -155,6 +191,14 @@ describe('MlflowGatewayChatCompletionProvider', () => {
       config: { gatewayUrl: 'http://localhost:5000' },
     });
     expect(provider.getApiKey()).toBeUndefined();
+  });
+
+  it('should NOT forward OPENAI_ORGANIZATION to MLflow Gateway', () => {
+    mockProcessEnv({ OPENAI_ORGANIZATION: 'org-openai-secret' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.getOrganization()).toBeUndefined();
   });
 
   it('should NOT require an API key by default', () => {

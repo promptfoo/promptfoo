@@ -9,14 +9,19 @@ description: Evaluate models through MLflow AI Gateway
 #   mlflow server --host 127.0.0.1 --port 5000
 #   export MLFLOW_GATEWAY_URL=http://localhost:5000
 
+prompts:
+  - 'You are a helpful assistant. Answer the following question concisely: {{question}}'
+
 providers:
   - id: mlflow-gateway:my-chat-endpoint
     config:
       temperature: 0.7
       max_tokens: 500
 
-prompts:
-  - 'You are a helpful assistant. Answer the following question concisely: {{question}}'
+defaultTest:
+  options:
+    provider:
+      text: mlflow-gateway:my-chat-endpoint
 
 tests:
   - description: Basic knowledge question
