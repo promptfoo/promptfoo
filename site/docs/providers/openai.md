@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-description: 'Configure OpenAI models including GPT-5.4, GPT-5.3, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
+description: 'Configure OpenAI models including GPT-5.5, GPT-5.4, GPT-4.1, o-series reasoning, embeddings, and assistants for comprehensive AI evals'
 ---
 
 # OpenAI
@@ -32,7 +32,7 @@ The OpenAI provider supports the following model formats:
 - `openai:video:<model name>` - uses Sora video generation models
 - `openai:agents:<agent name>` - runs agentic workflows via OpenAI Agents SDK
 - `openai:chatkit:<workflow_id>` - runs ChatKit workflows
-- `openai:codex-sdk` / `openai:codex` - runs agentic coding workflows via OpenAI Codex SDK, with optional inline model selection like `openai:codex:gpt-5.4`
+- `openai:codex-sdk` / `openai:codex` - runs agentic coding workflows via OpenAI Codex SDK, with optional inline model selection like `openai:codex:gpt-5.5`
 - `openai:codex-app-server` / `openai:codex-desktop` - runs the experimental Codex app-server protocol for rich-client event, approval, sandbox, skill, plugin, and thread lifecycle evals
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
@@ -40,17 +40,17 @@ or if you have a custom model.
 For example, if OpenAI releases `gpt-5` chat completion,
 you could begin using it immediately with `openai:chat:gpt-5`.
 
-```yaml title="GPT-5 only: verbosity and minimal reasoning"
+```yaml title="GPT-5 only: verbosity and lowest reasoning"
 providers:
   - id: openai:chat:gpt-5
     config:
       verbosity: high # low | medium | high
-      reasoning_effort: minimal
+      reasoning_effort: minimal # GPT-5.5 uses none instead
   # For the Responses API, use a nested reasoning object:
   - id: openai:responses:gpt-5
     config:
       reasoning:
-        effort: minimal
+        effort: minimal # GPT-5.5 uses none instead
 ```
 
 The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `max_tokens`, `max_completion_tokens`, `functions`, and `tools`, which can be used to customize model behavior like so:
@@ -61,7 +61,7 @@ providers:
     config:
       temperature: 0
       max_tokens: 1024
-  - id: openai:chat:gpt-5.4-mini
+  - id: openai:chat:gpt-5.5
     config:
       max_completion_tokens: 1024
 ```
@@ -82,7 +82,7 @@ providers:
     config:
       temperature: 0
       max_tokens: 128
-  - id: openai:chat:gpt-5.4-mini
+  - id: openai:chat:gpt-5.5
     config:
       max_completion_tokens: 128
       apiKey: sk-abc123
@@ -90,42 +90,42 @@ providers:
 
 Supported parameters include:
 
-| Parameter               | Description                                                                                                                                                                                                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apiBaseUrl`            | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                                                                                                                                                         |
-| `apiHost`               | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                                                                                                                                                         |
-| `apiKey`                | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                                                                                                                                                          |
-| `apiKeyEnvar`           | An environment variable that contains the API key                                                                                                                                                                                                                                                 |
-| `best_of`               | Controls the number of alternative outputs to generate and select from.                                                                                                                                                                                                                           |
-| `frequency_penalty`     | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                                                                                                                                                            |
-| `function_call`         | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                                                                                                                                                      |
-| `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                                                                                                                                 |
-| `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                              |
-| `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                     |
-| `cost`                  | Legacy per-token override applied to both input and output pricing in promptfoo cost estimates.                                                                                                                                                                                                   |
-| `inputCost`             | Override input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                         |
-| `outputCost`            | Override output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                        |
-| `audioCost`             | Legacy per-token override applied to both audio input and audio output pricing in promptfoo cost estimates.                                                                                                                                                                                       |
-| `audioInputCost`        | Override audio input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                   |
-| `audioOutputCost`       | Override audio output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                  |
-| `max_tokens`            | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                 |
-| `maxRetries`            | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries.                                                                                                                                                                                             |
-| `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                             |
-| `omitDefaults`          | Omits hardcoded defaults for `temperature` and `max_tokens`/`max_output_tokens` unless values are explicitly set via config or environment variables. Supported by `openai:chat` and `openai:responses`.                                                                                          |
-| `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                     |
-| `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings. |
-| `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                     |
-| `reasoning`             | Reasoning configuration object for reasoning-capable models. In practice, use this with the Responses API (`openai:responses:*`) for o-series and GPT-5 family models. `effort` supports `none`, `low`, `medium`, `high` (and `minimal` for GPT-5 family), with optional `summary`.               |
-| `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                             |
-| `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                               |
-| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                       |
-| `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                 |
-| `temperature`           | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family) because OpenAI ignores it there.                                                                                           |
-| `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                         |
-| `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                 |
-| `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                     |
-| `user`                  | A unique identifier representing your end-user, for tracking and abuse prevention.                                                                                                                                                                                                                |
-| `max_completion_tokens` | Maximum number of tokens for reasoning-capable Chat Completions models (o-series and GPT-5 family). For Responses API, use `max_output_tokens` instead.                                                                                                                                           |
+| Parameter               | Description                                                                                                                                                                                                                                                                                                |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apiBaseUrl`            | The base URL of the OpenAI API, please also read `OPENAI_BASE_URL` below.                                                                                                                                                                                                                                  |
+| `apiHost`               | The hostname of the OpenAI API, please also read `OPENAI_API_HOST` below.                                                                                                                                                                                                                                  |
+| `apiKey`                | Your OpenAI API key, equivalent to `OPENAI_API_KEY` environment variable                                                                                                                                                                                                                                   |
+| `apiKeyEnvar`           | An environment variable that contains the API key                                                                                                                                                                                                                                                          |
+| `best_of`               | Controls the number of alternative outputs to generate and select from.                                                                                                                                                                                                                                    |
+| `frequency_penalty`     | Applies a penalty to frequent tokens, making them less likely to appear in the output.                                                                                                                                                                                                                     |
+| `function_call`         | Controls whether the AI should call functions. Can be either 'none', 'auto', or an object with a `name` that specifies the function to call.                                                                                                                                                               |
+| `functions`             | Allows you to define custom functions. Each function should be an object with a `name`, optional `description`, and `parameters`.                                                                                                                                                                          |
+| `functionToolCallbacks` | A map of function tool names to function callbacks. Each callback should accept a string and return a string or a `Promise<string>`.                                                                                                                                                                       |
+| `headers`               | Additional headers to include in the request.                                                                                                                                                                                                                                                              |
+| `cost`                  | Legacy per-token override applied to both input and output pricing in promptfoo cost estimates.                                                                                                                                                                                                            |
+| `inputCost`             | Override input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                  |
+| `outputCost`            | Override output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                                 |
+| `audioCost`             | Legacy per-token override applied to both audio input and audio output pricing in promptfoo cost estimates.                                                                                                                                                                                                |
+| `audioInputCost`        | Override audio input token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                            |
+| `audioOutputCost`       | Override audio output token pricing in promptfoo cost estimates.                                                                                                                                                                                                                                           |
+| `max_tokens`            | Controls maximum output length for non-reasoning requests. Not used by reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family). Use `max_completion_tokens` (Chat Completions) or `max_output_tokens` (Responses API) instead.                                                          |
+| `maxRetries`            | Maximum number of retry attempts for failed API requests. Defaults to 4. Set to 0 to disable retries.                                                                                                                                                                                                      |
+| `metadata`              | Key-value pairs for request tagging and organization.                                                                                                                                                                                                                                                      |
+| `omitDefaults`          | Omits hardcoded defaults for `temperature` and `max_tokens`/`max_output_tokens` unless values are explicitly set via config or environment variables. Supported by `openai:chat` and `openai:responses`.                                                                                                   |
+| `organization`          | Your OpenAI organization key.                                                                                                                                                                                                                                                                              |
+| `passthrough`           | A flexible object that allows passing arbitrary parameters directly to the OpenAI API request body. Useful for experimental, new, or provider-specific parameters not yet explicitly supported in promptfoo. This parameter is merged into the final API request and can override other settings.          |
+| `presence_penalty`      | Applies a penalty to new tokens (tokens that haven't appeared in the input), making them less likely to appear in the output.                                                                                                                                                                              |
+| `reasoning`             | Reasoning configuration object for reasoning-capable models. In practice, use this with the Responses API (`openai:responses:*`) for o-series and GPT-5 family models. `effort` supports `none`, `low`, `medium`, `high`, and model-specific values such as `xhigh` or `minimal`, with optional `summary`. |
+| `response_format`       | Specifies the desired output format, including `json_object` and `json_schema`. Can also be specified in the prompt config. If specified in both, the prompt config takes precedence.                                                                                                                      |
+| `seed`                  | Seed used for deterministic output.                                                                                                                                                                                                                                                                        |
+| `stop`                  | Defines a list of tokens that signal the end of the output.                                                                                                                                                                                                                                                |
+| `store`                 | Whether to store the conversation for future retrieval (boolean).                                                                                                                                                                                                                                          |
+| `temperature`           | Controls the randomness of the AI's output for non-reasoning models. Promptfoo omits it for reasoning-capable models (o-series, `codex-mini-latest`, and GPT-5 family) because OpenAI ignores it there.                                                                                                    |
+| `tool_choice`           | Controls whether the AI should use a tool. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                  |
+| `tools`                 | Allows you to define custom tools. See [OpenAI Tools documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-tools)                                                                                                                                                          |
+| `top_p`                 | Controls the nucleus sampling, a method that helps control the randomness of the AI's output.                                                                                                                                                                                                              |
+| `user`                  | A unique identifier representing your end-user, for tracking and abuse prevention.                                                                                                                                                                                                                         |
+| `max_completion_tokens` | Maximum number of tokens for reasoning-capable Chat Completions models (o-series and GPT-5 family). For Responses API, use `max_output_tokens` instead.                                                                                                                                                    |
 
 Use `inputCost` and `outputCost` when a model has different prompt and completion rates.
 The legacy `cost` option remains a shared fallback. For audio-capable models,
@@ -140,7 +140,7 @@ interface OpenAiConfig {
   max_tokens?: number;
   max_completion_tokens?: number;
   reasoning?: {
-    effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | null;
+    effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | null;
     summary?: 'auto' | 'concise' | 'detailed' | null;
   };
   top_p?: number;
@@ -506,6 +506,50 @@ providers:
       max_output_tokens: 2048
 ```
 
+### GPT-5.5
+
+GPT-5.5 is a GPT-5 family model for high-capability reasoning, professional work, and agentic workflows.
+
+#### Available Models
+
+| Model                  | Description                   | Pricing (Input / Output) |
+| ---------------------- | ----------------------------- | ------------------------ |
+| gpt-5.5                | Standard GPT-5.5 model        | $5 / $30 per 1M tokens   |
+| gpt-5.5-2026-04-23     | Dated snapshot of gpt-5.5     | $5 / $30 per 1M tokens   |
+| gpt-5.5-pro            | Premium GPT-5.5 pro model     | $30 / $180 per 1M tokens |
+| gpt-5.5-pro-2026-04-23 | Dated snapshot of gpt-5.5-pro | $30 / $180 per 1M tokens |
+
+#### Key Specifications
+
+- **Endpoint support**: `gpt-5.5` supports Chat Completions and Responses API. `gpt-5.5-pro` is Responses API only.
+- **Context window**: `gpt-5.5` supports a 1M-token context window.
+- **Reasoning effort**: `gpt-5.5` supports `none`, `low`, `medium`, `high`, and `xhigh`. In Chat Completions, set `reasoning_effort`; in Responses API, set `reasoning.effort`.
+- **Cost estimates**: Promptfoo includes standard API pricing for GPT-5.5. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from `service_tier`.
+- **Long-running requests**: `gpt-5.5-pro` automatically receives the same 10-minute timeout as other GPT-5 pro models.
+
+#### Usage Examples
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-5.5
+    config:
+      max_completion_tokens: 4096
+      reasoning_effort: 'low'
+      verbosity: 'medium'
+
+  - id: openai:responses:gpt-5.5
+    config:
+      reasoning:
+        effort: 'high'
+      max_output_tokens: 4096
+
+  - id: openai:responses:gpt-5.5-pro
+    config:
+      reasoning:
+        effort: 'xhigh'
+      max_output_tokens: 8192
+```
+
 ### GPT-5.4
 
 GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, and tool-heavy workflows.
@@ -529,7 +573,7 @@ GPT-5.4 is a GPT-5 family model for complex professional work, agentic coding, a
 - **Long-context pricing**: `gpt-5.4` and `gpt-5.4-pro` use higher long-context rates when prompts exceed 272,000 input tokens.
 - **Max output tokens**: 128,000 tokens
 - **Reasoning effort**: `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.4-nano` support `none`, `low`, `medium`, `high`, `xhigh`. `gpt-5.4-pro` supports `medium`, `high`, `xhigh`.
-- **Endpoint support**: `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.4-nano` support Chat Completions and Responses API. `gpt-5.4-pro` is Responses API only. Promptfoo's Codex SDK provider currently supports `gpt-5.4` and `gpt-5.4-pro`.
+- **Endpoint support**: `gpt-5.4`, `gpt-5.4-mini`, and `gpt-5.4-nano` support Chat Completions and Responses API. `gpt-5.4-pro` is Responses API only. Promptfoo's Codex SDK provider supports `gpt-5.4`, `gpt-5.4-pro`, and the newer GPT-5.5 line.
 - **Cached input**: `gpt-5.4` cached input tokens $0.25 per 1M, `gpt-5.4-mini` $0.075 per 1M, and `gpt-5.4-nano` $0.02 per 1M. `gpt-5.4-pro` has no cached-input discount.
 
 #### Usage Examples
@@ -590,7 +634,7 @@ providers:
 Unlike standard models that use `max_tokens`, reasoning models use:
 
 - `max_completion_tokens` to control the total tokens generated (both reasoning and visible output)
-- `reasoning` to control how thoroughly the model thinks before responding (with `effort`: none, low, medium, high; GPT-5 family in Responses API also supports `minimal`)
+- `reasoning` to control how thoroughly the model thinks before responding (with `effort`: none, low, medium, high; some GPT-5 family models also support `minimal` or `xhigh`)
 
 #### How Reasoning Models Work
 
@@ -1848,6 +1892,10 @@ The Responses API supports a wide range of models, including:
 - `gpt-5.4-nano-2026-03-17` - Dated snapshot of gpt-5.4-nano
 - `gpt-5.4-pro` - Premium GPT-5.4 model ($30/$180 per 1M tokens)
 - `gpt-5.4-pro-2026-03-05` - Dated snapshot of gpt-5.4-pro
+- `gpt-5.5` - GPT-5.5 model
+- `gpt-5.5-2026-04-23` - Dated snapshot of gpt-5.5
+- `gpt-5.5-pro` - Premium GPT-5.5 pro model
+- `gpt-5.5-pro-2026-04-23` - Dated snapshot of gpt-5.5-pro
 - `gpt-5` - Earlier GPT-5 family model
 - `gpt-5-chat` - GPT-5 chat alias
 - `gpt-5.1` - GPT-5.1 base model
@@ -2195,7 +2243,7 @@ The `web_search_preview` tool is **required** for deep research models. The prov
 
 ### GPT-5 Pro Timeout Configuration
 
-`gpt-5-pro`, `gpt-5.2-pro`, and `gpt-5.4-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants automatically receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
+`gpt-5-pro`, `gpt-5.2-pro`, `gpt-5.4-pro`, and `gpt-5.5-pro` are long-running models that often require extended timeouts due to advanced reasoning. Like deep research models, these variants automatically receive a 10-minute timeout (600,000ms) instead of the standard 5-minute timeout.
 
 **Automatic timeout behavior:**
 
@@ -2348,13 +2396,13 @@ See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full co
 
 ### Codex SDK
 
-For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports GPT-5.4 and Codex-optimized GPT-5 models for code generation. You can select a model inline with `openai:codex:gpt-5.4` or via `config.model` when you need additional options:
+For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports GPT-5.5, GPT-5.4, and Codex-optimized GPT-5 models for code generation. You can select a model inline with `openai:codex:gpt-5.5` or via `config.model` when you need additional options:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.4
+      model: gpt-5.5
       working_dir: ./src
       output_schema:
         type: object

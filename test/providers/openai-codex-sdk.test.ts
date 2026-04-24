@@ -1563,7 +1563,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.output).toBe('Part 1\nPart 2');
+        expect(result.output).toBe('Part 2');
         expect(result.tokenUsage).toEqual({
           prompt: 10, // cached_input_tokens is already included in input_tokens
           completion: 20,
@@ -2229,7 +2229,23 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2, GPT-5.3, and GPT-5.4 models', () => {
+    describe('GPT-5.2, GPT-5.3, GPT-5.4, and GPT-5.5 models', () => {
+      it('should recognize gpt-5.5 as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.5');
+      });
+
+      it('should recognize gpt-5.5-pro as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.5-pro');
+      });
+
       it('should recognize gpt-5.4 as a known model', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.4' },

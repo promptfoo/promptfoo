@@ -311,13 +311,32 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 30 + 500 * 180) / 1e6, 6);
   });
 
-  it('should keep GPT-5.4 Pro out of Chat Completions routing', () => {
+  it('should recognize GPT-5.5 models with built-in pricing', () => {
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5')).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-2026-04-23')).toBe(true);
+    expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.5-pro')).toBe(true);
+    expect(
+      OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23'),
+    ).toBe(true);
+    expect(calculateOpenAICost('gpt-5.5', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 5 + 500 * 30) / 1e6,
+      6,
+    );
+    expect(calculateOpenAICost('gpt-5.5-pro', {}, 1000, 500)).toBeCloseTo(
+      (1000 * 30 + 500 * 180) / 1e6,
+      6,
+    );
+  });
+
+  it('should keep GPT-5.4 and GPT-5.5 Pro out of Chat Completions routing', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(false);
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05')).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.4-pro')).toBe(true);
     expect(
       OPENAI_RESPONSES_ONLY_MODELS.some((model) => model.id === 'gpt-5.4-pro-2026-03-05'),
     ).toBe(true);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro')).toBe(false);
+    expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-5.5-pro-2026-04-23')).toBe(false);
   });
 
   it('should calculate cost correctly for gpt-5-nano', () => {
