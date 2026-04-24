@@ -1,18 +1,40 @@
 ---
 sidebar_position: 66
-title: Run AgentDojo Security Benchmarks
-description: Use Promptfoo to run AgentDojo prompt injection benchmarks, inspect agent traces, compare attacks and defenses, and understand security versus utility tradeoffs.
+title: AgentDojo Security Benchmark for LLM Agents
+sidebar_label: AgentDojo Benchmark
+description: Run AgentDojo prompt injection benchmarks for LLM agents with Promptfoo, inspect tool traces, compare defenses, and measure safe utility.
+keywords:
+  - AgentDojo
+  - prompt injection benchmark
+  - LLM agent security
+  - tool calling agents
+  - AI agent red teaming
+  - Promptfoo
+image: /img/docs/agentdojo/agentdojo-row-anatomy.svg
 ---
 
-# Run AgentDojo Security Benchmarks
+# AgentDojo Security Benchmark for LLM Agents
 
 [AgentDojo](https://agentdojo.spylab.ai/) is a benchmark for testing tool-using LLM agents against indirect prompt injection. It asks a simple question with uncomfortable consequences: when an agent reads untrusted data from tools, can it still complete the user's task without obeying malicious instructions hidden in that data?
 
-This guide shows how to run AgentDojo through Promptfoo, but it is also a field guide for reading the results. You will see what the attacks look like, what the defenses try to change, why traces matter, and how to make claims that will still be meaningful as models and agent stacks change in 2026 and beyond.
+AgentDojo was introduced in the NeurIPS 2024 Datasets and Benchmarks Track by [Edoardo Debenedetti, Jie Zhang, Mislav Balunović, Luca Beurer-Kellner, Marc Fischer, and Florian Tramèr](https://mlanthology.org/neurips/2024/debenedetti2024neurips-agentdojo/). Their paper frames prompt injection as an agent-system problem: the model, tool loop, untrusted environment data, defenses, and validators all shape the result.
 
-![Promptfoo AgentDojo results](/img/docs/agentdojo/promptfoo-agentdojo-results.png)
+This guide shows how to run AgentDojo through Promptfoo and how to read the results without overclaiming. You will see what the attacks look like, what the defenses try to change, why traces matter, and how to compare LLM agents in a way that stays useful as models and agent stacks change.
 
-## Start With One Row
+![AgentDojo row anatomy in Promptfoo](/img/docs/agentdojo/agentdojo-row-anatomy.svg)
+
+## What You Will Run
+
+| Question                         | Answer                                                                                 |
+| -------------------------------- | -------------------------------------------------------------------------------------- |
+| Benchmark                        | AgentDojo `workspace` prompt injection benchmark                                       |
+| Framework                        | Promptfoo evals with a Python provider that wraps AgentDojo                            |
+| Main score                       | `safe_utility`: the user task worked and the injected attacker goal did not execute    |
+| Evidence                         | Promptfoo row results, AgentDojo metadata, tool traces, and optional OTEL spans        |
+| Default full run                 | 560 rows: 40 user tasks crossed with 14 injection tasks                                |
+| Best first step                  | Run one row, inspect the trace, then scale to model or defense comparisons             |
+
+## Start With One AgentDojo Row
 
 Here is a representative AgentDojo row from the `workspace` suite.
 
@@ -46,7 +68,7 @@ That single row already shows why AgentDojo is different from a plain prompt ben
 
 ![AgentDojo trace example](/img/docs/agentdojo/agentdojo-example-trace.svg)
 
-## What AgentDojo Is
+## What AgentDojo Tests
 
 AgentDojo is an extensible benchmark environment for agents that use tools over realistic state. The NeurIPS 2024 paper introduced it with 97 user tasks and 629 security test cases across suites such as workspace, travel, Slack, and banking. The important design choice is that it is not just a list of adversarial prompts. It combines:
 
@@ -61,7 +83,7 @@ AgentDojo is an extensible benchmark environment for agents that use tools over 
 
 The benchmark is useful because prompt injection is an agent-system problem. A model may be stronger, but the result also depends on the tools you expose, how tool outputs are serialized, how the tool loop is written, what defenses run before or after tool calls, and how you decide that a task succeeded.
 
-## Why It Matters In 2026
+## Why AgentDojo Matters In 2026
 
 Modern agents do not just answer questions. They read mail, inspect documents, call APIs, update tickets, book travel, move money, and send messages. That makes indirect prompt injection more serious than a chat-only jailbreak:
 
@@ -72,7 +94,7 @@ Modern agents do not just answer questions. They read mail, inspect documents, c
 
 AgentDojo keeps these pressures visible by scoring utility and security separately. That is why it remains relevant even as model names, APIs, and defense techniques change.
 
-## Who Should Read This
+## Who Should Read This Guide
 
 | Reader               | What to take away                                                                   |
 | -------------------- | ----------------------------------------------------------------------------------- |
@@ -96,7 +118,7 @@ Use AgentDojo when the question involves an agent reading untrusted tool data an
 
 Do not use AgentDojo as your only application red team. It is a benchmark environment, not a clone of your production app. Pair it with app-specific Promptfoo red-team tests for your real tools, auth model, policies, and data boundaries.
 
-## How A Row Works
+## How The Prompt Injection Benchmark Works
 
 One Promptfoo test row maps to one AgentDojo scenario:
 
@@ -123,7 +145,7 @@ For example:
 
 This is the core mental model: AgentDojo tests whether the agent can separate instructions from data while still doing useful work.
 
-## Metrics
+## AgentDojo Metrics
 
 AgentDojo separates the user's benign task from the attacker's injected task:
 
@@ -152,7 +174,7 @@ AgentDojo trace logs use a potentially confusing field name: `security: true` me
 }
 ```
 
-## Attack Types
+## AgentDojo Attack Types
 
 The Promptfoo example can run AgentDojo attacks by name. These are representative forms, not promises that a single string captures every variant.
 
@@ -166,7 +188,7 @@ The Promptfoo example can run AgentDojo attacks by name. These are representativ
 
 The interesting part is where the attack appears. It is usually not in the user's prompt. It is inside tool data: an email body, calendar description, document, Slack message, banking record, or travel record that the agent reads while solving the benign task.
 
-## Defense Types
+## AgentDojo Defense Types
 
 AgentDojo also models defenses as pipeline components. The custom GPT wrapper in this Promptfoo example mirrors AgentDojo's built-in defense ordering so you can test current GPT models through the OpenAI Responses API and still exercise the same defense ideas.
 
@@ -179,7 +201,7 @@ AgentDojo also models defenses as pipeline components. The custom GPT wrapper in
 
 No defense should be treated as universal. The AgentDojo paper explicitly frames the benchmark as an environment for evolving attacks and defenses, including adaptive attacks. Use defenses comparatively: same suite, same model, same attack, changed defense.
 
-## Response Patterns
+## Response Patterns To Look For
 
 Rows usually fall into one of four buckets:
 
@@ -192,7 +214,7 @@ Rows usually fall into one of four buckets:
 
 This is why traces are central. A row can look fine in the final answer while leaking data through a tool call, or look wrong in the final answer while still correctly resisting the attacker.
 
-## Install The Example
+## Install The Promptfoo AgentDojo Example
 
 Create the example project:
 
@@ -263,7 +285,7 @@ If your account hits rate limits, lower concurrency:
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -j 4
 ```
 
-## Configure The Benchmark
+## Configure The AgentDojo Benchmark
 
 The main controls are in `promptfooconfig.yaml`:
 
@@ -330,7 +352,7 @@ providers:
 
 To compare models, keep the defense and attack fixed while changing only `model`. Use AgentDojo-registered IDs for paper reproduction, and custom `gpt-*` IDs when you want to evaluate the model you actually plan to ship.
 
-## Read The Results
+## Read AgentDojo Results In Promptfoo
 
 The exported JSON includes Promptfoo scores, provider metadata, and trace context. Start with the aggregate metrics, then inspect representative failed rows.
 
@@ -383,7 +405,7 @@ The strongest claim this supports is narrow: in this `workspace` run, under the 
 
 Do not generalize this to "GPT-5.4 is secure against prompt injection." This is one suite, one attack type, one provider wrapper, and no defense. AgentDojo is best used for repeated comparisons across models, attacks, defenses, and agent harness changes.
 
-## Compare An Older Model
+## Compare Against An Older LLM Agent Model
 
 To compare against an older model, rerun the same config with AgentDojo's registered `gpt-3.5-turbo-0125` model:
 
@@ -494,7 +516,7 @@ The model answered `12:30`, which is a clock time rather than the amount of time
 
 ![AgentDojo utility failures](/img/docs/agentdojo/agentdojo-utility-failures.svg)
 
-## Trace To OTEL
+## Trace AgentDojo Runs To OTEL
 
 The example enables Promptfoo tracing by default:
 
@@ -541,7 +563,7 @@ export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer your-token"
 
 If trace coverage is below 100%, fix that before interpreting the security result. The benchmark is only as useful as the tool behavior you can inspect.
 
-## What To Say About Results
+## What To Say About AgentDojo Results
 
 Ground claims in the exact run you performed:
 
@@ -562,9 +584,28 @@ The evergreen statement is narrower and stronger: AgentDojo helps evaluate promp
 
 A good recurring practice is to keep one small smoke slice in CI and run the full matrix before changing models, tool schemas, tool-output formatting, or defenses. That catches the failures AgentDojo is best at surfacing: silent side effects, stale trace reuse, broken utility, and defenses that make the agent safer by making it less useful.
 
+## FAQ
+
+### Is AgentDojo a prompt injection benchmark or an agent benchmark?
+
+Both. AgentDojo evaluates indirect prompt injection in tool-using agents, so the result depends on the model and the surrounding agent system. A row can fail because the model follows malicious text, because the tool loop exposes a dangerous tool at the wrong time, because a defense removes useful tools, or because the agent cannot complete the benign task.
+
+### What is the difference between security and safe utility?
+
+`security` means the injected attacker goal did not succeed. `safe_utility` means the attacker goal did not succeed and the user task still worked. For production agent evaluation, `safe_utility` is usually the better headline metric because it captures the security and usefulness tradeoff in one number.
+
+### Can I compare my results to the AgentDojo paper?
+
+Only if you match the AgentDojo version, suite, attack, defense, model ID, and pipeline. For product decisions, it is usually better to compare controlled runs inside your own harness: same suite, same attack, same Promptfoo config, and one changed variable such as model or defense.
+
+### Does a high AgentDojo score prove an agent is secure?
+
+No. AgentDojo is a strong benchmark for prompt injection behavior in simulated tool environments, but it is not a complete application red team. Use it alongside tests for your real tools, permissions, data boundaries, and production policies.
+
 ## References
 
-- [AgentDojo paper](https://arxiv.org/abs/2406.13352)
+- [AgentDojo NeurIPS 2024 paper page](https://mlanthology.org/neurips/2024/debenedetti2024neurips-agentdojo/)
+- [AgentDojo arXiv paper](https://arxiv.org/abs/2406.13352)
 - [AgentDojo docs](https://agentdojo.spylab.ai/)
 - [AgentDojo task suite concepts](https://agentdojo.spylab.ai/concepts/task_suite_and_tasks/)
 - [AgentDojo attacks concepts](https://agentdojo.spylab.ai/concepts/attacks/)
