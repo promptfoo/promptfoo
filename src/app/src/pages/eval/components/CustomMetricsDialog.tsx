@@ -276,11 +276,9 @@ const MetricsTable = ({ onClose }: { onClose: () => void }) => {
       data={rows}
       getRowId={(row) => row.id}
       initialSorting={[{ id: 'metric', desc: false }]}
-      initialPageSize={50}
       emptyMessage="No metrics available"
       showToolbar
       showFilter
-      showPagination
       showColumnToggle
     />
   );

@@ -1,3 +1,5 @@
+import { createHmac } from 'crypto';
+
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
@@ -97,6 +99,28 @@ interface RunStepsResponse {
   }>;
 }
 
+const AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY = 'promptfoo-azure-assistant-cache-key-v1';
+
+function hmacAzureAssistantCacheValue(value: unknown) {
+  return createHmac('sha256', AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY)
+    .update(JSON.stringify(value))
+    .digest('hex');
+}
+
+function getAuthHeadersCacheIdentity(authHeaders: Record<string, string>) {
+  const entries = Object.entries(authHeaders).sort(([nameA], [nameB]) =>
+    nameA.localeCompare(nameB),
+  );
+  if (entries.length === 0) {
+    return { headerNames: [], namespace: 'no-auth' };
+  }
+
+  return {
+    headerNames: entries.map(([name]) => name),
+    namespace: hmacAzureAssistantCacheValue(['auth', entries]),
+  };
+}
+
 export class AzureAssistantProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   private functionCallbackHandler = new FunctionCallbackHandler();
@@ -127,10 +151,16 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     }
 
     const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';
+    const loadedTools = await maybeLoadToolsFromExternalFile(
+      this.assistantConfig.tools,
+      context?.vars,
+    );
 
     // Create a simple cache key based on the input and configuration
-    const cacheKey = `azure_assistant:${this.deploymentName}:${JSON.stringify({
+    const cacheKey = `azure_assistant:${this.deploymentName}:${hmacAzureAssistantCacheValue({
+      apiBaseUrl,
       apiVersion,
+      auth: getAuthHeadersCacheIdentity(this.authHeaders),
       instructions: this.assistantConfig.instructions,
       max_tokens: this.assistantConfig.max_tokens,
       model: this.assistantConfig.modelName,
@@ -139,9 +169,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       temperature: this.assistantConfig.temperature,
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
-      tools: JSON.stringify(
-        await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
-      ),
+      tools: JSON.stringify(loadedTools),
       top_p: this.assistantConfig.top_p,
     })}`;
 
@@ -152,7 +180,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
 
         if (cachedResult) {
-          logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
+          logger.debug('Cache hit for assistant prompt', { promptLength: prompt.length });
           return { ...cachedResult, cached: true };
         }
       } catch (err) {
@@ -173,7 +201,10 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      logger.debug(`Created thread ${threadResponse.id} for prompt: ${prompt.substring(0, 30)}...`);
+      logger.debug('Created thread for assistant prompt', {
+        threadId: threadResponse.id,
+        promptLength: prompt.length,
+      });
 
       // Create a message
       await this.makeRequest(
@@ -207,10 +238,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         runOptions.tool_choice = this.assistantConfig.tool_choice;
       }
       if (this.assistantConfig.tools) {
-        const loadedTools = await maybeLoadToolsFromExternalFile(
-          this.assistantConfig.tools,
-          context?.vars,
-        );
         if (loadedTools !== undefined) {
           runOptions.tools = loadedTools;
         }
@@ -305,7 +332,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         try {
           const cache = await getCache();
           await cache.set(cacheKey, result);
-          logger.debug(`Cached assistant response for prompt: ${prompt.substring(0, 50)}...`);
+          logger.debug('Cached assistant response for prompt', { promptLength: prompt.length });
         } catch (err) {
           logger.warn(`Error caching result: ${err}`);
           // Continue even if caching fails

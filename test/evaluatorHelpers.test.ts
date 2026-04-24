@@ -13,6 +13,7 @@ import {
 } from '../src/evaluatorHelpers';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
+import { mockProcessEnv } from './util/utils';
 
 import type { Prompt, TestCase, TestSuite } from '../src/types/index';
 
@@ -165,8 +166,8 @@ describe('evaluatorHelpers', () => {
 
   describe('renderPrompt', () => {
     beforeEach(() => {
-      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
-      delete process.env.PROMPTFOO_DISABLE_JSON_AUTOESCAPE;
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: undefined });
     });
 
     it('should render a prompt with a single variable', async () => {
@@ -217,19 +218,19 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should render environment variables in JSON prompts', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       const prompt = toPrompt('{"text": "{{ env.TEST_ENV_VAR }}"}');
       const renderedPrompt = await renderPrompt(prompt, {}, {});
       expect(renderedPrompt).toBe(JSON.stringify({ text: 'env_value' }, null, 2));
-      delete process.env.TEST_ENV_VAR;
+      mockProcessEnv({ TEST_ENV_VAR: undefined });
     });
 
     it('should render environment variables in non-JSON prompts', async () => {
-      process.env.TEST_ENV_VAR = 'env_value';
+      mockProcessEnv({ TEST_ENV_VAR: 'env_value' });
       const prompt = toPrompt('Test prompt {{ env.TEST_ENV_VAR }}');
       const renderedPrompt = await renderPrompt(prompt, {}, {});
       expect(renderedPrompt).toBe('Test prompt env_value');
-      delete process.env.TEST_ENV_VAR;
+      mockProcessEnv({ TEST_ENV_VAR: undefined });
     });
 
     it('should handle complex variable substitutions in JSON prompts', async () => {
@@ -376,11 +377,11 @@ describe('evaluatorHelpers', () => {
 
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
-        process.env.PROMPTFOO_DISABLE_TEMPLATING = 'true';
+        mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
       });
 
       afterEach(() => {
-        delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+        mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
       });
 
       it('should return raw prompt when templating is disabled', async () => {
@@ -391,11 +392,11 @@ describe('evaluatorHelpers', () => {
     });
 
     it('should render normally when templating is enabled', async () => {
-      process.env.PROMPTFOO_DISABLE_TEMPLATING = 'false';
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'false' });
       const prompt = toPrompt('Test prompt {{ var1 }}');
       const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
       expect(renderedPrompt).toBe('Test prompt value1');
-      delete process.env.PROMPTFOO_DISABLE_TEMPLATING;
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });
     });
 
     it('should respect Nunjucks raw tags when variable is provided as a string', async () => {

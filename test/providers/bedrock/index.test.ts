@@ -20,6 +20,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
+import { mockProcessEnv } from '../../util/utils';
 
 import type {
   BedrockAI21GenerationOptions,
@@ -124,14 +125,14 @@ describe('AwsBedrockGenericProvider', () => {
     vi.clearAllMocks();
     credentialProviderSsoFactory.fromSSO.mockReset();
     credentialProviderSsoFactory.fromSSO.mockReturnValue('sso-provider');
-    delete process.env.AWS_BEDROCK_MAX_RETRIES;
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: undefined });
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     // Ensure proxy environment variables do not force proxy-specific code paths
     // when running tests. The container sets HTTP_PROXY by default which causes
     // getBedrockInstance to require optional dependencies that are not
     // installed in the test environment.
-    process.env.HTTP_PROXY = '';
-    process.env.HTTPS_PROXY = '';
+    mockProcessEnv({ HTTP_PROXY: '' });
+    mockProcessEnv({ HTTPS_PROXY: '' });
 
     nodeHttpHandlerFactory.setHandlerFactory(function () {
       return { handle: vi.fn() };
@@ -140,16 +141,16 @@ describe('AwsBedrockGenericProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     if (ORIGINAL_HTTP_PROXY === undefined) {
-      delete process.env.HTTP_PROXY;
+      mockProcessEnv({ HTTP_PROXY: undefined });
     } else {
-      process.env.HTTP_PROXY = ORIGINAL_HTTP_PROXY;
+      mockProcessEnv({ HTTP_PROXY: ORIGINAL_HTTP_PROXY });
     }
     if (ORIGINAL_HTTPS_PROXY === undefined) {
-      delete process.env.HTTPS_PROXY;
+      mockProcessEnv({ HTTPS_PROXY: undefined });
     } else {
-      process.env.HTTPS_PROXY = ORIGINAL_HTTPS_PROXY;
+      mockProcessEnv({ HTTPS_PROXY: ORIGINAL_HTTPS_PROXY });
     }
   });
 
@@ -221,7 +222,7 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   it('should respect AWS_BEDROCK_MAX_RETRIES environment variable', async () => {
-    process.env.AWS_BEDROCK_MAX_RETRIES = '10';
+    mockProcessEnv({ AWS_BEDROCK_MAX_RETRIES: '10' });
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
         super('test-model', { config: { region: 'us-east-1' } });
@@ -271,7 +272,7 @@ describe('AwsBedrockGenericProvider', () => {
   });
 
   it('should create custom request handler when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
-    process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
     const mockHandler = {
       handle: vi.fn(),
     };
@@ -296,7 +297,7 @@ describe('AwsBedrockGenericProvider', () => {
       requestHandler,
     });
 
-    delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+    mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
   });
 
   it('should add Authorization header with Bearer token to requests when using API key', async () => {
@@ -824,21 +825,21 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
       const provider = new TestBedrockProvider({});
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined();
-      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     });
 
     it('should prioritize config apiKey over environment variable', async () => {
-      process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
       const provider = new TestBedrockProvider({
         apiKey: 'test-config-api-key',
       });
       const credentials = await provider.getCredentials();
       expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
-      delete process.env.AWS_BEARER_TOKEN_BEDROCK;
+      mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined });
     });
 
     it('should prioritize explicit credentials over API key', async () => {
@@ -875,10 +876,10 @@ describe('addConfigParam', () => {
 
   it('should add env value if config value is not provided', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY);
     expect(params.key).toBe('envValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should add default value if neither config nor env value is provided', async () => {
@@ -889,26 +890,26 @@ describe('addConfigParam', () => {
 
   it('should prioritize config value over env and default values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', 'configValue', process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('configValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should prioritize env value over default value if config value is not provided', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'envValue';
+    mockProcessEnv({ TEST_ENV_KEY: 'envValue' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('envValue');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should parse env value if default value is a number', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '42';
+    mockProcessEnv({ TEST_ENV_KEY: '42' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(42);
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should handle undefined config, env, and default values gracefully', async () => {
@@ -919,18 +920,18 @@ describe('addConfigParam', () => {
 
   it('should correctly parse non-number string values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = 'nonNumberString';
+    mockProcessEnv({ TEST_ENV_KEY: 'nonNumberString' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 0);
     expect(params.key).toBe(0);
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should correctly parse empty string values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '';
+    mockProcessEnv({ TEST_ENV_KEY: '' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 
   it('should handle env value not set', async () => {
@@ -955,10 +956,10 @@ describe('addConfigParam', () => {
 
   it('should handle special characters in env values', async () => {
     const params: any = {};
-    process.env.TEST_ENV_KEY = '!@#$%^&*()_+';
+    mockProcessEnv({ TEST_ENV_KEY: '!@#$%^&*()_+' });
     addConfigParam(params, 'key', undefined, process.env.TEST_ENV_KEY, 'defaultValue');
     expect(params.key).toBe('!@#$%^&*()_+');
-    delete process.env.TEST_ENV_KEY;
+    mockProcessEnv({ TEST_ENV_KEY: undefined });
   });
 });
 
@@ -2302,9 +2303,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
     });
 
     it('should respect environment variables', async () => {
-      process.env.AWS_BEDROCK_MAX_TOKENS = '2000';
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
-      process.env.AWS_BEDROCK_TOP_P = '0.9';
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: '2000' });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.5' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.9' });
 
       const config = {};
       const prompt = 'Test with env vars';
@@ -2318,9 +2319,9 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
         top_p: 0.9,
       });
 
-      delete process.env.AWS_BEDROCK_MAX_TOKENS;
-      delete process.env.AWS_BEDROCK_TEMPERATURE;
-      delete process.env.AWS_BEDROCK_TOP_P;
+      mockProcessEnv({ AWS_BEDROCK_MAX_TOKENS: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
     });
   });
 
@@ -3240,8 +3241,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
     });
 
     it('should use environment variables for defaults', async () => {
-      process.env.AWS_BEDROCK_TEMPERATURE = '0.5';
-      process.env.AWS_BEDROCK_TOP_P = '0.8';
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: '0.5' });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: '0.8' });
 
       const config = {};
       const prompt = 'Test prompt';
@@ -3251,8 +3252,8 @@ describe('BEDROCK_MODEL.QWEN', () => {
       expect(result.temperature).toBe(0.5);
       expect(result.top_p).toBe(0.8);
 
-      delete process.env.AWS_BEDROCK_TEMPERATURE;
-      delete process.env.AWS_BEDROCK_TOP_P;
+      mockProcessEnv({ AWS_BEDROCK_TEMPERATURE: undefined });
+      mockProcessEnv({ AWS_BEDROCK_TOP_P: undefined });
     });
   });
 

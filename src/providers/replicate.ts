@@ -1,3 +1,5 @@
+import { createHmac } from 'crypto';
+
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
@@ -59,6 +61,53 @@ interface ReplicatePrediction {
   };
 }
 
+const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
+
+function normalizeReplicateCacheValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeReplicateCacheValue);
+  }
+
+  if (value && typeof value === 'object') {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return value;
+    }
+
+    return Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((normalized, key) => {
+        normalized[key] = normalizeReplicateCacheValue((value as Record<string, unknown>)[key]);
+        return normalized;
+      }, {});
+  }
+
+  return value;
+}
+
+function hashReplicateCacheValue(value: unknown) {
+  return createHmac('sha256', REPLICATE_CACHE_KEY_HMAC_KEY)
+    .update(safeJsonStringify(normalizeReplicateCacheValue(value)) ?? '')
+    .digest('hex');
+}
+
+function getReplicateAuthCacheNamespace(apiKey: string | undefined) {
+  if (!apiKey) {
+    return 'no-api-key';
+  }
+
+  return createHmac('sha256', apiKey).update(REPLICATE_CACHE_KEY_HMAC_KEY).digest('hex');
+}
+
+function getReplicateValueSummary(prefix: string, value: unknown): Record<string, unknown> {
+  const valueType = Array.isArray(value) ? 'array' : typeof value;
+  return {
+    [`${prefix}Type`]: valueType,
+    [`${prefix}Length`]:
+      typeof value === 'string' || Array.isArray(value) ? value.length : undefined,
+  };
+}
+
 export class ReplicateProvider implements ApiProvider {
   modelName: string;
   apiKey?: string;
@@ -69,14 +118,15 @@ export class ReplicateProvider implements ApiProvider {
     options: { config?: ReplicateCompletionOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const { config, id, env } = options;
+    const { apiKey, ...restConfig } = config ?? {};
     this.modelName = modelName;
     this.apiKey =
-      config?.apiKey ||
+      apiKey ||
       env?.REPLICATE_API_KEY ||
       env?.REPLICATE_API_TOKEN ||
       getEnvString('REPLICATE_API_TOKEN') ||
       getEnvString('REPLICATE_API_KEY');
-    this.config = config || {};
+    this.config = restConfig;
     this.id = id ? () => id : this.id;
   }
 
@@ -142,21 +192,6 @@ export class ReplicateProvider implements ApiProvider {
       prompt = prompt + this.config.prompt.suffix;
     }
 
-    let cache;
-    let cacheKey;
-    if (isCacheEnabled()) {
-      cache = await getCache();
-      cacheKey = `replicate:${this.modelName}:${JSON.stringify(this.config)}:${prompt}`;
-
-      // Try to get the cached response
-      const cachedResponse = await cache.get(cacheKey);
-
-      if (cachedResponse) {
-        logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
-        return { ...JSON.parse(cachedResponse as string), cached: true };
-      }
-    }
-
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
     const systemPrompt =
       messages.find((message) => message.role === 'system')?.content ||
@@ -164,31 +199,48 @@ export class ReplicateProvider implements ApiProvider {
       getEnvString('REPLICATE_SYSTEM_PROMPT');
     const userPrompt = messages.find((message) => message.role === 'user')?.content || prompt;
 
-    logger.debug(`Calling Replicate: ${prompt}`);
+    const inputOptions = {
+      max_length: this.config.max_length ?? getEnvInt('REPLICATE_MAX_LENGTH'),
+      max_new_tokens: this.config.max_new_tokens ?? getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
+      temperature: this.config.temperature ?? getEnvFloat('REPLICATE_TEMPERATURE'),
+      top_p: this.config.top_p ?? getEnvFloat('REPLICATE_TOP_P'),
+      top_k: this.config.top_k ?? getEnvInt('REPLICATE_TOP_K'),
+      repetition_penalty:
+        this.config.repetition_penalty ?? getEnvFloat('REPLICATE_REPETITION_PENALTY'),
+      stop_sequences: this.config.stop_sequences ?? getEnvString('REPLICATE_STOP_SEQUENCES'),
+      seed: this.config.seed ?? getEnvInt('REPLICATE_SEED'),
+      system_prompt: systemPrompt,
+      prompt: userPrompt,
+    };
+
+    const data = {
+      version: this.modelName.includes(':') ? this.modelName.split(':')[1] : undefined,
+      input: {
+        ...this.config,
+        ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
+      },
+    };
+
+    let cache;
+    let cacheKey;
+    if (isCacheEnabled()) {
+      cache = await getCache();
+      cacheKey = `replicate:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
+        data,
+      )}`;
+
+      // Try to get the cached response
+      const cachedResponse = await cache.get(cacheKey);
+
+      if (cachedResponse) {
+        logger.debug('Returning cached Replicate response', { modelName: this.modelName });
+        return { ...JSON.parse(cachedResponse as string), cached: true };
+      }
+    }
+
+    logger.debug('Calling Replicate', { modelName: this.modelName, promptLength: prompt.length });
     let response;
     try {
-      const inputOptions = {
-        max_length: this.config.max_length ?? getEnvInt('REPLICATE_MAX_LENGTH'),
-        max_new_tokens: this.config.max_new_tokens ?? getEnvInt('REPLICATE_MAX_NEW_TOKENS'),
-        temperature: this.config.temperature ?? getEnvFloat('REPLICATE_TEMPERATURE'),
-        top_p: this.config.top_p ?? getEnvFloat('REPLICATE_TOP_P'),
-        top_k: this.config.top_k ?? getEnvInt('REPLICATE_TOP_K'),
-        repetition_penalty:
-          this.config.repetition_penalty ?? getEnvFloat('REPLICATE_REPETITION_PENALTY'),
-        stop_sequences: this.config.stop_sequences ?? getEnvString('REPLICATE_STOP_SEQUENCES'),
-        seed: this.config.seed ?? getEnvInt('REPLICATE_SEED'),
-        system_prompt: systemPrompt,
-        prompt: userPrompt,
-      };
-
-      const data = {
-        version: this.modelName.includes(':') ? this.modelName.split(':')[1] : undefined,
-        input: {
-          ...this.config,
-          ...Object.fromEntries(Object.entries(inputOptions).filter(([_, v]) => v !== undefined)),
-        },
-      };
-
       // Create prediction with sync mode (wait up to 60 seconds)
       const createResponse = await fetchWithCache(
         this.modelName.includes(':')
@@ -224,7 +276,10 @@ export class ReplicateProvider implements ApiProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tReplicate API response: ${JSON.stringify(response)}`);
+    logger.debug('Replicate API response received', {
+      modelName: this.modelName,
+      ...getReplicateValueSummary('response', response),
+    });
 
     if (typeof response === 'string') {
       // It's text
@@ -387,24 +442,29 @@ export class ReplicateImageProvider extends ReplicateProvider {
 
   async callApi(
     prompt: string,
-    context?: CallApiContextParams,
+    _context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const cache = getCache();
-    const cacheKey = `replicate:image:${safeJsonStringify({ context, prompt })}`;
-
     if (!this.apiKey) {
       throw new Error(
         'Replicate API key is not set. Set the REPLICATE_API_TOKEN environment variable or add `apiKey` to the provider config.',
       );
     }
 
+    const cache = getCache();
+    const cacheKey = `replicate:image:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
+      {
+        config: this.config,
+        prompt,
+      },
+    )}`;
+
     let response: any | undefined;
     let cached = false;
     if (isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
-        logger.debug(`Retrieved cached response for ${prompt}: ${cachedResponse}`);
+        logger.debug('Retrieved cached Replicate image response', { modelName: this.modelName });
         response = JSON.parse(cachedResponse as string);
         cached = true;
       }
@@ -458,9 +518,11 @@ export class ReplicateImageProvider extends ReplicateProvider {
         prediction = await this.pollForCompletion(prediction.id);
       }
 
-      logger.debug(
-        `Final prediction status: ${prediction.status}, output: ${JSON.stringify(prediction.output)}`,
-      );
+      logger.debug('Final Replicate prediction status', {
+        modelName: this.modelName,
+        status: prediction.status,
+        ...getReplicateValueSummary('output', prediction.output),
+      });
 
       if (prediction.status === 'failed') {
         return {

@@ -8,6 +8,7 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
+import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { fetchWithRetries } from '../util/fetch/index';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -16,6 +17,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  Inputs,
   PluginConfig,
   ProviderResponse,
   TokenUsage,
@@ -149,9 +151,8 @@ interface PromptfooChatCompletionOptions {
     | 'voice-crescendo-eval';
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
 }
 
 /**
@@ -193,6 +194,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       };
     }
 
+    const materializationContext = getRemoteMaterializationContextFromVars(context?.vars);
     const body = {
       jsonOnly: this.options.jsonOnly,
       preferSmallModel: this.options.preferSmallModel,
@@ -202,6 +204,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       email: getUserEmail(),
       // Pass inputs schema for multi-input mode
       ...(this.options.inputs && { inputs: this.options.inputs }),
+      ...(materializationContext ? { materializationContext } : {}),
     };
 
     try {
@@ -230,6 +233,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       }
 
       return {
+        inputMaterialization: data.inputMaterialization,
+        materializationHandled: data.materializationHandled,
+        materializedVars: data.materializedVars,
         output: data.result,
         tokenUsage: data.tokenUsage,
       };

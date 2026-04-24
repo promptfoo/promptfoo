@@ -8,9 +8,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  checks: write
-  id-token: write # Required for OIDC authentication with Codecov
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -72,6 +69,10 @@ jobs:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
     timeout-minutes: 15
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      checks: write
+      id-token: write # Required for OIDC authentication with Codecov
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.ci-config.outputs.test-matrix) }}
@@ -129,6 +130,7 @@ jobs:
           name: backend-coverage
           fail_ci_if_error: true
           use_oidc: true
+          version: v11.2.7
 
   build:
     needs: ci-config
@@ -369,6 +371,10 @@ jobs:
     name: Site tests
     timeout-minutes: 5
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      id-token: write # Required for OIDC authentication with Codecov
     steps:
       - name: Checkout repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -398,11 +404,16 @@ jobs:
           name: site-coverage
           fail_ci_if_error: true
           use_oidc: true
+          version: v11.2.7
 
   webui:
     name: webui tests
     timeout-minutes: 10
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      id-token: write # Required for OIDC authentication with Codecov
     steps:
       - name: Checkout repo
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -439,6 +450,7 @@ jobs:
           name: frontend-coverage
           fail_ci_if_error: true
           use_oidc: true
+          version: v11.2.7
 
   integration-tests:
     name: Run Integration Tests

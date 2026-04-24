@@ -62,7 +62,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
+ *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
@@ -195,7 +196,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex')
+   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
    */
   model?: string;
 
@@ -1311,9 +1312,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     conversationMessages: Array<{ role: string; content: string }>;
   } {
     const agentMessages = state.items.filter((item) => item.type === 'agent_message');
+    const finalAgentMessage = [...agentMessages]
+      .reverse()
+      .find((item) => typeof item.text === 'string');
     return {
-      finalResponse:
-        agentMessages.length > 0 ? agentMessages.map((item) => item.text).join('\n') : '',
+      finalResponse: finalAgentMessage?.text ?? '',
       items: state.items,
       usage: state.usage,
       reasoningTexts: state.reasoningTexts,
