@@ -194,7 +194,7 @@ describe('OpenAICodexAppServerProvider', () => {
       config: {
         apiKey: 'test-api-key',
         codex_path_override: '/usr/local/bin/codex',
-        model: 'gpt-5.4',
+        model: 'gpt-5.5',
         service_tier: 'fast',
         model_reasoning_effort: 'none',
         reasoning_summary: 'detailed',
@@ -204,7 +204,7 @@ describe('OpenAICodexAppServerProvider', () => {
         collaboration_mode: {
           mode: 'plan',
           settings: {
-            model: 'gpt-5.4',
+            model: 'gpt-5.5',
             reasoning_effort: 'none',
             developer_instructions: null,
           },
@@ -229,7 +229,7 @@ describe('OpenAICodexAppServerProvider', () => {
       approvalPolicy: 'never',
       sandbox: 'read-only',
       ephemeral: true,
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       serviceTier: 'fast',
       baseInstructions: 'You are evaluating repository quality.',
       developerInstructions: 'Return concise, actionable output.',
@@ -251,7 +251,7 @@ describe('OpenAICodexAppServerProvider', () => {
       threadId: 'thr_test',
       input: [{ type: 'text', text: 'Summarize this repo', text_elements: [] }],
       approvalPolicy: 'never',
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       serviceTier: 'fast',
       effort: 'none',
       summary: 'detailed',
@@ -259,7 +259,7 @@ describe('OpenAICodexAppServerProvider', () => {
       collaborationMode: {
         mode: 'plan',
         settings: {
-          model: 'gpt-5.4',
+          model: 'gpt-5.5',
           reasoning_effort: 'none',
           developer_instructions: null,
         },
@@ -333,11 +333,11 @@ describe('OpenAICodexAppServerProvider', () => {
       total: 15,
       cached: 2,
     });
-    expect(result.cost).toBeCloseTo(0.000095);
+    expect(result.cost).toBeCloseTo(0.000191);
     expect(result.metadata?.codexAppServer).toMatchObject({
       threadId: 'thr_test',
       turnId: 'turn_test',
-      model: 'gpt-5.4',
+      model: 'gpt-5.5',
       sandboxMode: 'read-only',
       approvalPolicy: 'never',
       itemCounts: { agentMessage: 1 },

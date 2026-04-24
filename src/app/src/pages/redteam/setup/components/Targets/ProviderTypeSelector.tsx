@@ -169,7 +169,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.4, GPT-5.4 Mini, GPT-5.4 Nano and older models',
+    description: 'GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models',
     tag: 'providers',
     recommended: true,
   },

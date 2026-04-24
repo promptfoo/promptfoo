@@ -354,7 +354,10 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       );
     });
 
-    it('should use longer timeout for gpt-5.4-pro models', async () => {
+    it.each([
+      'gpt-5.4-pro',
+      'gpt-5.5-pro',
+    ])('should use longer timeout for %s models', async (model) => {
       const mockData = {
         output: [
           {
@@ -373,7 +376,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
         cached: false,
       });
 
-      const provider = new OpenAiResponsesProvider('gpt-5.4-pro', {
+      const provider = new OpenAiResponsesProvider(model, {
         config: {
           apiKey: 'test-key',
         },
