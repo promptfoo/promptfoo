@@ -68,5 +68,5 @@ tracing:
   otlp:
     endpoint: http://localhost:5317
   provider:
-    type: tempo
+    id: tempo
     endpoint: http://localhost:3250

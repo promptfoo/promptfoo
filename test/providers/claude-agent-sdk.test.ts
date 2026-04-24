@@ -1963,6 +1963,118 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with title configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              title: 'promptfoo eval — release regression',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              title: 'promptfoo eval — release regression',
+            }),
+          });
+        });
+
+        it('omits title when not configured', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {},
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const call = mockQuery.mock.calls.at(-1)?.[0] as
+            | { options: Record<string, unknown> }
+            | undefined;
+          expect(call?.options).toBeDefined();
+          expect(call?.options.title).toBeUndefined();
+        });
+
+        it('does not bust the cache when only title differs between runs', async () => {
+          const wasEnabled = isCacheEnabled();
+          enableCache();
+          try {
+            mockQuery.mockImplementation(() => createMockResponse('cached-output'));
+
+            const first = await new ClaudeCodeSDKProvider({
+              config: { title: 'eval run A' },
+              env: { ANTHROPIC_API_KEY: 'test-api-key' },
+            }).callApi('same prompt');
+            expect(first.cached).toBeFalsy();
+
+            const second = await new ClaudeCodeSDKProvider({
+              config: { title: 'eval run B — totally different label' },
+              env: { ANTHROPIC_API_KEY: 'test-api-key' },
+            }).callApi('same prompt');
+            expect(second.cached).toBe(true);
+            expect(second.output).toBe('cached-output');
+          } finally {
+            await clearCache();
+            if (wasEnabled) {
+              enableCache();
+            } else {
+              disableCache();
+            }
+          }
+        });
+
+        it('warns when title is combined with resume', async () => {
+          const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: { title: 'ignored on resume', resume: 'session-123' },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('`title` is ignored when `resume` or `continue` is set'),
+          );
+          warnSpy.mockRestore();
+        });
+
+        it('warns when title is combined with continue', async () => {
+          const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: { title: 'ignored on continue', continue: true },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining('`title` is ignored when `resume` or `continue` is set'),
+          );
+          warnSpy.mockRestore();
+        });
+
+        it('does not warn when title is set without resume/continue', async () => {
+          const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: { title: 'brand new session' },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          const titleWarn = warnSpy.mock.calls.find(
+            (call) => typeof call[0] === 'string' && call[0].includes('`title` is ignored'),
+          );
+          expect(titleWarn).toBeUndefined();
+          warnSpy.mockRestore();
+        });
+
         it('with thinking configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 

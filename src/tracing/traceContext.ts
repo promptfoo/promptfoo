@@ -392,17 +392,22 @@ async function fetchFromExternalProvider(
     await sleep(queryDelay);
   }
 
-  const provider = createTraceProvider(providerConfig);
+  let provider: ReturnType<typeof createTraceProvider>;
+  try {
+    provider = createTraceProvider(providerConfig);
+  } catch (error) {
+    logger.warn(`[TraceContext] Failed to initialize trace provider: ${error}`);
+    return null;
+  }
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const result = await provider.fetchTrace(traceId, {
-        earliestStartTime: fetchOptions.earliestStartTime,
-        maxSpans: fetchOptions.maxSpans,
-        maxDepth: fetchOptions.maxDepth,
-        spanFilter: fetchOptions.spanFilter,
-        sanitizeAttributes: fetchOptions.sanitizeAttributes,
-      });
+      const result = await provider.fetchTrace(
+        traceId,
+        fetchOptions.earliestStartTime === undefined
+          ? undefined
+          : { earliestStartTime: fetchOptions.earliestStartTime },
+      );
 
       if (!result || result.spans.length === 0) {
         if (attempt === maxRetries) {
