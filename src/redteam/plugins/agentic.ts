@@ -431,6 +431,19 @@ function normalizeEvidenceForPlugin(
   };
 }
 
+function hasVerifierEvidence(evidence: AgenticRuntimeEvidence | undefined): boolean {
+  if (!evidence) {
+    return false;
+  }
+
+  return (
+    Array.isArray(evidence.findings) ||
+    Boolean(evidence.mode) ||
+    Boolean(evidence.trace) ||
+    Boolean(evidence.evidenceSource)
+  );
+}
+
 function traceAttributesMatchPlugin(
   attributes: Record<string, unknown> | undefined,
   pluginId: AgenticRuntimePluginId,
@@ -522,7 +535,7 @@ function extractAgenticRuntimeEvidence(
   for (const candidate of candidates) {
     for (const evidence of parseEvidenceCandidates(candidate)) {
       const scopedEvidence = normalizeEvidenceForPlugin(evidence, pluginId);
-      if (scopedEvidence?.findings || scopedEvidence?.pluginId || scopedEvidence?.mode) {
+      if (hasVerifierEvidence(scopedEvidence)) {
         return {
           ...scopedEvidence,
           evidenceSource: scopedEvidence.evidenceSource || 'provider',
