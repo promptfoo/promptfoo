@@ -91,7 +91,13 @@ jobs:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
 
   docker:
-    if: needs.release-please.outputs.release_created == 'true'
+    if: >-
+      ${{
+        !cancelled() &&
+        needs.release-please.result == 'success' &&
+        needs.publish-npm.result == 'success' &&
+        needs.release-please.outputs.release_created == 'true'
+      }}
     needs: [publish-npm, release-please]
     permissions:
       contents: read
