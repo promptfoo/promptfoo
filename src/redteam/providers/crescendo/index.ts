@@ -20,6 +20,12 @@ import {
 } from '../../inputVariables';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializationContextVars,
+  buildRemoteMaterializedInputVariables,
+  isRemoteMaterializationUpgradeError,
+} from '../../remoteMaterialization';
+import {
   applyRuntimeTransforms,
   type LayerConfig,
   type MediaData,
@@ -103,6 +109,13 @@ interface CrescendoMetadata extends BaseRedteamMetadata {
 interface CrescendoResponse extends ProviderResponse {
   metadata: CrescendoMetadata;
 }
+
+type CrescendoAttackPromptResponse = {
+  generatedQuestion: string | undefined;
+  inputMaterialization?: Record<string, unknown>;
+  materializationHandled?: boolean;
+  materializedVars?: Record<string, string>;
+};
 
 interface CrescendoConfig {
   injectVar: string;
@@ -400,12 +413,18 @@ export class CrescendoProvider implements ApiProvider {
 
         logger.debug(`\n[Crescendo] ROUND ${roundNum}\n`);
 
-        const { generatedQuestion: attackPrompt } = await this.getAttackPrompt(
+        const {
+          generatedQuestion: attackPrompt,
+          inputMaterialization,
+          materializationHandled,
+          materializedVars,
+        } = await this.getAttackPrompt(
           roundNum,
           evalFlag,
           lastResponse,
           lastFeedback,
           objectiveScore,
+          context,
           tracingOptions,
           options,
         );
@@ -433,6 +452,7 @@ export class CrescendoProvider implements ApiProvider {
           tracingOptions,
           shouldFetchTrace,
           traceSnapshots,
+          { inputMaterialization, materializationHandled, materializedVars },
         );
         lastResponse = response;
         lastTransformResult = transformResult;
@@ -708,6 +728,9 @@ export class CrescendoProvider implements ApiProvider {
           logger.debug('[Crescendo] Operation aborted');
           throw error;
         }
+        if (isRemoteMaterializationUpgradeError(error)) {
+          throw error;
+        }
         logger.error(`[Crescendo] Error Running crescendo step`, { error });
       }
     }
@@ -772,9 +795,10 @@ export class CrescendoProvider implements ApiProvider {
     lastResponse: TargetResponse,
     lastFeedback: string,
     objectiveScore: { value: number; rationale: string } | undefined,
+    context: CallApiContextParams | undefined,
     tracingOptions: RedteamTracingOptions,
     options?: CallApiOptionsParams,
-  ): Promise<{ generatedQuestion: string | undefined }> {
+  ): Promise<CrescendoAttackPromptResponse> {
     logger.debug(
       `[Crescendo] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
         objectiveScore,
@@ -826,7 +850,15 @@ export class CrescendoProvider implements ApiProvider {
           raw: JSON.stringify(redTeamingHistory),
           label: 'history',
         },
-        vars: {},
+        vars: shouldGenerateRemote()
+          ? buildRemoteMaterializationContextVars({
+              injectVar: this.config.injectVar,
+              inputs: this.config.inputs,
+              materializationIndex: roundNum,
+              pluginId: 'crescendo',
+              purpose: context?.test?.metadata?.purpose as string | undefined,
+            })
+          : {},
       },
       options,
     );
@@ -904,6 +936,9 @@ export class CrescendoProvider implements ApiProvider {
 
     return {
       generatedQuestion: stripPromptBlockPrefix(generatedQuestion),
+      inputMaterialization: response.inputMaterialization,
+      materializationHandled: response.materializationHandled,
+      materializedVars: response.materializedVars,
     };
   }
 
@@ -919,6 +954,10 @@ export class CrescendoProvider implements ApiProvider {
     tracingOptions?: RedteamTracingOptions,
     shouldFetchTrace?: boolean,
     traceSnapshots?: TraceContextData[],
+    remoteMaterialization?: Pick<
+      CrescendoAttackPromptResponse,
+      'inputMaterialization' | 'materializationHandled' | 'materializedVars'
+    >,
   ): Promise<{
     response: TargetResponse;
     transformResult?: TransformResult;
@@ -933,16 +972,41 @@ export class CrescendoProvider implements ApiProvider {
     processedPrompt = stripPromptBlockPrefix(processedPrompt);
 
     // Extract input vars from the processed prompt for multi-input mode
+    if (this.config.inputs && shouldGenerateRemote()) {
+      assertRemoteMaterializationHandled(remoteMaterialization, 'Crescendo multi-input generation');
+    }
     const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
-    const materializedInputVars =
-      currentInputVars && this.config.inputs
-        ? await materializeInputVariablesWithMetadata(currentInputVars, this.config.inputs, {
+    let materializedInputVars:
+      | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+      | undefined;
+    if (
+      this.config.inputs &&
+      shouldGenerateRemote() &&
+      !currentInputVars &&
+      !remoteMaterialization?.materializedVars
+    ) {
+      throw new Error('Crescendo remote multi-input generation returned an invalid prompt format');
+    }
+    if ((currentInputVars || remoteMaterialization?.materializedVars) && this.config.inputs) {
+      if (shouldGenerateRemote()) {
+        materializedInputVars = buildRemoteMaterializedInputVariables(
+          remoteMaterialization ?? {},
+          currentInputVars ?? {},
+          this.config.inputs,
+        );
+      } else {
+        materializedInputVars = await materializeInputVariablesWithMetadata(
+          currentInputVars!,
+          this.config.inputs,
+          {
             materializationIndex: _roundNum,
             pluginId: 'crescendo',
             provider: await this.getRedTeamProvider(),
             purpose: context?.test?.metadata?.purpose as string | undefined,
-          })
-        : undefined;
+          },
+        );
+      }
+    }
     const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
     // Build updated vars - handle multi-input mode
