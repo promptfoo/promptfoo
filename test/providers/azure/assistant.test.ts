@@ -290,6 +290,32 @@ describe('Azure Assistant Provider', () => {
 
       expect(cacheGet.mock.calls[0][0]).toBe(cacheGet.mock.calls[1][0]);
     });
+
+    it('should reject unserializable assistant cache key inputs', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: vi.fn(),
+        set: vi.fn(),
+      } as any);
+      provider.assistantConfig.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'unserializable_response',
+          strict: true,
+          schema: {
+            type: 'object',
+            properties: {
+              answer: { type: 'string', default: BigInt(1) },
+            },
+            additionalProperties: false,
+          },
+        },
+      } as any;
+
+      await expect(provider.callApi('prompt with unserializable config')).rejects.toThrow(
+        'Azure Assistant cache key input contains values that cannot be serialized',
+      );
+    });
   });
 
   describe('error handling', () => {

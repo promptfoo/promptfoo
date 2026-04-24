@@ -138,9 +138,13 @@ function normalizeAzureAssistantCacheValue(value: unknown, seen = new WeakSet<ob
 }
 
 function hmacAzureAssistantCacheValue(value: unknown) {
-  return createHmac('sha256', AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY)
-    .update(safeJsonStringify(normalizeAzureAssistantCacheValue(value)) ?? '')
-    .digest('hex');
+  const serialized = safeJsonStringify(normalizeAzureAssistantCacheValue(value));
+  invariant(
+    serialized !== undefined,
+    'Azure Assistant cache key input contains values that cannot be serialized',
+  );
+
+  return createHmac('sha256', AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY).update(serialized).digest('hex');
 }
 
 function getAuthHeadersCacheIdentity(authHeaders: Record<string, string>) {
