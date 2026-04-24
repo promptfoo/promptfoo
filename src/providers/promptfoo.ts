@@ -9,6 +9,7 @@ import {
   neverGenerateRemote,
   neverGenerateRemoteForRegularEvals,
 } from '../redteam/remoteGeneration';
+import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { fetchWithRetries } from '../util/fetch/index';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
@@ -197,6 +198,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
     }
 
     const evaluationId = context?.evaluationId || cliState.evaluationId;
+    const materializationContext = getRemoteMaterializationContextFromVars(context?.vars);
     const body = {
       jsonOnly: this.options.jsonOnly,
       preferSmallModel: this.options.preferSmallModel,
@@ -213,6 +215,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         context?.testCaseId && {
           testRunId: `${evaluationId}-${context.testCaseId}`,
         }),
+      ...(materializationContext ? { materializationContext } : {}),
     };
 
     try {
@@ -241,6 +244,9 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       }
 
       return {
+        inputMaterialization: data.inputMaterialization,
+        materializationHandled: data.materializationHandled,
+        materializedVars: data.materializedVars,
         output: data.result,
         tokenUsage: data.tokenUsage,
       };
