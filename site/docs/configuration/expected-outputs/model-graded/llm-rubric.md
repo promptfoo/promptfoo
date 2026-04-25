@@ -172,6 +172,10 @@ defaultTest:
         showThinking: false
 ```
 
+For vLLM, make sure the model has enough output and context budget to finish its thinking block. If
+generation stops early, vLLM may put raw `<think>` text in `content`; `showThinking: false` cannot
+strip that because it is no longer a separate reasoning field.
+
 For vLLM/Qwen3-style thinking models, you can also disable thinking at request time:
 
 ```yaml

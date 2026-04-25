@@ -42,6 +42,20 @@ curl http://localhost:8000/v1/chat/completions \
 `apiBaseUrl` should be the `/v1` root. Promptfoo appends `/chat/completions`,
 `/completions`, or `/embeddings` depending on the provider type.
 
+For a wiring-only smoke test, a tiny reasoning model such as `Qwen/Qwen3-0.6B` can verify that
+promptfoo reaches vLLM and that `showThinking` behaves correctly. Do not use a tiny model as a real
+judge; use it only to test the endpoint, parser, and config shape:
+
+```bash
+vllm serve Qwen/Qwen3-0.6B \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --served-model-name llm_judge \
+  --reasoning-parser qwen3 \
+  --max-model-len 4096 \
+  --api-key token-abc123
+```
+
 ### Common 2026 judge models
 
 vLLM's current [supported models](https://docs.vllm.ai/en/stable/models/supported_models/) list
@@ -244,7 +258,7 @@ assert:
 
 When vLLM is started with a reasoning parser, responses may include:
 
-- `message.reasoning`: hidden reasoning extracted by vLLM
+- `message.reasoning_content` or `message.reasoning`: hidden reasoning extracted by vLLM
 - `message.content`: final answer
 
 Promptfoo's OpenAI-compatible chat provider includes reasoning in the returned output by default:
@@ -261,8 +275,18 @@ as the material to parse, embed, classify, or score. If the reasoning text conta
 scratchpad content, attribution markers, candidate sentences, or numeric choices, promptfoo can use
 that scratchpad before the final answer.
 
-Set `showThinking: false` on vLLM judge providers so promptfoo discards `reasoning` and parses only
-`content`.
+Set `showThinking: false` on vLLM judge providers so promptfoo discards reasoning fields and parses
+only `content`.
+
+This depends on vLLM successfully splitting the response. If the request stops before the model
+closes its thinking block, vLLM can return raw `<think>...` text in `message.content` instead of
+`reasoning_content`. In that case `showThinking: false` cannot distinguish scratchpad text from
+final content. Increase the server `--max-model-len` and provider `max_tokens`, or disable thinking
+for judge calls with `chat_template_kwargs.enable_thinking: false`.
+
+`search-rubric` is special because it requires web search. A plain vLLM chat server is not a
+web-search-capable grader; promptfoo will prefer or load a search-capable provider instead. The
+`showThinking` guidance applies to the search provider that actually grades the assertion.
 
 | Assertion family                                                                                                      | What reasoning text can break                                                                                                  |
 | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
@@ -276,8 +300,9 @@ Set `showThinking: false` on vLLM judge providers so promptfoo discards `reasoni
 ### Disable thinking at the vLLM API level
 
 `showThinking: false` only changes what promptfoo reads from the response; the model may still spend
-tokens thinking. Qwen3 and GLM chat templates support disabling thinking per request through
-`chat_template_kwargs`:
+tokens thinking. For small local judges and CI smoke tests, disabling thinking is often faster and
+avoids truncated `<think>` content. Qwen3 and GLM chat templates support disabling thinking per
+request through `chat_template_kwargs`:
 
 ```yaml
 defaultTest:
@@ -353,14 +378,16 @@ defaultTest:
 
 ## Troubleshooting
 
-| Symptom                                                                                                  | Fix                                                                                                                                                        |
-| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `API key is not set`                                                                                     | Set `apiKey` in provider config, or set `OPENAI_API_KEY`. If vLLM was started without `--api-key`, any placeholder such as `empty` is fine.                |
-| `ECONNREFUSED`                                                                                           | Use `127.0.0.1` instead of `localhost`, verify the vLLM port, and confirm Docker or a remote host exposes the port.                                        |
-| Promptfoo calls OpenAI instead of vLLM                                                                   | Put `apiBaseUrl: http://.../v1` on the provider object, or set `OPENAI_BASE_URL`. Do not set `apiBaseUrl` to `/v1/chat/completions`.                       |
-| Judge returns `Could not extract JSON`, wrong categories, odd RAG scores, or wrong `select-best` winners | Set `showThinking: false` on the judge provider and keep the full provider object in `defaultTest.options.provider` or `assert.provider`.                  |
-| `assert.provider` appears to ignore `defaultTest.options.provider.config`                                | This is expected precedence. Use the full provider object at the assertion level, or remove `assert.provider` so the default provider object is inherited. |
-| Local models reload between rows                                                                         | Run with `--max-concurrency 1`; promptfoo groups eligible model-graded calls by grading provider ID to reduce local model switching.                       |
+| Symptom                                                                                                  | Fix                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API key is not set`                                                                                     | Set `apiKey` in provider config, or set `OPENAI_API_KEY`. If vLLM was started without `--api-key`, any placeholder such as `empty` is fine.                                                                      |
+| `ECONNREFUSED`                                                                                           | Use `127.0.0.1` instead of `localhost`, verify the vLLM port, and confirm Docker or a remote host exposes the port.                                                                                              |
+| Promptfoo calls OpenAI instead of vLLM                                                                   | Put `apiBaseUrl: http://.../v1` on the provider object, or set `OPENAI_BASE_URL`. Do not set `apiBaseUrl` to `/v1/chat/completions`.                                                                             |
+| Judge returns `Could not extract JSON`, wrong categories, odd RAG scores, or wrong `select-best` winners | Set `showThinking: false` on the judge provider and keep the full provider object in `defaultTest.options.provider` or `assert.provider`.                                                                        |
+| Judge output still starts with `<think>` even with `showThinking: false`                                 | The generation was truncated before vLLM split reasoning into `reasoning_content`. Increase `--max-model-len` / `max_tokens`, or disable thinking via `passthrough.chat_template_kwargs.enable_thinking: false`. |
+| `search-rubric` uses a different provider than vLLM                                                      | This is expected unless the configured provider has web-search capability. Plain vLLM chat is not a search provider; configure a web-search-capable grader for `search-rubric`.                                  |
+| `assert.provider` appears to ignore `defaultTest.options.provider.config`                                | This is expected precedence. Use the full provider object at the assertion level, or remove `assert.provider` so the default provider object is inherited.                                                       |
+| Local models reload between rows                                                                         | Run with `--max-concurrency 1`; promptfoo groups eligible model-graded calls by grading provider ID to reduce local model switching.                                                                             |
 
 Run with `--no-cache` while debugging:
 

@@ -262,6 +262,11 @@ defaultTest:
         showThinking: false
 ```
 
+If the judge output still begins with raw `<think>` text, the response was likely truncated before
+vLLM split reasoning into `reasoning_content`. Increase the judge `max_tokens` and the vLLM
+`--max-model-len`, or disable thinking for judge calls with
+`passthrough.chat_template_kwargs.enable_thinking: false`.
+
 If you already have that provider object under `defaultTest.options.provider`, do not also set
 `provider: openai:chat:llm_judge` on the assertion. Assertion-level providers override the default
 object, so the `config` block above will not be inherited. See the [vLLM judge guide](/docs/providers/vllm#use-vllm-as-an-llm-judge)
