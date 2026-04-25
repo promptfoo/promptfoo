@@ -62,26 +62,23 @@ export interface HttpRateLimitErrorInit {
 }
 
 /**
- * Structured error thrown by `fetchWithRetries` when an HTTP rate limit
- * (status 429 or equivalent header signal) is final — i.e. retries are
- * exhausted, or the response code indicates a hard quota that should not
- * be retried.
+ * Structured error representing a final HTTP rate limit (status 429 or an
+ * equivalent header signal) — i.e. retries are exhausted, or the response
+ * code indicates a hard quota that should not be retried.
  *
  * Distinguishes:
  * - `kind: 'quota'`     — daily / billing / contractual exhaustion. Don't retry.
  * - `kind: 'rate_limit'` — per-window throttling. Retry honoring `retryAfterMs`.
  *
- * Back-compat invariant: the rendered `message` always contains the
- * substrings `"429"`, `"too many requests"` (case-insensitive), and either
- * `"Rate limit"` or `"Quota"` so legacy substring-based classifiers (e.g.
- * `scheduler/providerRateLimitState.ts`) continue to match. The constructor
- * does not accept a message override — the format is fixed.
+ * The rendered `message` always contains the kind prefix (`"Rate limit
+ * exceeded"` or `"Quota exceeded"`) plus the literal status code. When the
+ * status is 429 (the typical construction path) the message also contains
+ * `"429"` and the default `"Too Many Requests"` statusText, which is what
+ * legacy substring classifiers downstream rely on.
  *
- * Coexists with two other rate-limit error classes that have different
- * scope: `RateLimitExhaustedError` in `src/scheduler/providerRateLimitState.ts`
- * (in-process queue/budget exhaustion) and `RateLimitError` in
- * `src/commands/mcp/lib/errors.ts` (MCP command layer). The `Http` prefix
- * here scopes this one to the network transport boundary.
+ * The `Http` prefix on the name scopes this to the network transport
+ * boundary, distinguishing it from rate-limit-shaped errors in other
+ * layers (e.g. an in-process scheduler queue exhausting its budget).
  */
 export class HttpRateLimitError extends Error {
   readonly status: number;

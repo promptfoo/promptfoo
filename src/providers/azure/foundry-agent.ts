@@ -54,13 +54,13 @@ interface FoundryResponseCreateOptions {
 }
 
 /**
- * Detect a 429 from the OpenAI / Azure SDK error shape (status === 429
- * with a body-level error code in `.error.code` / `.error.type`). The SDK
- * does not throw `HttpRateLimitError` because it doesn't go through
- * `fetchWithRetries` — so we rebuild the same classification here.
+ * Detect a 429 from the OpenAI / Azure SDK error shape — `status === 429`
+ * with a body-level error code in `.error.code` / `.error.type`. SDK errors
+ * don't pass through the structured-error transport path, so we rebuild the
+ * same `(kind, code)` classification locally from the SDK shape.
  *
- * Returns null when the error isn't a 429 (caller falls through to other
- * branches; this is a classifier, not an error filter).
+ * Returns null when the error isn't a 429: this is a classifier, not an
+ * error filter, so non-matching inputs fall through to other branches.
  */
 function classifySdkRateLimit(error: unknown): {
   kind: 'quota' | 'rate_limit';

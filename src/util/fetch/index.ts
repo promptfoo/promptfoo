@@ -397,16 +397,14 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  * stream. Returns the parsed body (JSON if parseable, else raw text) and
  * any extracted error code (e.g. `insufficient_quota`).
  *
- * Why clone: `Response.text()` consumes the underlying stream. Even though
- * the immediate caller (`fetchWithRetries`) discards the response after a
- * 429, middleware layered above (logging, monkey-patched fetch) may have
- * captured the response and expect its body to still be readable. Cloning
- * keeps that contract intact for any wrapper that observes the response.
+ * Why clone: `Response.text()` consumes the underlying stream. The original
+ * response may still be observed by upstream wrappers (logging middleware,
+ * monkey-patched fetch); cloning preserves their ability to read the body.
  *
- * Caller-visible failures (clone, read, parse) are degraded to
- * `{ body: undefined, code: undefined }` and logged at debug level —
- * losing the body code only widens the rate-limit kind from `quota` to
- * `rate_limit`, which is the safer (more conservative) misclassification.
+ * Failures (clone, read, parse) degrade to `{ body: undefined, code:
+ * undefined }` and are logged at debug level. Losing the body code only
+ * widens classification from `quota` to `rate_limit`, which is the safer
+ * (retryable) side of the misclassification.
  */
 async function peekRateLimitBody(
   response: Response,
@@ -435,8 +433,7 @@ async function peekRateLimitBody(
     const json = JSON.parse(text);
     return { body: json, code: extractRateLimitErrorCode(json) };
   } catch {
-    // Non-JSON body (some providers return text/html on 429). Keep the raw
-    // bytes for diagnostics but no code can be extracted.
+    // Keep the raw bytes for diagnostics; no code is extractable.
     logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
     return { body: text, code: undefined };
   }

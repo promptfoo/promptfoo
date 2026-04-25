@@ -873,11 +873,10 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           pollIntervalMs = Math.min(pollIntervalMs * 1.5, 5000);
         }
       } catch (error: any) {
-        // Structured rate-limit / quota errors carry classification metadata.
-        // Surface them via the same path as the top-level callApi handler so
-        // we get distinct error messages for quota vs per-window throttling.
-        // Log at warn (not error) since these are operator-actionable signals,
-        // not unexpected failures.
+        // Route structured rate-limit errors through formatError so quota
+        // vs per-window throttling produce distinct user-facing messages.
+        // logger.warn (not error) since these are operator-actionable, not
+        // unexpected failures.
         if (error instanceof HttpRateLimitError) {
           logger.warn(`Rate-limited while polling run status: ${error.message}`);
           return this.formatError(error);
