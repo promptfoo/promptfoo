@@ -28,8 +28,9 @@ describe('envars', () => {
   });
 
   afterEach(() => {
+    // Clear the throwing cliState mock used by the "without importing cliState" test
+    // before the next test's beforeEach re-resolves modules.
     vi.doUnmock('../src/cliState');
-    setEnvOverridesProvider(() => cliState.config?.env);
   });
 
   afterAll(() => {
@@ -39,7 +40,9 @@ describe('envars', () => {
       delete cliState[key as keyof typeof cliState];
     });
     Object.assign(cliState, originalCliState);
-    setEnvOverridesProvider(() => cliState.config?.env);
+    // Symmetric teardown: leave the singleton "unregistered" rather than pointing
+    // at a closure owned by this test file.
+    setEnvOverridesProvider(undefined);
   });
 
   describe('getEnvar', () => {
@@ -114,6 +117,50 @@ describe('envars', () => {
       setEnvOverridesProvider(() => ({ OPENAI_API_KEY: 'provider-env-key' }));
 
       expect(getEnvString('OPENAI_API_KEY')).toBe('provider-env-key');
+    });
+
+    it('should fall through to process.env when no provider is registered', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
+      setEnvOverridesProvider(undefined);
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('process-env-key');
+    });
+
+    it('should fall through to process.env when the provider returns undefined', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
+      setEnvOverridesProvider(() => undefined);
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('process-env-key');
+    });
+
+    it('should fall through to process.env when the provider returns an empty record', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
+      setEnvOverridesProvider(() => ({}));
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('process-env-key');
+    });
+
+    it('should swallow provider exceptions and fall through to process.env', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'process-env-key' });
+      setEnvOverridesProvider(() => {
+        throw new Error('provider exploded');
+      });
+
+      expect(() => getEnvString('OPENAI_API_KEY')).not.toThrow();
+      expect(getEnvString('OPENAI_API_KEY')).toBe('process-env-key');
+    });
+
+    it('should auto-register the provider when cliState is imported', async () => {
+      vi.resetModules();
+
+      const [dynEnvOverrides, dynCliState] = await Promise.all([
+        import('../src/envOverrides'),
+        import('../src/cliState'),
+      ]);
+
+      dynCliState.default.config = { env: { OPENAI_API_KEY: 'wired-key' } };
+
+      expect(dynEnvOverrides.getEnvOverrides()).toEqual({ OPENAI_API_KEY: 'wired-key' });
     });
   });
 

@@ -450,7 +450,7 @@ export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
   const envOverrides = getEnvOverrides();
-  if (envOverrides && typeof envOverrides === 'object') {
+  if (envOverrides) {
     const envValue = envOverrides[key as string];
     if (envValue !== undefined) {
       return String(envValue);
