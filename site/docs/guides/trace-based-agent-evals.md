@@ -105,7 +105,7 @@ In the passing run above, Promptfoo verified:
 - no `issue_refund` tool call
 - the expected search query argument
 - search before answer composition
-- four reasoning steps
+- four reasoning steps (the parent `reasoning_chain` span plus three `reasoning_*` children — any span whose name starts with `reasoning` or `reasoning_` counts)
 - overall traced task success with a judge score of `0.98`
 
 Read the assertion reasons as a debugging contract:
@@ -412,6 +412,8 @@ Use `trajectory:step-count` when you care about a class of steps, not just tools
 ```
 
 Supported step types are `tool`, `command`, `search`, `reasoning`, `message`, and `span`. You can also add `name` or `pattern`. This is useful for “ran at least one test command,” “did not perform more than two web searches,” “included reasoning spans,” or “kept tool fanout under control.” Use `not-trajectory:step-count` when a matching range itself is forbidden.
+
+`reasoning` matching is name-based: any span whose name starts with `reasoning` or `reasoning_` counts, including grouping spans like `reasoning_chain`. Three semantic reasoning steps wrapped in one parent span produce a count of four, not three. Either include the parent in your range or skip the wrapper.
 
 ### `trajectory:goal-success`
 
