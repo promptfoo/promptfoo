@@ -401,7 +401,14 @@ export async function doEval(
     const hasScenarios = Array.isArray(testSuite.scenarios)
       ? testSuite.scenarios.length > 0
       : testSuite.scenarios !== undefined;
-    const filterRange = cmdObj.filterRange ?? commandLineOptions?.filterRange;
+    const resumeRuntimeOptions = resumeEval?.runtimeOptions as EvaluateOptions | undefined;
+    const persistedFilterRange =
+      typeof resumeRuntimeOptions?.filterRange === 'string'
+        ? resumeRuntimeOptions.filterRange
+        : undefined;
+    const filterRange = resumeEval
+      ? (persistedFilterRange ?? commandLineOptions?.filterRange)
+      : (cmdObj.filterRange ?? commandLineOptions?.filterRange);
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
@@ -472,7 +479,7 @@ export async function doEval(
             : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
-      filterRange: !resumeEval && hasScenarios ? filterRange : undefined,
+      filterRange,
       maxConcurrency,
       cache,
     };
@@ -605,6 +612,7 @@ export async function doEval(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         eventSource: 'cli',
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),

@@ -131,6 +131,8 @@ promptfoo eval --filter-range 200:    # tests 200 through the end
 promptfoo eval --filter-range :50     # first 50 tests
 ```
 
+When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable.
+
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 
 ### Pause and Resume

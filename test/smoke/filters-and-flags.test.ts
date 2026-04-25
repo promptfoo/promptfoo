@@ -139,24 +139,8 @@ describe('Count-Based Filter Tests', () => {
   });
 
   it('1.8.1.8 - commandLineOptions.filterRange slices tests', () => {
-    const configPath = path.join(OUTPUT_DIR, 'range-command-line-options.json');
+    const configPath = path.join(CONFIGS_DIR, 'range-command-line-options.json');
     const outputPath = path.join(OUTPUT_DIR, 'range-command-line-options-output.json');
-    fs.writeFileSync(
-      configPath,
-      JSON.stringify({
-        commandLineOptions: {
-          filterRange: '1:3',
-        },
-        prompts: ['Hello {{name}}'],
-        providers: ['echo'],
-        tests: [
-          { vars: { name: 'Alice' } },
-          { vars: { name: 'Bob' } },
-          { vars: { name: 'Charlie' } },
-          { vars: { name: 'David' } },
-        ],
-      }),
-    );
 
     const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
       cwd: ROOT_DIR,

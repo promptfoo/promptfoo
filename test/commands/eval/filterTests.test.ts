@@ -498,6 +498,12 @@ describe('filterTests', () => {
       );
     });
 
+    it('should reject invalid whitespace-heavy ranges without excessive backtracking', async () => {
+      await expect(
+        filterTests(mockTestSuite, { range: `${'\t'.repeat(10_000)}:${'\t'.repeat(10_000)}x` }),
+      ).rejects.toThrow(/--filter-range must be specified in start:end format/);
+    });
+
     it('should throw error when start is greater than end', async () => {
       await expect(filterTests(mockTestSuite, { range: '3:1' })).rejects.toThrow(
         '--filter-range start must be less than or equal to end, got: 3:1',
