@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
-import { isValidFilterRange } from '../util/filterRange';
+import { parseFilterRange } from '../util/filterRange';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 
@@ -107,9 +107,18 @@ export const CommandLineOptionsSchema = z.object({
   filterProviders: z.string().optional(),
   filterRange: z
     .string()
-    .refine(isValidFilterRange, {
-      message:
-        'must be in start:end format using zero-based indices, with start less than or equal to end',
+    .superRefine((value, ctx) => {
+      try {
+        parseFilterRange(value);
+      } catch (error) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            error instanceof Error
+              ? error.message
+              : '--filter-range must be specified in start:end format using zero-based indices',
+        });
+      }
     })
     .optional(),
   filterSample: z.coerce.number().int().positive().optional(),

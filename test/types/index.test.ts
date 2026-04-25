@@ -695,10 +695,10 @@ describe('CommandLineOptionsSchema', () => {
       providers: ['provider1'],
     };
     expect(() => CommandLineOptionsSchema.parse({ ...baseOptions, filterRange: '3:1' })).toThrow(
-      'must be in start:end format',
+      '--filter-range start must be less than or equal to end, got: 3:1',
     );
     expect(() => CommandLineOptionsSchema.parse({ ...baseOptions, filterRange: ':' })).toThrow(
-      'must be in start:end format',
+      '--filter-range must be specified in start:end format using zero-based indices, got: :',
     );
   });
 });
