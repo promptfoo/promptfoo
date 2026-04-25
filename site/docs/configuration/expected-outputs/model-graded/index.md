@@ -221,7 +221,11 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use `gpt-5` for grading. If you do not have access to `gpt-5` or prefer not to use it, you can override the grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts use promptfoo's built-in grading provider. With OpenAI
+credentials, this is currently `gpt-5.5-2026-04-23`; other available credentials can select
+Anthropic, Gemini, Mistral, GitHub Models, Azure OpenAI, or Codex defaults. If you do not have
+access to the selected default or prefer a different judge, you can override the grader. There are
+several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
@@ -275,7 +279,14 @@ global provider object's `config` values such as `apiBaseUrl`, `apiKey`, `temper
 provider object there.
 
 :::note
-The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. GPT-5 series reasoning models ignore `temperature` entirely.
+The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when
+overriding the grader with a custom `provider` block that would otherwise inherit a non-zero
+default. GPT-5 series reasoning models ignore `temperature` entirely.
+
+The built-in OpenAI grader may spend hidden reasoning tokens internally, but the official OpenAI
+response does not expose private reasoning text in the output string. The `showThinking: false`
+guidance below is for OpenAI-compatible or local judge providers that return reasoning fields such
+as `reasoning` or `reasoning_content`.
 :::
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.
