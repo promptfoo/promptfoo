@@ -32,8 +32,10 @@ const SectionHeading = ({ id, children }: { id: string; children: string }) => (
     variant="h4"
     component="h3"
     gutterBottom
-    fontWeight="medium"
     className={styles.sectionHeading}
+    sx={{
+      fontWeight: 'medium',
+    }}
   >
     {children}
     <a href={`#${id}`} className={styles.anchorLink} aria-label={`Link to ${children}`}>
@@ -45,7 +47,13 @@ const SectionHeading = ({ id, children }: { id: string; children: string }) => (
 const ArticleLink = ({ article }: { article: Article }) => (
   <Grid size={{ xs: 12, md: 6 }} key={article.link}>
     <Link href={article.link} className={styles.articleLink}>
-      <Typography variant="subtitle2" color="text.secondary" component="span">
+      <Typography
+        variant="subtitle2"
+        component="span"
+        sx={{
+          color: 'text.secondary',
+        }}
+      >
         {article.publication}
       </Typography>
       <Typography variant="body2">{article.title}</Typography>
@@ -72,16 +80,26 @@ const PodcastCard = ({ podcast }: { podcast: Podcast }) => (
   <Grid size={{ xs: 12, md: 6 }}>
     <Box
       className={styles.coverageItem}
-      p={3}
-      sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      sx={{
+        p: 3,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
       <Typography variant="h6" component="h4" gutterBottom>
         {podcast.title}
       </Typography>
-      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+      <Typography
+        variant="subtitle2"
+        gutterBottom
+        sx={{
+          color: 'text.secondary',
+        }}
+      >
         {podcast.source} &bull; {podcast.date}
       </Typography>
-      <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+      <Typography variant="body2" component="p" sx={{ flex: 1, mb: 2 }}>
         {podcast.description}
       </Typography>
       <Link href={podcast.link} target="_blank" rel="noopener noreferrer">
@@ -95,20 +113,35 @@ const EducationalResourceCard = ({ resource }: { resource: EducationalResource }
   <Grid size={{ xs: 12, md: 6 }}>
     <Box
       className={styles.coverageItem}
-      p={3}
-      sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      sx={{
+        p: 3,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
       <Typography variant="h6" component="h4" gutterBottom>
         {resource.title}
       </Typography>
-      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+      <Typography
+        variant="subtitle2"
+        gutterBottom
+        sx={{
+          color: 'text.secondary',
+        }}
+      >
         {resource.source} &bull; {resource.year}
       </Typography>
-      <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+      <Typography variant="body2" component="p" sx={{ flex: 1, mb: 2 }}>
         {resource.description}
       </Typography>
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 'auto' }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          variant="caption"
+          sx={{
+            color: 'text.secondary',
+          }}
+        >
           {resource.duration}
         </Typography>
         <Link href={resource.link}>View course →</Link>
@@ -121,16 +154,26 @@ const TechnicalContentCard = ({ content }: { content: TechnicalContent }) => (
   <Grid size={{ xs: 12, md: 6 }}>
     <Box
       className={styles.coverageItem}
-      p={3}
-      sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      sx={{
+        p: 3,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
     >
       <Typography variant="h6" component="h4" gutterBottom>
         {content.title}
       </Typography>
-      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+      <Typography
+        variant="subtitle2"
+        gutterBottom
+        sx={{
+          color: 'text.secondary',
+        }}
+      >
         {content.source} &bull; {content.date}
       </Typography>
-      <Typography variant="body2" paragraph sx={{ flex: 1 }}>
+      <Typography variant="body2" component="p" sx={{ flex: 1, mb: 2 }}>
         {content.description}
       </Typography>
       <Link href={content.link}>Read article →</Link>
@@ -156,24 +199,50 @@ const PressContent = () => {
   return (
     <ThemeProvider theme={theme}>
       <Container maxWidth="lg">
-        <Box py={8}>
-          <Typography variant="h2" component="h1" align="center" gutterBottom fontWeight="bold">
+        <Box
+          sx={{
+            py: 8,
+          }}
+        >
+          <Typography
+            variant="h2"
+            component="h1"
+            align="center"
+            gutterBottom
+            sx={{
+              fontWeight: 'bold',
+            }}
+          >
             Press Center
           </Typography>
-          <Typography variant="h5" component="h2" align="center" color="text.secondary" paragraph>
+          <Typography
+            variant="h5"
+            component="h2"
+            align="center"
+            sx={{
+              color: 'text.secondary',
+              mb: 2,
+            }}
+          >
             Resources and information for media coverage of Promptfoo
           </Typography>
         </Box>
 
         {/* Company Overview Section */}
-        <Box id="about-promptfoo" className={styles.section} mb={8}>
+        <Box
+          id="about-promptfoo"
+          className={styles.section}
+          sx={{
+            mb: 8,
+          }}
+        >
           <SectionHeading id="about-promptfoo">About Promptfoo</SectionHeading>
-          <Typography variant="body1" paragraph>
+          <Typography variant="body1" component="p" sx={{ mb: 2 }}>
             Promptfoo is a leading provider of AI security solutions, helping developers and
             enterprises build secure, reliable AI applications. Based in {COMPANY_INFO.headquarters}
             , Promptfoo is now part of OpenAI and continues as an open-source AI security project.
           </Typography>
-          <Typography variant="body1" paragraph>
+          <Typography variant="body1" component="p" sx={{ mb: 2 }}>
             Our core product is an open-source pentesting and evaluation framework used by{' '}
             {SITE_CONSTANTS.USER_COUNT_DISPLAY}+ developers. Promptfoo is among the most popular
             evaluation frameworks and is the first product to adapt AI-specific pentesting
@@ -184,7 +253,13 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Featured Podcasts Section */}
-        <Box id="featured-podcasts" className={styles.section} mb={8}>
+        <Box
+          id="featured-podcasts"
+          className={styles.section}
+          sx={{
+            mb: 8,
+          }}
+        >
           <SectionHeading id="featured-podcasts">Podcast Appearances</SectionHeading>
           <Grid container spacing={4}>
             {FEATURED_PODCASTS.map((podcast) => (
@@ -196,27 +271,56 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Press Coverage Section */}
-        <Box id="recent-coverage" className={styles.section} mb={8}>
+        <Box
+          id="recent-coverage"
+          className={styles.section}
+          sx={{
+            mb: 8,
+          }}
+        >
           <SectionHeading id="recent-coverage">Press Coverage</SectionHeading>
 
           {/* DeepSeek Research Coverage */}
-          <Grid container spacing={4} mb={6}>
+          <Grid
+            container
+            spacing={4}
+            sx={{
+              mb: 6,
+            }}
+          >
             <Grid size={12}>
-              <Box className={styles.coverageItem} p={3}>
+              <Box
+                className={styles.coverageItem}
+                sx={{
+                  p: 3,
+                }}
+              >
                 <Typography variant="h6" component="h4" gutterBottom>
                   DeepSeek AI Censorship Research
                 </Typography>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                <Typography
+                  variant="subtitle2"
+                  gutterBottom
+                  sx={{
+                    color: 'text.secondary',
+                  }}
+                >
                   January 2025
                 </Typography>
-                <Typography variant="body1" paragraph>
+                <Typography variant="body1" component="p" sx={{ mb: 2 }}>
                   Our groundbreaking research on AI censorship and content filtering in DeepSeek
                   models has been widely covered by major technology and news publications.
                 </Typography>
-                <Typography variant="body2" paragraph>
+                <Typography variant="body2" component="p" sx={{ mb: 2 }}>
                   <Link to="/blog/deepseek-censorship/">Read the original research →</Link>
                 </Typography>
-                <Grid container spacing={2} mt={2}>
+                <Grid
+                  container
+                  spacing={2}
+                  sx={{
+                    mt: 2,
+                  }}
+                >
                   {DEEPSEEK_COVERAGE.map((article) => (
                     <ArticleLink key={article.link} article={article} />
                   ))}
@@ -229,9 +333,15 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Educational Resources Section */}
-        <Box id="educational-resources" className={styles.section} mb={8}>
+        <Box
+          id="educational-resources"
+          className={styles.section}
+          sx={{
+            mb: 8,
+          }}
+        >
           <SectionHeading id="educational-resources">Educational Resources</SectionHeading>
-          <Typography variant="body1" paragraph>
+          <Typography variant="body1" component="p" sx={{ mb: 2 }}>
             Leading AI platforms have integrated Promptfoo into their official educational
             materials, recognizing it as an essential tool for LLM application development,
             evaluation, and security. These courses and workshops, developed in partnership with
@@ -247,7 +357,13 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Technical Content Section */}
-        <Box id="technical-content" className={styles.section} mb={8}>
+        <Box
+          id="technical-content"
+          className={styles.section}
+          sx={{
+            mb: 8,
+          }}
+        >
           <SectionHeading id="technical-content">Technical Content & Guides</SectionHeading>
           <Grid container spacing={4}>
             {TECHNICAL_CONTENT.map((content) => (
@@ -259,9 +375,15 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Brand Assets Section */}
-        <Box id="brand-assets" className={styles.section} mb={8}>
+        <Box
+          id="brand-assets"
+          className={styles.section}
+          sx={{
+            mb: 8,
+          }}
+        >
           <SectionHeading id="brand-assets">Brand Assets</SectionHeading>
-          <Typography variant="body1" paragraph>
+          <Typography variant="body1" component="p" sx={{ mb: 2 }}>
             Download official Promptfoo logos and brand assets for media use.
           </Typography>
           <Grid container spacing={4}>
@@ -276,7 +398,12 @@ const PressContent = () => {
                 }}
               >
                 <LogoPanda style={{ maxWidth: '200px', height: 'auto' }} />
-                <Typography variant="subtitle1" mt={2}>
+                <Typography
+                  variant="subtitle1"
+                  sx={{
+                    mt: 2,
+                  }}
+                >
                   Promptfoo Logo (SVG)
                 </Typography>
                 <a href="/img/logo-panda.svg" download>
@@ -290,15 +417,21 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Media Contact Section */}
-        <Box id="media-contact" className={styles.section} mb={8}>
+        <Box
+          id="media-contact"
+          className={styles.section}
+          sx={{
+            mb: 8,
+          }}
+        >
           <SectionHeading id="media-contact">Media Contact</SectionHeading>
-          <Typography variant="body1" paragraph>
+          <Typography variant="body1" component="p" sx={{ mb: 2 }}>
             For press inquiries, please contact our media relations team:
           </Typography>
-          <Typography variant="body1" paragraph>
+          <Typography variant="body1" component="p" sx={{ mb: 2 }}>
             <Link href={`mailto:${COMPANY_INFO.contactEmail}`}>{COMPANY_INFO.contactEmail}</Link>
           </Typography>
-          <Typography variant="body1" paragraph>
+          <Typography variant="body1" component="p" sx={{ mb: 2 }}>
             For urgent inquiries, please include "URGENT" in the subject line.
           </Typography>
         </Box>
@@ -306,20 +439,26 @@ const PressContent = () => {
         <Divider sx={{ my: 8 }} />
 
         {/* Company Facts Section */}
-        <Box id="quick-facts" className={styles.section} mb={8}>
+        <Box
+          id="quick-facts"
+          className={styles.section}
+          sx={{
+            mb: 8,
+          }}
+        >
           <SectionHeading id="quick-facts">Quick Facts</SectionHeading>
           <Grid container spacing={4}>
             <Grid size={{ xs: 12, md: 6 }}>
               <Typography variant="h6" component="h4" gutterBottom>
                 Founded
               </Typography>
-              <Typography variant="body1" paragraph>
+              <Typography variant="body1" component="p" sx={{ mb: 2 }}>
                 {COMPANY_INFO.founded}
               </Typography>
               <Typography variant="h6" component="h4" gutterBottom>
                 Headquarters
               </Typography>
-              <Typography variant="body1" paragraph>
+              <Typography variant="body1" component="p" sx={{ mb: 2 }}>
                 {COMPANY_INFO.headquarters}
               </Typography>
             </Grid>
@@ -327,7 +466,7 @@ const PressContent = () => {
               <Typography variant="h6" component="h4" gutterBottom>
                 Leadership
               </Typography>
-              <Typography variant="body1" paragraph>
+              <Typography variant="body1" component="p" sx={{ mb: 2 }}>
                 {FOUNDERS.map((founder, index) => (
                   <React.Fragment key={founder.name}>
                     <Link href={founder.linkedIn} target="_blank" rel="noopener noreferrer">
@@ -341,13 +480,13 @@ const PressContent = () => {
               <Typography variant="h6" component="h4" gutterBottom>
                 Part of
               </Typography>
-              <Typography variant="body1" paragraph>
+              <Typography variant="body1" component="p" sx={{ mb: 2 }}>
                 {COMPANY_INFO.affiliation}
               </Typography>
               <Typography variant="h6" component="h4" gutterBottom>
                 Early supporters
               </Typography>
-              <Typography variant="body1" paragraph>
+              <Typography variant="body1" component="p" sx={{ mb: 2 }}>
                 {COMPANY_INFO.earlySupporters}
               </Typography>
             </Grid>

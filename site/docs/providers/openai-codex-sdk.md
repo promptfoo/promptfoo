@@ -93,7 +93,7 @@ export CODEX_API_KEY=your_api_key_here
 
 :::note
 
-ChatGPT login support is specific to the Codex SDK provider. Other `openai:*` providers in promptfoo still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
+ChatGPT login support is specific to the Codex SDK provider. Promptfoo can now use that provider automatically for default text grading and synthesis when Codex is signed in and no higher-priority API credentials are set. Explicit `openai:chat`, `openai:responses`, embedding, and moderation providers still use Platform API credentials, and [ChatGPT subscriptions are billed separately from API usage](https://help.openai.com/en/articles/8156019).
 
 :::
 
@@ -237,8 +237,8 @@ Supported models include:
 
 - **GPT-5.5** - Latest frontier model for professional work (`gpt-5.5`)
 - **GPT-5.5 Pro** - Higher-capacity variant (`gpt-5.5-pro`)
-- **GPT-5.4** - Frontier model for professional work (`gpt-5.4`)
-- **GPT-5.4 Pro** - Higher-capacity variant (`gpt-5.4-pro`)
+- **GPT-5.4** - Previous frontier model for professional work (`gpt-5.4`)
+- **GPT-5.4 Pro** - Previous higher-capacity variant (`gpt-5.4-pro`)
 - **GPT-5.3 Codex** - Latest codex generation (`gpt-5.3-codex`, `gpt-5.3-codex-spark`)
 - **GPT-5.2** - Current GPT-5.2 line (`gpt-5.2`, `gpt-5.2-codex`)
 - **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
@@ -246,6 +246,8 @@ Supported models include:
 - **GPT-5** - Base GPT-5 model (`gpt-5`)
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise fall back to the provider's generic `codex` label with `response.cost: 0`.
+
+GPT-5.5 model IDs are recognized for routing, usage tracking, and standard API cost estimates. Batch and Flex discounts, and Priority processing multipliers, are not automatically inferred from Codex runtime settings.
 
 ### Mini Models
 
@@ -552,6 +554,8 @@ Available levels vary by model:
 
 Promptfoo validates the allowed enum values, but model-specific support is ultimately enforced by the Codex SDK/runtime. If a value is not supported by the selected model, the provider returns a normal provider error row.
 
+For GPT-5.5 API requests, use `none`, `low`, `medium`, `high`, or `xhigh` reasoning where the runtime exposes those values. The current Codex SDK type still exposes `minimal`, `low`, `medium`, `high`, and `xhigh`.
+
 ## Additional Directories
 
 Allow the Codex agent to access directories beyond the main working directory:
@@ -580,6 +584,17 @@ providers:
       cli_env:
         CUSTOM_VAR: custom-value
         ANOTHER_VAR: another-value
+```
+
+Codex provider config is rendered with test-case vars at call time. This lets you pass row-specific synthetic canaries and disposable workspaces:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      working_dir: '{{workspaceDir}}'
+      cli_env:
+        PFQA_SECRET_ENV_READ: '{{secretEnvValue}}'
 ```
 
 By default, promptfoo now passes a minimal shell environment (`PATH`, `HOME`, `SHELL`, temp vars, locale vars, and similar OS basics), merges `cli_env`, and injects only the provider's resolved Codex/OpenAI API key from promptfoo-level env overrides. Other config-level `env:` keys are not forwarded to the Codex subprocess; pass those explicitly through `cli_env`. The provider emits a one-time warning if it sees non-auth promptfoo env overrides that are not present in `cli_env`. This keeps Codex agent commands isolated from unrelated process secrets while still leaving a usable shell path.

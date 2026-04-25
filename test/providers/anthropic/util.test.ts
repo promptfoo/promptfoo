@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateAnthropicCost,
+  getRefusalDetails,
   getTokenUsage,
   outputFromMessage,
   parseMessages,
@@ -77,6 +78,28 @@ describe('Anthropic utilities', () => {
     it('should calculate default cost for Claude Haiku 4.5 latest model', () => {
       const cost = calculateAnthropicCost('claude-haiku-4-5-latest', {}, 100, 200);
       expect(cost).toBe(0.0011); // (0.000001 * 100) + (0.000005 * 200) - $1/MTok input, $5/MTok output
+    });
+
+    it('should calculate default cost for Claude Opus 4.7 model', () => {
+      const cost = calculateAnthropicCost('claude-opus-4-7', {}, 100, 200);
+      expect(cost).toBe(0.0055); // (0.000005 * 100) + (0.000025 * 200) - $5/MTok input, $25/MTok output
+    });
+
+    it('should apply cache pricing for Claude Opus 4.7 with cache tokens', () => {
+      // Opus 4.7: $5/MTok input, $25/MTok output
+      // 100 uncached input, 50 cache_read, 30 cache_write, 200 output
+      const cost = calculateAnthropicCost('claude-opus-4-7', {}, 100, 200, 50, 30);
+      const expected =
+        100 * (5 / 1e6) + 50 * (5 / 1e6) * 0.1 + 30 * (5 / 1e6) * 1.25 + 200 * (25 / 1e6);
+      expect(cost).toBeCloseTo(expected, 10);
+    });
+
+    it('should return undefined for claude-opus-4-7-latest (alias does not exist)', () => {
+      // The Anthropic Models API returns 404 for `claude-opus-4-7-latest` — it is not a real
+      // alias. If someone copies the `-latest` pattern from 4.6 and re-adds it to
+      // ANTHROPIC_MODELS, this test will fail and prompt them to check the API first.
+      const cost = calculateAnthropicCost('claude-opus-4-7-latest', {}, 100, 200);
+      expect(cost).toBeUndefined();
     });
 
     it('should calculate default cost for Claude Opus 4.6 model', () => {
@@ -176,6 +199,16 @@ describe('Anthropic utilities', () => {
       expect(cost).toBe(5200); // (0.02 * 250,000) + (0.02 * 10,000) = 5000 + 200 = 5200
     });
 
+    it('should respect separate config input and output cost overrides for tiered models', () => {
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { inputCost: 0.01, outputCost: 0.03 },
+        250_000,
+        10_000,
+      );
+      expect(cost).toBe(2800);
+    });
+
     it('should return undefined for missing model', () => {
       const cost = calculateAnthropicCost('non-existent-model', { cost: 0.015 });
 
@@ -198,6 +231,19 @@ describe('Anthropic utilities', () => {
       expect(cost).toBeCloseTo(expected, 10);
     });
 
+    it('should apply separate config input and output cost overrides to non-tiered cache pricing', () => {
+      const cost = calculateAnthropicCost(
+        'claude-3-5-sonnet-20241022',
+        { inputCost: 0.01, outputCost: 0.03 },
+        100,
+        200,
+        50,
+        30,
+      );
+      const expected = 100 * 0.01 + 50 * 0.01 * 0.1 + 30 * 0.01 * 1.25 + 200 * 0.03;
+      expect(cost).toBeCloseTo(expected, 10);
+    });
+
     it('should apply cache pricing for Sonnet 4.5 tiered model with cache tokens', () => {
       // Sonnet 4.5 below 200k threshold: $3/MTok input, $15/MTok output
       // 100k uncached input, 20k cache_read, 10k cache_write, 10k output
@@ -216,6 +262,58 @@ describe('Anthropic utilities', () => {
         10_000 * (3 / 1e6) * 1.25 +
         10_000 * (15 / 1e6);
       expect(cost).toBeCloseTo(expected, 10);
+    });
+
+    it('should apply separate config input and output cost overrides to tiered cache pricing', () => {
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { inputCost: 0.01, outputCost: 0.03 },
+        100_000,
+        10_000,
+        20_000,
+        10_000,
+      );
+      const expected = 100_000 * 0.01 + 20_000 * 0.01 * 0.1 + 10_000 * 0.01 * 1.25 + 10_000 * 0.03;
+      expect(cost).toBeCloseTo(expected, 10);
+    });
+
+    it('should prefer inputCost/outputCost over cost and preserve tiered cache math when all are set', () => {
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { cost: 0.99, inputCost: 0.01, outputCost: 0.03 },
+        100_000,
+        10_000,
+        20_000,
+        10_000,
+      );
+      const expected = 100_000 * 0.01 + 20_000 * 0.01 * 0.1 + 10_000 * 0.01 * 1.25 + 10_000 * 0.03;
+      expect(cost).toBeCloseTo(expected, 6);
+    });
+
+    it('should use config.cost as fallback for the unset side on tiered cache pricing', () => {
+      const cost = calculateAnthropicCost(
+        'claude-sonnet-4-5-20250929',
+        { cost: 0.02, inputCost: 0.01 },
+        100_000,
+        10_000,
+        20_000,
+        10_000,
+      );
+      const expected = 100_000 * 0.01 + 20_000 * 0.01 * 0.1 + 10_000 * 0.01 * 1.25 + 10_000 * 0.02;
+      expect(cost).toBeCloseTo(expected, 6);
+    });
+
+    it('should use config.cost as fallback for the unset side on non-tiered cache pricing', () => {
+      const cost = calculateAnthropicCost(
+        'claude-3-5-sonnet-20241022',
+        { cost: 0.02, outputCost: 0.03 },
+        100,
+        200,
+        50,
+        30,
+      );
+      const expected = 100 * 0.02 + 50 * 0.02 * 0.1 + 30 * 0.02 * 1.25 + 200 * 0.03;
+      expect(cost).toBeCloseTo(expected, 6);
     });
 
     it('should use long-context tier when cache tokens push past 200k', () => {
@@ -259,6 +357,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -285,6 +384,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -314,6 +414,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -355,6 +456,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -393,6 +495,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -437,6 +540,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -471,6 +575,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -507,6 +612,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -540,6 +646,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -573,6 +680,7 @@ describe('Anthropic utilities', () => {
         id: '',
         model: '',
         role: 'assistant',
+        stop_details: null,
         stop_reason: null,
         stop_sequence: null,
         type: 'message',
@@ -1420,6 +1528,102 @@ describe('Anthropic utilities', () => {
       const data = { usage: { input_tokens: 100, output_tokens: 50 } };
       const result = getTokenUsage(data, false);
       expect(result.completionDetails).toBeUndefined();
+    });
+  });
+
+  describe('getRefusalDetails', () => {
+    it('should return undefined for non-refusal responses', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hello' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'end_turn',
+        stop_details: null,
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as unknown as Anthropic.Messages.Message;
+      expect(getRefusalDetails(message)).toBeUndefined();
+    });
+
+    it('should return details for refusal with category and explanation', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'cyber',
+          explanation: 'This request involves prohibited cyber activities',
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      const result = getRefusalDetails(message);
+      expect(result).toContain('Content refused by Anthropic safety filters');
+      expect(result).toContain('category: cyber');
+      expect(result).toContain('explanation: This request involves prohibited cyber activities');
+    });
+
+    it('should handle refusal with null category and explanation', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: null,
+          explanation: null,
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      const result = getRefusalDetails(message);
+      expect(result).toBe('Content refused by Anthropic safety filters');
+    });
+
+    it('should handle refusal with bio category', () => {
+      const message = {
+        id: 'msg_1',
+        type: 'message',
+        role: 'assistant',
+        content: [{ type: 'text', text: '' }],
+        model: 'claude-sonnet-4-6',
+        stop_reason: 'refusal',
+        stop_details: {
+          type: 'refusal',
+          category: 'bio',
+          explanation: null,
+        },
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 0 },
+      } as unknown as Anthropic.Messages.Message;
+      const result = getRefusalDetails(message);
+      expect(result).toContain('category: bio');
+    });
+  });
+
+  describe('calculateAnthropicCost for claude-mythos-preview', () => {
+    it('should calculate cost for claude-mythos-preview', () => {
+      const cost = calculateAnthropicCost('claude-mythos-preview', {}, 1000, 500);
+      // $25/MTok input, $125/MTok output
+      expect(cost).toBeCloseTo(0.025 + 0.0625, 6); // 0.000025 * 1000 + 0.000125 * 500
+    });
+
+    it('should calculate cost with cache tokens for claude-mythos-preview', () => {
+      const cost = calculateAnthropicCost('claude-mythos-preview', {}, 1000, 500, 200, 100);
+      // uncached: 1000 * 25/1e6 = 0.025
+      // cache read: 200 * 25/1e6 * 0.1 = 0.0005
+      // cache creation: 100 * 25/1e6 * 1.25 = 0.003125
+      // output: 500 * 125/1e6 = 0.0625
+      expect(cost).toBeCloseTo(0.025 + 0.0005 + 0.003125 + 0.0625, 6);
     });
   });
 });

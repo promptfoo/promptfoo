@@ -15,6 +15,7 @@ import {
   getTraceparent,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { providerRegistry } from '../providerRegistry';
 
@@ -61,7 +62,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh'
+ * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
+ *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.4: 'minimal', 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
@@ -194,7 +196,7 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
    */
   model?: string;
 
@@ -437,8 +439,8 @@ async function loadCodexSDK(): Promise<any> {
 // See: https://openai.com/pricing
 const CODEX_MODEL_PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
   // GPT-5.5 models
-  // Cached-input pricing was not published at launch, so charge cached tokens at standard input.
-  'gpt-5.5': { input: 5.0, output: 30.0, cache_read: 5.0 },
+  'gpt-5.5': { input: 5.0, output: 30.0, cache_read: 0.5 },
+  // gpt-5.5-pro does not have discounted cached-input pricing.
   'gpt-5.5-pro': { input: 30.0, output: 180.0, cache_read: 30.0 },
   // GPT-5.4 models
   'gpt-5.4': { input: 2.5, output: 15.0, cache_read: 0.25 },
@@ -1310,9 +1312,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     conversationMessages: Array<{ role: string; content: string }>;
   } {
     const agentMessages = state.items.filter((item) => item.type === 'agent_message');
+    const finalAgentMessage = [...agentMessages]
+      .reverse()
+      .find((item) => typeof item.text === 'string');
     return {
-      finalResponse:
-        agentMessages.length > 0 ? agentMessages.map((item) => item.text).join('\n') : '',
+      finalResponse: finalAgentMessage?.text ?? '',
       items: state.items,
       usage: state.usage,
       reasoningTexts: state.reasoningTexts,
@@ -1815,10 +1819,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Merge configs (prompt config takes precedence)
-    const config: OpenAICodexSDKConfig = {
+    const mergedConfig: OpenAICodexSDKConfig = {
       ...this.config,
       ...context?.prompt?.config,
     };
+    const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
 
     const requestedModel =
       typeof config.model === 'string' && config.model ? config.model : undefined;

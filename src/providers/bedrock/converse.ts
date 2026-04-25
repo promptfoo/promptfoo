@@ -26,6 +26,7 @@ import {
 } from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { isClaudeOpus47Model } from '../anthropic/util';
 import {
   isOpenAIToolArray,
   isOpenAIToolChoice,
@@ -136,6 +137,8 @@ export interface BedrockConverseToolConfig {
  * Prices as of 2025 - may need updates
  */
 const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }> = {
+  // Claude Opus 4.7
+  'anthropic.claude-opus-4-7': { input: 5, output: 25 },
   // Claude Opus 4.6
   'anthropic.claude-opus-4-6': { input: 5, output: 25 },
   // Claude Opus 4.5
@@ -292,9 +295,18 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
  * Convert tool choice to Converse API format.
  * Supports OpenAI tool choice format and native Bedrock format.
  */
-function convertToolChoiceToConverseFormat(
-  toolChoice: 'auto' | 'any' | { tool: { name: string } } | unknown,
-): ToolChoice | undefined {
+function isNamedConverseToolChoice(toolChoice: unknown): toolChoice is { tool: { name: string } } {
+  if (!toolChoice || typeof toolChoice !== 'object' || !('tool' in toolChoice)) {
+    return false;
+  }
+
+  const tool = (toolChoice as { tool?: unknown }).tool;
+  return Boolean(
+    tool && typeof tool === 'object' && typeof (tool as { name?: unknown }).name === 'string',
+  );
+}
+
+function convertToolChoiceToConverseFormat(toolChoice: unknown): ToolChoice | undefined {
   // Handle OpenAI tool choice format (strings 'auto'/'none'/'required' and object form)
   if (isOpenAIToolChoice(toolChoice)) {
     return openaiToolChoiceToBedrock(toolChoice);
@@ -304,9 +316,8 @@ function convertToolChoiceToConverseFormat(
   if (toolChoice === 'any') {
     return { any: {} };
   }
-  if (typeof toolChoice === 'object' && toolChoice && 'tool' in toolChoice) {
-    const tc = toolChoice as { tool: { name: string } };
-    return { tool: { name: tc.tool.name } };
+  if (isNamedConverseToolChoice(toolChoice)) {
+    return { tool: { name: toolChoice.tool.name } };
   }
   return { auto: {} };
 }
@@ -797,7 +808,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // - maxTokens: only include if NOT (reasoning enabled AND high effort)
     // - temperature/topP: only include if reasoning is NOT enabled
     const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
-    const temperature = reasoningEnabled ? undefined : temperatureValue;
+    // Claude Opus 4.7 deprecates `temperature` at the model level — any request
+    // that includes it on Bedrock returns ValidationException. Drop the value
+    // regardless of where it came from (config or AWS_BEDROCK_TEMPERATURE).
+    const isOpus47 = isClaudeOpus47Model(this.modelName);
+    const temperature = reasoningEnabled || isOpus47 ? undefined : temperatureValue;
     const topP = reasoningEnabled ? undefined : topPValue;
 
     // Only return config if at least one field is set

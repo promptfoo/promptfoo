@@ -55,7 +55,15 @@ vi.mock('./PluginConfigDialog', () => ({
 
 vi.mock('./TestCaseDialog', () => ({
   TestCaseDialog: () => <div data-testid="test-case-dialog" />,
-  TestCaseGenerateButton: ({ children, ...props }: React.ComponentProps<'button'>) => (
+  TestCaseGenerateButton: ({
+    children,
+    isGenerating: _isGenerating,
+    tooltipTitle: _tooltipTitle,
+    ...props
+  }: React.ComponentProps<'button'> & {
+    isGenerating?: boolean;
+    tooltipTitle?: string;
+  }) => (
     <button type="button" {...props}>
       {children ?? 'Generate test case'}
     </button>

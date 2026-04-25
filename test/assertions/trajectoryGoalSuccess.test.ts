@@ -1,23 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleTrajectoryGoalSuccess } from '../../src/assertions/trajectory';
-import { matchesTrajectoryGoalSuccess } from '../../src/matchers';
+import { matchesTrajectoryGoalSuccess } from '../../src/matchers/llmGrading';
+import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type {
-  ApiProvider,
-  AssertionParams,
-  AtomicTestCase,
-  GradingResult,
-} from '../../src/types/index';
+import type { AssertionParams, AtomicTestCase, GradingResult } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
 
-vi.mock('../../src/matchers', () => ({
+vi.mock('../../src/matchers/llmGrading', () => ({
   matchesTrajectoryGoalSuccess: vi.fn(),
 }));
 
-const mockProvider: ApiProvider = {
-  id: () => 'mock',
-  callApi: async () => ({ output: 'mock' }),
-};
+const mockProvider = createMockProvider({
+  id: 'mock',
+  response: createProviderResponse({ output: 'mock' }),
+});
 
 const mockTraceData: TraceData = {
   traceId: 'test-trace-id',

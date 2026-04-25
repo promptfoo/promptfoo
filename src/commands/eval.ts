@@ -11,7 +11,11 @@ import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
-import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
+import {
+  checkEmailStatusAndMaybeExit,
+  getAuthor,
+  promptForEmailUnverified,
+} from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
@@ -39,6 +43,7 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 import { isUuid } from '../util/uuid';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import { warnIfRedteamConfigHasNoTests } from './eval/redteamWarning';
 import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
@@ -301,24 +306,12 @@ export async function doEval(
     }
 
     // Phase 2: Load environment from config files if not already set via CLI
-    if (!cmdObj.envPath && commandLineOptions?.envPath) {
+    if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
       setupEnv(commandLineOptions.envPath);
     }
 
-    // Check if config has redteam section but no test cases
-    if (
-      config.redteam &&
-      (!testSuite.tests || testSuite.tests.length === 0) &&
-      (!testSuite.scenarios || testSuite.scenarios.length === 0)
-    ) {
-      logger.warn(
-        chalk.yellow(dedent`
-        Warning: Config file has a redteam section but no test cases.
-        Did you mean to run ${chalk.bold('promptfoo redteam generate')} instead?
-        `),
-      );
-    }
+    warnIfRedteamConfigHasNoTests(config, testSuite);
 
     // TODO(faizan): Crazy condition to see when we run the example redteam config.
     // Remove this once we have a better way to track this.
@@ -376,7 +369,7 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
-    if (cache === false || repeat > 1) {
+    if (cache === false) {
       logger.info('Cache is disabled.');
       disableCache();
     }
@@ -532,11 +525,12 @@ export async function doEval(
     }
 
     // Create or load eval record
+    const author = getAuthor();
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { runtimeOptions: options })
-        : new Eval(config, { runtimeOptions: options });
+        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions: options })
+        : new Eval(config, { author, runtimeOptions: options });
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();

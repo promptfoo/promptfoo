@@ -18,6 +18,7 @@ import { type Strategy as StrategyFactory } from '../../redteam/strategies/types
 import { TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { sanitizeObject } from '../../util/sanitizer';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
@@ -362,13 +363,11 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 
   const { taskId } = paramsResult.data;
   const cloudFunctionUrl = getRemoteGenerationUrl();
-  logger.debug(
-    `Received ${taskId} task request: ${JSON.stringify({
-      method: req.method,
-      url: req.url,
-      body: req.body,
-    })}`,
-  );
+  logger.debug(`Received ${taskId} task request`, {
+    method: req.method,
+    url: req.url,
+    body: sanitizeObject(bodyResult.data, { context: 'request body' }),
+  });
 
   try {
     logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);

@@ -59,15 +59,15 @@ export function calculateGoogleCost(
   // Check for tiered pricing (higher rates above token threshold)
   if (promptTokens != null && completionTokens != null) {
     if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      const inputCost = config.cost ?? model.tieredCost.above.input;
-      const outputCost = config.cost ?? model.tieredCost.above.output;
+      const inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
+      const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
       return inputCost * promptTokens + outputCost * completionTokens;
     }
 
     // Use Vertex-specific pricing when available
     if (isVertexMode && model?.vertexCost) {
-      const inputCost = config.cost ?? model.vertexCost.input;
-      const outputCost = config.cost ?? model.vertexCost.output;
+      const inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
+      const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
       return inputCost * promptTokens + outputCost * completionTokens;
     }
   }
@@ -763,7 +763,7 @@ function processImagesInContents(
  * @param contextVars - Variables for Nunjucks template rendering
  * @returns Processed Content object or undefined
  */
-function parseConfigSystemInstruction(
+export function parseConfigSystemInstruction(
   configSystemInstruction: Content | string | undefined,
   contextVars?: Record<string, VarValue>,
 ): Content | undefined {

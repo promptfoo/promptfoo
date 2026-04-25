@@ -25,26 +25,49 @@ Example of setting the environment variable:
 export ANTHROPIC_API_KEY=your_api_key_here
 ```
 
+### Authenticating via a Claude Code session
+
+If you already have an active Claude Code session (for example as a Claude Pro or Max subscriber), you can reuse its OAuth credential instead of creating a separate Anthropic Console API key. Set `apiKeyRequired: false` on the provider config:
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-sonnet-4-6
+    config:
+      apiKeyRequired: false
+```
+
+When `apiKeyRequired` is `false` and no `ANTHROPIC_API_KEY` is available, Promptfoo loads the Claude Code OAuth credential from:
+
+1. The macOS keychain entry `Claude Code-credentials` (darwin only), then
+2. `$HOME/.claude/.credentials.json` on Linux and macOS, or `%USERPROFILE%\.claude\.credentials.json` on Windows.
+
+Promptfoo authenticates requests with a Bearer token, sends the `claude-code-20250219,oauth-2025-04-20` beta headers, and prepends the required Claude Code identity system block (`"You are Claude Code, Anthropic's official CLI for Claude."`) to every Messages request. Your own system prompt is still forwarded as the next system block.
+
+If you haven't logged in yet, run `claude /login` to create a credential. Re-run it if Promptfoo warns that the credential has expired. Requests made this way are expected to count against your Claude subscription the same way calls from the Claude Code CLI do — check [Anthropic's documentation](https://docs.claude.com/en/docs/claude-code/overview) for current billing behavior.
+
+This also enables [model-graded assertions](#model-graded-tests) such as `llm-rubric` to run without a separate Anthropic Console key — see [the example below](#model-graded-tests).
+
 ## Models
 
 The `anthropic` provider supports the following models via the messages API:
 
-| Model ID                                                                   | Description                      |
-| -------------------------------------------------------------------------- | -------------------------------- |
-| `anthropic:messages:claude-sonnet-4-6`                                     | Latest Claude 4.6 Sonnet model   |
-| `anthropic:messages:claude-opus-4-6`                                       | Latest Claude 4.6 Opus model     |
-| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus model            |
-| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus model            |
-| `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Latest Claude 4 Opus model       |
-| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Latest Claude 4.5 Sonnet model   |
-| `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Latest Claude 4 Sonnet model     |
-| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Latest Claude 4.5 Haiku model    |
-| `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Latest Claude 3.7 Sonnet model   |
-| `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Latest Claude 3.5 Sonnet model   |
-| `anthropic:messages:claude-3-5-sonnet-20240620`                            | Previous Claude 3.5 Sonnet model |
-| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Latest Claude 3.5 Haiku model    |
-| `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus model              |
-| `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku model             |
+| Model ID                                                                   | Description            |
+| -------------------------------------------------------------------------- | ---------------------- |
+| `anthropic:messages:claude-opus-4-7`                                       | Claude 4.7 Opus        |
+| `anthropic:messages:claude-sonnet-4-6`                                     | Claude 4.6 Sonnet      |
+| `anthropic:messages:claude-opus-4-6`                                       | Claude 4.6 Opus        |
+| `anthropic:messages:claude-opus-4-5-20251101` (claude-opus-4-5-latest)     | Claude 4.5 Opus        |
+| `anthropic:messages:claude-opus-4-1-20250805` (claude-opus-4-1-latest)     | Claude 4.1 Opus        |
+| `anthropic:messages:claude-opus-4-20250514` (claude-opus-4-latest)         | Claude 4 Opus          |
+| `anthropic:messages:claude-sonnet-4-5-20250929` (claude-sonnet-4-5-latest) | Claude 4.5 Sonnet      |
+| `anthropic:messages:claude-sonnet-4-20250514` (claude-sonnet-4-latest)     | Claude 4 Sonnet        |
+| `anthropic:messages:claude-haiku-4-5-20251001` (claude-haiku-4-5-latest)   | Claude 4.5 Haiku       |
+| `anthropic:messages:claude-3-7-sonnet-20250219` (claude-3-7-sonnet-latest) | Claude 3.7 Sonnet      |
+| `anthropic:messages:claude-3-5-sonnet-20241022` (claude-3-5-sonnet-latest) | Claude 3.5 Sonnet (v2) |
+| `anthropic:messages:claude-3-5-sonnet-20240620`                            | Claude 3.5 Sonnet (v1) |
+| `anthropic:messages:claude-3-5-haiku-20241022` (claude-3-5-haiku-latest)   | Claude 3.5 Haiku       |
+| `anthropic:messages:claude-3-opus-20240229` (claude-3-opus-latest)         | Claude 3 Opus          |
+| `anthropic:messages:claude-3-haiku-20240307`                               | Claude 3 Haiku         |
 
 ### Cross-Platform Model Availability
 
@@ -52,6 +75,7 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                         | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
+| Claude 4.7 Opus   | claude-opus-4-7                                       | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
 | Claude 4.6 Sonnet | claude-sonnet-4-6                                     | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
 | Claude 4.6 Opus   | claude-opus-4-6                                       | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
 | Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5-latest)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
@@ -71,6 +95,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | Config Property | Environment Variable  | Description                                                                         |
 | --------------- | --------------------- | ----------------------------------------------------------------------------------- |
 | apiKey          | ANTHROPIC_API_KEY     | Your API key from Anthropic                                                         |
+| apiKeyRequired  | -                     | Skip the API key preflight and authenticate via a local Claude Code session         |
 | apiBaseUrl      | ANTHROPIC_BASE_URL    | The base URL for requests to the Anthropic API                                      |
 | temperature     | ANTHROPIC_TEMPERATURE | Controls the randomness of the output (default: 0). Omitted when `top_p` is set.    |
 | max_tokens      | ANTHROPIC_MAX_TOKENS  | The maximum length of the generated text (default: 1024)                            |
@@ -83,7 +108,7 @@ Claude models are available across multiple platforms. Here's how the model name
 | stream          | -                     | Enable streaming (required when `max_tokens` > 21,333)                              |
 | tools           | -                     | An array of tool or function definitions for the model to call                      |
 | tool_choice     | -                     | An object specifying the tool to call                                               |
-| effort          | -                     | Output effort level: `low`, `medium`, `high`, or `max`                              |
+| effort          | -                     | Output effort level: `low`, `medium`, `high`, `xhigh`, or `max`                     |
 | output_format   | -                     | JSON schema configuration for structured outputs                                    |
 | thinking        | -                     | Configuration for Claude's extended thinking (`enabled`, `adaptive`, or `disabled`) |
 | showThinking    | -                     | Whether to include thinking content in the output (default: true)                   |
@@ -425,14 +450,25 @@ tests:
       pdf_base64: file://document.pdf
 ```
 
+### Claude Opus 4.7 notes
+
+Opus 4.7 is designed around adaptive thinking and runs with the reasoning stack always on. Promptfoo handles the key differences from earlier Opus models automatically:
+
+- **Temperature is managed for you.** Opus 4.7 samples adaptively and does not accept `temperature`; promptfoo omits the field from every request. Passing `temperature` in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the value out of your eval.
+- **Adaptive thinking is the default.** Use `thinking: { type: 'adaptive' }` (or leave `thinking` unset) to let the model choose how much to reason per request. Budget-based modes from older models aren't used on 4.7.
+- **`xhigh` effort level is available.** It sits between `high` and `max` and is a good starting point for coding and agentic tasks. See the [Effort Level](#effort-level) section.
+- **Updated tokenizer.** The same input can map to 1.0–1.35× more tokens than Opus 4.6, so measure real traffic if you're comparing costs.
+
+The same guidance applies when you reach Opus 4.7 through AWS Bedrock, GCP Vertex, or Azure AI Foundry — promptfoo suppresses `temperature` on each of those paths as well.
+
 ### Extended Thinking
 
 Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  # Adaptive thinking (recommended for Claude Opus 4.6)
-  - id: anthropic:messages:claude-opus-4-6
+  # Adaptive thinking (recommended for Claude Opus 4.7)
+  - id: anthropic:messages:claude-opus-4-7
     config:
       max_tokens: 20000
       thinking:
@@ -449,14 +485,14 @@ providers:
 
 The thinking configuration has three possible values:
 
-1. Adaptive thinking (recommended for Claude Opus 4.6):
+1. Adaptive thinking (recommended for Claude Opus 4.7):
 
 ```yaml
 thinking:
   type: 'adaptive'
 ```
 
-In adaptive mode, Claude decides when and how much to think based on the complexity of the request. This is the recommended mode for `claude-opus-4-6`.
+In adaptive mode, Claude decides when and how much to think based on the complexity of the request. This is the recommended mode for `claude-opus-4-7`.
 
 2. Enabled thinking:
 
@@ -582,16 +618,18 @@ The `effort` parameter controls the output quality/speed tradeoff. Higher effort
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-opus-4-6
+  - id: anthropic:messages:claude-opus-4-7
     config:
-      effort: low # Options: low, medium, high, max
+      effort: xhigh # Options: low, medium, high, xhigh, max
 ```
+
+Claude Opus 4.7 introduces the `xhigh` level between `high` and `max`, giving finer control over reasoning/latency on hard problems. For coding and agentic use cases, Anthropic recommends starting with `high` or `xhigh`.
 
 This can be combined with other features like structured outputs:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-opus-4-6
+  - id: anthropic:messages:claude-opus-4-7
     config:
       effort: high
       output_format:
@@ -608,7 +646,7 @@ providers:
 
 ### Structured Outputs
 
-Structured outputs constrain Claude's responses to a JSON schema. Available for Claude Sonnet 4.5 and Claude Opus 4.1.
+Structured outputs constrain Claude's responses to a JSON schema. Supported on Claude Opus 4.7, Opus 4.6, Sonnet 4.6, and Sonnet 4.5+ / Opus 4.1+.
 
 #### JSON Outputs
 
@@ -693,6 +731,19 @@ See [Anthropic's guide](https://docs.anthropic.com/en/docs/build-with-claude/str
 
 If both API keys are present, OpenAI will be used by default. You can explicitly override the grading provider in your configuration.
 
+Claude Pro/Max subscribers without a separate Anthropic Console key can wire up `llm-rubric` through a local Claude Code session by pointing the grader at `anthropic:messages:<model>` with `apiKeyRequired: false`:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: anthropic:messages:claude-sonnet-4-6
+      config:
+        apiKeyRequired: false
+```
+
+See [Authenticating via a Claude Code session](#authenticating-via-a-claude-code-session) above for how the credential is loaded and what beta headers Promptfoo sets.
+
 Because of how model-graded evals are implemented, **the model must support chat-formatted prompts** (except for embedding or classification models).
 
 You can override the grading provider in several ways:
@@ -751,7 +802,7 @@ We provide several example implementations demonstrating Claude's capabilities:
 
 #### Model Comparisons & Evaluations
 
-- [Claude vs GPT](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-claude-vs-gpt) - Compares Claude with GPT-4 on various tasks
+- [Claude vs GPT](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-claude-vs-gpt) - Compares Claude with GPT-5.4 on various tasks
 - [Claude vs GPT Image Analysis](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-claude-vs-gpt-image) - Compares Claude's and GPT's image analysis capabilities
 
 #### Cloud Platform Integrations

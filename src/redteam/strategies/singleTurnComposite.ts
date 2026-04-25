@@ -5,9 +5,14 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
+import type { Inputs } from '../../types/shared';
 
 async function generateCompositePrompts(
   testCases: TestCase[],
@@ -40,7 +45,7 @@ async function generateCompositePrompts(
       );
 
       // Get inputs schema from plugin config for multi-input mode
-      const inputs = testCase.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
+      const inputs = testCase.metadata?.pluginConfig?.inputs as Inputs | undefined;
 
       const payload = {
         task: 'jailbreak:composite',
@@ -141,7 +146,7 @@ export async function addCompositeTestCases(
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
   if (neverGenerateRemote()) {
-    throw new Error('Composite jailbreak strategy requires remote generation to be enabled');
+    throw new Error(getRemoteGenerationExplicitlyDisabledError('Composite jailbreak strategy'));
   }
 
   const compositeTestCases = await generateCompositePrompts(testCases, injectVar, config);

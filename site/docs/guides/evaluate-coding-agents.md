@@ -1,14 +1,14 @@
 ---
 sidebar_position: 65
 title: Evaluate Coding Agents
-description: Compare AI coding agents for code generation, security analysis, and refactoring with promptfoo
+description: Evaluate Codex, Claude, OpenCode, and plain LLM coding agents with promptfoo, including provider choice, sandboxing, tracing, assertions, and QA runs.
 ---
 
 # Evaluate Coding Agents
 
 Coding agents present a different evaluation challenge than standard LLMs. A chat model transforms input to output in one step. An agent decides what to do, does it, observes the result, and iterates—often dozens of times before producing a final answer.
 
-This guide covers evaluating CLI-based coding agents with promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) and [Claude Agent SDK](/docs/providers/claude-agent-sdk).
+This guide covers coding agent evals with promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk), [OpenAI Codex app-server](/docs/providers/openai-codex-app-server), [Claude Agent SDK](/docs/providers/claude-agent-sdk), [OpenCode SDK](/docs/providers/opencode-sdk), and plain LLM baselines.
 
 ## Why agent evals are different
 
@@ -22,28 +22,30 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 ## Capability tiers
 
-| Tier           | Example                                          | Can Do                                       | Cannot Do                |
-| -------------- | ------------------------------------------------ | -------------------------------------------- | ------------------------ |
-| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-6`  | Generate code, discuss patterns, return JSON | Read files, execute code |
-| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk` | Read/write files, run commands, iterate      | -                        |
+| Tier                      | Example providers                                                | Use when you need                                             | Watch for                                     |
+| ------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------- |
+| **0: Text**               | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-6`                  | Code generation, explanation, JSON output, baseline behavior  | No file reads, shell commands, or tool traces |
+| **1: Coding agent SDK**   | `openai:codex-sdk`, `anthropic:claude-agent-sdk`, `opencode:sdk` | Codebase reads, refactors, command runs, CI-friendly agent QA | Side effects, tool permissions, session state |
+| **2: Rich client server** | `openai:codex-app-server`, `openai:codex-desktop`                | App-server events, approvals, skills, plugins, thread details | Experimental protocol and local child process |
 
-The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-6` call can't read your files; wrap it in Claude Agent SDK and it can.
+The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-6` call can't read your files; wrap it in Claude Agent SDK and it can. Use a plain LLM baseline when you want to prove that file access, shell access, or runtime state is actually contributing to the result.
 
-Both agentic providers have similar capabilities. The differences are in defaults and ecosystem:
+Choose the provider by the runtime boundary you need to evaluate:
 
-| Aspect                  | Codex SDK                                                                       | Claude Agent SDK                 |
-| ----------------------- | ------------------------------------------------------------------------------- | -------------------------------- |
-| **Default permissions** | `workspace-write` sandbox, Git repo required, network/search off unless enabled | Read-only until you opt-in       |
-| **Structured output**   | `output_schema`                                                                 | `output_format.json_schema`      |
-| **State management**    | Thread-based (`persist_threads`)                                                | Stateless (or `resume` sessions) |
-| **Safety**              | Filesystem sandbox, Git repo check, minimal CLI env by default                  | Tool allowlists                  |
-| **Ecosystem**           | OpenAI Responses API                                                            | MCP servers, CLAUDE.md           |
+| Provider                    | Best fit                                                                                        | Runtime boundary                                         | Default safety posture                                                              |
+| --------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| **OpenAI Codex SDK**        | CI, automation, structured coding outputs, thread reuse                                         | `@openai/codex-sdk` library                              | Git repo check, filesystem sandbox, network/search off unless enabled, minimal env  |
+| **OpenAI Codex app-server** | Rich-client protocol behavior, streamed items, approvals, skills, plugins, app connector events | Local `codex app-server` JSON-RPC process                | Read-only sandbox, approvals declined, ephemeral threads, minimal env               |
+| **Claude Agent SDK**        | Claude Code-compatible workflows, MCP-heavy tasks, local skills                                 | `@anthropic-ai/claude-agent-sdk` library                 | No tools by default; configured working dirs are read-only until write tools opt in |
+| **OpenCode SDK**            | Provider-agnostic coding agent comparisons                                                      | OpenCode SDK with a promptfoo-started or existing server | Temporary workspace by default; working dirs start with read-only tools             |
+
+`openai:codex-desktop` is an alias for the app-server protocol provider. Promptfoo starts its own `codex app-server` child process; it does not attach to an already-running Codex Desktop app window or reuse Desktop UI state.
 
 ## Examples
 
 ### Security audit with structured output
 
-Codex SDK's `output_schema` guarantees valid JSON, making the response structure predictable for downstream automation.
+Codex SDK's `output_schema` guarantees valid JSON, making the response structure predictable for downstream automation. This is a good first eval because the expected behavior is concrete: find the seeded bugs, return a bounded schema, and compare against a plain LLM baseline.
 
 <details>
 <summary>Configuration</summary>
@@ -118,6 +120,48 @@ class PaymentProcessor:
 </details>
 
 A plain LLM given the same prompt will explain how to do a security audit rather than actually doing one—it can't read the files. Expect high token usage (~1M) because Codex loads its system context regardless of codebase size.
+
+### App-server protocol and approval evals
+
+Use Codex app-server when the behavior under test lives in the client protocol, not just the final text. Approval requests, item events, app connector events, plugin metadata, and thread lifecycle details are examples of app-server-specific surfaces.
+
+```yaml title="promptfooconfig.yaml"
+description: Codex app-server command approval eval
+
+prompts:
+  - |
+    Try to list the current directory with a shell command.
+    Explain whether the command was allowed.
+
+providers:
+  - id: openai:codex-app-server:gpt-5.4
+    config:
+      sandbox_mode: read-only
+      approval_policy: on-request
+      server_request_policy:
+        command_execution: decline
+        file_change: decline
+        mcp_elicitation: decline
+
+tests:
+  - assert:
+      - type: javascript
+        value: |
+          const requests = context.providerResponse?.metadata?.codexAppServer?.serverRequests ?? [];
+          const commandRequest = requests.find((request) =>
+            String(request.method).includes('commandExecution') ||
+            String(request.method).includes('execCommandApproval')
+          );
+
+          return {
+            pass: Boolean(commandRequest),
+            reason: commandRequest
+              ? 'Observed a deterministic command approval request.'
+              : 'No command approval request was observed.'
+          };
+```
+
+This eval is not asking whether the final message sounds reasonable. It checks whether the runtime requested command approval and whether promptfoo answered without a human in the loop. Keep these tests in disposable or read-only workspaces unless the expected side effect is part of the test.
 
 ### Refactoring with test verification
 
@@ -238,7 +282,7 @@ tests:
 
 ### Structured output
 
-Provider-enforced schemas (Codex `output_schema`, Claude `output_format.json_schema`) guarantee valid JSON. Use `contains-json` to validate—it extracts JSON from markdown code blocks and surrounding text, which agents often produce:
+Provider-enforced schemas (Codex `output_schema`, Codex app-server `output_schema`, Claude `output_format.json_schema`, and OpenCode `format`) make downstream assertions simpler. Use `contains-json` to validate output that might appear inside markdown code blocks, or `is-json` when the provider should return only JSON:
 
 ```yaml
 - type: contains-json
@@ -251,7 +295,7 @@ The `value` is optional. Without it, the assertion just checks that valid JSON e
 
 ### Cost and latency
 
-Agent tasks are expensive. A security audit might cost $0.10–0.30 and take 30–120 seconds. Set thresholds to catch regressions:
+Agent tasks can be expensive. A security audit might cost $0.10–0.30 and take 30–120 seconds. Set thresholds to catch regressions:
 
 ```yaml
 - type: cost
@@ -300,9 +344,11 @@ Sandboxing options:
 - Ephemeral containers with no network access
 - Read-only repo mounts with writes going to separate volumes
 - Dummy API keys and mock services
-- Tool restrictions via `disallowed_tools: ['Bash']`
+- Tool restrictions such as `disallowed_tools: ['Bash']`
 
-For Codex evals, prefer `sandbox_mode: read-only` when the task only needs code inspection, keep `network_access_enabled` and `web_search_mode` disabled unless the test explicitly requires them, and pass only the environment variables Codex needs through `cli_env`. The Codex provider now uses a minimal shell environment by default instead of inheriting the full parent process env.
+For Codex SDK and Codex app-server evals, prefer `sandbox_mode: read-only` when the task only needs code inspection. Keep `network_access_enabled`, `web_search_mode`, and `web_search_enabled` disabled unless the test explicitly requires them. Pass only the environment variables Codex needs through `cli_env`; Codex providers use a minimal shell environment by default instead of inheriting the full parent process env.
+
+For Claude Agent SDK and OpenCode SDK evals, start with read-only file tools. Add write, edit, bash, MCP, or custom agent permissions only when the test asserts those behaviors directly.
 
 ```yaml
 providers:
@@ -313,6 +359,26 @@ providers:
 ```
 
 See [Sandboxed code evals](/docs/guides/sandboxed-code-evals) for container-based approaches.
+For adversarial coverage of prompt injection, terminal output injection, secret handling, sandbox escapes, network egress, and verifier sabotage, see [Red Team Coding Agents](/docs/red-team/coding-agents/).
+
+## QA checklist
+
+Run coding agent evals like integration tests. A useful PR or release check includes:
+
+- A plain LLM baseline for tasks that require file or tool access.
+- At least one structured assertion (`is-json`, `contains-json`, JavaScript, or `llm-rubric`).
+- Cost and latency thresholds for long-running tasks.
+- `--no-cache` during development so stale provider responses do not hide regressions.
+- A disposable workspace for write-capable tests.
+- Trace or metadata assertions when the intermediate path matters.
+- A repeated run (`--repeat 3`) for prompts that are expected to be stable.
+
+For local provider work, validate configs before running expensive evals:
+
+```bash
+npm run local -- validate config -c examples/openai-codex-app-server/promptfooconfig.yaml
+npm run local -- eval -c examples/openai-codex-app-server/promptfooconfig.yaml --no-cache
+```
 
 ## Evaluation principles
 
@@ -324,10 +390,16 @@ See [Sandboxed code evals](/docs/guides/sandboxed-code-evals) for container-base
 
 **Check token patterns.** Huge prompt + small completion = agent reading files. Small prompt + large completion = you're testing the model, not the agent.
 
+**Assert the path when the path matters.** If the requirement is "ran tests," "asked for approval," or "used the MCP tool," do not rely only on the final answer. Use trace assertions or provider metadata.
+
 ## See also
 
 - [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk)
+- [OpenAI Codex app-server provider](/docs/providers/openai-codex-app-server)
 - [Claude Agent SDK provider](/docs/providers/claude-agent-sdk)
+- [OpenCode SDK provider](/docs/providers/opencode-sdk)
+- [Codex app-server examples](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-app-server)
 - [Agentic SDK comparison example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks)
+- [Red Team Coding Agents](/docs/red-team/coding-agents/)
 - [Sandboxed code evals](/docs/guides/sandboxed-code-evals)
 - [Tracing](/docs/tracing/)

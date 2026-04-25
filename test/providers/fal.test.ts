@@ -395,6 +395,166 @@ describe('Fal Provider', () => {
         );
       });
 
+      it('should hash prompt and config values in cache keys', async () => {
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
+          return true;
+        });
+        const mockCache = {
+          get: vi.fn().mockResolvedValue(null),
+          set: vi.fn(),
+          wrap: vi.fn(),
+          del: vi.fn(),
+          clear: vi.fn(),
+          stores: [
+            {
+              get: vi.fn(),
+              set: vi.fn(),
+            },
+          ] as any,
+          mget: vi.fn(),
+          mset: vi.fn(),
+          mdel: vi.fn(),
+          reset: vi.fn(),
+          ttl: vi.fn(),
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
+        };
+        vi.mocked(getCache).mockReturnValue(mockCache as any);
+
+        mockSubscribe.mockResolvedValueOnce({
+          data: {
+            images: [{ url: 'https://example.com/image.png' }],
+          },
+          requestId: 'test-request-id',
+        });
+
+        const prompt = 'PFQA_FAL_PROMPT_SENTINEL';
+        const contextSecret = 'PFQA_FAL_CONFIG_SECRET_SENTINEL';
+        const result = await provider.callApi(prompt, {
+          prompt: {
+            raw: prompt,
+            label: 'test',
+            config: {
+              negative_prompt: contextSecret,
+            },
+          },
+          vars: {},
+        });
+
+        expect(result.cached).toBe(false);
+        const cacheKey = mockCache.get.mock.calls[0]?.[0] as string;
+        expect(cacheKey).toMatch(
+          /^fal:fal-ai\/flux\/schnell:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+        );
+        expect(cacheKey).not.toContain(prompt);
+        expect(cacheKey).not.toContain(contextSecret);
+        expect(mockCache.set).toHaveBeenCalledWith(
+          cacheKey,
+          JSON.stringify(`![${prompt}](https://example.com/image.png)`),
+        );
+      });
+
+      it('should not expose API key values in hashed cache keys', async () => {
+        vi.mocked(isCacheEnabled).mockImplementation(function () {
+          return true;
+        });
+        const mockCache = {
+          get: vi.fn().mockResolvedValue(null),
+          set: vi.fn(),
+          wrap: vi.fn(),
+          del: vi.fn(),
+          clear: vi.fn(),
+          stores: [
+            {
+              get: vi.fn(),
+              set: vi.fn(),
+            },
+          ] as any,
+          mget: vi.fn(),
+          mset: vi.fn(),
+          mdel: vi.fn(),
+          reset: vi.fn(),
+          ttl: vi.fn(),
+          on: vi.fn(),
+          removeAllListeners: vi.fn(),
+        };
+        vi.mocked(getCache).mockReturnValue(mockCache as any);
+        mockSubscribe
+          .mockResolvedValueOnce({
+            data: {
+              images: [{ url: 'https://example.com/tenant-a.png' }],
+            },
+            requestId: 'tenant-a-request-id',
+          })
+          .mockResolvedValueOnce({
+            data: {
+              images: [{ url: 'https://example.com/tenant-b.png' }],
+            },
+            requestId: 'tenant-b-request-id',
+          });
+
+        const providerA = new FalImageGenerationProvider('fal-ai/flux/schnell', {
+          config: { apiKey: 'fal-tenant-a-secret' },
+        });
+        const providerB = new FalImageGenerationProvider('fal-ai/flux/schnell', {
+          config: { apiKey: 'fal-tenant-b-secret' },
+        });
+
+        await providerA.callApi('Shared fal prompt');
+        await providerB.callApi('Shared fal prompt');
+
+        const cacheKeyA = mockCache.get.mock.calls[0][0] as string;
+        const cacheKeyB = mockCache.get.mock.calls[1][0] as string;
+        expect(cacheKeyA).toMatch(
+          /^fal:fal-ai\/flux\/schnell:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+        );
+        expect(cacheKeyB).toMatch(
+          /^fal:fal-ai\/flux\/schnell:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+        );
+        expect(cacheKeyA).not.toBe(cacheKeyB);
+        expect(mockSubscribe).toHaveBeenCalledTimes(2);
+        for (const cacheKey of [cacheKeyA, cacheKeyB]) {
+          expect(cacheKey).not.toContain('Shared fal prompt');
+          expect(cacheKey).not.toContain('fal-tenant-a-secret');
+          expect(cacheKey).not.toContain('fal-tenant-b-secret');
+        }
+      });
+
+      it('should use a deterministic auth namespace across module reloads', async () => {
+        async function getCacheKeyFromFreshModule() {
+          vi.resetModules();
+          const freshCache = await import('../../src/cache');
+          const mockCache = {
+            get: vi
+              .fn()
+              .mockResolvedValue(JSON.stringify('![cached](https://example.com/cached.png)')),
+            set: vi.fn(),
+          };
+          vi.mocked(freshCache.isCacheEnabled).mockReturnValue(true);
+          vi.mocked(freshCache.getCache).mockReturnValue(mockCache as any);
+          const { FalImageGenerationProvider: FreshFalImageGenerationProvider } = await import(
+            '../../src/providers/fal'
+          );
+
+          const freshProvider = new FreshFalImageGenerationProvider('fal-ai/flux/schnell', {
+            config: { apiKey: 'fal-deterministic-secret' },
+          });
+
+          await freshProvider.callApi('Shared fal prompt');
+          return mockCache.get.mock.calls[0][0] as string;
+        }
+
+        const firstCacheKey = await getCacheKeyFromFreshModule();
+        const secondCacheKey = await getCacheKeyFromFreshModule();
+
+        expect(firstCacheKey).toBe(secondCacheKey);
+        expect(firstCacheKey).toMatch(
+          /^fal:fal-ai\/flux\/schnell:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/,
+        );
+        expect(firstCacheKey).not.toContain('fal-deterministic-secret');
+        expect(firstCacheKey).not.toContain('Shared fal prompt');
+      });
+
       it('should handle cache set errors gracefully', async () => {
         vi.mocked(isCacheEnabled).mockImplementation(function () {
           return true;
