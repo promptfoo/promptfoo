@@ -499,4 +499,89 @@ describe('Cloud blob upload', () => {
       }),
     );
   });
+
+  it('should reuse the same audio blob across turns[].audio and metadata.audio', async () => {
+    // Realtime providers can mirror an audio chunk into both turns[N].audio
+    // and metadata.audio. Without a shared cache, the metadata path stored a
+    // separate blob (and triggered a duplicate cloud upload).
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response = {
+      output: 'test',
+      turns: [
+        {
+          role: 'assistant',
+          audio: { data: largeBase64, format: 'wav', transcript: 'hi' },
+        },
+      ],
+      metadata: {
+        audio: { data: largeBase64, format: 'wav', transcript: 'hi' },
+      },
+    } as unknown as ProviderResponse;
+
+    const result = await extractAndStoreBinaryData(response);
+
+    const turnsBlob = (result as any)?.turns?.[0]?.audio?.blobRef;
+    expect(turnsBlob).toBeDefined();
+    expect(result?.metadata?.audio?.blobRef).toEqual(turnsBlob);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'audio/wav',
+      expect.objectContaining({
+        location: 'response.turns[0].audio.data',
+        kind: 'audio',
+      }),
+    );
+  });
+
+  it('should reuse the same image blob across images[] and a metadata data-URL of the same bytes', async () => {
+    // E.g. a provider that mirrors a generated image into both `images[]` and
+    // a metadata field. The shared per-response cache canonicalizes on the
+    // parsed bytes so both paths land on one blob.
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const dataUri = `data:image/png;base64,${largeBase64}`;
+    const response: ProviderResponse = {
+      output: 'text',
+      images: [{ data: dataUri, mimeType: 'image/png' }],
+      metadata: {
+        previewImage: dataUri,
+      },
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.images?.[0].blobRef?.uri).toBeDefined();
+    expect(result?.metadata?.previewImage).toBe(result?.images?.[0].blobRef?.uri);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+    expect(mockStoreBlob).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      'image/png',
+      expect.objectContaining({
+        location: 'response.images[0].data',
+        kind: 'image',
+      }),
+    );
+  });
+
+  it('should reuse the same image blob when output is a data URL and metadata holds raw base64', async () => {
+    // Different encodings of identical bytes (data: URL vs. raw base64) must
+    // hit the same cache slot — canonicalization happens on the parsed buffer.
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const dataUri = `data:image/png;base64,${largeBase64}`;
+    const response: ProviderResponse = {
+      output: dataUri,
+      images: [{ data: `data:image/png;base64,${largeBase64}`, mimeType: 'image/png' }],
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.output).toBe(result?.images?.[0].blobRef?.uri);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+  });
 });

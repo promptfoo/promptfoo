@@ -157,9 +157,48 @@ async function maybeStore(
   return ref;
 }
 
+/**
+ * Per-response store-once function: returns the same `BlobRef` for byte-identical
+ * payloads regardless of how the input is encoded (raw base64 vs. `data:` URL) or
+ * which field it appeared under, so a single response that mirrors the same
+ * audio/image across `output`, `images[]`, `metadata`, and `turns[]` triggers one
+ * `storeBlob` write and one cloud upload.
+ */
+type StoreOnce = (
+  base64OrDataUrl: string,
+  defaultMimeType: string,
+  location: string,
+  kind: BlobKind,
+) => Promise<BlobRef | null>;
+
+function createStoreOnce(blobContext: BlobContext): StoreOnce {
+  const cache = new Map<string, BlobRef>();
+  return async (base64OrDataUrl, defaultMimeType, location, kind) => {
+    // Canonicalize the cache key on the parsed bytes (not the raw input string)
+    // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
+    // same cache slot when they decode to the same buffer.
+    const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
+    if (!parsed || !shouldExternalize(parsed.buffer)) {
+      return null;
+    }
+
+    const cacheKey = `${kind}:${parsed.buffer.toString('base64')}`;
+    const existing = cache.get(cacheKey);
+    if (existing) {
+      return existing;
+    }
+
+    const stored = await maybeStore(base64OrDataUrl, defaultMimeType, blobContext, location, kind);
+    if (stored) {
+      cache.set(cacheKey, stored);
+    }
+    return stored;
+  };
+}
+
 async function externalizeDataUrls(
   value: unknown,
-  context: BlobContext,
+  storeOnce: StoreOnce,
   location: string,
 ): Promise<{ value: unknown; mutated: boolean }> {
   if (typeof value === 'string') {
@@ -167,17 +206,18 @@ async function externalizeDataUrls(
       return { value, mutated: false };
     }
     const parsed = extractBase64(value);
-    if (!parsed || !shouldExternalize(parsed.buffer)) {
+    if (!parsed) {
       return { value, mutated: false };
     }
-    const storedRef =
-      (await maybeStore(
-        parsed.buffer.toString('base64'),
-        parsed.mimeType,
-        context,
-        location,
-        getKindFromMimeType(parsed.mimeType),
-      )) || null;
+    // Pass the raw data-URL through `storeOnce` so it canonicalizes on the
+    // parsed bytes, sharing the per-response cache with `output` / `images[]`
+    // / `turns[]` / top-level audio.
+    const storedRef = await storeOnce(
+      value,
+      parsed.mimeType,
+      location,
+      getKindFromMimeType(parsed.mimeType),
+    );
     if (!storedRef) {
       return { value, mutated: false };
     }
@@ -190,7 +230,7 @@ async function externalizeDataUrls(
       value.map(async (item, idx) => {
         const { value: nextValue, mutated: childMutated } = await externalizeDataUrls(
           item,
-          context,
+          storeOnce,
           `${location}[${idx}]`,
         );
         mutated ||= childMutated;
@@ -207,7 +247,7 @@ async function externalizeDataUrls(
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
       const { value: nextValue, mutated: childMutated } = await externalizeDataUrls(
         child,
-        context,
+        storeOnce,
         location ? `${location}.${key}` : key,
       );
       if (childMutated) {
@@ -223,8 +263,7 @@ async function externalizeDataUrls(
 
 async function externalizeMetadataAudio(
   metadata: ProviderResponse['metadata'],
-  context: BlobContext,
-  existingAudioBlob?: { data: string; blobRef: BlobRef },
+  storeOnce: StoreOnce,
 ): Promise<{ value: ProviderResponse['metadata']; mutated: boolean }> {
   if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
     return { value: metadata, mutated: false };
@@ -240,24 +279,13 @@ async function externalizeMetadataAudio(
     return { value: metadata, mutated: false };
   }
 
-  if (existingAudioBlob && audioRecord.data === existingAudioBlob.data) {
-    return {
-      value: {
-        ...metadata,
-        audio: {
-          ...audioRecord,
-          data: undefined,
-          blobRef: existingAudioBlob.blobRef,
-        },
-      },
-      mutated: true,
-    };
-  }
-
-  const stored = await maybeStore(
+  // Routing through `storeOnce` (instead of calling `maybeStore` directly) means
+  // a metadata-mirrored audio payload reuses the blob written for any other
+  // path (`response.audio.data`, `turns[N].audio.data`, etc.) when the bytes
+  // match — one store, one cloud upload.
+  const stored = await storeOnce(
     audioRecord.data,
     normalizeAudioMimeType(typeof audioRecord.format === 'string' ? audioRecord.format : undefined),
-    context,
     'response.metadata.audio.data',
     'audio',
   );
@@ -293,28 +321,9 @@ export async function extractAndStoreBinaryData(
   let mutated = false;
   const next: ProviderResponse = { ...response };
   const blobContext = context || {};
-  const storedBlobByInput = new Map<string, BlobRef>();
-  const storeOnce = async (
-    base64OrDataUrl: string,
-    defaultMimeType: string,
-    location: string,
-    kind: BlobKind,
-  ): Promise<BlobRef | null> => {
-    const cacheKey = `${kind}:${base64OrDataUrl}`;
-    const existing = storedBlobByInput.get(cacheKey);
-    if (existing) {
-      return existing;
-    }
-
-    const stored = await maybeStore(base64OrDataUrl, defaultMimeType, blobContext, location, kind);
-    if (stored) {
-      storedBlobByInput.set(cacheKey, stored);
-    }
-    return stored;
-  };
+  const storeOnce = createStoreOnce(blobContext);
 
   // Audio at top level
-  let topLevelAudioBlob: { data: string; blobRef: BlobRef } | undefined;
   if (response.audio?.data && typeof response.audio.data === 'string') {
     const stored = await storeOnce(
       response.audio.data,
@@ -328,7 +337,6 @@ export async function extractAndStoreBinaryData(
         data: undefined,
         blobRef: stored,
       };
-      topLevelAudioBlob = { data: response.audio.data, blobRef: stored };
       mutated = true;
       logger.debug('[BlobExtractor] Stored audio blob', { ...context, hash: stored.hash });
     }
@@ -472,12 +480,11 @@ export async function extractAndStoreBinaryData(
   if (metadata) {
     const { value: audioValue, mutated: audioMetadataMutated } = await externalizeMetadataAudio(
       metadata,
-      blobContext,
-      topLevelAudioBlob,
+      storeOnce,
     );
     const { value, mutated: dataUrlMetadataMutated } = await externalizeDataUrls(
       audioValue,
-      blobContext,
+      storeOnce,
       'response.metadata',
     );
     if (audioMetadataMutated || dataUrlMetadataMutated) {
