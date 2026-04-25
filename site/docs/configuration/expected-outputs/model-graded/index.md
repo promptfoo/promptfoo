@@ -268,11 +268,54 @@ tests:
 
 This works at every level where a grader can be set — per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
 
+If you configure a full provider object globally, do not also add a shorthand
+`provider: openai:chat:...` to the assertion. Assertion-level providers take precedence, so the
+global provider object's `config` values such as `apiBaseUrl`, `apiKey`, `temperature`, or
+`showThinking` will not be inherited. Either remove the assertion-level provider or repeat the full
+provider object there.
+
 :::note
 The built-in OpenAI grader already uses `temperature=0` by default, so you only need to set it when overriding the grader with a custom `provider` block that would otherwise inherit a non-zero default. GPT-5 series reasoning models ignore `temperature` entirely.
 :::
 
 Also note that [custom providers](/docs/providers/custom-api) are supported as well.
+
+### OpenAI-compatible thinking judges
+
+Self-hosted OpenAI-compatible judges such as [vLLM](/docs/providers/vllm), LocalAI, and llamafile
+can return reasoning in a separate field while putting the final answer in `content`. For
+model-graded assertions, set `showThinking: false` on the judge provider so promptfoo parses the
+final JSON verdict instead of any JSON-looking scratchpad in the reasoning field:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:llm_judge
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: empty
+        temperature: 0
+        max_tokens: 10000
+        showThinking: false
+```
+
+For vLLM models whose chat template enables thinking by default, you can also disable thinking at
+request time:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:llm_judge
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: empty
+        showThinking: false
+        passthrough:
+          chat_template_kwargs:
+            enable_thinking: false
+```
 
 ### Multiple graders
 

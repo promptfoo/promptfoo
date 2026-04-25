@@ -64,6 +64,20 @@ defaultTest:
         apiHost: 'xxxxxxx.openai.azure.com'
 ```
 
+For OpenAI-compatible local graders such as vLLM, use a full provider object and set
+`showThinking: false` if the model returns reasoning separately from final content:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:llm_judge
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: empty
+        showThinking: false
+```
+
 ### Using Local Providers for Grading
 
 The `redteam.provider` configuration controls both attack generation and grading. When you configure a local provider (like Ollama), promptfoo uses it for generating attacks and evaluating results:

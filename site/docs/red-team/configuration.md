@@ -822,6 +822,7 @@ redteam:
     config:
       apiBaseUrl: http://localhost:8000/v1
       apiKey: '{{ env.LOCAL_API_KEY }}'
+      showThinking: false # Recommended when the local provider returns separate reasoning
 ```
 
 :::warning

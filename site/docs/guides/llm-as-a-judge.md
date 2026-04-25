@@ -83,6 +83,46 @@ The judge returns a structured verdict for each row:
 }
 ```
 
+### Self-hosted OpenAI-compatible judges
+
+If your judge runs behind an OpenAI-compatible API such as vLLM, configure the full provider object
+under `defaultTest.options.provider`:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{answer}}'
+
+providers:
+  - echo
+
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:llm_judge
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: empty
+        temperature: 0
+        max_tokens: 10000
+        showThinking: false
+
+tests:
+  - vars:
+      answer: 'Use the Forgot password link and verify by email or SMS.'
+    assert:
+      - type: llm-rubric
+        value: 'Pass if the answer explains password reset and verification.'
+```
+
+`showThinking: false` matters for thinking-capable local judges. vLLM can return reasoning in a
+separate `reasoning` field and the final verdict in `content`; promptfoo should parse only the final
+JSON verdict. Do not also put `provider: openai:chat:llm_judge` on the assertion, because that
+shorthand overrides the full provider object and drops the `apiBaseUrl`, `apiKey`, and
+`showThinking` settings.
+
+See [vLLM as an LLM judge](/docs/providers/vllm#use-vllm-as-an-llm-judge) for the full local setup,
+including request-level `chat_template_kwargs` for disabling thinking at the API level.
+
 Stack [deterministic checks](/docs/configuration/expected-outputs/deterministic) with LLM judges
 when format or execution must be exact:
 
@@ -1089,7 +1129,8 @@ When scores seem wrong:
 2. **View in UI**: Run `npx promptfoo view` and click into failed tests
 3. **Test obvious cases**: Create clear pass/fail examples to verify judge behavior
 4. **Check for injection**: If scores are unexpectedly high, inspect the output for manipulation attempts
-5. **Compare judges**: Run the same test with different judge models
+5. **Check thinking output**: For OpenAI-compatible local judges, set `showThinking: false` if reasoning text appears before the final JSON verdict
+6. **Compare judges**: Run the same test with different judge models
 
 ## FAQ
 
