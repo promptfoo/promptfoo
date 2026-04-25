@@ -180,6 +180,8 @@ describe('OpenAICodexSDKProvider', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
