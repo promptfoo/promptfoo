@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import {
   getEnvBool,
@@ -8,6 +8,7 @@ import {
   getMaxEvalTimeMs,
   isCI,
 } from '../src/envars';
+import { setEnvOverridesProvider } from '../src/envOverrides';
 import { mockProcessEnv } from './util/utils';
 
 import type { EnvVarKey } from '../src/envars';
@@ -23,6 +24,12 @@ describe('envars', () => {
     Object.keys(cliState).forEach((key) => {
       delete cliState[key as keyof typeof cliState];
     });
+    setEnvOverridesProvider(() => cliState.config?.env);
+  });
+
+  afterEach(() => {
+    vi.doUnmock('../src/cliState');
+    setEnvOverridesProvider(() => cliState.config?.env);
   });
 
   afterAll(() => {
@@ -32,6 +39,7 @@ describe('envars', () => {
       delete cliState[key as keyof typeof cliState];
     });
     Object.assign(cliState, originalCliState);
+    setEnvOverridesProvider(() => cliState.config?.env);
   });
 
   describe('getEnvar', () => {
@@ -90,6 +98,22 @@ describe('envars', () => {
     it('should handle arbitrary string keys not defined in EnvVars type', () => {
       mockProcessEnv({ CUSTOM_ENV_VAR: 'custom value' });
       expect(getEnvString('CUSTOM_ENV_VAR' as EnvVarKey)).toBe('custom value');
+    });
+
+    it('should read injected env overrides without importing cliState', async () => {
+      vi.resetModules();
+      vi.doMock('../src/cliState', () => {
+        throw new Error('cliState should not be imported by envars');
+      });
+
+      const [{ getEnvString }, { setEnvOverridesProvider }] = await Promise.all([
+        import('../src/envars'),
+        import('../src/envOverrides'),
+      ]);
+
+      setEnvOverridesProvider(() => ({ OPENAI_API_KEY: 'provider-env-key' }));
+
+      expect(getEnvString('OPENAI_API_KEY')).toBe('provider-env-key');
     });
   });
 
