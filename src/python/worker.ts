@@ -5,7 +5,7 @@ import path from 'path';
 import { PythonShell } from 'python-shell';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
-import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { getRequestTimeoutMs } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
 import { validatePythonPath } from './pythonUtils';
 
@@ -26,7 +26,7 @@ export class PythonWorker {
     private scriptPath: string,
     private functionName: string,
     private pythonPath?: string,
-    private timeout: number = REQUEST_TIMEOUT_MS,
+    private timeout: number = getRequestTimeoutMs(),
     private onReady?: () => void,
   ) {}
 

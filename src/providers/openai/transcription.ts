@@ -3,7 +3,7 @@ import path from 'path';
 
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { OPENAI_TRANSCRIPTION_MODELS } from './util';
 
@@ -140,7 +140,7 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
             headers,
             body: formData,
           },
-          REQUEST_TIMEOUT_MS,
+          getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
         ));

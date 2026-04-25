@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { getTokenUsage } from './util';
 
@@ -47,7 +47,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         false,
         this.config.maxRetries,

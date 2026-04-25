@@ -7,7 +7,7 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
+import { getRequestTimeoutMs, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type {
@@ -432,7 +432,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
    * Helper method to make HTTP requests using fetchWithCache
    */
   private async makeRequest<T>(url: string, options: RequestInit): Promise<T> {
-    const timeoutMs = this.assistantConfig.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const timeoutMs = this.assistantConfig.timeoutMs ?? getRequestTimeoutMs();
     const retries = this.assistantConfig.retryOptions?.maxRetries ?? 4;
 
     // These operations should never be cached

@@ -8,7 +8,7 @@ import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
+import { getRequestTimeoutMs } from '../src/providers/shared';
 import {
   clearAgentCache,
   fetchWithProxy,
@@ -444,7 +444,7 @@ describe('fetchWithProxy', () => {
         ca: mockCertContent,
         rejectUnauthorized: true,
       },
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      headersTimeout: getRequestTimeoutMs(),
       keepAliveTimeout: 30_000,
       keepAliveMaxTimeout: 60_000,
       connections: DEFAULT_MAX_CONCURRENCY,
@@ -496,7 +496,7 @@ describe('fetchWithProxy', () => {
       requestTls: {
         rejectUnauthorized: true,
       },
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      headersTimeout: getRequestTimeoutMs(),
       keepAliveTimeout: 30_000,
       keepAliveMaxTimeout: 60_000,
       connections: DEFAULT_MAX_CONCURRENCY,
@@ -539,7 +539,7 @@ describe('fetchWithProxy', () => {
       requestTls: {
         rejectUnauthorized: false,
       },
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      headersTimeout: getRequestTimeoutMs(),
       keepAliveTimeout: 30_000,
       keepAliveMaxTimeout: 60_000,
       connections: DEFAULT_MAX_CONCURRENCY,
@@ -606,7 +606,7 @@ describe('fetchWithProxy', () => {
         ca: mockCertContent,
         rejectUnauthorized: true,
       },
-      headersTimeout: REQUEST_TIMEOUT_MS,
+      headersTimeout: getRequestTimeoutMs(),
       keepAliveTimeout: 30_000,
       keepAliveMaxTimeout: 60_000,
       connections: DEFAULT_MAX_CONCURRENCY,
@@ -693,7 +693,7 @@ describe('fetchWithProxy', () => {
         requestTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
-        headersTimeout: REQUEST_TIMEOUT_MS,
+        headersTimeout: getRequestTimeoutMs(),
         keepAliveTimeout: 30_000,
         keepAliveMaxTimeout: 60_000,
         connections: DEFAULT_MAX_CONCURRENCY,
@@ -733,7 +733,7 @@ describe('fetchWithProxy', () => {
         requestTls: {
           rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
         },
-        headersTimeout: REQUEST_TIMEOUT_MS,
+        headersTimeout: getRequestTimeoutMs(),
         keepAliveTimeout: 30_000,
         keepAliveMaxTimeout: 60_000,
         connections: DEFAULT_MAX_CONCURRENCY,

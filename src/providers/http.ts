@@ -40,7 +40,12 @@ import {
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS, type ToolFormat, transformToolChoice, transformTools } from './shared';
+import {
+  getRequestTimeoutMs,
+  type ToolFormat,
+  transformToolChoice,
+  transformTools,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -1728,7 +1733,7 @@ export class HttpProvider implements ApiProvider {
       const response = await fetchWithCache(
         oauthConfig.tokenUrl,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         true, // Always bust cache for token requests
         0, // No retries for token requests
@@ -2026,7 +2031,7 @@ export class HttpProvider implements ApiProvider {
     const response = await fetchWithCache(
       url,
       fetchOptions,
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'text',
       true, // Always bust cache for session requests
       this.config.maxRetries,
@@ -2465,7 +2470,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         multipartBody ? true : (context?.bustCache ?? context?.debug),
         this.config.maxRetries,
@@ -2696,7 +2701,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         context?.bustCache ?? context?.debug,
         this.config.maxRetries,

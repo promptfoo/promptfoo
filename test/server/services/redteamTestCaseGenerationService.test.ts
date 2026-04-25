@@ -29,7 +29,7 @@ function mockRemoteGeneration(responseBody: unknown, rejectWith?: Error) {
     neverGenerateRemote: vi.fn().mockReturnValue(false),
   }));
   vi.doMock('../../../src/providers/shared', () => ({
-    REQUEST_TIMEOUT_MS,
+    getRequestTimeoutMs: () => REQUEST_TIMEOUT_MS,
   }));
   vi.doMock('../../../src/constants', () => ({
     VERSION: '0.0.0-test',
