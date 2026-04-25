@@ -6,7 +6,7 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
   extractRateLimitErrorCode,
-  formatRateLimitDetail,
+  formatRateLimitErrorMessage,
   HARD_QUOTA_ERROR_CODES,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
@@ -585,30 +585,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     if (error instanceof HttpRateLimitError) {
-      const detail = formatRateLimitDetail(error);
-      if (error.kind === 'quota') {
-        return {
-          error: `Quota exceeded (HTTP ${error.status}${error.code ? `, code: ${error.code}` : ''}): ${error.message}. Retries will not help — check your billing or daily quota.`,
-        };
-      }
-      return {
-        error: `Rate limit exceeded (HTTP ${error.status}${error.code ? `, code: ${error.code}` : ''}): ${error.message}${detail}`,
-      };
+      return { error: formatRateLimitErrorMessage(error) };
     }
 
     // The OpenAI SDK throws APIError-shaped objects with `status` and a body
     // that carries the same `error.code` shape we parse for fetch-based paths.
-    // Treat status === 429 as the source of truth and extract a body code.
+    // Adapt to HttpRateLimitError so SDK-raised 429s share the same message
+    // formatter; pass the SDK-supplied message as `details` so operator
+    // context (deployment name, token counts) is preserved.
     const sdkRateLimit = classifySdkRateLimit(error);
     if (sdkRateLimit) {
-      if (sdkRateLimit.kind === 'quota') {
-        return {
-          error: `Quota exceeded (HTTP 429${sdkRateLimit.code ? `, code: ${sdkRateLimit.code}` : ''}): ${errorMessage}. Retries will not help — check your billing or daily quota.`,
-        };
-      }
-      return {
-        error: `Rate limit exceeded (HTTP 429${sdkRateLimit.code ? `, code: ${sdkRateLimit.code}` : ''}): ${errorMessage}`,
-      };
+      const adapted = new HttpRateLimitError({ status: 429, code: sdkRateLimit.code });
+      return { error: formatRateLimitErrorMessage(adapted, errorMessage) };
     }
 
     if (this.isContentFilterError(errorMessage)) {

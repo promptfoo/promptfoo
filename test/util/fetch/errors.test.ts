@@ -3,6 +3,7 @@ import {
   extractRateLimitErrorCode,
   findTargetErrorStatus,
   formatRateLimitDetail,
+  formatRateLimitErrorMessage,
   HttpRateLimitError,
   isHardQuotaCode,
   isHttpRateLimitError,
@@ -315,5 +316,67 @@ describe('formatRateLimitDetail', () => {
       resetAt: Date.now() + 60_000,
     });
     expect(formatRateLimitDetail(err)).toBe('');
+  });
+});
+
+describe('formatRateLimitErrorMessage', () => {
+  it('formats a per-window rate limit with status, code, and retry-after', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      retryAfterMs: 7000,
+    });
+    expect(formatRateLimitErrorMessage(err)).toBe(
+      'Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after 7s]',
+    );
+  });
+
+  it('formats a hard quota with the non-retryable hint', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'insufficient_quota',
+    });
+    expect(formatRateLimitErrorMessage(err)).toBe(
+      'Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota.',
+    );
+  });
+
+  it('omits the code segment when no code is set', () => {
+    const err = new HttpRateLimitError({ status: 429 });
+    expect(formatRateLimitErrorMessage(err)).toBe(
+      'Rate limit exceeded: HTTP 429 Too Many Requests',
+    );
+  });
+
+  it('appends `details` for upstream-supplied context', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'rate_limit_exceeded',
+      retryAfterMs: 12_000,
+    });
+    const out = formatRateLimitErrorMessage(
+      err,
+      'Rate limit reached for gpt-4o (current: 1000 TPM)',
+    );
+    expect(out).toBe(
+      'Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) Rate limit reached for gpt-4o (current: 1000 TPM) [retry after 12s]',
+    );
+  });
+
+  it('appends `details` before the non-retryable hint on quota errors', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'insufficient_quota',
+    });
+    expect(formatRateLimitErrorMessage(err, 'Quota exhausted for asst_xyz')).toBe(
+      'Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota) Quota exhausted for asst_xyz. Retries will not help — check your billing or daily quota.',
+    );
+  });
+
+  it('produces a single non-redundant prefix (no double "Rate limit exceeded")', () => {
+    const err = new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' });
+    const out = formatRateLimitErrorMessage(err);
+    expect(out.match(/Rate limit exceeded/g)?.length).toBe(1);
+    expect(out.match(/HTTP 429/g)?.length).toBe(1);
   });
 });

@@ -3,7 +3,7 @@ import { createHmac } from 'crypto';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import {
-  formatRateLimitDetail,
+  formatRateLimitErrorMessage,
   HARD_QUOTA_ERROR_CODES,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
@@ -401,15 +401,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     // Use them in preference to substring matching so we can distinguish a
     // hard quota (don't retry) from a per-window rate limit (retry-safe).
     if (err instanceof HttpRateLimitError) {
-      const detail = formatRateLimitDetail(err);
-      if (err.kind === 'quota') {
-        return {
-          error: `Quota exceeded (HTTP ${err.status}${err.code ? `, code: ${err.code}` : ''}): ${err.message}. Retries will not help — check your billing or daily quota.`,
-        };
-      }
-      return {
-        error: `Rate limit exceeded (HTTP ${err.status}${err.code ? `, code: ${err.code}` : ''}): ${err.message}${detail}`,
-      };
+      return { error: formatRateLimitErrorMessage(err) };
     }
 
     // Handle content filter errors

@@ -141,6 +141,28 @@ export function formatRateLimitDetail(err: HttpRateLimitError): string {
   return parts.length > 0 ? ` [${parts.join(', ')}]` : '';
 }
 
+/**
+ * Render the user-facing error string for a structured rate-limit / quota
+ * failure. Single-prefix format (no provider-specific wrapper duplication):
+ *
+ *   "Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after 7s]"
+ *   "Quota exceeded: HTTP 429 Too Many Requests (code: insufficient_quota). Retries will not help — check your billing or daily quota."
+ *
+ * `details` (optional) is appended verbatim before the kind-specific
+ * trailer. Use it to surface upstream-provided context (e.g. an SDK
+ * error's full message that names the deployment / token count) that the
+ * structured error itself doesn't carry.
+ */
+export function formatRateLimitErrorMessage(err: HttpRateLimitError, details?: string): string {
+  const codePart = err.code ? ` (code: ${err.code})` : '';
+  const trailingDetails = details ? ` ${details}` : '';
+  if (err.kind === 'quota') {
+    return `Quota exceeded: HTTP ${err.status} ${err.statusText}${codePart}${trailingDetails}. Retries will not help — check your billing or daily quota.`;
+  }
+  const detail = formatRateLimitDetail(err);
+  return `Rate limit exceeded: HTTP ${err.status} ${err.statusText}${codePart}${trailingDetails}${detail}`;
+}
+
 export function isHttpRateLimitError(err: unknown): err is HttpRateLimitError {
   return err instanceof HttpRateLimitError;
 }
