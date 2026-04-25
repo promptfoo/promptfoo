@@ -19,6 +19,7 @@ import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
 import { getTestCaseDeduplicationKey } from '../../util/comparison';
 import { filterByRange } from '../../util/filterRange';
+import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
 import { filterTestsByResults } from './filterTestsUtil';
 
 import type { TestSuite } from '../../types/index';
@@ -249,7 +250,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   if (options.range !== undefined) {
-    tests = filterByRange(tests, options.range);
+    tests = filterByRange(tests, options.range, warnEmptyFilterRange);
   }
 
   if (options.firstN !== undefined) {
