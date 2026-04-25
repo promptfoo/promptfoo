@@ -28,8 +28,31 @@ This guide shows how to:
 - understand how Promptfoo turns spans into trajectory steps
 - use raw trace assertions for span counts, latency, and errors
 - use trajectory assertions for tool use, arguments, ordering, reasoning, and task success
-- inspect the assertion output and Trace Timeline in the web UI
+- gate CI on tool-call accuracy, latency budgets, and cost
+- handle multi-turn agents, parallel tool calls, retrieval quality, PII, and drift over time
 - design trace checks that stay stable as an agent evolves
+
+:::note Span 101: a 60-second primer
+A **span** is one timed operation in a trace. It has a `name`, a `startTime` and (usually) an `endTime`, an OTEL `statusCode`, and a flat `attributes` map of strings, numbers, and booleans. Spans nest into a tree via `parentSpanId`, and the whole tree shares one `traceId`.
+
+A trace from one eval row of the example RAG agent looks like this (each indent is a parent → child relationship):
+
+```text
+rag_agent_workflow
+├─ query_analysis                 attrs: {tokens.used: 120}
+├─ document_retrieval
+│  ├─ retrieve_document_0          attrs: {tool.name: search_corpus, tool.arguments: "..."}
+│  ├─ retrieve_document_1          attrs: {tool.name: search_corpus, ...}
+│  └─ retrieve_document_2          attrs: {tool.name: search_corpus, ...}
+├─ reasoning_chain
+│  ├─ reasoning_identify_key_concepts
+│  ├─ reasoning_analyze_relationships
+│  └─ reasoning_synthesize_answer
+└─ response_generation              attrs: {tool.name: compose_answer}
+```
+
+Promptfoo asserts on this tree two ways: directly (`trace-span-*` over names, timing, and status) or after normalization into trajectory steps (`trajectory:*` over `tool` / `command` / `search` / `reasoning` / `message`). The W3C `traceparent` string (`00-<traceId>-<spanId>-<flags>`) is what stitches your provider's spans into Promptfoo's eval row — your provider reads it from the call context and uses it as the parent context for every span it emits.
+:::
 
 ## Why Evaluate Agent Trajectories, Not Just Final Answers
 
@@ -459,7 +482,38 @@ Use `trajectory:goal-success` when the whole trace should prove the task succeed
   value: The agent explained {{ topic }} using retrieved context, cited multiple documents, and composed a final answer after reasoning.
 ```
 
-Promptfoo summarizes the trace trajectory and asks the judge whether the workflow and final output accomplished the goal. Use this for end-to-end task success, but pair it with deterministic assertions for critical operations. The judge is powerful for “did the agent actually solve the task?” and weaker for “did the agent call exactly this API with exactly this ID?” Use `not-trajectory:goal-success` when a traced workflow must not achieve a prohibited goal.
+Promptfoo summarizes the trace trajectory and asks the judge whether the workflow and final output accomplished the goal. Use this for end-to-end task success, but pair it with deterministic assertions for critical operations. The judge is powerful for "did the agent actually solve the task?" and weaker for "did the agent call exactly this API with exactly this ID?" Use `not-trajectory:goal-success` when a traced workflow must not achieve a prohibited goal.
+
+:::warning What `trajectory:goal-success` cannot see
+The judge receives a JSON summary of the trajectory truncated to roughly 24 steps (the first 12 plus the last 12 if the trace is longer), plus the final output and the rendered goal template. It cannot see:
+
+- spans truncated by the head-and-tail summarizer in long agent runs
+- redacted or dropped attribute values — the summary contains step `name` and status, not full `args`
+- parallel branches that raced or duplicated work, since the summary serializes by start time
+- silent failures inside tools that returned status 200 with empty bodies
+- hallucinated citations when the cited IDs do not appear in any step name
+- timing-based bugs where the steps are correct but the order at sub-millisecond resolution is wrong
+
+For any of these, pair the judge with deterministic `trace-*` and `trajectory:*` assertions. The judge is at its best for "did the agent broadly accomplish the user's task?" and at its worst for "did this specific operation hit this specific argument?"
+:::
+
+## Anti-Patterns
+
+A few common mistakes pass schema validation but undermine the eval. Watch for these:
+
+**Asserting on free-text query strings.** A search agent might paraphrase `quantum computing classical computing` as `compare quantum and classical computing`. Both are correct; only the first matches `trajectory:tool-args-match`. Assert on causally load-bearing arguments (tenant_id, user_id, document_id, action_type) and treat free-text fields as evidence the model is responsive, not as a contract.
+
+**Using `percentile: 95` on a small batch.** With three retrieval spans, p95 returns the slowest of three — identical to `max`. Aggregate latency assertions across many test rows or skip the percentile and use `max`.
+
+**Using `mode: exact` on a reactive agent.** Real agents retry, branch, and self-correct. `mode: exact` on `trajectory:tool-sequence` fails the row whenever the model legitimately re-issues a search. Reserve `exact` for short safety-critical sequences (`verify_user → authorize → execute`) and use `in_order` everywhere else.
+
+**Pinning `min: N, max: N` for tool fan-out.** A frozen exact count (`min: 3, max: 3`) fails the moment the model decides 2 documents suffice. Use a range (`min: 1, max: 5`) for evolving agents and reserve exact equality for product-spec'd contracts.
+
+**Trusting `goal-success` as the only check.** The judge sees a _summarized_ trajectory plus the final output. It cannot see redacted PII inside arguments, parallel branches that race, silent-but-200 tool failures, truncated long traces, or hallucinated citations whose IDs aren't in the summary. Pair the judge with deterministic assertions for any operation that must be exactly right.
+
+**Letting `trace-span-duration` and `trace-error-spans` no-op-pass.** Both pass when no spans match the pattern. Anchor each one to a presence check with `trace-span-count` whenever the span must exist.
+
+**Recording free-form prompts and outputs as span attributes.** Span attributes travel to the trace DB, the UI, assertion failure reasons in `output.json`, and any forwarding endpoint. Treat them as log lines: redact at the source. See [Handling PII in Spans](#handling-pii-in-spans).
 
 ## Design Durable Trace Checks
 
@@ -508,11 +562,47 @@ If traces appear but trajectory assertions do not match:
 - Use `trajectory:step-count` with `type: span` temporarily to inspect what Promptfoo can see.
 - Export results with `-o output.json` and inspect each component assertion reason for matched span names and arguments.
 
+## Next Steps
+
+Pick the path that matches what you want to do next:
+
+**Run the working example in two minutes.**
+
+```bash
+npx promptfoo@latest init --example integration-opentelemetry/javascript
+cd integration-opentelemetry/javascript
+npm install
+export OPENAI_API_KEY="sk-..."   # only needed for trajectory:goal-success
+npx promptfoo@latest eval -c promptfooconfig.trace-guide.yaml --no-cache -o output.json
+npx promptfoo@latest view
+```
+
+**Add tracing to a config you already have.** Drop the `tracing:` block from [Instrument Spans For Assertions](#instrument-spans-for-assertions) into your `promptfooconfig.yaml`, then start with one assertion:
+
+```yaml
+- type: trace-span-count
+  value: { pattern: <one critical span name in your agent>, min: 1 }
+```
+
+Confirm the assertion fires by running the eval and checking the Traces tab. Then layer on `trajectory:tool-used` and `trajectory:tool-sequence` for behavior, `trace-span-duration` for latency, and `trajectory:goal-success` for end-to-end task success.
+
+**Match the recipe to your stack.**
+
+- Codex SDK / Codex CLI agents → [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk#tracing-and-observability)
+- OpenAI Agents Python SDK → [Evaluate OpenAI Agents Python SDK](/docs/guides/evaluate-openai-agents-python)
+- Custom JS or Python providers → [Tracing](/docs/tracing#instrumenting-providers)
+- Coding agents that run shell commands → [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents)
+- LangGraph apps → [Evaluate LangGraph](/docs/guides/evaluate-langgraph)
+- RAG quality scoring on top of trace presence → [RAG evaluation](/docs/guides/evaluate-rag)
+- Red-team coverage of forbidden tools and trajectories → [How to Red Team LLM Agents](/docs/red-team/llm-agents)
+
 ## Related Docs
 
-- [Tracing](/docs/tracing/)
-- [Deterministic assertions](/docs/configuration/expected-outputs/deterministic/)
-- [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/)
+- [Tracing](/docs/tracing/) — full OTLP receiver setup, JS and Python provider examples, and forwarding to external backends
+- [Deterministic assertions](/docs/configuration/expected-outputs/deterministic/) — non-trace assertions that pair with `trace-*` and `trajectory:*`
+- [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) — judge configuration shared with `trajectory:goal-success`
 - [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents)
 - [Evaluate OpenAI Agents Python SDK](/docs/guides/evaluate-openai-agents-python)
+- [How to Red Team LLM Agents](/docs/red-team/llm-agents)
 - [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
+- [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python)
