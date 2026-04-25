@@ -1036,7 +1036,8 @@
               "const": "next"
             },
             {
-              "type": "boolean"
+              "type": "boolean",
+              "const": true
             }
           ]
         }

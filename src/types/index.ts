@@ -688,8 +688,11 @@ export const AssertionSchema = z.object({
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
 
-  // If this assertion fails, try the next assertion in the list as a fallback
-  fallback: z.union([z.literal('next'), z.boolean()]).optional(),
+  // When set to 'next' (or `true` as a synonym), and this assertion fails,
+  // run the following assertion as a fallback. Bypassed assertions do not
+  // contribute to the score; failed-then-fallback primaries remain visible
+  // in componentResults and their tokens are summed into the chain result.
+  fallback: z.union([z.literal('next'), z.literal(true)]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;

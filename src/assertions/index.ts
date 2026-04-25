@@ -43,7 +43,7 @@ import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { handleAnswerRelevance } from './answerRelevance';
-import { AssertionsResult } from './assertionsResult';
+import { AssertionsResult, DEFAULT_TOKENS_USED } from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -639,62 +639,66 @@ function isSpecialCompareAssertion(assertion: Assertion): boolean {
 }
 
 /**
- * Validates that assertions with fallback are properly configured.
- * Operates on the original assertion array before flattening.
- * Recursively validates assertions inside assert-sets.
- * Throws an error if validation fails.
+ * Validates that fallback-bearing assertions are configured correctly.
+ *
+ * Runs before assertion-set flattening so that fallback chains cannot bridge
+ * across an assert-set boundary. The `path` argument carries dotted-index
+ * breadcrumbs (e.g. `assert[2].assert[0]`) into recursive calls so users with
+ * nested assert-sets can localize a validation failure.
  */
-function validateFallbackChains(assertions: AssertionOrSet[]): void {
+function validateFallbackChains(assertions: AssertionOrSet[], path = 'assert'): void {
   for (let i = 0; i < assertions.length; i++) {
     const assertion = assertions[i];
+    const here = `${path}[${i}]`;
 
-    // Handle assert-set types - validate inner assertions recursively
     if (isAssertionSet(assertion)) {
-      validateFallbackChains(assertion.assert);
+      validateFallbackChains(assertion.assert, `${here}.assert`);
       continue;
     }
 
-    const assertionHasFallback = hasFallback(assertion);
+    if (!hasFallback(assertion)) {
+      continue;
+    }
 
-    if (assertionHasFallback) {
-      if (isSpecialCompareAssertion(assertion)) {
-        throw new Error(
-          `Assertion at index ${i} (type: ${assertion.type}) has fallback: next but ${assertion.type} assertions cannot be fallback chain sources`,
-        );
-      }
+    if (isSpecialCompareAssertion(assertion)) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): ${assertion.type} assertions cannot be fallback chain sources`,
+      );
+    }
 
-      // Rule 1: Must have next assertion
-      if (i === assertions.length - 1) {
-        throw new Error(
-          `Assertion at index ${i} (type: ${assertion.type}) has fallback: next but is the last assertion in the list`,
-        );
-      }
+    if (i === assertions.length - 1) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): has fallback but no next assertion to fall through to`,
+      );
+    }
 
-      const nextAssertion = assertions[i + 1];
+    const nextAssertion = assertions[i + 1];
 
-      // Rule 2: Next assertion cannot be assert-set
-      if (isAssertionSet(nextAssertion)) {
-        throw new Error(
-          `Assertion at index ${i} (type: ${assertion.type}) has fallback: next but next assertion is assert-set (not supported as fallback target)`,
-        );
-      }
+    if (isAssertionSet(nextAssertion)) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): next assertion is assert-set (not supported as fallback target)`,
+      );
+    }
 
-      // Rule 3: Next assertion cannot be select-* or max-score
-      if (isSpecialCompareAssertion(nextAssertion)) {
-        throw new Error(
-          `Assertion at index ${i} (type: ${assertion.type}) has fallback: next but next assertion is ${nextAssertion.type} (not supported as fallback target)`,
-        );
-      }
+    if (isSpecialCompareAssertion(nextAssertion)) {
+      throw new Error(
+        `Fallback chain misconfigured at ${here} (type: ${assertion.type}): next assertion is ${nextAssertion.type} (not supported as fallback target)`,
+      );
     }
   }
 }
 
 /**
- * Categorizes assertions into independent assertions and fallback chains.
- * This allows independent assertions to run in parallel while maintaining
- * sequential execution within fallback chains.
+ * Splits the flattened assertion list into independent assertions and chain
+ * primaries. Independent assertions can run in parallel; chain primaries are
+ * dispatched once and walk their successors sequentially via
+ * `executeFallbackChain`.
  *
- * Note: This operates on the flattened assertions array (after assert-set expansion)
+ * A chain extends from a `fallback`-bearing primary forward through every
+ * adjacent `fallback`-bearing assertion until it hits a terminal (no
+ * `fallback`) or a different `assertResult` parent — the latter is the
+ * defensive guard that keeps a chain from bridging two assert-sets even if a
+ * future validator change loosens the rule.
  */
 function categorizeAssertions(
   assertions: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
@@ -708,37 +712,27 @@ function categorizeAssertions(
 
   let i = 0;
   while (i < assertions.length) {
-    const { assertion } = assertions[i];
-    const assertionHasFallback = hasFallback(assertion);
+    const { assertion, assertResult } = assertions[i];
 
-    if (assertionHasFallback) {
-      // This is the start of a fallback chain
+    if (hasFallback(assertion)) {
       primaryInChains.push(i);
 
-      // Mark all subsequent assertions in the chain as fallback targets
       let chainIndex = i + 1;
-      while (chainIndex < assertions.length) {
+      while (
+        chainIndex < assertions.length &&
+        assertions[chainIndex].assertResult === assertResult
+      ) {
         fallbackTargets.add(chainIndex);
-
-        const { assertion: nextAssertion } = assertions[chainIndex];
-        const nextHasFallback = hasFallback(nextAssertion);
-
-        if (nextHasFallback) {
-          // Chain continues
-          chainIndex++;
-        } else {
-          // Chain ends at this assertion
+        if (!hasFallback(assertions[chainIndex].assertion)) {
           break;
         }
+        chainIndex++;
       }
 
-      // Skip past all assertions in this chain
       i = chainIndex + 1;
     } else if (fallbackTargets.has(i)) {
-      // This is a fallback target processed as part of a chain
       i++;
     } else {
-      // Independent assertion (not part of any chain)
       independent.push(i);
       i++;
     }
@@ -747,9 +741,31 @@ function categorizeAssertions(
   return { independent, primaryInChains };
 }
 
+function sumTokensInto(target: GradingResult, source: GradingResult['tokensUsed']): void {
+  if (!source) {
+    return;
+  }
+  const tokens = target.tokensUsed ?? { ...DEFAULT_TOKENS_USED };
+  tokens.total = (tokens.total ?? 0) + (source.total ?? 0);
+  tokens.prompt = (tokens.prompt ?? 0) + (source.prompt ?? 0);
+  tokens.completion = (tokens.completion ?? 0) + (source.completion ?? 0);
+  tokens.cached = (tokens.cached ?? 0) + (source.cached ?? 0);
+  tokens.numRequests = (tokens.numRequests ?? 0) + (source.numRequests ?? 0);
+  target.tokensUsed = tokens;
+}
+
 /**
- * Executes a fallback chain sequentially until an assertion passes or the chain ends.
- * Returns only the assertion result that contributes to scoring.
+ * Walks a fallback chain sequentially, returning a single GradingResult that
+ * scores the chain plus a trace of every assertion that actually executed.
+ *
+ * Scoring contract: only the terminating assertion (the first to pass, or the
+ * last to fail) contributes weight/score. Intermediate failed primaries are
+ * exposed via `componentResults` and their `tokensUsed` is summed into the
+ * returned result so cost telemetry remains accurate. Throws from
+ * fallback-bearing primaries are converted to synthetic failed results and
+ * the chain continues — that is the user-declared contract of
+ * `fallback: 'next'`. Throws from the terminal link propagate, matching the
+ * behavior of non-chain assertions.
  */
 async function executeFallbackChain(
   asserts: Array<{ assertion: Assertion; assertResult: AssertionsResult; index: number }>,
@@ -768,42 +784,58 @@ async function executeFallbackChain(
   result: GradingResult;
   finalIndex: number;
 }> {
+  const intermediateResults: GradingResult[] = [];
   let currentIndex = startIndex;
 
   while (currentIndex < asserts.length) {
     const { assertion, index } = asserts[currentIndex];
-
-    // Execute current assertion in the chain
-    const result = await runAssertion({
-      prompt: context.prompt,
-      provider: context.provider,
-      providerResponse: context.providerResponse,
-      assertion,
-      test: context.test,
-      vars: context.vars,
-      latencyMs: context.latencyMs,
-      assertIndex: index,
-      traceId: context.traceId,
-      traceData: context.traceData,
-    });
-
     const assertionHasFallback = hasFallback(assertion);
 
-    if (result.pass) {
-      // Success - chain ends here
+    let result: GradingResult;
+    try {
+      result = await runAssertion({
+        prompt: context.prompt,
+        provider: context.provider,
+        providerResponse: context.providerResponse,
+        assertion,
+        test: context.test,
+        vars: context.vars,
+        latencyMs: context.latencyMs,
+        assertIndex: index,
+        traceId: context.traceId,
+        traceData: context.traceData,
+      });
+    } catch (err) {
+      if (!assertionHasFallback) {
+        throw err;
+      }
+      const reason = err instanceof Error ? err.message : String(err);
+      logger.debug(`[fallback] assertion threw, falling through: ${reason}`);
+      result = {
+        pass: false,
+        score: 0,
+        reason: `Assertion threw: ${reason}`,
+        assertion,
+      };
+    }
+
+    if (result.pass || !assertionHasFallback) {
+      for (const earlier of intermediateResults) {
+        sumTokensInto(result, earlier.tokensUsed);
+      }
+      if (intermediateResults.length > 0) {
+        result.componentResults = [...intermediateResults, ...(result.componentResults ?? [])];
+      }
       return { result, finalIndex: currentIndex };
     }
 
-    if (!assertionHasFallback) {
-      // Failed and no fallback - chain ends here with failure
-      return { result, finalIndex: currentIndex };
-    }
-
-    // Failed and has fallback - continue to the next assertion in the chain
+    intermediateResults.push(result);
     currentIndex++;
   }
 
-  throw new Error('Unexpected end of fallback chain');
+  throw new Error(
+    `Fallback chain at index ${startIndex} (type: ${asserts[startIndex]?.assertion.type}) ran past array end — validateFallbackChains should have rejected this configuration`,
+  );
 }
 
 export async function runAssertions({

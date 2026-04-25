@@ -53,7 +53,7 @@ tests:
 | transform        | string \| Function | No       | Process the output before running the assertion. Accepts a string expression, `file://` reference, or a [function](/docs/usage/node-package#transform-functions) when using the Node.js package. See [Transformations](/docs/configuration/guide#transforming-outputs)                                                                             |
 | metric           | string             | No       | Tag that appears in the web UI as a named metric                                                                                                                                                                                                                                                                                                   |
 | contextTransform | string \| Function | No       | Javascript expression or [function](/docs/usage/node-package#transform-functions) to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
-| fallback         | `next` \| boolean  | No       | If set to `next` or `true`, run the next assertion only when this assertion fails. Useful for cascading from cheap assertions to more expensive fallbacks.                                                                                                                                                                                         |
+| fallback         | `next` \| `true`   | No       | If set to `next` or `true`, run the next assertion only when this assertion fails. Useful for cascading from cheap assertions to more expensive fallbacks.                                                                                                                                                                                         |
 
 ## Fallback assertions
 
@@ -71,7 +71,7 @@ tests:
         value: 'The response correctly identifies Paris as the capital of France'
 ```
 
-Fallbacks are useful when you want cheap deterministic checks to handle common cases and reserve model-graded assertions for ambiguous outputs. Assertions bypassed by a successful fallback chain do not affect the score or named metrics. Fallback targets cannot be assertion sets, `select-*` assertions, or `max-score`.
+Fallbacks are useful when you want cheap deterministic checks to handle common cases and reserve model-graded assertions for ambiguous outputs. Assertions that are bypassed because an earlier fallback passed do not affect the score or named metrics. Failed-then-fallback primaries that actually executed remain visible in `componentResults`, and their token usage is summed into the chain's result so per-test cost telemetry stays accurate. Fallback targets cannot be assertion sets, `select-*` assertions, or `max-score`.
 
 ## Grouping assertions via Assertion Sets
 

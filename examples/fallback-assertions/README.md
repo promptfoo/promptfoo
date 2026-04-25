@@ -79,9 +79,15 @@ The chain executes until:
 
 ### Score Calculation
 
-- **Bypassed assertions do NOT affect the score**
-- Only the final executed assertion contributes to the total
-- Weights are taken from the assertion that actually runs
+- **Bypassed assertions do NOT affect the score** — assertions skipped because an earlier link passed are excluded from scoring and named metrics.
+- Only the final executed assertion (the first to pass, or the last to fail) contributes weight and score.
+- Weights are taken from the assertion that actually runs.
+
+### Telemetry
+
+- Failed primaries that triggered the fallback **remain visible** in `componentResults`. They are not silently dropped, so the eval UI/JSON shows exactly what was tried.
+- Token counts from every assertion that actually executed (including failed primaries) are summed into the test's aggregate `tokensUsed`, so cost telemetry stays accurate.
+- A throw from a `fallback`-bearing primary is caught and converted into a synthetic failure — the chain continues. A throw from the terminal (non-fallback) link still propagates, matching non-chain assertion behavior.
 
 ### Independent vs. Fallback Assertions
 
