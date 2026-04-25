@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
+import { isValidFilterRange } from '../util/filterRange';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 
@@ -104,6 +105,13 @@ export const CommandLineOptionsSchema = z.object({
   filterPattern: z.string().optional(),
   filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
+  filterRange: z
+    .string()
+    .refine(isValidFilterRange, {
+      message:
+        'must be in start:end format using zero-based indices, with start less than or equal to end',
+    })
+    .optional(),
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
@@ -274,7 +282,10 @@ export const EvaluateOptionsSchema = z.object({
    */
   silent: z.boolean().optional(),
 });
-export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
+export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
+  abortSignal?: AbortSignal;
+  filterRange?: string;
+};
 
 const PromptMetricsSchema = z.object({
   score: z.number(),

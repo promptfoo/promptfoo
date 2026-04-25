@@ -398,6 +398,11 @@ export async function doEval(
       cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
+    const hasScenarios = Array.isArray(testSuite.scenarios)
+      ? testSuite.scenarios.length > 0
+      : testSuite.scenarios !== undefined;
+    const filterRange = cmdObj.filterRange ?? commandLineOptions?.filterRange;
+
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
       const filterOptions: FilterOptions = {
@@ -407,6 +412,7 @@ export async function doEval(
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
+        range: hasScenarios ? undefined : filterRange,
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
@@ -466,6 +472,7 @@ export async function doEval(
             : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
+      filterRange: !resumeEval && hasScenarios ? filterRange : undefined,
       maxConcurrency,
       cache,
     };
@@ -1020,6 +1027,10 @@ export function evalCommand(
     .option(
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
+    )
+    .option(
+      '--filter-range <start:end>',
+      'Only run tests whose zero-based index is in the range. End is exclusive (e.g. 0:10, 10:20, 10:, :10)',
     )
     .option(
       '--filter-prompts <pattern>',

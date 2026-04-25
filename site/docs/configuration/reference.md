@@ -155,6 +155,7 @@ Set default values for command-line options. These defaults will be used unless 
 | filterProviders          | string             | Only run tests with providers matching this regex (matches against provider `id` or `label`)                          |
 | filterTargets            | string             | Only run tests with targets matching this regex (alias for filterProviders)                                           |
 | filterFirstN             | number             | Only run the first N test cases                                                                                       |
+| filterRange              | string             | Run test cases in a zero-based `start:end` range. The end index is exclusive                                          |
 | filterSample             | number             | Run a random sample of N test cases                                                                                   |
 | filterMetadata           | string             | Only run tests matching metadata filter (JSON format)                                                                 |
 | filterErrorsOnly         | string             | Only run tests that resulted in errors (expects previous output path)                                                 |
@@ -202,6 +203,7 @@ commandLineOptions:
   # Filtering options
   filterPattern: 'auth.*' # Only run tests with 'auth' in description
   filterProviders: 'openai.*' # Only test OpenAI providers
+  filterRange: '0:100' # Run tests 0 through 99
   filterSample: 50 # Random sample of 50 tests
 
   # Prompt modifications

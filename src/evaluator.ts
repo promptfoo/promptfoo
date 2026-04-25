@@ -65,6 +65,7 @@ import {
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { isNonTransientHttpStatus } from './util/fetch/errors';
+import { filterByRange } from './util/filterRange';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
@@ -4235,7 +4236,8 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
-    const tests = buildTestsFromSuite(testSuite);
+    let tests = buildTestsFromSuite(testSuite);
+    tests = filterByRange(tests, options.filterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);

@@ -3243,6 +3243,9 @@
         "filterProviders": {
           "type": "string"
         },
+        "filterRange": {
+          "type": "string"
+        },
         "filterSample": {
           "type": "integer",
           "exclusiveMinimum": 0,

@@ -454,6 +454,57 @@ describe('filterTests', () => {
     });
   });
 
+  describe('range filter', () => {
+    it('should slice tests by zero-based start-inclusive, end-exclusive range', async () => {
+      const result = await filterTests(mockTestSuite, { range: '1:3' });
+      expect(result).toHaveLength(2);
+      expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test2', 'test3']);
+    });
+
+    it('should support omitted start and omitted end', async () => {
+      const fromStart = await filterTests(mockTestSuite, { range: ':2' });
+      expect(fromStart.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2']);
+
+      const toEnd = await filterTests(mockTestSuite, { range: '1:' });
+      expect(toEnd.map((t: TestCase) => t.vars?.var1)).toEqual(['test2', 'test3']);
+    });
+
+    it('should allow range ends beyond the test count', async () => {
+      const result = await filterTests(mockTestSuite, { range: '2:100' });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars?.var1).toBe('test3');
+    });
+
+    it('should apply after pattern and before firstN', async () => {
+      const result = await filterTests(mockTestSuite, {
+        pattern: 'test',
+        range: '1:3',
+        firstN: 1,
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.vars?.var1).toBe('test2');
+    });
+
+    it('should throw error for invalid range format', async () => {
+      await expect(filterTests(mockTestSuite, { range: '1' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+      await expect(filterTests(mockTestSuite, { range: ':' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+      await expect(filterTests(mockTestSuite, { range: 'a:b' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+    });
+
+    it('should throw error when start is greater than end', async () => {
+      await expect(filterTests(mockTestSuite, { range: '3:1' })).rejects.toThrow(
+        '--filter-range start must be less than or equal to end, got: 3:1',
+      );
+    });
+  });
+
   describe('firstN filter', () => {
     it('should take first N tests', async () => {
       const result = await filterTests(mockTestSuite, { firstN: 2 });
