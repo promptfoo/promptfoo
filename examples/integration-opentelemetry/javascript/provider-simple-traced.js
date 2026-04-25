@@ -321,6 +321,10 @@ class SimpleTracedProvider {
             const generationDelay = 750 + Math.random() * 200;
             await new Promise((resolve) => setTimeout(resolve, generationDelay));
 
+            // Body is hardcoded to quantum-computing content so the deterministic
+            // `contains` assertion in promptfooconfig.trace-guide.yaml stays stable.
+            // If you reuse this provider with a different `topic`, replace this
+            // string with topic-aware content before relying on output assertions.
             response = {
               text:
                 `Based on my analysis of ${documents.length} technical documents, here's a comprehensive explanation:\n\n` +
