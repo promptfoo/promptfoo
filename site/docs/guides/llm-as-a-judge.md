@@ -116,21 +116,13 @@ tests:
 
 `showThinking: false` matters for thinking-capable local judges. vLLM can return reasoning in a
 separate `reasoning_content` or `reasoning` field and the final verdict in `content`; promptfoo
-should grade only the final content. This applies beyond `llm-rubric`: `g-eval`, `factuality` /
-`model-graded-factuality`, RAG metrics, conversation relevance, trajectory goal success, and
-`select-best` all consume the judge output according to their own parsers. `search-rubric` is the
-exception: it requires a web-search-capable grader, so a plain vLLM chat server will not be the
-search judge. Do not also put
-`provider: openai:chat:llm_judge` on the assertion, because that
-shorthand overrides the full provider object and drops the `apiBaseUrl`, `apiKey`, and
-`showThinking` settings.
-
-If a vLLM response still starts with raw `<think>` text after `showThinking: false`, the model was
-cut off before vLLM could move reasoning into `reasoning_content`. Increase `max_tokens` and the
-server context window, or disable thinking for judge calls.
+should grade only the final content. Do not also put `provider: openai:chat:llm_judge` on the
+assertion, because that shorthand overrides the full provider object and drops the `apiBaseUrl`,
+`apiKey`, and `showThinking` settings.
 
 See [vLLM as an LLM judge](/docs/providers/vllm#use-vllm-as-an-llm-judge) for the full local setup,
-including request-level `chat_template_kwargs` for disabling thinking at the API level.
+including affected metrics, `search-rubric`, truncated `<think>` output, and request-level thinking
+controls.
 
 Stack [deterministic checks](/docs/configuration/expected-outputs/deterministic) with LLM judges
 when format or execution must be exact:
@@ -1138,7 +1130,7 @@ When scores seem wrong:
 2. **View in UI**: Run `npx promptfoo view` and click into failed tests
 3. **Test obvious cases**: Create clear pass/fail examples to verify judge behavior
 4. **Check for injection**: If scores are unexpectedly high, inspect the output for manipulation attempts
-5. **Check thinking output**: For OpenAI-compatible local judges, set `showThinking: false` if reasoning text appears before the final verdict, generated questions, attribution lines, or selected index
+5. **Check thinking output**: For OpenAI-compatible local judges, set `showThinking: false` if reasoning text appears before the final verdict
 6. **Compare judges**: Run the same test with different judge models
 
 ## FAQ

@@ -97,11 +97,6 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-5-mini
    ```
 
-If the grader is a thinking-capable OpenAI-compatible model, use the full provider object and set
-`showThinking: false`. `factuality` and its legacy alias `model-graded-factuality` parse the first
-valid category JSON they see, so scratchpad reasoning such as `{"category":"D"}` can override the
-final category in `content`.
-
 ## Customizing the Prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property. The prompt has access to the following Nunjucks template variables:

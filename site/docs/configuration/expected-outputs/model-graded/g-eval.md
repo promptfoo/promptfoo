@@ -85,10 +85,6 @@ assert:
         temperature: 0
 ```
 
-For thinking-capable OpenAI-compatible graders, add `showThinking: false` to that `config`.
-`g-eval` parses JSON twice: once for generated evaluation steps and once for the final score. If
-reasoning is prepended to the output, scratchpad JSON can be parsed before the final JSON.
-
 See the [llm-rubric grader override docs](/docs/configuration/expected-outputs/model-graded/llm-rubric#setting-grader-parameters-temperature-etc) for more detail.
 
 ## Example

@@ -157,44 +157,11 @@ return hidden reasoning separately from final content. Promptfoo includes that r
 output by default. For a judge, that can confuse JSON parsing if the reasoning contains scratchpad
 objects before the final `{"pass": ..., "score": ..., "reason": ...}` verdict.
 
-Set `showThinking: false` on the judge provider:
-
-```yaml
-defaultTest:
-  options:
-    provider:
-      id: openai:chat:llm_judge
-      config:
-        apiBaseUrl: http://localhost:8000/v1
-        apiKey: empty
-        temperature: 0
-        max_tokens: 10000
-        showThinking: false
-```
-
-For vLLM, make sure the model has enough output and context budget to finish its thinking block. If
-generation stops early, vLLM may put raw `<think>` text in `content`; `showThinking: false` cannot
-strip that because it is no longer a separate reasoning field.
-
-For vLLM/Qwen3-style thinking models, you can also disable thinking at request time:
-
-```yaml
-defaultTest:
-  options:
-    provider:
-      id: openai:chat:llm_judge
-      config:
-        apiBaseUrl: http://localhost:8000/v1
-        apiKey: empty
-        showThinking: false
-        passthrough:
-          chat_template_kwargs:
-            enable_thinking: false
-```
-
-See the [vLLM provider guide](/docs/providers/vllm#use-vllm-as-an-llm-judge) for a complete local
-judge recipe. The same `showThinking: false` rule applies to other model-graded assertions that use
-a text judge; see the [model-graded overview](/docs/configuration/expected-outputs/model-graded#openai-compatible-thinking-judges)
+Set `showThinking: false` on the judge provider. See the
+[vLLM provider guide](/docs/providers/vllm#use-vllm-as-an-llm-judge) for a complete local judge
+recipe, including truncated `<think>` output and request-level thinking controls. The same rule
+applies to other model-graded assertions that use a text judge; see the
+[model-graded overview](/docs/configuration/expected-outputs/model-graded#openai-compatible-thinking-judges)
 for the full metric list.
 
 ## Customizing the rubric prompt

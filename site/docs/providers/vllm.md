@@ -56,18 +56,15 @@ vllm serve Qwen/Qwen3-0.6B \
   --api-key token-abc123
 ```
 
-### Common 2026 judge models
+### Common judge models
 
-vLLM's current [supported models](https://docs.vllm.ai/en/stable/models/supported_models/) list
-includes GPT-OSS (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`) and GLM-4.7
-(`zai-org/GLM-4.7`, `zai-org/GLM-4.7-Flash`). Keep `--served-model-name` short and stable;
-promptfoo uses that served name in `openai:chat:<served-model-name>`.
+Keep `--served-model-name` short and stable; promptfoo uses that alias in
+`openai:chat:<served-model-name>`.
 
 #### GPT-OSS
 
 The [vLLM GPT-OSS recipe](https://docs.vllm.ai/projects/recipes/en/latest/OpenAI/GPT-OSS.html)
-uses `openai/gpt-oss-20b` for the smaller deployment and `openai/gpt-oss-120b` for larger GPU
-hosts:
+uses `openai/gpt-oss-20b` for smaller deployments and `openai/gpt-oss-120b` for larger GPU hosts:
 
 ```bash
 vllm serve openai/gpt-oss-20b \
@@ -77,55 +74,13 @@ vllm serve openai/gpt-oss-20b \
   --api-key token-abc123
 ```
 
-Run GPT-OSS on a Linux CUDA or ROCm host for vLLM. On Apple Silicon developer machines, use
-Ollama or MLX for local smoke tests instead; GPT-OSS 20B can fit locally, but vLLM's CPU/ARM path
-may hit backend limits for sliding-window reasoning models. The promptfoo provider config is the
-same shape for any OpenAI-compatible `/v1` endpoint:
-
-```bash
-ollama pull gpt-oss:20b
-ollama serve
-```
-
-```yaml
-providers:
-  - id: openai:chat:gpt-oss:20b
-    config:
-      apiBaseUrl: http://127.0.0.1:11434/v1
-      apiKey: ollama
-      max_tokens: 512
-      showThinking: false
-```
-
-For a GPT-OSS judge, ask vLLM not to include reasoning in the chat response and keep
-`showThinking: false` as the promptfoo-side guard:
-
-```yaml
-defaultTest:
-  options:
-    provider:
-      id: openai:chat:gpt-oss-20b
-      label: Judge: gpt-oss-20b @ vLLM
-      config:
-        apiBaseUrl: http://localhost:8000/v1
-        apiKey: token-abc123
-        temperature: 0
-        max_tokens: 10000
-        showThinking: false
-        passthrough:
-          include_reasoning: false
-          reasoning_effort: low
-```
-
-Put `reasoning_effort` in `passthrough` when you use a custom served name such as `llm_judge`;
-promptfoo forwards `passthrough` fields directly even when the served name no longer contains
-`gpt-oss`.
+Run GPT-OSS on a Linux CUDA or ROCm host for vLLM. The CPU/ARM path can hit backend limits for
+sliding-window reasoning models.
 
 #### GLM-4.7
 
 The [vLLM GLM-4.X recipe](https://docs.vllm.ai/projects/recipes/en/latest/GLM/GLM.html) includes
-GLM-4.7 and GLM-4.7-Flash. The recipe notes that GLM-4.7 may require a nightly vLLM build and
-Transformers from source:
+GLM-4.7 and GLM-4.7-Flash. GLM-4.7 may require a nightly vLLM build and Transformers from source:
 
 ```bash
 uv pip install -U vllm --pre --extra-index-url https://wheels.vllm.ai/nightly
@@ -143,28 +98,8 @@ vllm serve zai-org/GLM-4.7-FP8 \
 ```
 
 For `zai-org/GLM-4.7-Flash`, use a served name such as `glm-4.7-flash`. If you do not need tool
-calling, the `--tool-call-parser` and `--enable-auto-tool-choice` flags are optional for ordinary
-model-graded assertions; keep `--reasoning-parser glm45` when you want vLLM to split reasoning from
-final content.
-
-GLM's reasoning parser supports disabling thinking through `enable_thinking: false`:
-
-```yaml
-defaultTest:
-  options:
-    provider:
-      id: openai:chat:glm-4.7
-      label: Judge: GLM-4.7 @ vLLM
-      config:
-        apiBaseUrl: http://localhost:8000/v1
-        apiKey: token-abc123
-        temperature: 0
-        max_tokens: 10000
-        showThinking: false
-        passthrough:
-          chat_template_kwargs:
-            enable_thinking: false
-```
+calling, the tool flags are optional for ordinary model-graded assertions; keep
+`--reasoning-parser glm45` when you want vLLM to split reasoning from final content.
 
 ## Use vLLM as the target model
 
@@ -288,14 +223,10 @@ for judge calls with `chat_template_kwargs.enable_thinking: false`.
 web-search-capable grader; promptfoo will prefer or load a search-capable provider instead. The
 `showThinking` guidance applies to the search provider that actually grades the assertion.
 
-| Assertion family                                                                                                      | What reasoning text can break                                                                                                  |
-| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `llm-rubric`, `g-eval`, `factuality` / `model-graded-factuality`, `conversation-relevance`, `trajectory:goal-success` | These parse structured JSON or category output. A JSON-looking scratchpad can be read as the verdict before the final content. |
-| `search-rubric`                                                                                                       | Same JSON-first behavior, when the configured search-capable judge also returns separate reasoning.                            |
-| `answer-relevance`                                                                                                    | Generated questions are embedded. Prepended thinking text changes the strings being embedded and can change similarity scores. |
-| `context-recall`, `context-relevance`, `context-faithfulness`                                                         | Scratchpad sentences, attribution markers, or NLI verdict text can become part of the score calculation.                       |
-| `select-best`                                                                                                         | The first integer in the combined judge output can come from scratchpad reasoning instead of the final selected index.         |
-| `model-graded-closedqa`                                                                                               | This parser is less fragile because it checks the final `Y`/`N` suffix, but hiding thinking still keeps judge reasons clean.   |
+This applies to every model-graded assertion that consumes text from the judge. JSON-first metrics
+can parse scratchpad JSON, RAG metrics can score scratchpad sentences or attribution markers,
+`answer-relevance` can embed generated questions with `Thinking:` prepended, and `select-best` can
+read a scratchpad number as the winning index.
 
 ### Disable thinking at the vLLM API level
 
@@ -335,23 +266,8 @@ defaultTest:
 ```
 
 Keep `showThinking: false` even when you pass model-specific controls such as
-`include_reasoning: false` or `chat_template_kwargs.enable_thinking: false`. Those controls are
-server-specific: vLLM may honor them, while another OpenAI-compatible runtime may ignore them or
-return reasoning under a different field name. `showThinking: false` is the promptfoo-side rule that
-keeps judge output limited to the final `message.content`.
-
-You can also set a server-wide default when launching vLLM:
-
-```bash
-vllm serve Qwen/Qwen3-8B \
-  --served-model-name llm_judge \
-  --reasoning-parser qwen3 \
-  --default-chat-template-kwargs '{"enable_thinking": false}'
-```
-
-Use the request-level `passthrough` option when you want promptfoo evals to be explicit and
-reproducible. Use the server-level default when every client of that vLLM server should share the
-same thinking behavior.
+`include_reasoning: false` or `chat_template_kwargs.enable_thinking: false`. Those controls save
+tokens when vLLM honors them; `showThinking: false` is the promptfoo-side guard.
 
 ## Provider maps for text and embeddings
 
@@ -387,7 +303,6 @@ defaultTest:
 | Judge output still starts with `<think>` even with `showThinking: false`                                 | The generation was truncated before vLLM split reasoning into `reasoning_content`. Increase `--max-model-len` / `max_tokens`, or disable thinking via `passthrough.chat_template_kwargs.enable_thinking: false`. |
 | `search-rubric` uses a different provider than vLLM                                                      | This is expected unless the configured provider has web-search capability. Plain vLLM chat is not a search provider; configure a web-search-capable grader for `search-rubric`.                                  |
 | `assert.provider` appears to ignore `defaultTest.options.provider.config`                                | This is expected precedence. Use the full provider object at the assertion level, or remove `assert.provider` so the default provider object is inherited.                                                       |
-| Local models reload between rows                                                                         | Run with `--max-concurrency 1`; promptfoo groups eligible model-graded calls by grading provider ID to reduce local model switching.                                                                             |
 
 Run with `--no-cache` while debugging:
 

@@ -606,13 +606,9 @@ providers:
       showThinking: false # Exclude thinking content from output
 ```
 
-This is useful when you want better reasoning but don't want to expose the thinking process to your
-assertions. It is especially important for model-graded assertions that use a thinking-capable
-OpenAI-compatible judge, because those assertions parse or score the judge's final answer. Reasoning
-scratchpad text can look like JSON, attribution markers, generated questions, or numeric choices and
-be consumed before the final content.
+This is useful when you want better reasoning but don't want to expose the thinking process to your assertions.
 
-For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking), [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models), and [vLLM judge setup](/docs/providers/vllm#use-vllm-as-an-llm-judge).
+For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking) and [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models).
 
 ## Transforming outputs
 

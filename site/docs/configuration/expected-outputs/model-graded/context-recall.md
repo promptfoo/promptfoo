@@ -66,12 +66,6 @@ assert:
 - Works best with factual statements
 - Requires known correct answers
 
-## Local thinking judges
-
-If you override the grader with a thinking-capable OpenAI-compatible provider such as vLLM, set
-`showThinking: false` on the judge provider. `context-recall` scores lines containing `[Attributed]`
-or `[Not Attributed]`, so scratchpad attribution markers can become part of the recall score.
-
 ## Related metrics
 
 - [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) - Is retrieved context relevant?

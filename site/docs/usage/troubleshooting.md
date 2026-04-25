@@ -236,42 +236,6 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
-## Model-graded judge parses reasoning instead of final JSON
-
-If a model-graded assertion fails with an unexpected reason, `Could not extract JSON`, a wrong
-`factuality` category, a bad `select-best` winner, or context/RAG scores that appear to include
-scratchpad sentences, check whether your judge is a thinking-capable OpenAI-compatible model.
-
-Some self-hosted APIs, including vLLM with reasoning parsers, return reasoning separately from final
-content. Promptfoo includes thinking output by default, which is useful for target-model assertions
-but can confuse judge metrics that parse JSON, embed generated questions, score attribution markers,
-or read a selected index.
-
-Set `showThinking: false` on the judge provider:
-
-```yaml
-defaultTest:
-  options:
-    provider:
-      id: openai:chat:llm_judge
-      config:
-        apiBaseUrl: http://localhost:8000/v1
-        apiKey: empty
-        temperature: 0
-        max_tokens: 10000
-        showThinking: false
-```
-
-If the judge output still begins with raw `<think>` text, the response was likely truncated before
-vLLM split reasoning into `reasoning_content`. Increase the judge `max_tokens` and the vLLM
-`--max-model-len`, or disable thinking for judge calls with
-`passthrough.chat_template_kwargs.enable_thinking: false`.
-
-If you already have that provider object under `defaultTest.options.provider`, do not also set
-`provider: openai:chat:llm_judge` on the assertion. Assertion-level providers override the default
-object, so the `config` block above will not be inherited. See the [vLLM judge guide](/docs/providers/vllm#use-vllm-as-an-llm-judge)
-for a complete recipe.
-
 ## Python/JavaScript tool files require function name
 
 If you see errors like `Python files require a function name` when loading tools from Python or JavaScript files, you need to specify the function name that returns the tool definitions.

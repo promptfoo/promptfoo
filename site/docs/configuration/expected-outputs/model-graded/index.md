@@ -310,20 +310,10 @@ defaultTest:
         showThinking: false
 ```
 
-This is not specific to `llm-rubric`. Promptfoo receives one output string from the judge, and each
-model-graded assertion consumes that string according to its own parser:
-
-| Assertions                                                                                                            | Why `showThinking: false` matters                                                                                                                      |
-| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `llm-rubric`, `g-eval`, `factuality` / `model-graded-factuality`, `conversation-relevance`, `trajectory:goal-success` | They parse JSON or category-like verdicts; scratchpad JSON can be selected before the final verdict.                                                   |
-| `search-rubric`                                                                                                       | It has the same JSON-first parsing behavior when the web-search-capable judge also exposes reasoning text. Plain vLLM chat is not a web-search grader. |
-| `answer-relevance`                                                                                                    | It embeds judge-generated questions; prepended thinking text changes the embedded strings.                                                             |
-| `context-recall`, `context-relevance`, `context-faithfulness`                                                         | They score judge-generated sentences, attribution markers, or NLI verdicts; scratchpad text can become scored content.                                 |
-| `select-best`                                                                                                         | It reads the first integer from the judge output; scratchpad numbers can select the wrong candidate.                                                   |
-
-`model-graded-closedqa` is less likely to flip because it checks whether the combined output ends in
-`Y` or `N`, but `showThinking: false` is still recommended for self-hosted judges so explanations and
-debug output do not include private scratchpad text.
+This is not specific to `llm-rubric`. JSON-first metrics can parse scratchpad JSON,
+`answer-relevance` can embed questions with `Thinking:` prepended, RAG metrics can score scratchpad
+sentences or attribution markers, and `select-best` can read a scratchpad number as the winning
+index.
 
 For vLLM specifically, `showThinking: false` only removes reasoning after vLLM has parsed it into a
 separate field such as `reasoning_content`. If `max_tokens` or the server context window is too
@@ -331,21 +321,8 @@ small, vLLM may return an unfinished `<think>` block in `content`; increase the 
 thinking for judge requests.
 
 For vLLM models whose chat template enables thinking by default, you can also disable thinking at
-request time:
-
-```yaml
-defaultTest:
-  options:
-    provider:
-      id: openai:chat:llm_judge
-      config:
-        apiBaseUrl: http://localhost:8000/v1
-        apiKey: empty
-        showThinking: false
-        passthrough:
-          chat_template_kwargs:
-            enable_thinking: false
-```
+request time. See the [vLLM judge guide](/docs/providers/vllm#use-vllm-as-an-llm-judge) for
+complete Qwen, GPT-OSS, and GLM examples.
 
 ### Multiple graders
 

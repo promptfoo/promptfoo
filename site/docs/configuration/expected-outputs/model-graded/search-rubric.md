@@ -61,11 +61,6 @@ tests:
 
 The search-rubric assertion requires a grading provider with web search capabilities:
 
-Plain OpenAI-compatible chat servers such as a local vLLM endpoint are not web-search providers by
-themselves. If you configure vLLM as the default judge, promptfoo will still look for a
-web-search-capable grader for `search-rubric`. Apply `showThinking: false` to the provider that
-actually performs the web-search grading when that provider also exposes reasoning text.
-
 ### 1. Anthropic Claude
 
 Anthropic Claude models support web search through the `web_search_20250305` tool:
@@ -128,10 +123,6 @@ grading:
       search_parameters:
         mode: 'on'
 ```
-
-If the web-search-capable judge also returns separate reasoning, hide it in the provider config.
-`search-rubric` parses the first JSON object in the judge output, so reasoning JSON can be mistaken
-for the final searched verdict.
 
 ## Use Cases
 
