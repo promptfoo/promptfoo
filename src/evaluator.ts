@@ -4237,15 +4237,7 @@ class Evaluator {
     await this.evalRecord.addPrompts(prompts);
 
     let tests = buildTestsFromSuite(testSuite);
-    if (options.filterRange !== undefined) {
-      const before = tests.length;
-      tests = filterByRange(tests, options.filterRange);
-      if (before > 0 && tests.length === 0) {
-        logger.warn(
-          `--filter-range ${options.filterRange} selected 0 tests (had ${before} before slicing). Check your range bounds.`,
-        );
-      }
-    }
+    tests = filterByRange(tests, options.filterRange);
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     const varNames = await prepareTestVariables(tests, testSuite);

@@ -1,3 +1,5 @@
+import logger from '../logger';
+
 export interface FilterRange {
   end?: number;
   start: number;
@@ -57,7 +59,13 @@ export function filterByRange<T>(items: T[], option: string | undefined): T[] {
     return items;
   }
   const { start, end } = parseFilterRange(option);
-  return items.slice(start, end);
+  const sliced = items.slice(start, end);
+  if (items.length > 0 && sliced.length === 0) {
+    logger.warn(
+      `--filter-range ${option} selected 0 tests (had ${items.length} before slicing). Check your range bounds.`,
+    );
+  }
+  return sliced;
 }
 
 export function isValidFilterRange(option: string): boolean {
