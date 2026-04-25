@@ -947,11 +947,11 @@ Confirm the assertion fires by running the eval and checking the Traces tab. The
 
 - Codex SDK / Codex CLI agents → [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk#tracing-and-observability)
 - OpenAI Agents Python SDK → [Evaluate OpenAI Agents Python SDK](/docs/guides/evaluate-openai-agents-python)
-- Custom JS or Python providers → [Tracing](/docs/tracing#instrumenting-providers)
+- Custom JS or Python providers → [Tracing — Instrument Your Provider](/docs/tracing#2-instrument-your-provider)
 - Coding agents that run shell commands → [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents)
 - LangGraph apps → [Evaluate LangGraph](/docs/guides/evaluate-langgraph)
 - RAG quality scoring on top of trace presence → [RAG evaluation](/docs/guides/evaluate-rag)
-- Red-team coverage of forbidden tools and trajectories → [How to Red Team LLM Agents](/docs/red-team/llm-agents)
+- Red-team coverage of forbidden tools and trajectories → [How to Red Team LLM Agents](/docs/red-team/agents)
 
 ## Related Docs
 
@@ -960,6 +960,6 @@ Confirm the assertion fires by running the eval and checking the Traces tab. The
 - [Model-graded assertions](/docs/configuration/expected-outputs/model-graded/) — judge configuration shared with `trajectory:goal-success`
 - [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents)
 - [Evaluate OpenAI Agents Python SDK](/docs/guides/evaluate-openai-agents-python)
-- [How to Red Team LLM Agents](/docs/red-team/llm-agents)
+- [How to Red Team LLM Agents](/docs/red-team/agents)
 - [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/javascript)
 - [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-opentelemetry/python)
