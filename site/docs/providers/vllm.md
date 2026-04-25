@@ -63,6 +63,26 @@ vllm serve openai/gpt-oss-20b \
   --api-key token-abc123
 ```
 
+Run GPT-OSS on a Linux CUDA or ROCm host for vLLM. On Apple Silicon developer machines, use
+Ollama or MLX for local smoke tests instead; GPT-OSS 20B can fit locally, but vLLM's CPU/ARM path
+may hit backend limits for sliding-window reasoning models. The promptfoo provider config is the
+same shape for any OpenAI-compatible `/v1` endpoint:
+
+```bash
+ollama pull gpt-oss:20b
+ollama serve
+```
+
+```yaml
+providers:
+  - id: openai:chat:gpt-oss:20b
+    config:
+      apiBaseUrl: http://127.0.0.1:11434/v1
+      apiKey: ollama
+      max_tokens: 512
+      showThinking: false
+```
+
 For a GPT-OSS judge, ask vLLM not to include reasoning in the chat response and keep
 `showThinking: false` as the promptfoo-side guard:
 
@@ -288,6 +308,12 @@ defaultTest:
           include_reasoning: false
           reasoning_effort: low
 ```
+
+Keep `showThinking: false` even when you pass model-specific controls such as
+`include_reasoning: false` or `chat_template_kwargs.enable_thinking: false`. Those controls are
+server-specific: vLLM may honor them, while another OpenAI-compatible runtime may ignore them or
+return reasoning under a different field name. `showThinking: false` is the promptfoo-side rule that
+keeps judge output limited to the final `message.content`.
 
 You can also set a server-wide default when launching vLLM:
 
