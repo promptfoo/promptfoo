@@ -779,6 +779,81 @@ node -e '
 
 This is brittle — a first-class `promptfoo eval --baseline` is on the roadmap. For now, keep the comparison logic in your CI workflow rather than in the eval config so the suite stays portable.
 
+## Handling PII in Spans
+
+Anything you put on a span travels to:
+
+- Promptfoo's SQLite trace store (default `~/.promptfoo/promptfoo.db`)
+- the Web UI Traces tab
+- assertion failure reasons inside `output.json` — full `tool.arguments` JSON appears verbatim in `trajectory:tool-args-match` and `not-trajectory:tool-args-match` reasons
+- any configured `tracing.forwarding.endpoint` (forwarded spans are not redacted)
+
+Treat span attributes as you would log lines: redact at the source, not in the viewer.
+
+**What Promptfoo redacts automatically.** Promptfoo's GenAI provider tracer sanitizes API-key-like and token-like patterns from the request and response bodies it captures itself. It does **not** redact attributes you attach to your own spans. Custom provider spans, OpenAI Agents SDK spans, and Codex item spans are stored as-emitted.
+
+**Redact in your provider before calling `setAttributes`.**
+
+```javascript
+function redact(
+  value,
+  redactKeys = ['password', 'token', 'api_key', 'authorization', 'ssn', 'email'],
+) {
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+  const out = Array.isArray(value) ? [] : {};
+  for (const [k, v] of Object.entries(value)) {
+    out[k] = redactKeys.some((rk) => k.toLowerCase().includes(rk))
+      ? '[REDACTED]'
+      : redact(v, redactKeys);
+  }
+  return out;
+}
+
+span.setAttributes({
+  'tool.name': 'lookup_user',
+  'tool.arguments': JSON.stringify(redact(args)),
+});
+```
+
+Once the values are redacted, your `trajectory:tool-args-match` assertions need to assert on identifiers (tenant_id, user_id, document_id), not on the redacted fields. This is the right shape regardless: the identifiers are the causal contract; the free-text fields are evidence.
+
+**Hardening checklist for shared environments.**
+
+- Bind the OTLP receiver to `127.0.0.1` (the default). The receiver has no auth; binding to `0.0.0.0` on a shared CI runner exposes the port to every other tenant on the host.
+- Disable `tracing.forwarding` in CI unless the destination is trusted and configured for sensitive data. The forwarder does not redact.
+- Avoid recording full prompts and full responses on spans by default. The OTel GenAI semantic conventions treat `gen_ai.prompt` and `gen_ai.completion` as opt-in for the same reason.
+- Never put live customer data, secrets, or auth headers in fixture configs that travel through the eval.
+- If your eval database accumulates real production traces, set `PROMPTFOO_CONFIG_DIR` to an ephemeral path in CI so the SQLite file is scoped to the run and discarded with the runner.
+
+## Managing Drift Over Time
+
+A `min: 3, max: 3` retrieval count is right today and wrong tomorrow. Models change, tools are added, prompts evolve. Treat every numeric range and exact string match as a moving baseline.
+
+**Ratchet, don't pin.** Start each new assertion with the loosest range that still catches the failure mode (`min: 1, max: 10`). Tighten only when a regression slips through.
+
+**Tag assertions by strictness.** Use `metric` names so strict regression checks are distinguishable from advisory ones, then compute pass-rates per group:
+
+```yaml
+assert:
+  - type: trace-span-count
+    metric: strict.retrieval-presence
+    value: { pattern: retrieve_document_*, min: 1 }
+
+  - type: trace-span-duration
+    metric: advisory.retrieval-latency
+    value: { pattern: retrieve_document_*, max: 350 }
+```
+
+A failing `advisory.*` becomes a soft signal in dashboards rather than a CI blocker.
+
+**Rebaseline on intentional changes.** When you switch the retriever from top-3 to top-5, update the assertion in the same PR that switches it. Reviewers should see both changes together — never silently relax bounds in a separate "flake fix" commit.
+
+**Watch the assertion reasons over time.** Failing rows now report which spans matched (`Matched spans: retrieve_document_0, retrieve_document_1`). Diff the reasons across runs to spot drift even when the assertion still passes — retrieval going from 3 spans to 2 over many releases is a quiet regression that exact-match assertions catch and a `min: 1` assertion does not.
+
+**Schedule a quarterly refresh.** Re-run the full trace suite against the current model, capture the actual span counts and latencies, and update bounds explicitly. Outdated assertions break trust in the suite faster than any false positive.
+
 ## Anti-Patterns
 
 A few common mistakes pass schema validation but undermine the eval. Watch for these:
