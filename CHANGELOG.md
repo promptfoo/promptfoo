@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.8](https://github.com/promptfoo/promptfoo/compare/0.121.7...0.121.8) (2026-04-24)
+
+### Features
+
+- **claude-agent-sdk:** bump to 0.2.116 and add title option ([#8858](https://github.com/promptfoo/promptfoo/issues/8858)) ([9bca53a](https://github.com/promptfoo/promptfoo/commit/9bca53a2502be2395690019fad65b5a008f14c05))
+- **providers:** add GPT-5.5 OpenAI support ([#8873](https://github.com/promptfoo/promptfoo/issues/8873)) ([6488623](https://github.com/promptfoo/promptfoo/commit/6488623e485742892dedd684ae3c1d2ae91574c1))
+
+### Bug Fixes
+
+- **cache:** hash azure assistant keys ([#8646](https://github.com/promptfoo/promptfoo/issues/8646)) ([7264a73](https://github.com/promptfoo/promptfoo/commit/7264a7382ae9671d5afe10c797cafb2bb499e9ce))
+- **deps:** update dependency uuid to v14 [security] ([#8864](https://github.com/promptfoo/promptfoo/issues/8864)) ([3fa2956](https://github.com/promptfoo/promptfoo/commit/3fa29560e020acef2539b4e29816ab285bda80f5))
+- **providers:** canonicalize Azure assistant cache keys ([#8883](https://github.com/promptfoo/promptfoo/issues/8883)) ([c80f431](https://github.com/promptfoo/promptfoo/commit/c80f431f89847cbbff427441efa44957819ef582))
+- **redteam:** support remote input materialization ([#8863](https://github.com/promptfoo/promptfoo/issues/8863)) ([d89382e](https://github.com/promptfoo/promptfoo/commit/d89382ed3b9cce861a86622b55934f0004b75ce4))
+
 ## [0.121.7](https://github.com/promptfoo/promptfoo/compare/0.121.6...0.121.7) (2026-04-22)
 
 ### Features

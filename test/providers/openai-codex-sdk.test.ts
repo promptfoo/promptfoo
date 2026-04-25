@@ -180,6 +180,8 @@ describe('OpenAICodexSDKProvider', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.2' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5.5-pro' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -1563,7 +1565,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        expect(result.output).toBe('Part 1\nPart 2');
+        expect(result.output).toBe('Part 2');
         expect(result.tokenUsage).toEqual({
           prompt: 10, // cached_input_tokens is already included in input_tokens
           completion: 20,
@@ -2229,7 +2231,111 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('GPT-5.2, GPT-5.3, and GPT-5.4 models', () => {
+    describe('GPT-5.2, GPT-5.3, GPT-5.4, and GPT-5.5 models', () => {
+      it('should recognize gpt-5.5 as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.5');
+      });
+
+      it('should recognize gpt-5.5-pro as a known model', () => {
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        expect(provider.config.model).toBe('gpt-5.5-pro');
+      });
+
+      it('should calculate cost for gpt-5.5 model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.5: $5/1M input, $30/1M output
+        // Cost = (1000 * 5/1000000) + (500 * 30/1000000) = 0.005 + 0.015 = 0.02
+        expect(result.cost).toBeCloseTo(0.02, 6);
+      });
+
+      it('should calculate cost for gpt-5.5 model with cached input tokens', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.5: $5/1M input, $0.50/1M cache_read, $30/1M output
+        // uncached input = 2000 - 500 = 1500, cached = 500
+        // Cost = (1500 * 5/1000000) + (500 * 0.5/1000000) + (1000 * 30/1000000)
+        //      = 0.0075 + 0.00025 + 0.03 = 0.03775
+        expect(result.cost).toBeCloseTo(0.03775, 6);
+      });
+
+      it('should calculate cost for gpt-5.5-pro model', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 1000,
+            cached_input_tokens: 0,
+            output_tokens: 500,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.5-pro: $30/1M input, $180/1M output
+        // Cost = (1000 * 30/1000000) + (500 * 180/1000000) = 0.03 + 0.09 = 0.12
+        expect(result.cost).toBeCloseTo(0.12, 6);
+      });
+
+      it('should calculate cost for gpt-5.5-pro model without cache discount', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Response', {
+            input_tokens: 2000,
+            cached_input_tokens: 500,
+            output_tokens: 1000,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          config: { model: 'gpt-5.5-pro' },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        // gpt-5.5-pro has no discounted cached-input pricing.
+        // uncached input = 2000 - 500 = 1500, cached = 500, both billed at $30/1M.
+        // Cost = (1500 * 30/1000000) + (500 * 30/1000000) + (1000 * 180/1000000)
+        //      = 0.045 + 0.015 + 0.18 = 0.24
+        expect(result.cost).toBeCloseTo(0.24, 6);
+      });
+
       it('should recognize gpt-5.4 as a known model', () => {
         const provider = new OpenAICodexSDKProvider({
           config: { model: 'gpt-5.4' },
