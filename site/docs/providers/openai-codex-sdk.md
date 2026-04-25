@@ -421,7 +421,7 @@ providers:
       deep_tracing: true
 ```
 
-The `host: '127.0.0.1'` setting keeps the local OTLP receiver bound to loopback for a single-machine eval. Omit it when your Codex subprocess or external providers need to reach the receiver from another host/container.
+The `host: '127.0.0.1'` setting keeps the local OTLP receiver bound to loopback for a single-machine eval. This matches Promptfoo's default; omitting `host` does **not** open the receiver to non-loopback traffic. Set `host: '0.0.0.0'` (or another interface address) when a Codex subprocess or external provider must reach the receiver from another host or container.
 
 ### Streaming Mode Tracing
 
