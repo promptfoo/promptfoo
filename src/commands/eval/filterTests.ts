@@ -249,7 +249,13 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   if (options.range !== undefined) {
+    const before = tests.length;
     tests = filterByRange(tests, options.range);
+    if (before > 0 && tests.length === 0) {
+      logger.warn(
+        `--filter-range ${options.range} selected 0 tests (had ${before} before slicing). Check your range bounds.`,
+      );
+    }
   }
 
   if (options.firstN !== undefined) {

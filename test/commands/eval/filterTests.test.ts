@@ -2,6 +2,7 @@ import path from 'path';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { filterTests } from '../../../src/commands/eval/filterTests';
+import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 
@@ -508,6 +509,28 @@ describe('filterTests', () => {
       await expect(filterTests(mockTestSuite, { range: '3:1' })).rejects.toThrow(
         '--filter-range start must be less than or equal to end, got: 3:1',
       );
+    });
+
+    it('should reject negative range bounds', async () => {
+      await expect(filterTests(mockTestSuite, { range: '-1:5' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+      await expect(filterTests(mockTestSuite, { range: '0:-3' })).rejects.toThrow(
+        /--filter-range must be specified in start:end format/,
+      );
+    });
+
+    it('should warn when range slices to an empty set on a non-empty suite', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined as any);
+      try {
+        const result = await filterTests(mockTestSuite, { range: '100:200' });
+        expect(result).toHaveLength(0);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('--filter-range 100:200 selected 0 tests'),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 

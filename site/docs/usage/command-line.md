@@ -131,7 +131,9 @@ promptfoo eval --filter-range 200:    # tests 200 through the end
 promptfoo eval --filter-range :50     # first 50 tests
 ```
 
-When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable.
+Range is applied before `--repeat` expansion, so `--filter-range 0:5 --repeat 3` runs 15 evaluations across the same 5 tests. When combined with other filters (`--filter-pattern`, `--filter-metadata`, etc.), range slices the post-filter list.
+
+When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable. A `--filter-range` flag passed on resume is ignored (with a warning) and other transient filters from the original run are not restored, so resume is most predictable when range was the only selection filter.
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 

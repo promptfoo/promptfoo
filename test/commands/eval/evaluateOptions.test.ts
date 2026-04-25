@@ -6,6 +6,7 @@ import yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
+import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import type { Command } from 'commander';
 
@@ -557,6 +558,54 @@ describe('evaluateOptions behavior', () => {
         expect(evaluateMock).toHaveBeenCalled();
         const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
         expect(options.filterRange).toBe('1:2');
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should warn and ignore CLI --filter-range when resuming with a different persisted range', async () => {
+      const resumeEval = new Eval(
+        {
+          providers: ['echo'],
+          prompts: ['Hello {{name}}'],
+          tests: [
+            { vars: { name: 'Alice' } },
+            { vars: { name: 'Bob' } },
+            { vars: { name: 'Carol' } },
+          ],
+        },
+        {
+          id: 'eval-resume-filter-range-conflict',
+          persisted: true,
+          runtimeOptions: {
+            cache: true,
+            filterRange: '0:1',
+            maxConcurrency: 1,
+            repeat: 1,
+          },
+        },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      const warnMock = vi.mocked(logger.warn);
+      warnMock.mockClear();
+
+      try {
+        await doEval(
+          {
+            table: false,
+            resume: 'eval-resume-filter-range-conflict',
+            filterRange: '1:3',
+          } as any,
+          {},
+          undefined,
+          {},
+        );
+
+        expect(warnMock).toHaveBeenCalledWith(
+          expect.stringContaining('Ignoring --filter-range 1:3'),
+        );
+        const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        expect(evalRecord.runtimeOptions?.filterRange).toBe('0:1');
       } finally {
         findByIdSpy.mockRestore();
       }

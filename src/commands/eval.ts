@@ -398,14 +398,17 @@ export async function doEval(
       cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
-    const hasScenarios = Array.isArray(testSuite.scenarios)
-      ? testSuite.scenarios.length > 0
-      : testSuite.scenarios !== undefined;
+    const hasScenarios = Boolean(testSuite.scenarios?.length);
     const resumeRuntimeOptions = resumeEval?.runtimeOptions as EvaluateOptions | undefined;
     const persistedFilterRange =
       typeof resumeRuntimeOptions?.filterRange === 'string'
         ? resumeRuntimeOptions.filterRange
         : undefined;
+    if (resumeEval && cmdObj.filterRange && cmdObj.filterRange !== persistedFilterRange) {
+      logger.warn(
+        `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with persisted range ${persistedFilterRange ?? '(none)'} to preserve test indices.`,
+      );
+    }
     const filterRange = resumeEval
       ? (persistedFilterRange ?? commandLineOptions?.filterRange)
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange);

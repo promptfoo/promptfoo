@@ -69,6 +69,23 @@ export * from './tracing';
 
 export type { EnvOverrides };
 
+const FilterRangeSchema = z
+  .string()
+  .superRefine((value, ctx) => {
+    try {
+      parseFilterRange(value);
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          error instanceof Error
+            ? error.message
+            : '--filter-range must be specified in start:end format using zero-based indices',
+      });
+    }
+  })
+  .optional();
+
 export const CommandLineOptionsSchema = z.object({
   // Shared with TestSuite
   description: z.string().optional(),
@@ -105,22 +122,7 @@ export const CommandLineOptionsSchema = z.object({
   filterPattern: z.string().optional(),
   filterPrompts: z.string().optional(),
   filterProviders: z.string().optional(),
-  filterRange: z
-    .string()
-    .superRefine((value, ctx) => {
-      try {
-        parseFilterRange(value);
-      } catch (error) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message:
-            error instanceof Error
-              ? error.message
-              : '--filter-range must be specified in start:end format using zero-based indices',
-        });
-      }
-    })
-    .optional(),
+  filterRange: FilterRangeSchema,
   filterSample: z.coerce.number().int().positive().optional(),
   filterTargets: z.string().optional(),
   var: z.record(z.string(), z.string()).optional(),
@@ -290,10 +292,14 @@ export const EvaluateOptionsSchema = z.object({
    * Useful for internal evaluations like provider validation.
    */
   silent: z.boolean().optional(),
+  /**
+   * Zero-based test index range in start:end format (end exclusive).
+   * Persisted on the eval record so resume runs reproduce the original slice.
+   */
+  filterRange: FilterRangeSchema,
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
   abortSignal?: AbortSignal;
-  filterRange?: string;
 };
 
 const PromptMetricsSchema = z.object({
