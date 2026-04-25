@@ -497,6 +497,146 @@ The judge receives a JSON summary of the trajectory truncated to roughly 24 step
 For any of these, pair the judge with deterministic `trace-*` and `trajectory:*` assertions. The judge is at its best for "did the agent broadly accomplish the user's task?" and at its worst for "did this specific operation hit this specific argument?"
 :::
 
+## Retrieval Evaluation: Presence vs. Quality
+
+`trace-span-count` and `trajectory:tool-used` answer one question about a RAG pipeline: did retrieval _run_? They cannot answer whether retrieval _worked_. Treat the two as separate failure modes.
+
+**Presence (deterministic).** The agent fired three `retrieve_document_*` spans, each via the `search_corpus` tool, with the expected query.
+
+```yaml
+- type: trace-span-count
+  value: { pattern: retrieve_document_*, min: 1 }
+- type: trajectory:tool-used
+  value:
+    pattern: search_corpus
+    min: 1
+- type: trajectory:tool-args-match
+  value:
+    name: search_corpus
+    args: { tenant_id: '{{ user.tenant_id }}' }
+    mode: partial
+```
+
+**Quality (judged or scored).** The retrieved documents were relevant, ranked by relevance, and the answer is faithful to them. Two patterns work today:
+
+```yaml
+# Pattern 1 — assert on numeric retrieval scores attached to spans.
+# (Your provider sets retrieval.score on each retrieve_document_* span.)
+- type: javascript
+  value: |
+    const scores = (context.trace?.spans || [])
+      .filter((s) => s.name.startsWith('retrieve_document_'))
+      .map((s) => Number(s.attributes?.['retrieval.score']))
+      .filter(Number.isFinite);
+    if (scores.length === 0) {
+      return { pass: false, reason: 'no retrieval scores captured' };
+    }
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    return {
+      pass: avg >= 0.7,
+      score: avg,
+      reason: `avg retrieval score ${avg.toFixed(2)} (threshold 0.70)`,
+    };
+
+# Pattern 2 — judge whether the answer is faithful to the cited documents.
+- type: llm-rubric
+  provider: openai:chat:gpt-5.4-mini
+  value: The answer cites at least two of the retrieved documents and does not introduce facts that were not in the retrieval context.
+```
+
+For full retrieval-quality scoring (precision@k, recall, MRR, faithfulness), see the [RAG evaluation guide](/docs/guides/evaluate-rag) and combine its scorers with the trace-presence assertions above. Trace-based assertions tell you the retriever _ran_; RAG metrics tell you the retriever _was right_.
+
+## Multi-Turn and Conversational Traces
+
+A trace from a single eval row covers one turn. Multi-turn agents add two requirements:
+
+1. **Stitch turns into a session.** Set the OTel attribute `gen_ai.conversation.id` on every span emitted during the same conversation, and pass the same value into Promptfoo via `metadata.conversationId`. Promptfoo carries the metadata into the trace lookup so you can group rows by conversation post-hoc.
+2. **Assert per-turn and across turns.** Per-turn assertions live on each row as usual. Cross-turn assertions (e.g. "the agent never re-asks for the user's email") are most reliable when one row drives the full conversation in a single `callApi` invocation and emits one parent span per turn.
+
+```yaml
+tests:
+  - description: 3-turn troubleshooting conversation
+    vars:
+      transcript: file://transcripts/wifi-issue.json
+    metadata:
+      tracingEnabled: true
+      conversationId: wifi-issue
+    assert:
+      # Bound the turn budget.
+      - type: trajectory:step-count
+        value:
+          type: message
+          min: 3
+          max: 6
+
+      # Session-level forbidden behaviour.
+      - type: not-trajectory:tool-used
+        value: ask_for_email
+
+      # Each tool call must stay scoped to the right tenant.
+      - type: trajectory:tool-args-match
+        value:
+          name: lookup_account
+          args: { tenant_id: '{{ user.tenant_id }}' }
+          mode: partial
+
+      # Holistic judge over the conversation.
+      - type: trajectory:goal-success
+        provider: openai:chat:gpt-5.4-mini
+        value: The assistant resolved the WiFi issue without escalating to a human or re-asking for information already provided.
+```
+
+Tracking one conversation across multiple Promptfoo rows (one row per turn) is a useful pattern for production trace replay; today, asserting cross-turn behavior is most reliable inside one row.
+
+## Parallel and Concurrent Tool Calls
+
+`trajectory:tool-sequence` walks the steps sorted by `startTime` and looks for a subsequence. It assumes serial execution. An agent that fires three searches concurrently still produces three spans, but the order between them is determined by start-time race and is not stable.
+
+Three workable patterns:
+
+**Pattern 1 — Anchor `in_order` on the serial parent.** If `compose_answer` runs after retrieval finishes, the sequence `[search_corpus, compose_answer]` is reliable: any of the parallel `search_corpus` spans satisfies the first step, and `compose_answer` happens after. Avoid asserting on the order _between_ the parallel calls.
+
+**Pattern 2 — Use `trajectory:step-count` for cardinality without order.**
+
+```yaml
+- type: trajectory:step-count
+  value:
+    type: tool
+    name: search_corpus
+    min: 3
+    max: 3
+```
+
+**Pattern 3 — Wrap parallel work in a serial parent span.** If your provider creates a `retrieval_fanout` parent around the parallel children, assert on the parent count instead of the children's order:
+
+```yaml
+- type: trace-span-count
+  value: { pattern: retrieval_fanout, min: 1, max: 1 }
+- type: trace-span-count
+  value: { pattern: retrieve_document_*, min: 3, max: 3 }
+```
+
+True any-order set-membership ("these three tools fired in any order, with nothing else between them") is not directly expressible. If you need it, fall back to a `javascript` assertion that filters `context.trace.spans` by name and checks set equality:
+
+```yaml
+- type: javascript
+  value: |
+    const expected = new Set(['search_corpus', 'rerank', 'fetch_document']);
+    const observed = new Set(
+      (context.trace?.spans || [])
+        .map((s) => s.attributes?.['tool.name'])
+        .filter(Boolean),
+    );
+    const missing = [...expected].filter((t) => !observed.has(t));
+    return {
+      pass: missing.length === 0,
+      reason:
+        missing.length === 0
+          ? 'all expected parallel tools fired'
+          : `missing parallel tools: ${missing.join(', ')}`,
+    };
+```
+
 ## Anti-Patterns
 
 A few common mistakes pass schema validation but undermine the eval. Watch for these:
