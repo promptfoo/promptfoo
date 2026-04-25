@@ -93,7 +93,7 @@ const config: Config = {
     announcementBar: {
       id: 'joined-openai',
       content:
-        '<strong>Promptfoo is now part of OpenAI.</strong> <a href="/blog/promptfoo-joining-openai">Read the update →</a>',
+        '<strong>Promptfoo is now part of OpenAI.</strong> <a href="/blog/promptfoo-joining-openai/">Read the update →</a>',
       backgroundColor: '#dc2626',
       textColor: '#ffffff',
       isCloseable: false,

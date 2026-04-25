@@ -4,6 +4,7 @@ import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
@@ -101,10 +102,49 @@ interface RunStepsResponse {
 
 const AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY = 'promptfoo-azure-assistant-cache-key-v1';
 
+function normalizeAzureAssistantCacheValue(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+    seen.add(value);
+    const normalized = value.map((item) => normalizeAzureAssistantCacheValue(item, seen));
+    seen.delete(value);
+    return normalized;
+  }
+
+  if (value && typeof value === 'object') {
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return value;
+    }
+
+    seen.add(value);
+    const normalized = Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = normalizeAzureAssistantCacheValue((value as Record<string, unknown>)[key], seen);
+        return acc;
+      }, {});
+    seen.delete(value);
+    return normalized;
+  }
+
+  return value;
+}
+
 function hmacAzureAssistantCacheValue(value: unknown) {
-  return createHmac('sha256', AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY)
-    .update(JSON.stringify(value))
-    .digest('hex');
+  const serialized = safeJsonStringify(normalizeAzureAssistantCacheValue(value));
+  invariant(
+    serialized !== undefined,
+    'Azure Assistant cache key input contains values that cannot be serialized',
+  );
+
+  return createHmac('sha256', AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY).update(serialized).digest('hex');
 }
 
 function getAuthHeadersCacheIdentity(authHeaders: Record<string, string>) {
@@ -169,7 +209,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       temperature: this.assistantConfig.temperature,
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
-      tools: JSON.stringify(loadedTools),
+      tools: loadedTools,
       top_p: this.assistantConfig.top_p,
     })}`;
 
