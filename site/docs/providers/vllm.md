@@ -42,6 +42,96 @@ curl http://localhost:8000/v1/chat/completions \
 `apiBaseUrl` should be the `/v1` root. Promptfoo appends `/chat/completions`,
 `/completions`, or `/embeddings` depending on the provider type.
 
+### Common 2026 judge models
+
+vLLM's current [supported models](https://docs.vllm.ai/en/stable/models/supported_models/) list
+includes GPT-OSS (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`) and GLM-4.7
+(`zai-org/GLM-4.7`, `zai-org/GLM-4.7-Flash`). Keep `--served-model-name` short and stable;
+promptfoo uses that served name in `openai:chat:<served-model-name>`.
+
+#### GPT-OSS
+
+The [vLLM GPT-OSS recipe](https://docs.vllm.ai/projects/recipes/en/latest/OpenAI/GPT-OSS.html)
+uses `openai/gpt-oss-20b` for the smaller deployment and `openai/gpt-oss-120b` for larger GPU
+hosts:
+
+```bash
+vllm serve openai/gpt-oss-20b \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --served-model-name gpt-oss-20b \
+  --api-key token-abc123
+```
+
+For a GPT-OSS judge, ask vLLM not to include reasoning in the chat response and keep
+`showThinking: false` as the promptfoo-side guard:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:gpt-oss-20b
+      label: Judge: gpt-oss-20b @ vLLM
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: token-abc123
+        temperature: 0
+        max_tokens: 10000
+        showThinking: false
+        passthrough:
+          include_reasoning: false
+          reasoning_effort: low
+```
+
+Put `reasoning_effort` in `passthrough` when you use a custom served name such as `llm_judge`;
+promptfoo forwards `passthrough` fields directly even when the served name no longer contains
+`gpt-oss`.
+
+#### GLM-4.7
+
+The [vLLM GLM-4.X recipe](https://docs.vllm.ai/projects/recipes/en/latest/GLM/GLM.html) includes
+GLM-4.7 and GLM-4.7-Flash. The recipe notes that GLM-4.7 may require a nightly vLLM build and
+Transformers from source:
+
+```bash
+uv pip install -U vllm --pre --extra-index-url https://wheels.vllm.ai/nightly
+uv pip install git+https://github.com/huggingface/transformers.git
+
+vllm serve zai-org/GLM-4.7-FP8 \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --served-model-name glm-4.7 \
+  --tensor-parallel-size 4 \
+  --tool-call-parser glm47 \
+  --reasoning-parser glm45 \
+  --enable-auto-tool-choice \
+  --api-key token-abc123
+```
+
+For `zai-org/GLM-4.7-Flash`, use a served name such as `glm-4.7-flash`. If you do not need tool
+calling, the `--tool-call-parser` and `--enable-auto-tool-choice` flags are optional for ordinary
+model-graded assertions; keep `--reasoning-parser glm45` when you want vLLM to split reasoning from
+final content.
+
+GLM's reasoning parser supports disabling thinking through `enable_thinking: false`:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:glm-4.7
+      label: Judge: GLM-4.7 @ vLLM
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: token-abc123
+        temperature: 0
+        max_tokens: 10000
+        showThinking: false
+        passthrough:
+          chat_template_kwargs:
+            enable_thinking: false
+```
+
 ## Use vLLM as the target model
 
 ```yaml title="promptfooconfig.yaml"
@@ -166,8 +256,8 @@ Set `showThinking: false` on vLLM judge providers so promptfoo discards `reasoni
 ### Disable thinking at the vLLM API level
 
 `showThinking: false` only changes what promptfoo reads from the response; the model may still spend
-tokens thinking. For Qwen3-style chat templates, vLLM also supports disabling thinking per request
-through `chat_template_kwargs`:
+tokens thinking. Qwen3 and GLM chat templates support disabling thinking per request through
+`chat_template_kwargs`:
 
 ```yaml
 defaultTest:
@@ -181,6 +271,22 @@ defaultTest:
         passthrough:
           chat_template_kwargs:
             enable_thinking: false
+```
+
+GPT-OSS uses a different chat-completions knob:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:chat:gpt-oss-20b
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: token-abc123
+        showThinking: false
+        passthrough:
+          include_reasoning: false
+          reasoning_effort: low
 ```
 
 You can also set a server-wide default when launching vLLM:
