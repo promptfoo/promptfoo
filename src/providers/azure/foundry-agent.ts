@@ -4,6 +4,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import { extractRateLimitErrorCode, HttpRateLimitError } from '../../util/fetch/errors';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import {
   maybeLoadResponseFormatFromExternalFile,
@@ -44,6 +45,58 @@ interface AgentReferenceOption {
 interface FoundryResponseCreateOptions {
   body?: {
     agent?: AgentReferenceOption;
+  };
+}
+
+const QUOTA_LIKE_CODES = new Set([
+  'insufficient_quota',
+  'billing_hard_limit_reached',
+  'billing_not_active',
+  'access_terminated',
+  'quota_exceeded',
+]);
+
+/**
+ * Format the human-readable retry-after / reset suffix for a structured
+ * rate-limit error. Returns empty string if no metadata is available.
+ */
+function formatHttpRateLimitDetail(err: HttpRateLimitError): string {
+  const parts: string[] = [];
+  if (typeof err.retryAfterMs === 'number') {
+    parts.push(`retry after ${Math.round(err.retryAfterMs / 1000)}s`);
+  }
+  if (typeof err.resetAt === 'number' && typeof err.retryAfterMs !== 'number') {
+    const remainingMs = Math.max(err.resetAt - Date.now(), 0);
+    if (remainingMs > 0) {
+      parts.push(`resets in ${Math.round(remainingMs / 1000)}s`);
+    }
+  }
+  return parts.length > 0 ? ` [${parts.join(', ')}]` : '';
+}
+
+/**
+ * Detect a 429 from the OpenAI / Azure SDK error shape (status === 429,
+ * with a body-level error code in `.error` / `.code` / `.type`). Returns
+ * the classification or null if the error doesn't match.
+ */
+function classifySdkRateLimit(error: unknown): {
+  kind: 'quota' | 'rate_limit';
+  code?: string;
+} | null {
+  if (typeof error !== 'object' || error === null) {
+    return null;
+  }
+  const err = error as { status?: unknown; code?: unknown; type?: unknown; error?: unknown };
+  if (err.status !== 429) {
+    return null;
+  }
+  const code =
+    extractRateLimitErrorCode(err) ??
+    (typeof err.code === 'string' ? err.code : undefined) ??
+    (typeof err.type === 'string' ? err.type : undefined);
+  return {
+    kind: code !== undefined && QUOTA_LIKE_CODES.has(code) ? 'quota' : 'rate_limit',
+    code,
   };
 }
 
@@ -551,6 +604,33 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private formatError(error: unknown): ProviderResponse {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
+    if (error instanceof HttpRateLimitError) {
+      const detail = formatHttpRateLimitDetail(error);
+      if (error.kind === 'quota') {
+        return {
+          error: `Quota exceeded (HTTP ${error.status}${error.code ? `, code: ${error.code}` : ''}): ${error.message}${detail}. Retries will not help — check your billing or daily quota.`,
+        };
+      }
+      return {
+        error: `Rate limit exceeded (HTTP ${error.status}${error.code ? `, code: ${error.code}` : ''}): ${error.message}${detail}`,
+      };
+    }
+
+    // The OpenAI SDK throws APIError-shaped objects with `status` and a body
+    // that carries the same `error.code` shape we parse for fetch-based paths.
+    // Treat status === 429 as the source of truth and extract a body code.
+    const sdkRateLimit = classifySdkRateLimit(error);
+    if (sdkRateLimit) {
+      if (sdkRateLimit.kind === 'quota') {
+        return {
+          error: `Quota exceeded (HTTP 429${sdkRateLimit.code ? `, code: ${sdkRateLimit.code}` : ''}): ${errorMessage}. Retries will not help — check your billing or daily quota.`,
+        };
+      }
+      return {
+        error: `Rate limit exceeded (HTTP 429${sdkRateLimit.code ? `, code: ${sdkRateLimit.code}` : ''}): ${errorMessage}`,
+      };
+    }
+
     if (this.isContentFilterError(errorMessage)) {
       const lowerErrorMessage = errorMessage.toLowerCase();
       const isInputFiltered =
@@ -593,9 +673,11 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private isRateLimitError(errorMessage: string): boolean {
+    const lower = errorMessage.toLowerCase();
     return (
-      errorMessage.includes('rate limit') ||
-      errorMessage.includes('Rate limit') ||
+      lower.includes('rate limit') ||
+      lower.includes('quota exceeded') ||
+      lower.includes('too many requests') ||
       errorMessage.includes('429')
     );
   }

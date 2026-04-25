@@ -13,10 +13,15 @@ import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerPa
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
+import {
+  extractRateLimitErrorCode,
+  HttpRateLimitError,
+  isHardQuotaCode,
+  type SystemError,
+} from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
-import type { SystemError } from './errors';
 import type { FetchOptions } from './types';
 
 // Cached agents to avoid recreating on every request.
@@ -328,17 +333,18 @@ export function isRateLimited(response: Response): boolean {
 }
 
 /**
- * Handle rate limiting by waiting the appropriate amount of time
+ * Compute how long to wait after a rate-limited response.
+ * Reads `Retry-After`, `X-RateLimit-Reset`, and OpenAI-style reset headers.
+ * Default: 60s.
  */
-export async function handleRateLimit(response: Response): Promise<void> {
+export function computeRateLimitWaitMs(response: Response): number {
   const rateLimitReset = response.headers.get('X-RateLimit-Reset');
   const retryAfter = response.headers.get('Retry-After');
-  // OpenAI specific headers
   const openaiReset =
     response.headers.get('x-ratelimit-reset-requests') ||
     response.headers.get('x-ratelimit-reset-tokens');
 
-  let waitTime = 60_000; // Default wait time of 60 seconds
+  let waitTime = 60_000;
 
   if (openaiReset) {
     const parsedHeaders = parseRateLimitHeaders(Object.fromEntries(response.headers.entries()));
@@ -353,8 +359,84 @@ export async function handleRateLimit(response: Response): Promise<void> {
     waitTime = parseRetryAfter(retryAfter) ?? waitTime;
   }
 
-  logger.debug(`Rate limited, waiting ${waitTime}ms before retry`);
-  await sleep(waitTime);
+  return waitTime;
+}
+
+/**
+ * Maximum jitter (in ms) added to rate-limit waits. Spreads concurrent
+ * waiters so they don't all retry in the same instant after Retry-After.
+ */
+const RATE_LIMIT_JITTER_MS = 1000;
+
+/**
+ * Handle rate limiting by waiting the appropriate amount of time, plus a
+ * uniform random jitter to avoid synchronized retry storms when many
+ * concurrent requests hit the same rate limit.
+ */
+export async function handleRateLimit(response: Response): Promise<void> {
+  const waitTime = computeRateLimitWaitMs(response);
+  const jitter = Math.floor(Math.random() * RATE_LIMIT_JITTER_MS);
+  const totalWait = waitTime + jitter;
+  logger.debug(
+    `Rate limited, waiting ${totalWait}ms (base ${waitTime}ms + ${jitter}ms jitter) before retry`,
+  );
+  await sleep(totalWait);
+}
+
+/**
+ * Read the body of a rate-limited response without consuming the original
+ * stream. Returns the parsed body (JSON if parseable, else raw text) and
+ * any extracted error code (e.g. `insufficient_quota`).
+ *
+ * Cloning is intentional: the caller may still want to read `response`
+ * after we've inspected it — and on a 429 we always end up either retrying
+ * or throwing a structured error, so the small clone cost is acceptable.
+ */
+async function peekRateLimitBody(
+  response: Response,
+): Promise<{ body: unknown; code: string | undefined }> {
+  let cloned: Response;
+  try {
+    cloned = response.clone();
+  } catch {
+    return { body: undefined, code: undefined };
+  }
+
+  let text: string;
+  try {
+    text = await cloned.text();
+  } catch {
+    return { body: undefined, code: undefined };
+  }
+
+  if (!text) {
+    return { body: undefined, code: undefined };
+  }
+
+  try {
+    const json = JSON.parse(text);
+    return { body: json, code: extractRateLimitErrorCode(json) };
+  } catch {
+    return { body: text, code: undefined };
+  }
+}
+
+function buildHttpRateLimitError(
+  response: Response,
+  body: unknown,
+  code: string | undefined,
+): HttpRateLimitError {
+  const headers = Object.fromEntries(response.headers.entries());
+  const parsed = parseRateLimitHeaders(headers);
+  return new HttpRateLimitError({
+    status: response.status,
+    statusText: response.statusText,
+    retryAfterMs: parsed.retryAfterMs,
+    resetAt: parsed.resetAt,
+    code,
+    headers,
+    body,
+  });
 }
 
 /**
@@ -428,17 +510,29 @@ export async function fetchWithRetries(
       }
 
       if (response && isRateLimited(response)) {
+        const { body, code } = await peekRateLimitBody(response);
+
+        // Hard quota codes (e.g. insufficient_quota) won't resolve on retry.
+        // Fail fast with a structured error so the caller can stop instead
+        // of amplifying load against an exhausted account.
+        if (isHardQuotaCode(code)) {
+          logger.debug(
+            `Quota exhausted on URL ${url}: HTTP ${response.status} (code: ${code}), failing fast.`,
+          );
+          throw buildHttpRateLimitError(response, body, code);
+        }
+
         lastErrorMessage = `Rate limited: ${response.status} ${response.statusText}`;
         if (i >= maxRetries) {
-          // No retries remain: fail fast instead of honoring the Retry-After delay.
-          // `lastErrorMessage` was set above so the throw below carries the 429 detail.
+          // No retries remain: throw a structured error instead of a bare string
+          // so callers can read Retry-After / reset / code without re-parsing.
           logger.debug(
-            `Rate limited on URL ${url}: ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, no retries remain.`,
+            `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, no retries remain.`,
           );
-          break;
+          throw buildHttpRateLimitError(response, body, code);
         }
         logger.debug(
-          `Rate limited on URL ${url}: ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, waiting before retry...`,
+          `Rate limited on URL ${url}: HTTP ${response.status} ${response.statusText}, attempt ${i + 1}/${maxRetries + 1}, waiting before retry...`,
         );
         await handleRateLimit(response);
         continue;
@@ -448,6 +542,13 @@ export async function fetchWithRetries(
     } catch (error) {
       // Don't retry on abort - propagate immediately
       if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+
+      // Structured rate-limit errors are already final (quota fail-fast or
+      // retries exhausted) and carry retry-after / reset metadata. Don't
+      // swallow them in the generic retry path.
+      if (error instanceof HttpRateLimitError) {
         throw error;
       }
 

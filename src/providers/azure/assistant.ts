@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import { HttpRateLimitError } from '../../util/fetch/errors';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -390,7 +391,22 @@ export class AzureAssistantProvider extends AzureGenericProvider {
    * Format error responses consistently
    */
   private formatError(err: any): ProviderResponse {
-    const errorMessage = err.message || String(err);
+    const errorMessage = err?.message || String(err);
+
+    // Structured rate-limit errors carry status, code, retry-after metadata.
+    // Use them in preference to substring matching so we can distinguish a
+    // hard quota (don't retry) from a per-window rate limit (retry-safe).
+    if (err instanceof HttpRateLimitError) {
+      const detail = this.formatRateLimitDetail(err);
+      if (err.kind === 'quota') {
+        return {
+          error: `Quota exceeded (HTTP ${err.status}${err.code ? `, code: ${err.code}` : ''}): ${err.message}${detail}. Retries will not help — check your billing or daily quota.`,
+        };
+      }
+      return {
+        error: `Rate limit exceeded (HTTP ${err.status}${err.code ? `, code: ${err.code}` : ''}): ${err.message}${detail}`,
+      };
+    }
 
     // Handle content filter errors
     if (this.isContentFilterError(errorMessage)) {
@@ -528,11 +544,31 @@ export class AzureAssistantProvider extends AzureGenericProvider {
   }
 
   private isRateLimitError(errorMessage: string): boolean {
+    const lower = errorMessage.toLowerCase();
     return (
-      errorMessage.includes('rate limit') ||
-      errorMessage.includes('Rate limit') ||
+      lower.includes('rate limit') ||
+      lower.includes('quota exceeded') ||
+      lower.includes('too many requests') ||
       errorMessage.includes('429')
     );
+  }
+
+  /**
+   * Format the human-readable retry-after / reset detail for a structured
+   * rate-limit error. Returns empty string if no metadata is available.
+   */
+  private formatRateLimitDetail(err: HttpRateLimitError): string {
+    const parts: string[] = [];
+    if (typeof err.retryAfterMs === 'number') {
+      parts.push(`retry after ${Math.round(err.retryAfterMs / 1000)}s`);
+    }
+    if (typeof err.resetAt === 'number') {
+      const remainingMs = Math.max(err.resetAt - Date.now(), 0);
+      if (remainingMs > 0 && typeof err.retryAfterMs !== 'number') {
+        parts.push(`resets in ${Math.round(remainingMs / 1000)}s`);
+      }
+    }
+    return parts.length > 0 ? ` [${parts.join(', ')}]` : '';
   }
 
   private isServiceError(errorMessage: string): boolean {
@@ -554,9 +590,17 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     );
   }
 
-  private isRetryableError(code?: string, message?: string): boolean {
+  private isRetryableError(code?: string, message?: string, err?: unknown): boolean {
+    // Structured signal beats string matching: hard quotas are explicitly
+    // not retryable even though they share HTTP 429 with rate limits.
+    if (err instanceof HttpRateLimitError) {
+      return err.kind !== 'quota';
+    }
     if (code === 'rate_limit_exceeded') {
       return true;
+    }
+    if (code && this.QUOTA_LIKE_CODES.has(code)) {
+      return false;
     }
     if (!message) {
       return false;
@@ -566,6 +610,14 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       this.isRateLimitError(message) || this.isServiceError(message) || this.isServerError(message)
     );
   }
+
+  private readonly QUOTA_LIKE_CODES = new Set([
+    'insufficient_quota',
+    'billing_hard_limit_reached',
+    'billing_not_active',
+    'access_terminated',
+    'quota_exceeded',
+  ]);
 
   /**
    * Poll a run until it completes or fails
@@ -845,16 +897,15 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       } catch (error: any) {
         // Handle error during polling
         logger.error(`Error polling run status: ${error}`);
-        const errorMessage = error.message || String(error);
 
-        // For transient errors, return a retryable error response
-        if (this.isRetryableError('', errorMessage)) {
-          return {
-            error: `Error polling run status: ${errorMessage}`,
-          };
+        // Structured rate-limit / quota errors carry classification metadata.
+        // Surface them via the same path as the top-level callApi handler so
+        // we get distinct error messages for quota vs per-window throttling.
+        if (error instanceof HttpRateLimitError) {
+          return this.formatError(error);
         }
 
-        // For other errors, just return the error without marking as retryable
+        const errorMessage = error?.message || String(error);
         return {
           error: `Error polling run status: ${errorMessage}`,
         };

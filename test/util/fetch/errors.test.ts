@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  extractRateLimitErrorCode,
   findTargetErrorStatus,
+  HttpRateLimitError,
+  isHardQuotaCode,
+  isHttpRateLimitError,
   isNonTransientHttpStatus,
   isTransientConnectionError,
 } from '../../../src/util/fetch/errors';
@@ -149,5 +153,121 @@ describe('isTransientConnectionError', () => {
   it('returns false for wrong version number errors', () => {
     const error = new Error('eproto wrong version number');
     expect(isTransientConnectionError(error)).toBe(false);
+  });
+});
+
+describe('isHardQuotaCode', () => {
+  it.each([
+    ['insufficient_quota', true],
+    ['billing_hard_limit_reached', true],
+    ['billing_not_active', true],
+    ['access_terminated', true],
+    ['quota_exceeded', true],
+    ['rate_limit_exceeded', false],
+    ['tokens_per_min', false],
+    ['', false],
+  ])('isHardQuotaCode(%s) === %s', (code, expected) => {
+    expect(isHardQuotaCode(code as string)).toBe(expected);
+  });
+
+  it('returns false for undefined', () => {
+    expect(isHardQuotaCode(undefined)).toBe(false);
+  });
+});
+
+describe('extractRateLimitErrorCode', () => {
+  it('extracts OpenAI / Azure shape: { error: { code } }', () => {
+    expect(
+      extractRateLimitErrorCode({
+        error: { code: 'insufficient_quota', message: 'You exceeded your current quota' },
+      }),
+    ).toBe('insufficient_quota');
+  });
+
+  it('falls back to error.type when error.code is missing', () => {
+    expect(extractRateLimitErrorCode({ error: { type: 'rate_limit_error' } })).toBe(
+      'rate_limit_error',
+    );
+  });
+
+  it('reads top-level code', () => {
+    expect(extractRateLimitErrorCode({ code: 'tokens_per_min' })).toBe('tokens_per_min');
+  });
+
+  it('reads top-level type', () => {
+    expect(extractRateLimitErrorCode({ type: 'rate_limit_error' })).toBe('rate_limit_error');
+  });
+
+  it('returns undefined for non-object', () => {
+    expect(extractRateLimitErrorCode('plain text')).toBeUndefined();
+    expect(extractRateLimitErrorCode(null)).toBeUndefined();
+    expect(extractRateLimitErrorCode(undefined)).toBeUndefined();
+    expect(extractRateLimitErrorCode(123)).toBeUndefined();
+  });
+
+  it('returns undefined when no code-like field is present', () => {
+    expect(extractRateLimitErrorCode({ error: {} })).toBeUndefined();
+    expect(extractRateLimitErrorCode({})).toBeUndefined();
+  });
+
+  it('ignores empty string code', () => {
+    expect(extractRateLimitErrorCode({ error: { code: '' } })).toBeUndefined();
+  });
+});
+
+describe('HttpRateLimitError', () => {
+  it('classifies known quota codes as kind="quota"', () => {
+    const err = new HttpRateLimitError({ status: 429, code: 'insufficient_quota' });
+    expect(err.kind).toBe('quota');
+    expect(err.message).toContain('Quota exceeded');
+    expect(err.message).toContain('429');
+    expect(err.message).toContain('insufficient_quota');
+  });
+
+  it('classifies unknown / per-window codes as kind="rate_limit"', () => {
+    const err = new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' });
+    expect(err.kind).toBe('rate_limit');
+    expect(err.message).toContain('Rate limit exceeded');
+    expect(err.message).toContain('429');
+  });
+
+  it('preserves status, retryAfterMs, resetAt, headers, body', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      statusText: 'Too Many Requests',
+      retryAfterMs: 5000,
+      resetAt: 1_700_000_000_000,
+      headers: { 'retry-after': '5' },
+      body: { error: { code: 'rate_limit_exceeded' } },
+      code: 'rate_limit_exceeded',
+    });
+    expect(err.status).toBe(429);
+    expect(err.statusText).toBe('Too Many Requests');
+    expect(err.retryAfterMs).toBe(5000);
+    expect(err.resetAt).toBe(1_700_000_000_000);
+    expect(err.headers?.['retry-after']).toBe('5');
+    expect(err.body).toEqual({ error: { code: 'rate_limit_exceeded' } });
+    expect(err.code).toBe('rate_limit_exceeded');
+  });
+
+  it('defaults statusText to "Too Many Requests"', () => {
+    const err = new HttpRateLimitError({ status: 429 });
+    expect(err.statusText).toBe('Too Many Requests');
+  });
+
+  it('produces a message containing the substrings legacy classifiers match on', () => {
+    const err = new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' });
+    const lowered = err.message.toLowerCase();
+    // Back-compat: substring matchers across the codebase look for these tokens
+    expect(err.message).toContain('429');
+    expect(lowered.includes('rate limit') || lowered.includes('too many requests')).toBe(true);
+  });
+
+  it('isHttpRateLimitError type guard works', () => {
+    expect(isHttpRateLimitError(new HttpRateLimitError({ status: 429 }))).toBe(true);
+    expect(isHttpRateLimitError(new Error('rate limit'))).toBe(false);
+    expect(isHttpRateLimitError(undefined)).toBe(false);
+    expect(isHttpRateLimitError(null)).toBe(false);
+    expect(isHttpRateLimitError({ name: 'HttpRateLimitError' })).toBe(false);
   });
 });

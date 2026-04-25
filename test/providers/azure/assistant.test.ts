@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureAssistantProvider } from '../../../src/providers/azure/assistant';
+import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { sleep } from '../../../src/util/time';
 
 vi.mock('../../../src/cache');
@@ -1364,6 +1365,7 @@ describe('Azure Assistant Provider', () => {
       expect((provider as any).isRateLimitError('rate limit exceeded')).toBe(true);
       expect((provider as any).isRateLimitError('Rate limit reached')).toBe(true);
       expect((provider as any).isRateLimitError('HTTP 429 Too Many Requests')).toBe(true);
+      expect((provider as any).isRateLimitError('Quota exceeded for daily tokens')).toBe(true);
       expect((provider as any).isRateLimitError('some other error')).toBe(false);
     });
 
@@ -1397,6 +1399,115 @@ describe('Azure Assistant Provider', () => {
       expect((provider as any).isRetryableError(undefined, 'Invalid request')).toBe(false);
       expect((provider as any).isRetryableError('invalid_request')).toBe(false);
       expect((provider as any).isRetryableError()).toBe(false);
+
+      // Quota codes are not retryable even though they share HTTP 429 with rate limits
+      expect((provider as any).isRetryableError('insufficient_quota')).toBe(false);
+      expect((provider as any).isRetryableError('billing_hard_limit_reached')).toBe(false);
+      expect((provider as any).isRetryableError('access_terminated')).toBe(false);
+    });
+
+    it('treats structured HttpRateLimitError as retryable iff kind === "rate_limit"', () => {
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 5000,
+      });
+      const quota = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
+
+      expect((provider as any).isRetryableError(undefined, undefined, rateLimit)).toBe(true);
+      expect((provider as any).isRetryableError(undefined, undefined, quota)).toBe(false);
+    });
+  });
+
+  describe('structured HttpRateLimitError handling', () => {
+    it('formats a per-window rate limit error with retry-after detail', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        statusText: 'Too Many Requests',
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 12_000,
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.error).toContain('429');
+      expect(result.error).toContain('rate_limit_exceeded');
+      expect(result.error).toContain('retry after 12s');
+      expect(result.error).not.toContain('Retries will not help');
+    });
+
+    it('formats a hard quota error with a clear non-retryable hint', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        statusText: 'Too Many Requests',
+        code: 'insufficient_quota',
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
+      expect(result.error).toContain('Retries will not help');
+    });
+
+    it('omits retry-after detail when no metadata is available', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).not.toContain('retry after');
+      expect(result.error).not.toContain('resets in');
+    });
+
+    it('uses resetAt fallback when retryAfterMs is missing', () => {
+      const err = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        resetAt: Date.now() + 30_000,
+      });
+      const result = (provider as any).formatError(err);
+
+      expect(result.error).toMatch(/resets in \d+s/);
+    });
+
+    it('surfaces structured rate-limit errors raised during run polling', async () => {
+      const provider2 = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            testFunction: vi.fn() as any,
+          },
+        },
+      });
+      (provider2 as any).authHeaders = { 'api-key': 'test-key' };
+
+      vi.spyOn(provider2 as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      vi.spyOn(provider2 as any, 'ensureInitialized').mockResolvedValue(undefined);
+      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+
+      const quota = new HttpRateLimitError({
+        status: 429,
+        code: 'insufficient_quota',
+      });
+      vi.spyOn(provider2 as any, 'makeRequest').mockRejectedValue(quota);
+
+      const result = await (provider2 as any).pollRunWithToolCallHandling(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-1',
+        'run-1',
+      );
+
+      expect(result.error).toContain('Quota exceeded');
+      expect(result.error).toContain('insufficient_quota');
     });
   });
 
