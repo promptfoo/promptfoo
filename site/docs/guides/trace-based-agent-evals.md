@@ -173,7 +173,7 @@ span.setAttributes({
 });
 ```
 
-Keep span names boring and stable. Avoid generated IDs in names; put IDs in attributes if you need them. Avoid recording secrets, raw credentials, or large documents in attributes. Promptfoo redacts common credential-like fields when displaying traces, but the safest trace is one that never records secrets in the first place.
+Keep span names boring and stable. Avoid generated IDs in names; put IDs in attributes if you need them. Avoid recording secrets, raw credentials, or large documents in attributes. Promptfoo sanitizes the GenAI request and response bodies it captures itself, but it does not redact attributes you attach to your own spans — the safest trace is one that never records secrets in the first place.
 
 If your provider manually flushes OpenTelemetry, flush after the root span has ended. Flushing before `span.end()` can export child spans while omitting the parent span, which makes count and timeline assertions harder to reason about.
 
@@ -467,7 +467,7 @@ If trajectory assertions say no trace data is available:
 
 If traces appear but trajectory assertions do not match:
 
-- Check span names and attributes in the Trace Timeline.
+- Check span names and attributes in the Traces tab of the result details panel.
 - Add `tool.name` and `tool.arguments` for tool calls.
 - Add `command` or `codex.command` for shell steps.
 - Add `search.query` or a search-like span name for retrieval/search steps.
