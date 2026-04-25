@@ -264,14 +264,14 @@ that scratchpad before the final answer.
 Set `showThinking: false` on vLLM judge providers so promptfoo discards `reasoning` and parses only
 `content`.
 
-| Assertion family                                                                          | What reasoning text can break                                                                                                  |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `llm-rubric`, `g-eval`, `factuality`, `conversation-relevance`, `trajectory:goal-success` | These parse structured JSON or category output. A JSON-looking scratchpad can be read as the verdict before the final content. |
-| `search-rubric`                                                                           | Same JSON-first behavior, when the configured search-capable judge also returns separate reasoning.                            |
-| `answer-relevance`                                                                        | Generated questions are embedded. Prepended thinking text changes the strings being embedded and can change similarity scores. |
-| `context-recall`, `context-relevance`, `context-faithfulness`                             | Scratchpad sentences, attribution markers, or NLI verdict text can become part of the score calculation.                       |
-| `select-best`                                                                             | The first integer in the combined judge output can come from scratchpad reasoning instead of the final selected index.         |
-| `model-graded-closedqa`                                                                   | This parser is less fragile because it checks the final `Y`/`N` suffix, but hiding thinking still keeps judge reasons clean.   |
+| Assertion family                                                                                                      | What reasoning text can break                                                                                                  |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `llm-rubric`, `g-eval`, `factuality` / `model-graded-factuality`, `conversation-relevance`, `trajectory:goal-success` | These parse structured JSON or category output. A JSON-looking scratchpad can be read as the verdict before the final content. |
+| `search-rubric`                                                                                                       | Same JSON-first behavior, when the configured search-capable judge also returns separate reasoning.                            |
+| `answer-relevance`                                                                                                    | Generated questions are embedded. Prepended thinking text changes the strings being embedded and can change similarity scores. |
+| `context-recall`, `context-relevance`, `context-faithfulness`                                                         | Scratchpad sentences, attribution markers, or NLI verdict text can become part of the score calculation.                       |
+| `select-best`                                                                                                         | The first integer in the combined judge output can come from scratchpad reasoning instead of the final selected index.         |
+| `model-graded-closedqa`                                                                                               | This parser is less fragile because it checks the final `Y`/`N` suffix, but hiding thinking still keeps judge reasons clean.   |
 
 ### Disable thinking at the vLLM API level
 

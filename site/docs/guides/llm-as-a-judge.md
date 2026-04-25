@@ -116,9 +116,10 @@ tests:
 
 `showThinking: false` matters for thinking-capable local judges. vLLM can return reasoning in a
 separate `reasoning` field and the final verdict in `content`; promptfoo should grade only the final
-content. This applies beyond `llm-rubric`: `g-eval`, `factuality`, RAG metrics, conversation
-relevance, trajectory goal success, and `select-best` all consume the judge output according to their
-own parsers. Do not also put `provider: openai:chat:llm_judge` on the assertion, because that
+content. This applies beyond `llm-rubric`: `g-eval`, `factuality` / `model-graded-factuality`,
+RAG metrics, `search-rubric`, conversation relevance, trajectory goal success, and `select-best` all
+consume the judge output according to their own parsers. Do not also put
+`provider: openai:chat:llm_judge` on the assertion, because that
 shorthand overrides the full provider object and drops the `apiBaseUrl`, `apiKey`, and
 `showThinking` settings.
 

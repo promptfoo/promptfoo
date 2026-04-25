@@ -98,8 +98,9 @@ Like other model-graded assertions, you can override the default grader:
    ```
 
 If the grader is a thinking-capable OpenAI-compatible model, use the full provider object and set
-`showThinking: false`. `factuality` parses the first valid category JSON it sees, so scratchpad
-reasoning such as `{"category":"D"}` can override the final category in `content`.
+`showThinking: false`. `factuality` and its legacy alias `model-graded-factuality` parse the first
+valid category JSON they see, so scratchpad reasoning such as `{"category":"D"}` can override the
+final category in `content`.
 
 ## Customizing the Prompt
 

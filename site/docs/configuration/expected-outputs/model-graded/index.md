@@ -302,13 +302,13 @@ defaultTest:
 This is not specific to `llm-rubric`. Promptfoo receives one output string from the judge, and each
 model-graded assertion consumes that string according to its own parser:
 
-| Assertions                                                                                | Why `showThinking: false` matters                                                                                      |
-| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `llm-rubric`, `g-eval`, `factuality`, `conversation-relevance`, `trajectory:goal-success` | They parse JSON or category-like verdicts; scratchpad JSON can be selected before the final verdict.                   |
-| `search-rubric`                                                                           | It has the same JSON-first parsing behavior when the web-search-capable judge also exposes reasoning text.             |
-| `answer-relevance`                                                                        | It embeds judge-generated questions; prepended thinking text changes the embedded strings.                             |
-| `context-recall`, `context-relevance`, `context-faithfulness`                             | They score judge-generated sentences, attribution markers, or NLI verdicts; scratchpad text can become scored content. |
-| `select-best`                                                                             | It reads the first integer from the judge output; scratchpad numbers can select the wrong candidate.                   |
+| Assertions                                                                                                            | Why `showThinking: false` matters                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `llm-rubric`, `g-eval`, `factuality` / `model-graded-factuality`, `conversation-relevance`, `trajectory:goal-success` | They parse JSON or category-like verdicts; scratchpad JSON can be selected before the final verdict.                   |
+| `search-rubric`                                                                                                       | It has the same JSON-first parsing behavior when the web-search-capable judge also exposes reasoning text.             |
+| `answer-relevance`                                                                                                    | It embeds judge-generated questions; prepended thinking text changes the embedded strings.                             |
+| `context-recall`, `context-relevance`, `context-faithfulness`                                                         | They score judge-generated sentences, attribution markers, or NLI verdicts; scratchpad text can become scored content. |
+| `select-best`                                                                                                         | It reads the first integer from the judge output; scratchpad numbers can select the wrong candidate.                   |
 
 `model-graded-closedqa` is less likely to flip because it checks whether the combined output ends in
 `Y` or `N`, but `showThinking: false` is still recommended for self-hosted judges so explanations and
