@@ -73,6 +73,8 @@ function createSSEStream(events: string, splitAt?: number[]) {
 describe('QuiverAI Provider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getEnvString).mockReset();
+    vi.mocked(getEnvInt).mockReset();
     vi.mocked(getEnvInt).mockReturnValue(300_000);
   });
 
