@@ -454,7 +454,7 @@ With streaming enabled, the provider calls `thread.runStreamed()` and creates on
 - **Web searches** - Spans named `search "<query>"` with a sanitized `codex.search.query`
 - **Collaboration events** - Spans for spawn/send/wait items when collaboration mode is enabled
 
-Promptfoo also derives `response.metadata.skillCalls` heuristically from Codex command items that reference a local `.../skills/<name>/SKILL.md` path. That detection does not verify that the command actually read the file, so keep `enable_streaming: true` on skill evals when you want both trace evidence and `skill-used` assertions.
+Promptfoo also derives `response.metadata.skillCalls` heuristically from Codex command items that exited successfully and reference a local `.../skills/<name>/SKILL.md` path. Successful execution does not prove the command actually read the file, so keep `enable_streaming: true` on skill evals when you want both trace evidence and `skill-used` assertions.
 
 ### Deep Tracing
 
