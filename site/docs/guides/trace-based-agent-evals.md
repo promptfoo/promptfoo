@@ -1,16 +1,26 @@
 ---
-title: Trace-Based Agent Evals
-description: Use Promptfoo tracing, trajectory assertions, and trace assertions to test what agents actually did, not just their final answers.
-sidebar_position: 66
+title: 'Trace-Based Agent Evaluation: Tool-Call, Trajectory, and CI Assertions'
+description: Evaluate AI agents on what they actually did — tool calls, retrieval steps, reasoning, and ordering — using OpenTelemetry traces in Promptfoo.
+keywords:
+  - agent evaluation
+  - agent trajectory evaluation
+  - tool-call accuracy
+  - tool selection accuracy
+  - LLM observability
+  - OpenTelemetry
+  - trace evaluation
+  - LLM CI
+image: /img/docs/tracing/trace-guide-results-overview.png
+sidebar_position: 64
 ---
 
-# Trace-Based Agent Evals
+# Trace-Based Agent Evaluation
 
 Agent evals often fail in the space between the prompt and the final answer. A support agent can say it looked up an order without calling the order API. A coding agent can say tests passed without running them. A RAG pipeline can answer correctly while silently skipping retrieval.
 
 Tracing turns that hidden path into eval data. Promptfoo can receive OpenTelemetry spans, visualize them in the web UI, and use them in assertions. That lets you test both the final answer and the workflow that produced it.
 
-![Promptfoo results table showing a trace-backed RAG agent eval with 12 passing assertions](/img/docs/tracing/trace-guide-results-overview.png)
+![Promptfoo results table for a trace-backed RAG agent eval, showing 12 of 12 assertions passing across span counts, retrieval latency, tool sequence, reasoning steps, and a goal-success judge score](/img/docs/tracing/trace-guide-results-overview.png)
 
 This guide shows how to:
 
@@ -21,7 +31,7 @@ This guide shows how to:
 - inspect the assertion output and Trace Timeline in the web UI
 - design trace checks that stay stable as an agent evolves
 
-## Why Trace-Based Evals Matter
+## Why Evaluate Agent Trajectories, Not Just Final Answers
 
 Modern agent observability tools are converging on the same pattern: keep the trace as the ground truth for what the agent did, then evaluate the trace instead of only evaluating the final message.
 
@@ -32,7 +42,7 @@ Modern agent observability tools are converging on the same pattern: keep the tr
 
 Promptfoo's angle is that these checks live in the same eval config as the rest of your regression suite. You can run them locally, in CI, against custom providers, and against agent SDKs that emit or forward OpenTelemetry spans.
 
-## The Mental Model
+## Raw Spans vs. Trajectory Steps
 
 Trace-based evals have three layers:
 
@@ -51,9 +61,8 @@ A durable trace-backed eval usually uses both levels:
 - trajectory assertions that prove the agent used the right tools, arguments, and order
 - a model-graded trajectory assertion for the overall task when deterministic checks are too narrow
 
-## How A Traced Row Is Evaluated
-
-For each traced test row, Promptfoo does the same loop:
+:::note How a traced row is evaluated under the hood
+For each traced test row, Promptfoo runs the same loop:
 
 1. Starts the OTLP receiver configured under `tracing`.
 2. Creates a provider span and passes `traceparent` into the provider context.
@@ -65,7 +74,8 @@ For each traced test row, Promptfoo does the same loop:
 8. Runs model-graded trajectory assertions as judge calls linked to the same trace.
 9. Stores assertion reasons so failures explain which spans or steps matched.
 
-That means trace-based assertions are not a separate observability product bolted on after the run. They are part of the eval result: pass/fail status, scores, reasons, and the trace UI all point at the same execution path.
+Trace-based assertions are not a separate observability product bolted on after the run — they are part of the eval result. Pass/fail status, scores, reasons, and the trace UI all point at the same execution path.
+:::
 
 ## Run The Example
 
@@ -84,15 +94,15 @@ The example uses a simulated provider for the RAG workflow. It only needs `OPENA
 
 Open the eval row, then switch between **Evaluation** and **Traces** in the details panel. The Evaluation tab shows which assertion passed and why:
 
-![Promptfoo Evaluation tab showing raw trace assertion results for span count, duration, and errors](/img/docs/tracing/trace-guide-assertions-raw.png)
+![Evaluation tab showing raw trace assertions: rag_agent_workflow span count of 1, three retrieve_document_* spans, 95th-percentile retrieval latency under 350 ms, and zero error spans](/img/docs/tracing/trace-guide-assertions-raw.png)
 
 Scroll further and you can see the trajectory assertions proving the behavioral path:
 
-![Promptfoo Evaluation tab showing trajectory assertion results for tool sequence, reasoning count, and goal success](/img/docs/tracing/trace-guide-assertions-trajectory.png)
+![Evaluation tab showing trajectory assertions: search_corpus tool used three times, compose_answer once, no issue_refund call, search_corpus arguments matched, search_corpus precedes compose_answer, four reasoning steps, and a goal-success judge score of 0.98](/img/docs/tracing/trace-guide-assertions-trajectory.png)
 
 The Traces tab shows the timeline that powered those assertions:
 
-![Promptfoo Trace Timeline showing query analysis, document retrieval, reasoning, response generation, and grading spans](/img/docs/tracing/trace-guide-timeline.png)
+![Trace timeline waterfall under the rag_agent_workflow root span: query_analysis, document_retrieval with three retrieve_document_* children, context_augmentation, reasoning_chain with three reasoning_* children, response_generation, and a grading span](/img/docs/tracing/trace-guide-timeline.png)
 
 In the passing run above, Promptfoo verified:
 
