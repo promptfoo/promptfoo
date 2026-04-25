@@ -128,6 +128,11 @@ promptfoo eval --output results.jsonl
 {"testIdx": 1, "promptIdx": 0, "output": "Response 2", "success": true, "score": 0.9}
 ```
 
+For assertion-level details, inspect each row's `gradingResult.componentResults` array. The
+top-level `success`, `score`, and `gradingResult` fields describe the aggregate result for the
+test row, while each `componentResults[]` entry contains the pass/fail, score, reason, and
+assertion metadata for one evaluated assertion.
+
 ### XML Format
 
 Structured data for enterprise integrations:
