@@ -4,7 +4,12 @@ import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { extractRateLimitErrorCode, HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  extractRateLimitErrorCode,
+  formatRateLimitDetail,
+  HARD_QUOTA_ERROR_CODES,
+  HttpRateLimitError,
+} from '../../util/fetch/errors';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import {
   maybeLoadResponseFormatFromExternalFile,
@@ -48,36 +53,14 @@ interface FoundryResponseCreateOptions {
   };
 }
 
-const QUOTA_LIKE_CODES = new Set([
-  'insufficient_quota',
-  'billing_hard_limit_reached',
-  'billing_not_active',
-  'access_terminated',
-  'quota_exceeded',
-]);
-
 /**
- * Format the human-readable retry-after / reset suffix for a structured
- * rate-limit error. Returns empty string if no metadata is available.
- */
-function formatHttpRateLimitDetail(err: HttpRateLimitError): string {
-  const parts: string[] = [];
-  if (typeof err.retryAfterMs === 'number') {
-    parts.push(`retry after ${Math.round(err.retryAfterMs / 1000)}s`);
-  }
-  if (typeof err.resetAt === 'number' && typeof err.retryAfterMs !== 'number') {
-    const remainingMs = Math.max(err.resetAt - Date.now(), 0);
-    if (remainingMs > 0) {
-      parts.push(`resets in ${Math.round(remainingMs / 1000)}s`);
-    }
-  }
-  return parts.length > 0 ? ` [${parts.join(', ')}]` : '';
-}
-
-/**
- * Detect a 429 from the OpenAI / Azure SDK error shape (status === 429,
- * with a body-level error code in `.error` / `.code` / `.type`). Returns
- * the classification or null if the error doesn't match.
+ * Detect a 429 from the OpenAI / Azure SDK error shape (status === 429
+ * with a body-level error code in `.error.code` / `.error.type`). The SDK
+ * does not throw `HttpRateLimitError` because it doesn't go through
+ * `fetchWithRetries` — so we rebuild the same classification here.
+ *
+ * Returns null when the error isn't a 429 (caller falls through to other
+ * branches; this is a classifier, not an error filter).
  */
 function classifySdkRateLimit(error: unknown): {
   kind: 'quota' | 'rate_limit';
@@ -86,16 +69,13 @@ function classifySdkRateLimit(error: unknown): {
   if (typeof error !== 'object' || error === null) {
     return null;
   }
-  const err = error as { status?: unknown; code?: unknown; type?: unknown; error?: unknown };
+  const err = error as { status?: unknown; error?: unknown };
   if (err.status !== 429) {
     return null;
   }
-  const code =
-    extractRateLimitErrorCode(err) ??
-    (typeof err.code === 'string' ? err.code : undefined) ??
-    (typeof err.type === 'string' ? err.type : undefined);
+  const code = extractRateLimitErrorCode(err);
   return {
-    kind: code !== undefined && QUOTA_LIKE_CODES.has(code) ? 'quota' : 'rate_limit',
+    kind: code !== undefined && HARD_QUOTA_ERROR_CODES.has(code) ? 'quota' : 'rate_limit',
     code,
   };
 }
@@ -605,10 +585,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     if (error instanceof HttpRateLimitError) {
-      const detail = formatHttpRateLimitDetail(error);
+      const detail = formatRateLimitDetail(error);
       if (error.kind === 'quota') {
         return {
-          error: `Quota exceeded (HTTP ${error.status}${error.code ? `, code: ${error.code}` : ''}): ${error.message}${detail}. Retries will not help — check your billing or daily quota.`,
+          error: `Quota exceeded (HTTP ${error.status}${error.code ? `, code: ${error.code}` : ''}): ${error.message}. Retries will not help — check your billing or daily quota.`,
         };
       }
       return {

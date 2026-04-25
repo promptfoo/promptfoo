@@ -2,7 +2,11 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { HttpRateLimitError } from '../../util/fetch/errors';
+import {
+  formatRateLimitDetail,
+  HARD_QUOTA_ERROR_CODES,
+  HttpRateLimitError,
+} from '../../util/fetch/errors';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -397,10 +401,10 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     // Use them in preference to substring matching so we can distinguish a
     // hard quota (don't retry) from a per-window rate limit (retry-safe).
     if (err instanceof HttpRateLimitError) {
-      const detail = this.formatRateLimitDetail(err);
+      const detail = formatRateLimitDetail(err);
       if (err.kind === 'quota') {
         return {
-          error: `Quota exceeded (HTTP ${err.status}${err.code ? `, code: ${err.code}` : ''}): ${err.message}${detail}. Retries will not help — check your billing or daily quota.`,
+          error: `Quota exceeded (HTTP ${err.status}${err.code ? `, code: ${err.code}` : ''}): ${err.message}. Retries will not help — check your billing or daily quota.`,
         };
       }
       return {
@@ -553,24 +557,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     );
   }
 
-  /**
-   * Format the human-readable retry-after / reset detail for a structured
-   * rate-limit error. Returns empty string if no metadata is available.
-   */
-  private formatRateLimitDetail(err: HttpRateLimitError): string {
-    const parts: string[] = [];
-    if (typeof err.retryAfterMs === 'number') {
-      parts.push(`retry after ${Math.round(err.retryAfterMs / 1000)}s`);
-    }
-    if (typeof err.resetAt === 'number') {
-      const remainingMs = Math.max(err.resetAt - Date.now(), 0);
-      if (remainingMs > 0 && typeof err.retryAfterMs !== 'number') {
-        parts.push(`resets in ${Math.round(remainingMs / 1000)}s`);
-      }
-    }
-    return parts.length > 0 ? ` [${parts.join(', ')}]` : '';
-  }
-
   private isServiceError(errorMessage: string): boolean {
     return (
       errorMessage.includes('Service unavailable') ||
@@ -599,7 +585,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     if (code === 'rate_limit_exceeded') {
       return true;
     }
-    if (code && this.QUOTA_LIKE_CODES.has(code)) {
+    if (code && HARD_QUOTA_ERROR_CODES.has(code)) {
       return false;
     }
     if (!message) {
@@ -610,14 +596,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       this.isRateLimitError(message) || this.isServiceError(message) || this.isServerError(message)
     );
   }
-
-  private readonly QUOTA_LIKE_CODES = new Set([
-    'insufficient_quota',
-    'billing_hard_limit_reached',
-    'billing_not_active',
-    'access_terminated',
-    'quota_exceeded',
-  ]);
 
   /**
    * Poll a run until it completes or fails
@@ -895,16 +873,17 @@ export class AzureAssistantProvider extends AzureGenericProvider {
           pollIntervalMs = Math.min(pollIntervalMs * 1.5, 5000);
         }
       } catch (error: any) {
-        // Handle error during polling
-        logger.error(`Error polling run status: ${error}`);
-
         // Structured rate-limit / quota errors carry classification metadata.
         // Surface them via the same path as the top-level callApi handler so
         // we get distinct error messages for quota vs per-window throttling.
+        // Log at warn (not error) since these are operator-actionable signals,
+        // not unexpected failures.
         if (error instanceof HttpRateLimitError) {
+          logger.warn(`Rate-limited while polling run status: ${error.message}`);
           return this.formatError(error);
         }
 
+        logger.error(`Error polling run status: ${error}`);
         const errorMessage = error?.message || String(error);
         return {
           error: `Error polling run status: ${errorMessage}`,

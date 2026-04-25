@@ -1619,6 +1619,59 @@ describe('fetchWithRetries', () => {
       // Body is preserved as raw text for diagnostics.
       expect(rl.body).toBe('plain text rate limit notice');
     });
+
+    it('handles empty body without bubbling up the read', async () => {
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.resolve(''),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBeUndefined();
+      expect(rl.body).toBeUndefined();
+    });
+
+    it('degrades gracefully when body read fails', async () => {
+      // Simulate a stream that errors mid-read — the structured error must
+      // still surface, just without body code (worst case: misclassify
+      // quota as rate_limit, which is the safer side).
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.reject(new Error('stream consumed')),
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      expect(rl.kind).toBe('rate_limit');
+      expect(rl.code).toBeUndefined();
+    });
+
+    it('classifies via error.type when error.code is missing (Anthropic shape)', async () => {
+      // Anthropic error envelopes use `error.type`, not `error.code`. The
+      // body-code extractor falls back to `type`; verify a quota-shaped
+      // type still triggers the quota fail-fast path.
+      const response = rateLimitedJsonResponse({
+        body: { error: { type: 'insufficient_quota', message: 'quota exhausted' } },
+      });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 4).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      expect((err as HttpRateLimitError).kind).toBe('quota');
+      expect((err as HttpRateLimitError).code).toBe('insufficient_quota');
+      // Single attempt — quota fail-fast must not retry.
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

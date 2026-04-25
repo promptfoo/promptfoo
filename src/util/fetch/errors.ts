@@ -11,9 +11,12 @@ export interface SystemError extends Error {
  * a transient per-window rate limit. Retrying these will not succeed and just
  * amplifies load and cost; callers should fail fast.
  *
- * Sourced from documented OpenAI / Azure OpenAI / Anthropic responses.
+ * References:
+ * - OpenAI: https://platform.openai.com/docs/guides/error-codes/api-errors
+ * - Azure OpenAI: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
+ * - Anthropic: https://docs.anthropic.com/en/api/errors
  */
-export const HARD_QUOTA_ERROR_CODES = new Set([
+export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
   'insufficient_quota',
   'billing_hard_limit_reached',
   'billing_not_active',
@@ -21,8 +24,28 @@ export const HARD_QUOTA_ERROR_CODES = new Set([
   'quota_exceeded',
 ]);
 
+/**
+ * Distinguishes the operational meaning of an HTTP rate-limit response.
+ *
+ * - `'quota'`     — Daily / billing / contractual exhaustion. Retrying the
+ *                   same request will not succeed; surface to the operator
+ *                   and stop. Examples: `insufficient_quota`,
+ *                   `billing_hard_limit_reached`.
+ * - `'rate_limit'`— Per-window (RPM/TPM) throttling. The request is expected
+ *                   to succeed once the window rolls; honor `Retry-After` and
+ *                   retry with backoff/jitter.
+ *
+ * Open union: future variants (e.g. `'concurrent_limit'`, `'tier_limit'`)
+ * would extend this — exhaustive switches should fall through to the most
+ * conservative behavior (treat unknown as rate_limit; don't fail-fast).
+ */
 export type RateLimitKind = 'quota' | 'rate_limit';
 
+/**
+ * Constructor input for {@link HttpRateLimitError}. Notably absent: `kind`.
+ * `kind` is derived from `code` so callers cannot create an inconsistent
+ * (code, kind) pairing.
+ */
 export interface HttpRateLimitErrorInit {
   status: number;
   statusText?: string;
@@ -36,8 +59,6 @@ export interface HttpRateLimitErrorInit {
   headers?: Record<string, string>;
   /** Parsed body — JSON object if parseable, else raw string. */
   body?: unknown;
-  /** Optional message override. */
-  message?: string;
 }
 
 /**
@@ -47,11 +68,20 @@ export interface HttpRateLimitErrorInit {
  * be retried.
  *
  * Distinguishes:
- * - `kind: 'quota'`  — daily / billing / contractual exhaustion. Don't retry.
+ * - `kind: 'quota'`     — daily / billing / contractual exhaustion. Don't retry.
  * - `kind: 'rate_limit'` — per-window throttling. Retry honoring `retryAfterMs`.
  *
- * The `message` always contains the substrings "Rate limit" / "Quota" and "429"
- * so legacy substring-based classifiers continue to match.
+ * Back-compat invariant: the rendered `message` always contains the
+ * substrings `"429"`, `"too many requests"` (case-insensitive), and either
+ * `"Rate limit"` or `"Quota"` so legacy substring-based classifiers (e.g.
+ * `scheduler/providerRateLimitState.ts`) continue to match. The constructor
+ * does not accept a message override — the format is fixed.
+ *
+ * Coexists with two other rate-limit error classes that have different
+ * scope: `RateLimitExhaustedError` in `src/scheduler/providerRateLimitState.ts`
+ * (in-process queue/budget exhaustion) and `RateLimitError` in
+ * `src/commands/mcp/lib/errors.ts` (MCP command layer). The `Http` prefix
+ * here scopes this one to the network transport boundary.
  */
 export class HttpRateLimitError extends Error {
   readonly status: number;
@@ -69,22 +99,49 @@ export class HttpRateLimitError extends Error {
     const kind: RateLimitKind = isHardQuotaCode(init.code) ? 'quota' : 'rate_limit';
     const prefix = kind === 'quota' ? 'Quota exceeded' : 'Rate limit exceeded';
     const codeSuffix = init.code ? ` (code: ${init.code})` : '';
-    const message = init.message ?? `${prefix}: HTTP ${status} ${statusText}${codeSuffix}`;
-    super(message);
+    super(`${prefix}: HTTP ${status} ${statusText}${codeSuffix}`);
     this.name = 'HttpRateLimitError';
     this.status = status;
     this.statusText = statusText;
-    this.retryAfterMs = init.retryAfterMs;
+    this.retryAfterMs =
+      typeof init.retryAfterMs === 'number' && init.retryAfterMs >= 0
+        ? init.retryAfterMs
+        : undefined;
     this.resetAt = init.resetAt;
     this.code = init.code;
     this.kind = kind;
-    this.headers = init.headers;
+    // Shallow-copy reference fields so post-construction mutations on the
+    // caller's object don't bleed into the captured error.
+    this.headers = init.headers ? { ...init.headers } : undefined;
     this.body = init.body;
   }
 }
 
 export function isHardQuotaCode(code: string | undefined): boolean {
   return code !== undefined && HARD_QUOTA_ERROR_CODES.has(code);
+}
+
+/**
+ * Render the per-window retry-after / reset detail for a structured
+ * rate-limit error. Returns empty string when:
+ * - No retry metadata is available, OR
+ * - The error is a hard quota (`kind === 'quota'`) — retries won't help,
+ *   so showing a "retry after Xs" hint would contradict the quota message.
+ */
+export function formatRateLimitDetail(err: HttpRateLimitError): string {
+  if (err.kind === 'quota') {
+    return '';
+  }
+  const parts: string[] = [];
+  if (typeof err.retryAfterMs === 'number') {
+    parts.push(`retry after ${Math.round(err.retryAfterMs / 1000)}s`);
+  } else if (typeof err.resetAt === 'number') {
+    const remainingMs = Math.max(err.resetAt - Date.now(), 0);
+    if (remainingMs > 0) {
+      parts.push(`resets in ${Math.round(remainingMs / 1000)}s`);
+    }
+  }
+  return parts.length > 0 ? ` [${parts.join(', ')}]` : '';
 }
 
 export function isHttpRateLimitError(err: unknown): err is HttpRateLimitError {

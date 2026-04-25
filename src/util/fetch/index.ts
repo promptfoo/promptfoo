@@ -384,13 +384,29 @@ export async function handleRateLimit(response: Response): Promise<void> {
 }
 
 /**
+ * Hard cap on bytes read from a 429 response body during classification.
+ * A hostile or buggy upstream could otherwise stream a multi-MB body on
+ * every 429, amplifying memory pressure under concurrent eval load. 64 KB
+ * is well above any well-formed provider error envelope (typical OpenAI
+ * / Anthropic JSON errors are <1 KB).
+ */
+const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
+
+/**
  * Read the body of a rate-limited response without consuming the original
  * stream. Returns the parsed body (JSON if parseable, else raw text) and
  * any extracted error code (e.g. `insufficient_quota`).
  *
- * Cloning is intentional: the caller may still want to read `response`
- * after we've inspected it — and on a 429 we always end up either retrying
- * or throwing a structured error, so the small clone cost is acceptable.
+ * Why clone: `Response.text()` consumes the underlying stream. Even though
+ * the immediate caller (`fetchWithRetries`) discards the response after a
+ * 429, middleware layered above (logging, monkey-patched fetch) may have
+ * captured the response and expect its body to still be readable. Cloning
+ * keeps that contract intact for any wrapper that observes the response.
+ *
+ * Caller-visible failures (clone, read, parse) are degraded to
+ * `{ body: undefined, code: undefined }` and logged at debug level —
+ * losing the body code only widens the rate-limit kind from `quota` to
+ * `rate_limit`, which is the safer (more conservative) misclassification.
  */
 async function peekRateLimitBody(
   response: Response,
@@ -398,14 +414,16 @@ async function peekRateLimitBody(
   let cloned: Response;
   try {
     cloned = response.clone();
-  } catch {
+  } catch (err) {
+    logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
     return { body: undefined, code: undefined };
   }
 
   let text: string;
   try {
-    text = await cloned.text();
-  } catch {
+    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
+  } catch (err) {
+    logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
     return { body: undefined, code: undefined };
   }
 
@@ -417,8 +435,54 @@ async function peekRateLimitBody(
     const json = JSON.parse(text);
     return { body: json, code: extractRateLimitErrorCode(json) };
   } catch {
+    // Non-JSON body (some providers return text/html on 429). Keep the raw
+    // bytes for diagnostics but no code can be extracted.
+    logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
     return { body: text, code: undefined };
   }
+}
+
+/**
+ * Drain a Response's body into a string, but stop reading once `maxBytes`
+ * have been collected. Falls back to `.text()` when the body stream isn't
+ * available (some Response polyfills).
+ */
+async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+  if (!response.body) {
+    const text = await response.text();
+    return text.length > maxBytes ? text.slice(0, maxBytes) : text;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // Reader cancellation can fail if the stream is already closed; safe to ignore.
+    }
+  }
+  const merged = new Uint8Array(Math.min(total, maxBytes));
+  let offset = 0;
+  for (const chunk of chunks) {
+    const room = maxBytes - offset;
+    if (room <= 0) {
+      break;
+    }
+    const slice = chunk.byteLength <= room ? chunk : chunk.subarray(0, room);
+    merged.set(slice, offset);
+    offset += slice.byteLength;
+  }
+  return new TextDecoder().decode(merged);
 }
 
 function buildHttpRateLimitError(

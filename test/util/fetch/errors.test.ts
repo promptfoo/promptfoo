@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   extractRateLimitErrorCode,
   findTargetErrorStatus,
+  formatRateLimitDetail,
   HttpRateLimitError,
   isHardQuotaCode,
   isHttpRateLimitError,
@@ -269,5 +270,50 @@ describe('HttpRateLimitError', () => {
     expect(isHttpRateLimitError(undefined)).toBe(false);
     expect(isHttpRateLimitError(null)).toBe(false);
     expect(isHttpRateLimitError({ name: 'HttpRateLimitError' })).toBe(false);
+  });
+
+  it('shallow-copies headers so post-construction mutation does not leak in', () => {
+    const headers = { 'retry-after': '5' };
+    const err = new HttpRateLimitError({ status: 429, headers });
+    headers['retry-after'] = '999';
+    expect(err.headers?.['retry-after']).toBe('5');
+  });
+
+  it('rejects negative retryAfterMs', () => {
+    const err = new HttpRateLimitError({ status: 429, retryAfterMs: -100 });
+    expect(err.retryAfterMs).toBeUndefined();
+  });
+});
+
+describe('formatRateLimitDetail', () => {
+  it('renders retry-after seconds', () => {
+    const err = new HttpRateLimitError({ status: 429, retryAfterMs: 12_000 });
+    expect(formatRateLimitDetail(err)).toBe(' [retry after 12s]');
+  });
+
+  it('renders resetAt fallback when retryAfterMs is missing', () => {
+    const err = new HttpRateLimitError({
+      status: 429,
+      resetAt: Date.now() + 30_000,
+    });
+    expect(formatRateLimitDetail(err)).toMatch(/resets in \d+s/);
+  });
+
+  it('returns empty string when no metadata is present', () => {
+    const err = new HttpRateLimitError({ status: 429 });
+    expect(formatRateLimitDetail(err)).toBe('');
+  });
+
+  it('returns empty string for kind=quota even when retry metadata is present', () => {
+    // Quota errors should not advertise a "retry after Xs" hint — that
+    // would contradict the "Retries will not help" message the providers
+    // surface to the operator.
+    const err = new HttpRateLimitError({
+      status: 429,
+      code: 'insufficient_quota',
+      retryAfterMs: 60_000,
+      resetAt: Date.now() + 60_000,
+    });
+    expect(formatRateLimitDetail(err)).toBe('');
   });
 });

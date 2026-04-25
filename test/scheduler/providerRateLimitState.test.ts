@@ -208,6 +208,58 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.failedRequests).toBe(1);
       expect(metrics.rateLimitHits).toBe(0);
     });
+
+    it('back-compat: substring matcher detects HttpRateLimitError (rate_limit kind)', async () => {
+      // The transport-layer HttpRateLimitError is unknown to the scheduler,
+      // so the scheduler relies on its substring matcher to detect rate-limit
+      // hits. The HttpRateLimitError contract requires the rendered message
+      // to contain `429` and a rate-limit token; verify the scheduler still
+      // counts these as ratelimit:hit events.
+      const { HttpRateLimitError } = await import('../../src/util/fetch/errors');
+      const events: any[] = [];
+      noRetryState.on('ratelimit:hit', (data) => events.push(data));
+
+      try {
+        await noRetryState.executeWithRetry(
+          'req-1',
+          async () => {
+            throw new HttpRateLimitError({
+              status: 429,
+              code: 'rate_limit_exceeded',
+              retryAfterMs: 5000,
+            });
+          },
+          {},
+        );
+      } catch {}
+
+      expect(events.length).toBeGreaterThan(0);
+      const metrics = noRetryState.getMetrics();
+      expect(metrics.rateLimitHits).toBeGreaterThan(0);
+    });
+
+    it('back-compat: substring matcher detects HttpRateLimitError (quota kind)', async () => {
+      const { HttpRateLimitError } = await import('../../src/util/fetch/errors');
+      const events: any[] = [];
+      noRetryState.on('ratelimit:hit', (data) => events.push(data));
+
+      try {
+        await noRetryState.executeWithRetry(
+          'req-1',
+          async () => {
+            throw new HttpRateLimitError({
+              status: 429,
+              code: 'insufficient_quota',
+            });
+          },
+          {},
+        );
+      } catch {}
+
+      expect(events.length).toBeGreaterThan(0);
+      const metrics = noRetryState.getMetrics();
+      expect(metrics.rateLimitHits).toBeGreaterThan(0);
+    });
   });
 
   describe('executeWithRetry - retry behavior', () => {

@@ -13,6 +13,7 @@ vi.mock('../../../src/logger', () => ({
     debug: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -1508,6 +1509,47 @@ describe('Azure Assistant Provider', () => {
 
       expect(result.error).toContain('Quota exceeded');
       expect(result.error).toContain('insufficient_quota');
+    });
+
+    it('surfaces rate-limit errors during run polling without "Retries will not help"', async () => {
+      // Symmetric to the quota test above: a per-window rate limit during
+      // polling must format as a regular rate-limit error, not the quota
+      // (non-retryable) message.
+      const provider2 = new AzureAssistantProvider('test-deployment', {
+        config: {
+          apiKey: 'test-key',
+          apiHost: 'test.azure.com',
+          functionToolCallbacks: {
+            testFunction: vi.fn() as any,
+          },
+        },
+      });
+      (provider2 as any).authHeaders = { 'api-key': 'test-key' };
+      vi.spyOn(provider2 as any, 'getApiBaseUrl').mockReturnValue('https://test.azure.com');
+      vi.spyOn(provider2 as any, 'ensureInitialized').mockResolvedValue(undefined);
+      vi.spyOn(provider2 as any, 'getHeaders').mockResolvedValue({
+        'Content-Type': 'application/json',
+        'api-key': 'test-key',
+      });
+
+      const rateLimit = new HttpRateLimitError({
+        status: 429,
+        code: 'rate_limit_exceeded',
+        retryAfterMs: 7000,
+      });
+      vi.spyOn(provider2 as any, 'makeRequest').mockRejectedValue(rateLimit);
+
+      const result = await (provider2 as any).pollRunWithToolCallHandling(
+        'https://test.azure.com',
+        '2024-04-01-preview',
+        'thread-1',
+        'run-1',
+      );
+
+      expect(result.error).toContain('Rate limit exceeded');
+      expect(result.error).toContain('rate_limit_exceeded');
+      expect(result.error).toContain('retry after 7s');
+      expect(result.error).not.toContain('Retries will not help');
     });
   });
 
