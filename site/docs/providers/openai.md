@@ -619,45 +619,6 @@ providers:
       max_output_tokens: 8192
 ```
 
-### GPT-5.5
-
-GPT-5.5 is OpenAI's latest GPT-5 family model for complex coding, tool use, knowledge work, and long-context tasks. OpenAI announced API model IDs `gpt-5.5` and `gpt-5.5-pro` for Chat Completions and Responses.
-
-#### Available Models
-
-| Model       | Description               | Pricing (Input / Output)    |
-| ----------- | ------------------------- | --------------------------- |
-| gpt-5.5     | Standard GPT-5.5 model    | $5.00 / $30 per 1M tokens   |
-| gpt-5.5-pro | Premium GPT-5.5 pro model | $30.00 / $180 per 1M tokens |
-
-#### Key Specifications
-
-- **Context window**: `gpt-5.5` supports a 1,000,000 token context window.
-- **Endpoint support**: Chat Completions API and Responses API.
-- **Codex SDK support**: Promptfoo's Codex SDK provider supports `gpt-5.5` and `gpt-5.5-pro`.
-
-#### Usage Examples
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:chat:gpt-5.5
-    config:
-      max_completion_tokens: 4096
-      reasoning_effort: 'high'
-
-  - id: openai:responses:gpt-5.5
-    config:
-      reasoning:
-        effort: 'high'
-      max_output_tokens: 4096
-
-  - id: openai:responses:gpt-5.5-pro
-    config:
-      reasoning:
-        effort: 'xhigh'
-      max_output_tokens: 8192
-```
-
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
 Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem-solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
