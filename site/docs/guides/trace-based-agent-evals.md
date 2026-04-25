@@ -155,7 +155,9 @@ Promptfoo normalizes spans into trajectory steps like this:
 | `message`            | Agent response/message spans such as `agent response` or `send input`                                          | Multi-turn agent message checks                         |
 | `span`               | Any span that does not normalize into a more specific type                                                     | Temporary inspection or custom workflow checks          |
 
-Each span normalizes into exactly one trajectory step. When attributes overlap, Promptfoo applies them in this priority order: shell-style tool calls (e.g. `tool.name: shell`) become `command`, then any `tool.name` becomes `tool`, then a recognised command attribute becomes `command`, then a recognised search attribute becomes `search`, then reasoning, then message, otherwise `span`. So a retrieval span that sets both `tool.name: search_corpus` and `search.query: ...` normalizes to `tool`, not `search` — assert with `trajectory:tool-used` rather than `trajectory:step-count { type: search }` for that case.
+Each span normalizes into exactly one trajectory step. When attributes overlap, Promptfoo applies them in this priority order: shell-style tool calls become `command`, then any `tool.name` becomes `tool`, then a recognised command attribute becomes `command`, then a recognised search attribute becomes `search`, then reasoning, then message, otherwise `span`. So a retrieval span that sets both `tool.name: search_corpus` and `search.query: ...` normalizes to `tool`, not `search` — assert with `trajectory:tool-used` rather than `trajectory:step-count { type: search }` for that case.
+
+"Shell-style" means `tool.name` matches one of `shell`, `exec_command`, or `local_shell` (case-insensitive). A tool you named `bash`, `terminal`, `run`, or anything else falls through to step type `tool` even when its arguments include a `cmd` field. Either rename the tool to one of the recognised shell names or assert with `trajectory:tool-used` instead of `trajectory:step-count { type: command }`.
 
 Matchers use aliases, not just raw span names. For example, a span named `retrieve_document_0` with `tool.name: search_corpus` can match `trajectory:tool-used` as `search_corpus`, while still matching `trace-span-count` as `retrieve_document_*`.
 
@@ -305,6 +307,8 @@ Use this matrix when choosing an assertion:
 
 The raw trace assertions operate on spans. The trajectory assertions operate on normalized steps. If you are unsure which one to use, start with a raw `trace-span-count` to prove the span exists, then add a trajectory assertion once the span has stable tool, command, search, or reasoning semantics.
 
+The matrix lists `not-` variants only for trajectory assertions. Raw trace assertions have no `not-` form: assert "this raw span must not occur" with `trace-span-count` value `{ pattern: <name>, max: 0 }`, and "no error spans" with `trace-error-spans` value `{ pattern: <name>, max_count: 0 }` (or the shorthand `value: 0`).
+
 ## Assertion Reference
 
 ### `trace-span-count`
@@ -333,7 +337,23 @@ Use `trace-span-duration` when matching spans must stay under a latency budget.
     percentile: 95
 ```
 
-Without `percentile`, every matching span must be under `max` milliseconds. With `percentile`, Promptfoo checks the requested percentile. Pair duration assertions with `trace-span-count` when the span must exist; if no spans match, the duration check has no timing data to fail on.
+Without `percentile`, every matching span must be under `max` milliseconds. With `percentile`, Promptfoo computes a nearest-rank percentile (no interpolation): for N matching spans the cutoff is the value at index `⌈(p/100) × N⌉ − 1` of the sorted-ascending durations. With small N this collapses to a max check — `percentile: 95` over 3 spans returns the slowest of the three, identical to `max`. Use percentiles when matching spans aggregate to 20+ samples (typically across many test rows) and prefer `max` over a small fixed batch.
+
+:::warning No-spans pass
+If no spans match the pattern, `trace-span-duration` returns `pass: true` with no warning. A renamed span, a dropped flush, or a missing `trace-span-count` companion can silently mask a real regression. Pair duration with a presence check whenever the span must exist:
+
+```yaml
+- type: trace-span-count
+  value:
+    pattern: retrieve_document_*
+    min: 1
+- type: trace-span-duration
+  value:
+    pattern: retrieve_document_*
+    max: 350
+```
+
+:::
 
 ### `trace-error-spans`
 
@@ -347,6 +367,10 @@ Use `trace-error-spans` as a default health gate for traced workflows.
 ```
 
 You can also use `max_percentage` for noisy systems, or a number shorthand such as `value: 0`. Promptfoo treats OTEL error status, HTTP status codes, error-like attributes, and error-like status messages as error signals.
+
+:::warning No-spans pass
+Like `trace-span-duration`, `trace-error-spans` returns `pass: true` when no spans match the pattern. The default `pattern: '*'` matches every span, so a missing trace (receiver bind failure, dropped flush, port conflict) makes the assertion pass for the wrong reason. Pair with a `trace-span-count` assertion on a known-required span name to catch missing traces.
+:::
 
 ### `trajectory:tool-used`
 
@@ -413,7 +437,7 @@ Use `trajectory:step-count` when you care about a class of steps, not just tools
 
 Supported step types are `tool`, `command`, `search`, `reasoning`, `message`, and `span`. You can also add `name` or `pattern`. This is useful for “ran at least one test command,” “did not perform more than two web searches,” “included reasoning spans,” or “kept tool fanout under control.” Use `not-trajectory:step-count` when a matching range itself is forbidden.
 
-`reasoning` matching is name-based: any span whose name starts with `reasoning` or `reasoning_` counts, including grouping spans like `reasoning_chain`. Three semantic reasoning steps wrapped in one parent span produce a count of four, not three. Either include the parent in your range or skip the wrapper.
+`reasoning` matching is name-based and uses `/^reasoning([_\s]|$)/i` (case-insensitive). The bare name `reasoning`, names starting with `reasoning_` (e.g. `reasoning_chain`, `reasoning_synthesize_answer`), and names starting with `reasoning ` followed by anything (e.g. `Reasoning step 1`) all match. Hyphenated names like `reasoning-chain` do not. Three semantic reasoning steps wrapped in one parent named `reasoning_chain` produce a count of four, not three. Either include the parent in your range or rename the wrapper to skip it.
 
 ### `trajectory:goal-success`
 
