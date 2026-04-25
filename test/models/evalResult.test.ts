@@ -457,6 +457,178 @@ describe('EvalResult', () => {
         expect(JSON.stringify(retrieved?.gradingResult)).not.toContain('grading-session=secret');
       });
 
+      it('preserves user-controlled `http` keys nested inside response.output, response.metadata, and gradingResult', async () => {
+        // Regression: a previous implementation walked any nested `http` key in the
+        // response/metadata/gradingResult tree and rewrote `headers` /
+        // `requestHeaders`. Legitimate model output that happens to contain an
+        // `http` key (e.g. an agent describing a request it observed) must survive
+        // persistence intact. See PR #8876 review thread.
+        const evalId = 'test-eval-redact-scope-output';
+        const userOutputHttp = {
+          headers: {
+            'x-request-id': 'user-controlled-id-keep-me',
+            'set-cookie': 'user-controlled-cookie-keep-me',
+            authorization: 'Bearer user-output-token-keep-me',
+          },
+        };
+
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            metadata: {
+              // arbitrary user metadata path that happens to use `http` as a key
+              // — must NOT be rewritten because it isn't `metadata.http`.
+              traces: [{ http: { headers: { 'x-request-id': 'trace-keep-me' } } }],
+            },
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'ok',
+                  metadata: {
+                    judgeOutput: {
+                      // legitimate judge output: a model describing http traffic
+                      http: { headers: { authorization: 'Bearer keep-me-too' } },
+                    },
+                  },
+                },
+              ],
+            },
+            response: createProviderResponse({
+              output: {
+                http: userOutputHttp,
+                quote: 'cf-ray was: abc-123',
+              },
+              audio: {
+                // an arbitrary `http` key inside a nested non-metadata field
+                http: { headers: { 'set-cookie': 'audio-http-keep-me' } },
+              } as any,
+            }),
+          },
+          { persist: true },
+        );
+
+        // Output stays bit-identical
+        expect((result.response?.output as any).http).toEqual(userOutputHttp);
+        expect((result.response?.output as any).quote).toBe('cf-ray was: abc-123');
+        expect((result.response?.audio as any)?.http?.headers?.['set-cookie']).toBe(
+          'audio-http-keep-me',
+        );
+
+        // Top-level result.metadata has no metadata.http, so nothing redacts
+        expect(result.metadata?.traces?.[0]?.http?.headers?.['x-request-id']).toBe('trace-keep-me');
+
+        // gradingResult.componentResults[].metadata only redacts metadata.http,
+        // not metadata.judgeOutput.http
+        expect(
+          (result.gradingResult?.componentResults?.[0]?.metadata as Record<string, any> | undefined)
+            ?.judgeOutput?.http?.headers?.authorization,
+        ).toBe('Bearer keep-me-too');
+
+        // Round-trip through DB: nothing was rewritten
+        const retrieved = await EvalResult.findById(result.id);
+        const serialized = JSON.stringify(retrieved);
+        expect(serialized).toContain('user-controlled-id-keep-me');
+        expect(serialized).toContain('user-controlled-cookie-keep-me');
+        expect(serialized).toContain('user-output-token-keep-me');
+        expect(serialized).toContain('audio-http-keep-me');
+        expect(serialized).toContain('trace-keep-me');
+        expect(serialized).toContain('keep-me-too');
+        expect(serialized).toContain('cf-ray was: abc-123');
+      });
+
+      it('redacts headers added in this PR (proxy-authorization, x-amzn-requestid, x-trace-id, etc.)', async () => {
+        const evalId = 'test-eval-redact-extended-headers';
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            response: createProviderResponse({
+              output: 'hello',
+              metadata: {
+                http: {
+                  status: 200,
+                  statusText: 'OK',
+                  headers: {
+                    'content-type': 'application/json',
+                    'proxy-authorization': 'Basic proxy-secret',
+                    'x-amzn-requestid': 'req_amzn_should_redact',
+                    'x-amzn-trace-id': 'Root=trace-id',
+                    'x-amz-security-token': 'amz-token-secret',
+                    'x-amz-cf-id': 'cf-id-secret',
+                    'x-azure-ref': 'azure-ref-secret',
+                    'x-correlation-id': 'corr-secret',
+                    'x-trace-id': 'trace-secret',
+                    'cf-cache-status': 'HIT',
+                    'openai-version': '2024-01-01',
+                    via: '1.1 proxy.example',
+                    // header name that doesn't match — must be preserved
+                    'x-safe-debug': 'keep-me',
+                  },
+                },
+              },
+            }),
+          },
+          { persist: true },
+        );
+
+        expect(result.response?.metadata?.http?.headers).toEqual({
+          'content-type': 'application/json',
+          'proxy-authorization': '[REDACTED]',
+          'x-amzn-requestid': '[REDACTED]',
+          'x-amzn-trace-id': '[REDACTED]',
+          'x-amz-security-token': '[REDACTED]',
+          'x-amz-cf-id': '[REDACTED]',
+          'x-azure-ref': '[REDACTED]',
+          'x-correlation-id': '[REDACTED]',
+          'x-trace-id': '[REDACTED]',
+          'cf-cache-status': '[REDACTED]',
+          'openai-version': '[REDACTED]',
+          via: '[REDACTED]',
+          'x-safe-debug': 'keep-me',
+        });
+      });
+
+      it('redacts response headers regardless of header-name casing', async () => {
+        const evalId = 'test-eval-redact-casing';
+        const result = await EvalResult.createFromEvaluateResult(
+          evalId,
+          {
+            ...mockEvaluateResult,
+            response: createProviderResponse({
+              output: 'hello',
+              metadata: {
+                http: {
+                  status: 200,
+                  statusText: 'OK',
+                  headers: {
+                    Authorization: 'Bearer mixed-case-secret',
+                    'Set-Cookie': 'session=mixed',
+                    'CF-RAY': 'cf-mixed',
+                    'X-Request-Id': 'req-mixed',
+                    'X-RateLimit-Remaining': '99',
+                  },
+                },
+              },
+            }),
+          },
+          { persist: true },
+        );
+
+        expect(result.response?.metadata?.http?.headers).toEqual({
+          Authorization: '[REDACTED]',
+          'Set-Cookie': '[REDACTED]',
+          'CF-RAY': '[REDACTED]',
+          'X-Request-Id': '[REDACTED]',
+          'X-RateLimit-Remaining': '[REDACTED]',
+        });
+      });
+
       it('redacts credentials from an instantiated provider object embedded in testCase.options.provider', async () => {
         // Mimic the real Anthropic / Bedrock shape: the resolved judge provider is an
         // ApiProvider instance whose internal SDK client carries `apiKey`, `_options`,
