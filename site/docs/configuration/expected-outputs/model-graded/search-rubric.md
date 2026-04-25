@@ -124,6 +124,10 @@ grading:
         mode: 'on'
 ```
 
+If the web-search-capable judge also returns separate reasoning, hide it in the provider config.
+`search-rubric` parses the first JSON object in the judge output, so reasoning JSON can be mistaken
+for the final searched verdict.
+
 ## Use Cases
 
 ### 1. Current Events Verification

@@ -221,7 +221,7 @@ tests:
 
 ## Overriding the LLM grader
 
-By default, model-graded asserts use `gpt-5` for grading. If you do not have access to `gpt-5` or prefer not to use it, you can override the rubric grader. There are several ways to do this, depending on your preferred workflow:
+By default, model-graded asserts use `gpt-5` for grading. If you do not have access to `gpt-5` or prefer not to use it, you can override the grader. There are several ways to do this, depending on your preferred workflow:
 
 1. Using the `--grader` CLI option:
 
@@ -283,9 +283,8 @@ Also note that [custom providers](/docs/providers/custom-api) are supported as w
 ### OpenAI-compatible thinking judges
 
 Self-hosted OpenAI-compatible judges such as [vLLM](/docs/providers/vllm), LocalAI, and llamafile
-can return reasoning in a separate field while putting the final answer in `content`. For
-model-graded assertions, set `showThinking: false` on the judge provider so promptfoo parses the
-final JSON verdict instead of any JSON-looking scratchpad in the reasoning field:
+can return reasoning in a separate field while putting the final answer in `content`. Set
+`showThinking: false` on the judge provider so promptfoo uses only the final `content` for grading:
 
 ```yaml
 defaultTest:
@@ -299,6 +298,21 @@ defaultTest:
         max_tokens: 10000
         showThinking: false
 ```
+
+This is not specific to `llm-rubric`. Promptfoo receives one output string from the judge, and each
+model-graded assertion consumes that string according to its own parser:
+
+| Assertions                                                                                | Why `showThinking: false` matters                                                                                      |
+| ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `llm-rubric`, `g-eval`, `factuality`, `conversation-relevance`, `trajectory:goal-success` | They parse JSON or category-like verdicts; scratchpad JSON can be selected before the final verdict.                   |
+| `search-rubric`                                                                           | It has the same JSON-first parsing behavior when the web-search-capable judge also exposes reasoning text.             |
+| `answer-relevance`                                                                        | It embeds judge-generated questions; prepended thinking text changes the embedded strings.                             |
+| `context-recall`, `context-relevance`, `context-faithfulness`                             | They score judge-generated sentences, attribution markers, or NLI verdicts; scratchpad text can become scored content. |
+| `select-best`                                                                             | It reads the first integer from the judge output; scratchpad numbers can select the wrong candidate.                   |
+
+`model-graded-closedqa` is less likely to flip because it checks whether the combined output ends in
+`Y` or `N`, but `showThinking: false` is still recommended for self-hosted judges so explanations and
+debug output do not include private scratchpad text.
 
 For vLLM models whose chat template enables thinking by default, you can also disable thinking at
 request time:

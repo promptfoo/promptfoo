@@ -74,6 +74,11 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-5-mini
    ```
 
+`model-graded-closedqa` is less sensitive to prepended reasoning than JSON-based graders because it
+checks whether the output ends in `Y` or `N`. Still, when using a thinking-capable
+OpenAI-compatible judge, prefer a full provider object with `showThinking: false` so private
+scratchpad text does not appear in grader reasons or exported results.
+
 ### Customizing the Prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property:

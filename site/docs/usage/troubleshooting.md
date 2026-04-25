@@ -238,13 +238,14 @@ defaultTest:
 
 ## Model-graded judge parses reasoning instead of final JSON
 
-If `llm-rubric` or another model-graded assertion fails with an unexpected reason, `Could not extract
-JSON`, or a verdict that looks like private scratchpad text, check whether your judge is a
-thinking-capable OpenAI-compatible model.
+If a model-graded assertion fails with an unexpected reason, `Could not extract JSON`, a wrong
+`factuality` category, a bad `select-best` winner, or context/RAG scores that appear to include
+scratchpad sentences, check whether your judge is a thinking-capable OpenAI-compatible model.
 
 Some self-hosted APIs, including vLLM with reasoning parsers, return reasoning separately from final
 content. Promptfoo includes thinking output by default, which is useful for target-model assertions
-but can confuse JSON parsing for judge responses.
+but can confuse judge metrics that parse JSON, embed generated questions, score attribution markers,
+or read a selected index.
 
 Set `showThinking: false` on the judge provider:
 

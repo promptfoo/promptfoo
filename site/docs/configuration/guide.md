@@ -608,8 +608,9 @@ providers:
 
 This is useful when you want better reasoning but don't want to expose the thinking process to your
 assertions. It is especially important for model-graded assertions that use a thinking-capable
-OpenAI-compatible judge, because `llm-rubric` expects to parse the judge's final JSON verdict rather
-than JSON-looking scratchpad text from a reasoning field.
+OpenAI-compatible judge, because those assertions parse or score the judge's final answer. Reasoning
+scratchpad text can look like JSON, attribution markers, generated questions, or numeric choices and
+be consumed before the final content.
 
 For more details on extended thinking capabilities, see the [Anthropic provider docs](/docs/providers/anthropic#extended-thinking), [AWS Bedrock provider docs](/docs/providers/aws-bedrock#claude-models), and [vLLM judge setup](/docs/providers/vllm#use-vllm-as-an-llm-judge).
 

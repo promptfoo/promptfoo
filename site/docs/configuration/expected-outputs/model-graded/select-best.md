@@ -78,6 +78,10 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-5-mini
    ```
 
+For thinking-capable OpenAI-compatible graders, use a full provider object with
+`showThinking: false`. `select-best` reads the first integer in the judge output; if reasoning is
+prepended, a scratchpad number can select the wrong output.
+
 ### Customizing the Prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property:

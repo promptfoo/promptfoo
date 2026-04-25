@@ -12,7 +12,8 @@ Promptfoo connects to it through the OpenAI provider by changing `apiBaseUrl`.
 Use this page when:
 
 - vLLM is the model under test
-- vLLM is the local LLM-as-a-judge provider for `llm-rubric`, `factuality`, RAG assertions, or red team grading
+- vLLM is the local LLM-as-a-judge provider for model-graded assertions such as
+  `llm-rubric`, `g-eval`, `factuality`, `answer-relevance`, `context-*`, or `select-best`
 - your vLLM model returns a separate `reasoning` field and promptfoo should grade only the final `content`
 
 ## Start a vLLM server
@@ -108,10 +109,10 @@ tests:
           Pass if the answer explains how to reset a password and mentions a verification step.
 ```
 
-Do not repeat `provider: openai:chat:llm_judge` on the `llm-rubric` assertion when the full provider
-object already lives in `defaultTest.options.provider`. An assertion-level `provider` overrides the
-default provider object, so the `apiBaseUrl`, `apiKey`, `showThinking`, and other config values above
-will not be used.
+Do not repeat `provider: openai:chat:llm_judge` on an assertion when the full provider object
+already lives in `defaultTest.options.provider`. An assertion-level `provider` overrides the default
+provider object, so the `apiBaseUrl`, `apiKey`, `showThinking`, and other config values above will
+not be used.
 
 If only one assertion should use vLLM, put the full object on that assertion:
 
@@ -145,12 +146,22 @@ Thinking: <reasoning>
 ```
 
 That is useful when vLLM is the target model, because assertions can inspect the full visible output.
-It is usually wrong when vLLM is the judge, because `llm-rubric` expects the judge response to contain
-the final JSON verdict (`{"pass": boolean, "score": number, "reason": string}`). If the reasoning text
-contains JSON-looking scratchpad content, promptfoo can parse that before the final verdict.
+It is usually wrong when vLLM is the judge, because model-graded assertions consume the judge output
+as the material to parse, embed, classify, or score. If the reasoning text contains JSON-looking
+scratchpad content, attribution markers, candidate sentences, or numeric choices, promptfoo can use
+that scratchpad before the final answer.
 
 Set `showThinking: false` on vLLM judge providers so promptfoo discards `reasoning` and parses only
 `content`.
+
+| Assertion family                                                                          | What reasoning text can break                                                                                                  |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `llm-rubric`, `g-eval`, `factuality`, `conversation-relevance`, `trajectory:goal-success` | These parse structured JSON or category output. A JSON-looking scratchpad can be read as the verdict before the final content. |
+| `search-rubric`                                                                           | Same JSON-first behavior, when the configured search-capable judge also returns separate reasoning.                            |
+| `answer-relevance`                                                                        | Generated questions are embedded. Prepended thinking text changes the strings being embedded and can change similarity scores. |
+| `context-recall`, `context-relevance`, `context-faithfulness`                             | Scratchpad sentences, attribution markers, or NLI verdict text can become part of the score calculation.                       |
+| `select-best`                                                                             | The first integer in the combined judge output can come from scratchpad reasoning instead of the final selected index.         |
+| `model-graded-closedqa`                                                                   | This parser is less fragile because it checks the final `Y`/`N` suffix, but hiding thinking still keeps judge reasons clean.   |
 
 ### Disable thinking at the vLLM API level
 
@@ -188,7 +199,7 @@ same thinking behavior.
 ## Provider maps for text and embeddings
 
 Some assertions need a text judge and an embedding model. Use a provider map when a single eval uses
-both `llm-rubric` and `similar`:
+both text-graded assertions and embedding-based assertions such as `answer-relevance` or `similar`:
 
 ```yaml
 defaultTest:
@@ -210,14 +221,14 @@ defaultTest:
 
 ## Troubleshooting
 
-| Symptom                                                                   | Fix                                                                                                                                                        |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `API key is not set`                                                      | Set `apiKey` in provider config, or set `OPENAI_API_KEY`. If vLLM was started without `--api-key`, any placeholder such as `empty` is fine.                |
-| `ECONNREFUSED`                                                            | Use `127.0.0.1` instead of `localhost`, verify the vLLM port, and confirm Docker or a remote host exposes the port.                                        |
-| Promptfoo calls OpenAI instead of vLLM                                    | Put `apiBaseUrl: http://.../v1` on the provider object, or set `OPENAI_BASE_URL`. Do not set `apiBaseUrl` to `/v1/chat/completions`.                       |
-| Judge returns `Could not extract JSON` or parses the wrong JSON           | Set `showThinking: false` on the judge provider and keep the full provider object in `defaultTest.options.provider` or `assert.provider`.                  |
-| `assert.provider` appears to ignore `defaultTest.options.provider.config` | This is expected precedence. Use the full provider object at the assertion level, or remove `assert.provider` so the default provider object is inherited. |
-| Local models reload between rows                                          | Run with `--max-concurrency 1`; promptfoo groups eligible model-graded calls by grading provider ID to reduce local model switching.                       |
+| Symptom                                                                                                  | Fix                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API key is not set`                                                                                     | Set `apiKey` in provider config, or set `OPENAI_API_KEY`. If vLLM was started without `--api-key`, any placeholder such as `empty` is fine.                |
+| `ECONNREFUSED`                                                                                           | Use `127.0.0.1` instead of `localhost`, verify the vLLM port, and confirm Docker or a remote host exposes the port.                                        |
+| Promptfoo calls OpenAI instead of vLLM                                                                   | Put `apiBaseUrl: http://.../v1` on the provider object, or set `OPENAI_BASE_URL`. Do not set `apiBaseUrl` to `/v1/chat/completions`.                       |
+| Judge returns `Could not extract JSON`, wrong categories, odd RAG scores, or wrong `select-best` winners | Set `showThinking: false` on the judge provider and keep the full provider object in `defaultTest.options.provider` or `assert.provider`.                  |
+| `assert.provider` appears to ignore `defaultTest.options.provider.config`                                | This is expected precedence. Use the full provider object at the assertion level, or remove `assert.provider` so the default provider object is inherited. |
+| Local models reload between rows                                                                         | Run with `--max-concurrency 1`; promptfoo groups eligible model-graded calls by grading provider ID to reduce local model switching.                       |
 
 Run with `--no-cache` while debugging:
 

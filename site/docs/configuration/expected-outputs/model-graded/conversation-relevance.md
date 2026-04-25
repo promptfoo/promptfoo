@@ -177,6 +177,10 @@ defaultTest:
     provider: anthropic:claude-3-7-sonnet-latest
 ```
 
+For thinking-capable OpenAI-compatible graders, use a full provider object with
+`showThinking: false`. `conversation-relevance` parses the first verdict JSON object returned by the
+judge, so scratchpad JSON can be mistaken for the final relevance verdict.
+
 ## See also
 
 - [Context relevance](/docs/configuration/expected-outputs/model-graded/context-relevance) - For evaluating if context is relevant to a query

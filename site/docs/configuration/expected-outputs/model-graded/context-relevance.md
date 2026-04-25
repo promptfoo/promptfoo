@@ -100,6 +100,13 @@ assert:
 - Single context strings split by lines (use arrays for better accuracy)
 - Score interpretation varies by use case
 
+## Local thinking judges
+
+If you override the grader with a thinking-capable OpenAI-compatible provider such as vLLM, set
+`showThinking: false` on the judge provider. `context-relevance` scores the extracted candidate
+sentences from the judge output; scratchpad text such as `Insufficient Information` can change the
+score before the final content is considered.
+
 ## Related metrics
 
 - [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) - Does output stay faithful to context?

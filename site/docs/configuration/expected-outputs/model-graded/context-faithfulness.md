@@ -81,9 +81,18 @@ Override the default grader:
 ```yaml
 assert:
   - type: context-faithfulness
-    provider: gpt-5 # Use a different model for grading
+    provider:
+      id: openai:chat:llm_judge
+      config:
+        apiBaseUrl: http://localhost:8000/v1
+        apiKey: empty
+        showThinking: false
     threshold: 0.9
 ```
+
+`context-faithfulness` first asks the judge to extract statements and then asks for NLI verdicts.
+For thinking-capable OpenAI-compatible graders, `showThinking: false` prevents scratchpad statements
+or verdict text from being scored as if it were final content.
 
 ## Limitations
 

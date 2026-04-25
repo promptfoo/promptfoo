@@ -189,7 +189,9 @@ defaultTest:
 ```
 
 See the [vLLM provider guide](/docs/providers/vllm#use-vllm-as-an-llm-judge) for a complete local
-judge recipe.
+judge recipe. The same `showThinking: false` rule applies to other model-graded assertions that use
+a text judge; see the [model-graded overview](/docs/configuration/expected-outputs/model-graded#openai-compatible-thinking-judges)
+for the full metric list.
 
 ## Customizing the rubric prompt
 
