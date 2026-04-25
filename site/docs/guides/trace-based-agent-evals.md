@@ -637,6 +637,148 @@ True any-order set-membership ("these three tools fired in any order, with nothi
     };
 ```
 
+## CI Gating, Regressions, and Cost Budgets
+
+Trace-based assertions exist to fail PRs cleanly. A few patterns make them production-grade in CI:
+
+### Run trace evals in GitHub Actions
+
+```yaml title=".github/workflows/agent-eval.yml"
+name: Agent Eval
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: agent-eval-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Verify port 4318 is free
+        run: |
+          if ss -lnt | grep -q ':4318 '; then
+            echo "::error ::Port 4318 is in use; OTLP receiver will not start."
+            exit 1
+          fi
+      - name: Run trace eval
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PROMPTFOO_DISABLE_TELEMETRY: '1'
+        run: |
+          npx promptfoo eval \
+            -c promptfooconfig.yaml \
+            --no-cache \
+            --pass-rate 0.95 \
+            -o eval-output.json
+      - name: Upload eval output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-output-${{ github.run_id }}
+          path: eval-output.json
+```
+
+The `concurrency` block prevents two CI runs on the same branch from racing for OTLP port 4318. For matrix builds on the same runner, set a unique port per job by reading `tracing.otlp.http.port` from a job-level env var. The pre-flight `ss -lnt` check fails fast if the port is occupied — without it, every trace assertion silently throws "No trace data available" and the row fails for the wrong reason.
+
+### Time-box the judge
+
+`trajectory:goal-success` makes one model call per row. If the judge stalls, the row stalls. Configure a timeout on the judge provider:
+
+```yaml
+- type: trajectory:goal-success
+  provider:
+    id: openai:chat:gpt-5.4-mini
+    config:
+      request_timeout_ms: 30000 # 30s ceiling per judge call
+  value: ...
+```
+
+For large suites, also keep judges off the deterministic critical path. Tag judge rows with metadata and run them in a separate job; gate merges on deterministic assertions only.
+
+### Detect regressions across runs
+
+Promptfoo does not currently produce a built-in run-vs-run diff. The pragmatic patterns:
+
+- **Suite-level threshold.** Pass `--pass-rate 0.95` so the CLI exits non-zero when row pass-rate drops below the threshold. Combine with `--share` to upload the run for human review when CI fails.
+- **Pinned baseline.** Check a sanitized `expected.json` into the repo and add a `javascript` assertion that compares each row's `score` and per-component scores to the baseline, failing on regression beyond a tolerance.
+- **Tagged artifacts.** Upload `eval-output.json` per commit (the workflow above does this), then compare PR vs base in a follow-up step with `jq`:
+
+```bash
+jq -r '.results.results[] |
+  "\(.testCase.description // .testIdx)\t\(.success)\t\(.score)"' \
+  pr-output.json > pr.tsv
+
+diff <(sort base.tsv) <(sort pr.tsv) || true
+```
+
+### Cap cost per row
+
+Agents that loop have unbounded cost. Even without a built-in token-budget assertion, you can enforce one over the captured spans:
+
+```yaml
+- type: javascript
+  value: |
+    const total = (context.trace?.spans || [])
+      .flatMap((s) => [
+        Number(s.attributes?.['gen_ai.usage.input_tokens']),
+        Number(s.attributes?.['gen_ai.usage.output_tokens']),
+      ])
+      .filter(Number.isFinite)
+      .reduce((a, b) => a + b, 0);
+    return {
+      pass: total <= 10000,
+      score: total <= 10000 ? 1 : 0,
+      reason: `agent used ${total} tokens (budget 10000)`,
+    };
+```
+
+Pair this with a tool-call ceiling to detect runaway loops directly from the span tree:
+
+```yaml
+- type: trajectory:step-count
+  value: { type: tool, max: 50 }
+- type: trace-span-count
+  value: { pattern: '*', max: 200 }
+```
+
+### Compare against last main
+
+A common CI ask is "did this PR regress p95 latency vs main?" Today the cleanest route is two artefacts and a `jq`/`javascript` step. Run the eval on `main` nightly with the same config, store the artefact, then in PR runs compare:
+
+```bash
+# In PR job, fetch latest main artefact
+gh run download -n eval-output-main -D ./baseline
+
+# Then in a JS assertion or post-step:
+node -e '
+  const cur = require("./eval-output.json").results.results;
+  const base = require("./baseline/eval-output.json").results.results;
+  const dur = (rows) => rows.flatMap((r) =>
+    (r.gradingResult?.componentResults ?? [])
+      .filter((c) => c.assertion?.type === "trace-span-duration")
+      .map((c) => Number((c.reason.match(/\((\d+)ms\)/) || [])[1]) || NaN));
+  const p = (xs, q) => xs.sort((a, b) => a - b)[Math.ceil((q/100)*xs.length) - 1];
+  const baseP95 = p(dur(base).filter(Number.isFinite), 95);
+  const curP95 = p(dur(cur).filter(Number.isFinite), 95);
+  if (curP95 > baseP95 * 1.20) {
+    console.error(`p95 regressed: ${baseP95}ms -> ${curP95}ms`);
+    process.exit(1);
+  }
+'
+```
+
+This is brittle — a first-class `promptfoo eval --baseline` is on the roadmap. For now, keep the comparison logic in your CI workflow rather than in the eval config so the suite stays portable.
+
 ## Anti-Patterns
 
 A few common mistakes pass schema validation but undermine the eval. Watch for these:
