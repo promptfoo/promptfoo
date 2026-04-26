@@ -74,7 +74,11 @@ Most commands support the following common options:
 | `-v, --verbose`                 | Show debug logs                                                                          |
 | `--help`                        | Display help                                                                             |
 
-`promptfoo eval` does not register the common verbose flag: `-v` is `--vars`. Set `LOG_LEVEL=debug` for debug logs during eval runs.
+:::note
+
+For `promptfoo eval`, `-v` is the short form of `--vars`, not `--verbose`. Use the long form (`--verbose`) or set `LOG_LEVEL=debug` to enable debug logs during eval runs.
+
+:::
 
 ### Multiple Environment Files
 
