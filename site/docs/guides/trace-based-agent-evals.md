@@ -859,8 +859,8 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
 
 **Hardening checklist for shared environments.**
 
-- Bind the OTLP receiver to `127.0.0.1` (the default). Binding to `0.0.0.0` on a shared CI runner exposes the port to every other tenant on the host.
-- If you must bind beyond loopback, set `tracing.otlp.http.authToken` to require a Bearer token on `/v1/traces` and `/v1/logs`. Forged spans from other tenants on the network will then be rejected with a `401`:
+- Bind the OTLP receiver to `127.0.0.1` (the default). The receiver is designed for a single-machine eval environment and has no in-process rate limiting, mTLS, or audit logging — those belong at a higher layer.
+- For a loopback-only deployment, the only attacker is something that already runs on your machine. If a token still helps your threat model (sibling container talking to a host receiver, dev box on a trusted LAN), set `tracing.otlp.http.authToken` to require a Bearer token on `/v1/traces` and `/v1/logs`. Forged or unauthenticated requests get a `401`:
 
   ```yaml
   tracing:
@@ -871,6 +871,8 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
   ```
 
   Provider-side code must include `Authorization: Bearer $OTLP_INGEST_TOKEN` on every export request (e.g. via `OTEL_EXPORTER_OTLP_HEADERS`).
+
+- For real network exposure (multi-tenant CI runners, public hosts, anywhere a brute-force attacker can reach the port), put a reverse proxy in front of the receiver. Run nginx, Caddy, or your service mesh to terminate TLS, enforce mTLS or OAuth, rate-limit by source, and forward to `127.0.0.1:4318`. Application-layer rate limiting on a loopback-default service is theatrical — the proxy is the right boundary.
 
 - Use `tracing.otlp.http.redactAttributes` to redact sensitive attribute keys at the receiver, before they hit the SQLite store, the UI, or any forwarder. Substring match is case-insensitive:
 

@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 
 import express from 'express';
-import { type RateLimitRequestHandler, rateLimit } from 'express-rate-limit';
 import logger from '../logger';
 import {
   bytesToHex,
@@ -218,13 +217,6 @@ export class OTLPReceiver {
   private server?: any; // http.Server type
   private authToken?: string;
   private redactAttributePatterns: string[] = [];
-  // Per-source rate limit on the ingest endpoints. The defaults are generous
-  // enough to never trip for legitimate eval traffic but bound brute-force
-  // attempts on the optional Bearer token. Backed by `express-rate-limit` so
-  // CodeQL's missing-rate-limiting rule recognises the protection.
-  private static readonly INGEST_RATE_LIMIT_WINDOW_MS = 60_000;
-  private static readonly INGEST_RATE_LIMIT_MAX_REQUESTS = 600;
-  private ingestRateLimiter: RateLimitRequestHandler;
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -235,13 +227,6 @@ export class OTLPReceiver {
     this.redactAttributePatterns = (options.redactAttributes ?? [])
       .map((p) => (typeof p === 'string' ? p.trim().toLowerCase() : ''))
       .filter((p) => p.length > 0);
-    this.ingestRateLimiter = rateLimit({
-      windowMs: OTLPReceiver.INGEST_RATE_LIMIT_WINDOW_MS,
-      limit: OTLPReceiver.INGEST_RATE_LIMIT_MAX_REQUESTS,
-      standardHeaders: 'draft-7',
-      legacyHeaders: false,
-      message: { error: 'Too Many Requests' },
-    });
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
     this.setupRoutes();
@@ -276,8 +261,14 @@ export class OTLPReceiver {
 
   /**
    * Express middleware that enforces Bearer-token auth when an authToken is set.
-   * Always preceded by `ingestRateLimiter` so a brute-force attacker cannot probe
-   * the auth path faster than INGEST_RATE_LIMIT_MAX_REQUESTS per minute per IP.
+   *
+   * Threat model: the receiver binds to 127.0.0.1 by default and is intended for a
+   * single-machine eval environment. authToken exists for the narrow case where a
+   * user explicitly opens the receiver beyond loopback (e.g. a Codex subprocess in
+   * a sibling container that needs to reach the host receiver). For hostile or
+   * multi-tenant network exposure, run a real reverse proxy (nginx, Caddy, an
+   * authenticated mesh) in front of the receiver — that is the right layer for
+   * rate limiting, mTLS, and audit logging.
    */
   private requireAuth(req: any, res: any, next: any): void {
     if (!this.authToken) {
@@ -293,19 +284,11 @@ export class OTLPReceiver {
     next();
   }
 
-  /** Test/cleanup helper: clear the in-memory rate limiter buckets. */
-  resetIngestRateLimits(): void {
-    this.ingestRateLimiter.resetKey?.('::ffff:127.0.0.1');
-    this.ingestRateLimiter.resetKey?.('127.0.0.1');
-    this.ingestRateLimiter.resetKey?.('::1');
-  }
-
   private setupMiddleware(): void {
-    // Ingest endpoints are always rate-limited and (when authToken is set) auth-gated
-    // before any content-type or body parsing runs. Rate limit precedes the auth check
-    // so brute-force attempts on the optional Bearer token are bounded.
-    this.app.use('/v1/traces', this.ingestRateLimiter);
-    this.app.use('/v1/logs', this.ingestRateLimiter);
+    // Auth gate runs before content-type checks for both ingest endpoints.
+    // No in-process rate limiter: the receiver is loopback-default, and any
+    // real network exposure should sit behind a reverse proxy that handles
+    // rate limiting at a layer that can also enforce mTLS, audit, and quotas.
     this.app.use('/v1/traces', (req, res, next) => this.requireAuth(req, res, next));
     this.app.use('/v1/logs', (req, res, next) => this.requireAuth(req, res, next));
 

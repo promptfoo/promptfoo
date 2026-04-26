@@ -622,42 +622,6 @@ describe('OTLPReceiver', () => {
     });
   });
 
-  describe('Ingest rate limiting', () => {
-    it('returns 429 once the per-IP window cap is reached', async () => {
-      // Build an isolated receiver whose limiter has a low cap so the test stays cheap.
-      const { rateLimit } = await import('express-rate-limit');
-      const limited = new OTLPReceiver();
-      (limited as any).traceStore = mockTraceStore;
-      (limited as any).ingestRateLimiter = rateLimit({
-        windowMs: 60_000,
-        limit: 3,
-        standardHeaders: 'draft-7',
-        legacyHeaders: false,
-        message: { error: 'Too Many Requests' },
-      });
-      // Re-register middleware on a fresh app so the swapped limiter is wired in.
-      (limited as any).app = (await import('express')).default();
-      (limited as any).setupMiddleware();
-      (limited as any).setupRoutes();
-
-      for (let i = 0; i < 3; i++) {
-        await request(limited.getApp())
-          .post('/v1/traces')
-          .set('Content-Type', 'application/json')
-          .send({ resourceSpans: [] })
-          .expect(200);
-      }
-      const blocked = await request(limited.getApp())
-        .post('/v1/traces')
-        .set('Content-Type', 'application/json')
-        .send({ resourceSpans: [] });
-      expect(blocked.status).toBe(429);
-      expect(blocked.body).toEqual({ error: 'Too Many Requests' });
-      // express-rate-limit's draft-7 standard headers expose the retry hint.
-      expect(blocked.headers['ratelimit']).toBeDefined();
-    });
-  });
-
   describe('Ingest-time redaction', () => {
     it('replaces values for matched attribute keys with [REDACTED] before persisting', async () => {
       const redactingReceiver = new OTLPReceiver({
