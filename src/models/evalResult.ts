@@ -146,7 +146,21 @@ export default class EvalResult {
       metadata,
       failureReason,
       testCase,
+      traceId,
+      evaluationId,
     } = result;
+
+    // Persist traceId and evaluationId inside metadata so they survive the
+    // EvalResult round-trip without a Drizzle schema migration. toEvaluateResult
+    // hoists them back to top-level when reading.
+    const persistedMetadata =
+      traceId || evaluationId
+        ? {
+            ...(metadata ?? {}),
+            ...(traceId ? { __traceId: traceId } : {}),
+            ...(evaluationId ? { __evaluationId: evaluationId } : {}),
+          }
+        : metadata;
 
     // Normalize provider for storage and extract blobs from responses.
     const preSanitizeTestCase = {
@@ -186,7 +200,7 @@ export default class EvalResult {
       provider: sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(metadata),
+      metadata: sanitizeForDb(persistedMetadata),
       failureReason,
     };
     if (persist) {
@@ -460,6 +474,19 @@ export default class EvalResult {
         }
       : this.testCase;
 
+    // Hoist traceId/evaluationId back from metadata where they're persisted.
+    const metadataIn = (this.metadata ?? {}) as Record<string, unknown>;
+    const traceId = typeof metadataIn.__traceId === 'string' ? metadataIn.__traceId : undefined;
+    const evaluationId =
+      typeof metadataIn.__evaluationId === 'string' ? metadataIn.__evaluationId : undefined;
+    const surfacedMetadata = shouldStripMetadata
+      ? {}
+      : Object.fromEntries(
+          Object.entries(metadataIn).filter(
+            ([key]) => key !== '__traceId' && key !== '__evaluationId',
+          ),
+        );
+
     return {
       cost: this.cost,
       description: this.description || undefined,
@@ -471,6 +498,8 @@ export default class EvalResult {
       prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
+      ...(traceId ? { traceId } : {}),
+      ...(evaluationId ? { evaluationId } : {}),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
       score: this.score,
@@ -478,7 +507,7 @@ export default class EvalResult {
       testCase,
       testIdx: this.testIdx,
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
-      metadata: shouldStripMetadata ? {} : this.metadata,
+      metadata: surfacedMetadata,
       failureReason: this.failureReason,
     };
   }

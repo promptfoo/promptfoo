@@ -967,10 +967,10 @@ describe('trajectory assertions', () => {
       ],
     };
 
-    const baseSetParams: AssertionParams = {
+    const baseSetParams = {
       ...defaultParams,
       assertionValueContext: { ...defaultParams.assertionValueContext, trace: setTrace },
-      baseType: 'trajectory:tool-set',
+      baseType: 'trajectory:tool-set' as const,
     };
 
     it('passes when all expected tools are present in any order (subset default)', () => {
