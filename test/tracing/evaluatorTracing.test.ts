@@ -281,6 +281,49 @@ describe('evaluatorTracing', () => {
       );
     });
 
+    it('should prune the trace store when storage.retentionDays is set', async () => {
+      const deleteOldTraces = vi.fn().mockResolvedValue(undefined);
+      const { getTraceStore } = await import('../../src/tracing/store');
+      vi.mocked(getTraceStore).mockReturnValue({
+        deleteOldTraces,
+      } as unknown as ReturnType<typeof getTraceStore>);
+
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+          storage: { type: 'sqlite', retentionDays: 7 },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(deleteOldTraces).toHaveBeenCalledWith(7);
+    });
+
+    it('should not prune when retentionDays is omitted', async () => {
+      const deleteOldTraces = vi.fn().mockResolvedValue(undefined);
+      const { getTraceStore } = await import('../../src/tracing/store');
+      vi.mocked(getTraceStore).mockReturnValue({
+        deleteOldTraces,
+      } as unknown as ReturnType<typeof getTraceStore>);
+
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(deleteOldTraces).not.toHaveBeenCalled();
+    });
+
     it('should default acceptFormats to both when omitted', async () => {
       const testSuite = {
         providers: [],
