@@ -25,6 +25,7 @@ interface TrajectorySequenceValue {
 
 interface TrajectoryGoalSuccessValue {
   goal: string;
+  timeoutMs?: number;
 }
 
 interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
@@ -76,9 +77,15 @@ function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
     typeof (value as TrajectoryGoalSuccessValue).goal === 'string' &&
     (value as TrajectoryGoalSuccessValue).goal.trim()
   ) {
-    return {
-      goal: (value as TrajectoryGoalSuccessValue).goal.trim(),
-    };
+    const objValue = value as TrajectoryGoalSuccessValue;
+    const resolved: TrajectoryGoalSuccessValue = { goal: objValue.goal.trim() };
+    if (typeof objValue.timeoutMs === 'number' && Number.isFinite(objValue.timeoutMs)) {
+      if (objValue.timeoutMs <= 0) {
+        throw new Error('trajectory:goal-success timeoutMs must be a positive number');
+      }
+      resolved.timeoutMs = objValue.timeoutMs;
+    }
+    return resolved;
   }
 
   throw new Error(
@@ -503,13 +510,38 @@ export const handleTrajectoryStepCount = (params: AssertionParams): GradingResul
   };
 };
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number | undefined,
+  onTimeout: () => T,
+): Promise<T> {
+  if (!timeoutMs) {
+    return promise;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(onTimeout()), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export const handleTrajectoryGoalSuccess = async (
   params: AssertionParams,
 ): Promise<GradingResult> => {
   const trace = getTraceOrThrow(params);
-  const { goal } = resolveGoalSuccessValue(params.renderedValue ?? params.assertion.value);
+  const { goal, timeoutMs } = resolveGoalSuccessValue(
+    params.renderedValue ?? params.assertion.value,
+  );
   const trajectory = summarizeTrajectoryForJudge(trace);
-  const result = await matchesTrajectoryGoalSuccess(
+  const judgePromise = matchesTrajectoryGoalSuccess(
     goal,
     trajectory,
     params.outputString,
@@ -518,6 +550,13 @@ export const handleTrajectoryGoalSuccess = async (
     params.assertion,
     params.providerCallContext,
   );
+
+  const result = await withTimeout(judgePromise, timeoutMs, () => ({
+    pass: false,
+    score: 0,
+    reason: `trajectory:goal-success judge timed out after ${timeoutMs}ms`,
+    assertion: params.assertion,
+  }));
 
   if (!params.inverse) {
     return result;

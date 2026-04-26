@@ -692,15 +692,14 @@ The `concurrency` block prevents two CI runs on the same branch from racing for 
 
 ### Time-box the judge
 
-`trajectory:goal-success` makes one model call per row. If the judge stalls, the row stalls. Configure a timeout on the judge provider:
+`trajectory:goal-success` makes one model call per row. If the judge stalls, the row stalls. Set `timeoutMs` on the assertion value — Promptfoo races the judge against the timer and fails the row with a clear reason if the judge does not return in time:
 
 ```yaml
 - type: trajectory:goal-success
-  provider:
-    id: openai:chat:gpt-5.4-mini
-    config:
-      request_timeout_ms: 30000 # 30s ceiling per judge call
-  value: ...
+  provider: openai:chat:gpt-5.4-mini
+  value:
+    goal: The agent explained {{ topic }} using retrieved context.
+    timeoutMs: 30000 # fail the row after 30s instead of stalling
 ```
 
 For large suites, also keep judges off the deterministic critical path. Tag judge rows with metadata and run them in a separate job; gate merges on deterministic assertions only.
