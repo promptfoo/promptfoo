@@ -5,7 +5,7 @@ import { Agent, ProxyAgent } from 'undici';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../src/constants';
-import { getEnvBool, getEnvString } from '../src/envars';
+import { getEnvBool, getEnvInt, getEnvString } from '../src/envars';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { getRequestTimeoutMs } from '../src/providers/shared';
@@ -623,6 +623,37 @@ describe('fetchWithProxy', () => {
     await fetchWithProxy('https://example.com');
 
     expect(ProxyAgent).not.toHaveBeenCalled();
+  });
+
+  it('should read REQUEST_TIMEOUT_MS when creating the default agent', async () => {
+    vi.mocked(getEnvInt).mockReturnValueOnce(1234);
+
+    await fetchWithProxy('https://example.com/api');
+
+    expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
+    expect(Agent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headersTimeout: 1234,
+        connections: DEFAULT_MAX_CONCURRENCY,
+      }),
+    );
+  });
+
+  it('should read REQUEST_TIMEOUT_MS when creating the proxy agent', async () => {
+    const mockProxyUrl = 'http://proxy.example.com';
+    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
+    vi.mocked(getEnvInt).mockReturnValueOnce(4321);
+
+    await fetchWithProxy('https://example.com/api');
+
+    expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
+    expect(ProxyAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        uri: mockProxyUrl,
+        headersTimeout: 4321,
+        connections: DEFAULT_MAX_CONCURRENCY,
+      }),
+    );
   });
 
   it('should use proxy URL from environment variables in order of precedence', async () => {
