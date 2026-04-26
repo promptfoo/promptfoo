@@ -382,6 +382,10 @@ export default class EvalResult {
   failureReason: ResultFailureReason;
   persisted: boolean;
   pluginId?: string;
+  /** W3C trace id for this row when tracing is enabled. Hoisted from persisted metadata. */
+  traceId?: string;
+  /** Evaluation id this row belongs to. Hoisted from persisted metadata. */
+  evaluationId?: string;
 
   constructor(opts: {
     id: string;
@@ -422,7 +426,23 @@ export default class EvalResult {
     this.provider = opts.provider;
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
-    this.metadata = opts.metadata || {};
+    // Hoist synthetic trace ids out of metadata so they don't pollute the
+    // user-visible metadata surface, and expose them as first-class fields.
+    const incomingMetadata = opts.metadata || {};
+    if (typeof incomingMetadata.__traceId === 'string') {
+      this.traceId = incomingMetadata.__traceId;
+    }
+    if (typeof incomingMetadata.__evaluationId === 'string') {
+      this.evaluationId = incomingMetadata.__evaluationId;
+    }
+    this.metadata =
+      this.traceId !== undefined || this.evaluationId !== undefined
+        ? Object.fromEntries(
+            Object.entries(incomingMetadata).filter(
+              ([key]) => key !== '__traceId' && key !== '__evaluationId',
+            ),
+          )
+        : incomingMetadata;
     this.failureReason = isResultFailureReason(opts.failureReason)
       ? opts.failureReason
       : ResultFailureReason.NONE;
@@ -474,18 +494,9 @@ export default class EvalResult {
         }
       : this.testCase;
 
-    // Hoist traceId/evaluationId back from metadata where they're persisted.
-    const metadataIn = (this.metadata ?? {}) as Record<string, unknown>;
-    const traceId = typeof metadataIn.__traceId === 'string' ? metadataIn.__traceId : undefined;
-    const evaluationId =
-      typeof metadataIn.__evaluationId === 'string' ? metadataIn.__evaluationId : undefined;
-    const surfacedMetadata = shouldStripMetadata
-      ? {}
-      : Object.fromEntries(
-          Object.entries(metadataIn).filter(
-            ([key]) => key !== '__traceId' && key !== '__evaluationId',
-          ),
-        );
+    // traceId/evaluationId are hoisted off metadata in the constructor, so
+    // surfacing them here is just reading the first-class fields.
+    const surfacedMetadata = shouldStripMetadata ? {} : this.metadata;
 
     return {
       cost: this.cost,
@@ -498,8 +509,8 @@ export default class EvalResult {
       prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
-      ...(traceId ? { traceId } : {}),
-      ...(evaluationId ? { evaluationId } : {}),
+      ...(this.traceId ? { traceId: this.traceId } : {}),
+      ...(this.evaluationId ? { evaluationId: this.evaluationId } : {}),
       provider: { id: this.provider.id, label: this.provider.label },
       response,
       score: this.score,

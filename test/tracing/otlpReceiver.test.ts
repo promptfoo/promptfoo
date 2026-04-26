@@ -622,6 +622,34 @@ describe('OTLPReceiver', () => {
     });
   });
 
+  describe('Ingest rate limiting', () => {
+    it('returns 429 with Retry-After once the per-IP window cap is reached', async () => {
+      const limited = new OTLPReceiver();
+      (limited as any).traceStore = mockTraceStore;
+      // Tighten the window cap for the test rather than firing 600 requests.
+      (limited as any).constructor.INGEST_RATE_LIMIT_MAX_REQUESTS = 3;
+      try {
+        for (let i = 0; i < 3; i++) {
+          await request(limited.getApp())
+            .post('/v1/traces')
+            .set('Content-Type', 'application/json')
+            .send({ resourceSpans: [] })
+            .expect(200);
+        }
+        const blocked = await request(limited.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', 'application/json')
+          .send({ resourceSpans: [] });
+        expect(blocked.status).toBe(429);
+        expect(blocked.body).toEqual({ error: 'Too Many Requests' });
+        expect(blocked.headers['retry-after']).toBeDefined();
+      } finally {
+        (limited as any).constructor.INGEST_RATE_LIMIT_MAX_REQUESTS = 600;
+        limited.resetIngestRateLimits();
+      }
+    });
+  });
+
   describe('Ingest-time redaction', () => {
     it('replaces values for matched attribute keys with [REDACTED] before persisting', async () => {
       const redactingReceiver = new OTLPReceiver({

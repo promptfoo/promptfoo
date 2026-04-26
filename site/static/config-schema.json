@@ -912,12 +912,14 @@
                 "similar:dot",
                 "similar:euclidean",
                 "starts-with",
+                "tokens-used",
                 "tool-call-f1",
                 "skill-used",
                 "trajectory:goal-success",
                 "trajectory:tool-args-match",
                 "trajectory:step-count",
                 "trajectory:tool-sequence",
+                "trajectory:tool-set",
                 "trajectory:tool-used",
                 "trace-error-spans",
                 "trace-span-count",
@@ -982,12 +984,14 @@
                 "similar:dot",
                 "similar:euclidean",
                 "starts-with",
+                "tokens-used",
                 "tool-call-f1",
                 "skill-used",
                 "trajectory:goal-success",
                 "trajectory:tool-args-match",
                 "trajectory:step-count",
                 "trajectory:tool-sequence",
+                "trajectory:tool-set",
                 "trajectory:tool-used",
                 "trace-error-spans",
                 "trace-span-count",
@@ -2993,6 +2997,15 @@
         "enabled": {
           "type": "boolean"
         },
+        "failOnReceiverStartFailure": {
+          "type": "boolean"
+        },
+        "commandToolNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "otlp": {
           "type": "object",
           "properties": {
@@ -3013,6 +3026,15 @@
                   "items": {
                     "type": "string",
                     "enum": ["protobuf", "json"]
+                  }
+                },
+                "authToken": {
+                  "type": "string"
+                },
+                "redactAttributes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
                   }
                 }
               },

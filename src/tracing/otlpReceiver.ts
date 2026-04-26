@@ -217,6 +217,12 @@ export class OTLPReceiver {
   private server?: any; // http.Server type
   private authToken?: string;
   private redactAttributePatterns: string[] = [];
+  // Fixed-window per-client rate limiter for the ingest endpoints. Defaults are
+  // generous enough to never trigger for legitimate eval traffic, but bound the
+  // cost of brute-forcing the optional Bearer token.
+  private static readonly INGEST_RATE_LIMIT_WINDOW_MS = 60_000;
+  private static readonly INGEST_RATE_LIMIT_MAX_REQUESTS = 600;
+  private ingestRateBuckets = new Map<string, { count: number; windowStart: number }>();
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -259,6 +265,33 @@ export class OTLPReceiver {
     return out;
   }
 
+  /**
+   * Per-client fixed-window rate limiter for the ingest endpoints. Keyed by
+   * `req.ip` (loopback for default deployments). Bounds the cost of brute-forcing
+   * the optional Bearer token and protects the trace store from runaway producers.
+   */
+  private rateLimitIngest(req: any, res: any, next: any): void {
+    const key = typeof req.ip === 'string' && req.ip ? req.ip : 'unknown';
+    const now = Date.now();
+    const bucket = this.ingestRateBuckets.get(key);
+    if (!bucket || now - bucket.windowStart >= OTLPReceiver.INGEST_RATE_LIMIT_WINDOW_MS) {
+      this.ingestRateBuckets.set(key, { count: 1, windowStart: now });
+      next();
+      return;
+    }
+    if (bucket.count >= OTLPReceiver.INGEST_RATE_LIMIT_MAX_REQUESTS) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((OTLPReceiver.INGEST_RATE_LIMIT_WINDOW_MS - (now - bucket.windowStart)) / 1000),
+      );
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      res.status(429).json({ error: 'Too Many Requests' });
+      return;
+    }
+    bucket.count += 1;
+    next();
+  }
+
   /** Express middleware that enforces Bearer-token auth when an authToken is set. */
   private requireAuth(req: any, res: any, next: any): void {
     if (!this.authToken) {
@@ -274,8 +307,17 @@ export class OTLPReceiver {
     next();
   }
 
+  /** Test/cleanup helper: clear the in-memory rate limiter buckets. */
+  resetIngestRateLimits(): void {
+    this.ingestRateBuckets.clear();
+  }
+
   private setupMiddleware(): void {
-    // Auth gate runs before content-type checks for both ingest endpoints.
+    // Rate limit + auth gate run before content-type checks for both ingest endpoints.
+    // Rate limit fires first so a brute-force attacker cannot probe the auth path
+    // faster than INGEST_RATE_LIMIT_MAX_REQUESTS per minute per source IP.
+    this.app.use('/v1/traces', (req, res, next) => this.rateLimitIngest(req, res, next));
+    this.app.use('/v1/logs', (req, res, next) => this.rateLimitIngest(req, res, next));
     this.app.use('/v1/traces', (req, res, next) => this.requireAuth(req, res, next));
     this.app.use('/v1/logs', (req, res, next) => this.requireAuth(req, res, next));
 
