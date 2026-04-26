@@ -242,6 +242,40 @@ describe('evaluatorTracing', () => {
       expect(mockStartOTLPReceiver).toHaveBeenCalledWith(4318, '0.0.0.0', ['protobuf']);
     });
 
+    it('should swallow receiver start errors by default', async () => {
+      mockStartOTLPReceiver.mockRejectedValueOnce(new Error('EADDRINUSE: port 4318'));
+
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite;
+
+      await expect(startOtlpReceiverIfNeeded(testSuite)).resolves.toBeUndefined();
+      expect(isOtlpReceiverStarted()).toBe(false);
+    });
+
+    it('should rethrow receiver start errors when failOnReceiverStartFailure is true', async () => {
+      mockStartOTLPReceiver.mockRejectedValueOnce(new Error('EADDRINUSE: port 4318'));
+
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          failOnReceiverStartFailure: true,
+          otlp: { http: { enabled: true, port: 4318, host: '127.0.0.1' } },
+        },
+      } as unknown as TestSuite;
+
+      await expect(startOtlpReceiverIfNeeded(testSuite)).rejects.toThrow(
+        /Failed to start OTLP tracing receiver: EADDRINUSE/,
+      );
+    });
+
     it('should default acceptFormats to both when omitted', async () => {
       const testSuite = {
         providers: [],

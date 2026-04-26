@@ -719,6 +719,16 @@ jobs:
 
 The `concurrency` block prevents two CI runs on the same branch from racing for OTLP port 4318. For matrix builds on the same runner, set a unique port per job by reading `tracing.otlp.http.port` from a job-level env var. The pre-flight `ss -lnt` check fails fast if the port is occupied — without it, every trace assertion silently throws "No trace data available" and the row fails for the wrong reason.
 
+Set `tracing.failOnReceiverStartFailure: true` in your config to make Promptfoo throw on bind failures instead of silently continuing. This converts a footgun (silent missing traces) into a loud, easy-to-diagnose error:
+
+```yaml
+tracing:
+  enabled: true
+  failOnReceiverStartFailure: true
+  otlp:
+    http: { enabled: true, port: 4318 }
+```
+
 ### Time-box the judge
 
 `trajectory:goal-success` makes one model call per row. If the judge stalls, the row stalls. Set `timeoutMs` on the assertion value — Promptfoo races the judge against the timer and fails the row with a clear reason if the judge does not return in time:
