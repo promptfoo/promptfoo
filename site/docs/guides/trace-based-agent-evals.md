@@ -330,23 +330,25 @@ curl http://localhost:15500/api/traces/evaluation/<eval-id>
 
 Use this matrix when choosing an assertion:
 
-| Assertion                        | Checks                                   | Value shape                                             | Common failure it catches                                 |
-| -------------------------------- | ---------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------- |
-| `trace-span-count`               | Raw span names and count bounds          | `{ pattern, min?, max? }`                               | Retrieval, guardrail, or root workflow span never ran     |
-| `trace-span-duration`            | Raw span duration threshold              | `{ pattern?, max, percentile? }`                        | Slow retrieval, reranking, sandbox, or tool span          |
-| `trace-error-spans`              | Raw span error status/attributes         | `{ pattern?, max_count?, max_percentage? }` or a number | Internal tool, HTTP, sandbox, or provider error           |
-| `trajectory:tool-used`           | Required normalized tool steps           | string, string array, or `{ name/pattern, min?, max? }` | Agent skipped the required tool                           |
-| `not-trajectory:tool-used`       | Forbidden normalized tool steps          | string, string array, or `{ name/pattern, min?, max? }` | Agent called an unsafe or irreversible tool               |
-| `trajectory:tool-args-match`     | Required tool arguments                  | `{ name/pattern, args or arguments, mode? }`            | Agent used the right tool with the wrong ID/filter/query  |
-| `not-trajectory:tool-args-match` | Forbidden tool arguments                 | `{ name/pattern, args or arguments, mode? }`            | Agent passed sensitive, unsafe, or wrong-tenant arguments |
-| `trajectory:tool-sequence`       | Required tool ordering                   | array or `{ mode?: in_order or exact, steps }`          | Agent composed an answer before retrieval or validation   |
-| `not-trajectory:tool-sequence`   | Forbidden tool ordering                  | array or `{ mode?: in_order or exact, steps }`          | Agent read sensitive data and then transmitted it         |
-| `trajectory:tool-set`            | Set membership (any-order tools)         | array or `{ tools, mode?: subset or exact }`            | Parallel agent missed a required tool in the fanout       |
-| `not-trajectory:tool-set`        | Forbidden tool combination               | array or `{ tools, mode?: subset or exact }`            | A combination of tools that should never co-occur did     |
-| `trajectory:step-count`          | Count of normalized steps by type/name   | `{ type?, name?, pattern?, min?, max? }`                | Agent skipped tests, over-searched, or never reasoned     |
-| `not-trajectory:step-count`      | Forbidden count range                    | `{ type?, name?, pattern?, min?, max? }`                | Agent performed too many commands/searches/messages       |
-| `trajectory:goal-success`        | Judge over final output plus trajectory  | string or `{ goal }`, with a `provider`                 | Path looked plausible but did not actually solve the task |
-| `not-trajectory:goal-success`    | Judge that a prohibited goal did not run | string or `{ goal }`, with a `provider`                 | Agent successfully performed something it must not do     |
+| Assertion                        | Checks                                   | Value shape                                              | Common failure it catches                                  |
+| -------------------------------- | ---------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------- |
+| `trace-span-count`               | Raw span names and count bounds          | `{ pattern, min?, max? }`                                | Retrieval, guardrail, or root workflow span never ran      |
+| `trace-span-duration`            | Raw span duration threshold              | `{ pattern?, max, percentile? }`                         | Slow retrieval, reranking, sandbox, or tool span           |
+| `trace-error-spans`              | Raw span error status/attributes         | `{ pattern?, max_count?, max_percentage? }` or a number  | Internal tool, HTTP, sandbox, or provider error            |
+| `trajectory:tool-used`           | Required normalized tool steps           | string, string array, or `{ name/pattern, min?, max? }`  | Agent skipped the required tool                            |
+| `not-trajectory:tool-used`       | Forbidden normalized tool steps          | string, string array, or `{ name/pattern, min?, max? }`  | Agent called an unsafe or irreversible tool                |
+| `trajectory:tool-args-match`     | Required tool arguments                  | `{ name/pattern, args or arguments, mode? }`             | Agent used the right tool with the wrong ID/filter/query   |
+| `not-trajectory:tool-args-match` | Forbidden tool arguments                 | `{ name/pattern, args or arguments, mode? }`             | Agent passed sensitive, unsafe, or wrong-tenant arguments  |
+| `trajectory:tool-sequence`       | Required tool ordering                   | array or `{ mode?: in_order or exact, steps }`           | Agent composed an answer before retrieval or validation    |
+| `not-trajectory:tool-sequence`   | Forbidden tool ordering                  | array or `{ mode?: in_order or exact, steps }`           | Agent read sensitive data and then transmitted it          |
+| `trajectory:tool-set`            | Set membership (any-order tools)         | array or `{ tools, mode?: subset or exact }`             | Parallel agent missed a required tool in the fanout        |
+| `not-trajectory:tool-set`        | Forbidden tool combination               | array or `{ tools, mode?: subset or exact }`             | A combination of tools that should never co-occur did      |
+| `trajectory:step-count`          | Count of normalized steps by type/name   | `{ type?, name?, pattern?, min?, max? }`                 | Agent skipped tests, over-searched, or never reasoned      |
+| `not-trajectory:step-count`      | Forbidden count range                    | `{ type?, name?, pattern?, min?, max? }`                 | Agent performed too many commands/searches/messages        |
+| `trajectory:goal-success`        | Judge over final output plus trajectory  | string or `{ goal }`, with a `provider`                  | Path looked plausible but did not actually solve the task  |
+| `not-trajectory:goal-success`    | Judge that a prohibited goal did not run | string or `{ goal }`, with a `provider`                  | Agent successfully performed something it must not do      |
+| `tokens-used`                    | Token budget over trace or response      | `{ min?, max?, pattern?, source?: auto/trace/response }` | Runaway agent loop or unbounded fan-out blew the budget    |
+| `not-tokens-used`                | Forbidden token-budget range             | same as `tokens-used`                                    | Stubbed provider returned 0 tokens when real work expected |
 
 The raw trace assertions operate on spans. The trajectory assertions operate on normalized steps. If you are unsure which one to use, start with a raw `trace-span-count` to prove the span exists, then add a trajectory assertion once the span has stable tool, command, search, or reasoning semantics.
 
@@ -761,24 +763,17 @@ diff <(sort base.tsv) <(sort pr.tsv) || true
 
 ### Cap cost per row
 
-Agents that loop have unbounded cost. Even without a built-in token-budget assertion, you can enforce one over the captured spans:
+Agents that loop have unbounded cost. Use the built-in `tokens-used` assertion to enforce a budget per row directly from trace data (preferred) or the provider response:
 
 ```yaml
-- type: javascript
-  value: |
-    const total = (context.trace?.spans || [])
-      .flatMap((s) => [
-        Number(s.attributes?.['gen_ai.usage.input_tokens']),
-        Number(s.attributes?.['gen_ai.usage.output_tokens']),
-      ])
-      .filter(Number.isFinite)
-      .reduce((a, b) => a + b, 0);
-    return {
-      pass: total <= 10000,
-      score: total <= 10000 ? 1 : 0,
-      reason: `agent used ${total} tokens (budget 10000)`,
-    };
+- type: tokens-used
+  value:
+    max: 10000 # fail the row if more than 10k tokens were spent
+    pattern: '*' # optional; defaults to all spans
+    source: auto # auto (default) | trace | response
 ```
+
+`source: auto` reads `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` (and Promptfoo's own `tokens.used`) off the trace when present, and falls back to `providerResponse.tokenUsage`. `source: trace` forces the trace path; `source: response` forces the provider-response path. The inverse `not-tokens-used` is occasionally useful when proving an agent _did_ spend tokens (e.g. a smoke test that detects a stubbed provider).
 
 Pair this with a tool-call ceiling to detect runaway loops directly from the span tree:
 

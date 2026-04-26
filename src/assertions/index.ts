@@ -85,6 +85,7 @@ import { handleSimilar } from './similar';
 import { handleSkillUsed } from './skill';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleTokensUsed } from './tokensUsed';
 import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
@@ -136,6 +137,7 @@ const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'javascript',
   'python',
   'ruby',
+  'tokens-used',
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',
@@ -301,6 +303,7 @@ const ASSERTION_HANDLERS: Record<
   'similar:dot': handleSimilar,
   'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
+  'tokens-used': handleTokensUsed,
   'tool-call-f1': handleToolCallF1,
   'trajectory:goal-success': handleTrajectoryGoalSuccess,
   'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,

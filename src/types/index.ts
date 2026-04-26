@@ -596,6 +596,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'similar:dot',
   'similar:euclidean',
   'starts-with',
+  'tokens-used',
   'tool-call-f1',
   'skill-used',
   'trajectory:goal-success',
