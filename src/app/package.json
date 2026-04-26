@@ -58,7 +58,7 @@
     "js-yaml": "^4.1.1",
     "jsdom": "^29.0.0",
     "lucide-react": "^1.0.0",
-    "postcss": "^8.5.8",
+    "postcss": "^8.5.10",
     "posthog-js": "^1.343.0",
     "prismjs": "^1.30.0",
     "react": "^19.2.4",
