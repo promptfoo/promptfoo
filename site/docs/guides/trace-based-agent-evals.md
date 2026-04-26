@@ -318,12 +318,17 @@ Run with cache disabled while you are calibrating:
 promptfoo eval -c promptfooconfig.trace-guide.yaml --no-cache -o output.json
 ```
 
-Use `output.json` for assertion scores, reasons, provider output, token usage, and metadata. Use the web UI or trace API for full span inspection; the eval export keeps the assertion evidence but does not currently embed every raw span.
-
-For local debugging, the trace API is useful when you need the complete span list:
+Use `output.json` for assertion scores, reasons, provider output, token usage, and metadata. Each row also includes `traceId` and `evaluationId` fields whenever tracing is enabled, which the trace API needs to look up raw spans:
 
 ```bash
-curl http://localhost:15500/api/traces/evaluation/<eval-id>
+# Pluck the failing row's traceId and evaluationId out of output.json
+ROW=$(jq -r '.results.results[] | select(.success == false) | "\(.evaluationId) \(.traceId)"' output.json | head -1)
+EVAL_ID=$(echo "$ROW" | cut -d' ' -f1)
+TRACE_ID=$(echo "$ROW" | cut -d' ' -f2)
+
+# Pull the full trace
+curl "http://localhost:15500/api/traces/evaluation/$EVAL_ID" \
+  | jq --arg tid "$TRACE_ID" '.traces[] | select(.traceId == $tid)'
 ```
 
 ## Assertion Matrix
@@ -938,7 +943,7 @@ Trace-based evals are most reliable when you design for the current assertion su
 - `trajectory:tool-args-match` depends on captured structured arguments. Add `tool.arguments`, `tool.args`, or framework-specific tool-call argument attributes.
 - Use stable literal expected arguments in structured examples. If you need row-specific values inside nested argument objects, verify the rendered assertion value in the assertion reason.
 - `trajectory:goal-success` adds a judge model call, cost, latency, and nondeterminism. Keep it for high-level task success and use deterministic assertions for critical gates.
-- Exported eval JSON includes assertion reasons and scores, but not every raw span. Inspect full traces in the web UI or through the trace API when debugging instrumentation.
+- Exported eval JSON includes assertion reasons, scores, `traceId`, and `evaluationId` per row, but not every raw span. Inspect full traces in the web UI or through the trace API when debugging instrumentation — see the curl recipe in [Write A Complete Trace Eval](#write-a-complete-trace-eval).
 - Trace schemas differ across frameworks. Normalize tool names, arguments, commands, searches, and reasoning spans explicitly when you own the instrumentation.
 
 ## Troubleshooting

@@ -364,6 +364,10 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  /** Evaluation ID this result belongs to. Used to look up traces via the trace API. */
+  evaluationId?: string;
+  /** W3C trace ID generated for this row when tracing is enabled. */
+  traceId?: string;
 }
 
 export interface EvaluateTableOutput {
