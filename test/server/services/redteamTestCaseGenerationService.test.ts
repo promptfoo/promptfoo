@@ -4,7 +4,9 @@ import { createMockResponse } from '../../util/utils';
 import type { MultiTurnPromptParams } from '../../../src/server/services/redteamTestCaseGenerationService';
 
 async function getExpectedRemoteGenerationUrl() {
-  const { getRemoteGenerationUrl } = await import('../../../src/redteam/remoteGeneration');
+  const { getRemoteGenerationUrl } = await vi.importActual<
+    typeof import('../../../src/redteam/remoteGeneration')
+  >('../../../src/redteam/remoteGeneration');
   return getRemoteGenerationUrl();
 }
 const TEST_REQUEST_TIMEOUT_MS = 300000;

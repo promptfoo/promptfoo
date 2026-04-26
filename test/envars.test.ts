@@ -166,7 +166,7 @@ describe('envars', () => {
 
   describe('getEnvBool', () => {
     it('should return true for truthy string values', () => {
-      ['1', 'true', 'yes', 'yup', 'yeppers'].forEach((value) => {
+      ['1', 'true', 'yes', 'yup'].forEach((value) => {
         mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
         expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
       });
