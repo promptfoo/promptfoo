@@ -190,7 +190,15 @@ Promptfoo normalizes spans into trajectory steps like this:
 
 Each span normalizes into exactly one trajectory step. When attributes overlap, Promptfoo applies them in this priority order: shell-style tool calls become `command`, then any `tool.name` becomes `tool`, then a recognised command attribute becomes `command`, then a recognised search attribute becomes `search`, then reasoning, then message, otherwise `span`. So a retrieval span that sets both `tool.name: search_corpus` and `search.query: ...` normalizes to `tool`, not `search` — assert with `trajectory:tool-used` rather than `trajectory:step-count { type: search }` for that case.
 
-"Shell-style" means `tool.name` matches one of `shell`, `exec_command`, or `local_shell` (case-insensitive). A tool you named `bash`, `terminal`, `run`, or anything else falls through to step type `tool` even when its arguments include a `cmd` field. Either rename the tool to one of the recognised shell names or assert with `trajectory:tool-used` instead of `trajectory:step-count { type: command }`.
+"Shell-style" means `tool.name` matches one of `shell`, `exec_command`, or `local_shell` (case-insensitive). A tool you named `bash`, `terminal`, `run`, or anything else falls through to step type `tool` by default. Extend the recognised set in your config:
+
+```yaml
+tracing:
+  enabled: true
+  commandToolNames: [bash, terminal, run] # additive, case-insensitive
+```
+
+After the extension, spans with `tool.name: bash` (and a `cmd` argument) normalize to step type `command` and the executable becomes the step name. If you cannot or do not want to change config, assert with `trajectory:tool-used` instead of `trajectory:step-count { type: command }`.
 
 Matchers use aliases, not just raw span names. For example, a span named `retrieve_document_0` with `tool.name: search_corpus` can match `trajectory:tool-used` as `search_corpus`, while still matching `trace-span-count` as `retrieve_document_*`.
 

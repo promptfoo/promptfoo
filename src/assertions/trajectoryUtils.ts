@@ -40,7 +40,29 @@ const COMMAND_ATTRIBUTE_KEYS = [
 const SEARCH_ATTRIBUTE_KEYS = ['codex.search.query', 'search.query', 'search_query'] as const;
 
 const GENERIC_QUERY_ATTRIBUTE_KEYS = ['query'] as const;
-const COMMAND_TOOL_NAMES = new Set(['exec_command', 'local_shell', 'shell']);
+const DEFAULT_COMMAND_TOOL_NAMES = ['exec_command', 'local_shell', 'shell'] as const;
+let COMMAND_TOOL_NAMES = new Set<string>(DEFAULT_COMMAND_TOOL_NAMES);
+
+/**
+ * Extend the set of tool names that normalize to the `command` step type.
+ * Names are matched case-insensitively. Pass an empty array to reset to defaults.
+ *
+ * @example
+ * setCommandToolNames(['bash', 'terminal']); // adds bash + terminal as shell-style tools
+ */
+export function setCommandToolNames(extra: readonly string[] | null | undefined): void {
+  const merged = new Set<string>(DEFAULT_COMMAND_TOOL_NAMES);
+  for (const name of extra ?? []) {
+    if (typeof name === 'string' && name.trim()) {
+      merged.add(name.trim().toLowerCase());
+    }
+  }
+  COMMAND_TOOL_NAMES = merged;
+}
+
+export function getCommandToolNames(): ReadonlySet<string> {
+  return COMMAND_TOOL_NAMES;
+}
 
 const SEARCH_SPAN_NAME_PATTERN = /(^|[\s._:/-])(search|find|lookup|retriev(?:e|al))($|[\s._:/-])/i;
 
