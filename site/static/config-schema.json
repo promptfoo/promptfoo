@@ -3028,9 +3028,6 @@
                     "enum": ["protobuf", "json"]
                   }
                 },
-                "authToken": {
-                  "type": "string"
-                },
                 "redactAttributes": {
                   "type": "array",
                   "items": {

@@ -158,8 +158,6 @@ type OTLPFormat = 'json' | 'protobuf';
 
 interface OTLPReceiverOptions {
   acceptFormats?: OTLPFormat[];
-  /** When set, ingest endpoints (/v1/traces, /v1/logs) require Authorization: Bearer <token>. */
-  authToken?: string;
   /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
   redactAttributes?: string[];
 }
@@ -215,15 +213,12 @@ export class OTLPReceiver {
   private traceStore: TraceStore;
   private port?: number;
   private server?: any; // http.Server type
-  private authToken?: string;
   private redactAttributePatterns: string[] = [];
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
     this.acceptFormats = normalizeAcceptFormats(options.acceptFormats);
     this.traceStore = getTraceStore();
-    this.authToken =
-      options.authToken && options.authToken.trim() ? options.authToken.trim() : undefined;
     this.redactAttributePatterns = (options.redactAttributes ?? [])
       .map((p) => (typeof p === 'string' ? p.trim().toLowerCase() : ''))
       .filter((p) => p.length > 0);
@@ -259,38 +254,13 @@ export class OTLPReceiver {
     return out;
   }
 
-  /**
-   * Express middleware that enforces Bearer-token auth when an authToken is set.
-   *
-   * Threat model: the receiver binds to 127.0.0.1 by default and is intended for a
-   * single-machine eval environment. authToken exists for the narrow case where a
-   * user explicitly opens the receiver beyond loopback (e.g. a Codex subprocess in
-   * a sibling container that needs to reach the host receiver). For hostile or
-   * multi-tenant network exposure, run a real reverse proxy (nginx, Caddy, an
-   * authenticated mesh) in front of the receiver — that is the right layer for
-   * rate limiting, mTLS, and audit logging.
-   */
-  private requireAuth(req: any, res: any, next: any): void {
-    if (!this.authToken) {
-      next();
-      return;
-    }
-    const header = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
-    const expected = `Bearer ${this.authToken}`;
-    if (header !== expected) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-    next();
-  }
-
   private setupMiddleware(): void {
-    // Auth gate runs before content-type checks for both ingest endpoints.
-    // No in-process rate limiter: the receiver is loopback-default, and any
-    // real network exposure should sit behind a reverse proxy that handles
-    // rate limiting at a layer that can also enforce mTLS, audit, and quotas.
-    this.app.use('/v1/traces', (req, res, next) => this.requireAuth(req, res, next));
-    this.app.use('/v1/logs', (req, res, next) => this.requireAuth(req, res, next));
+    // The OTLP receiver binds to 127.0.0.1 by default and is intended for a
+    // single-machine eval environment. There is no in-process auth or rate
+    // limiting: anything that can already reach the loopback port is on the
+    // box. For non-loopback deployments, run a reverse proxy (nginx, Caddy,
+    // a service mesh) in front of the receiver to terminate TLS and enforce
+    // auth, rate limiting, and audit at the layer where they belong.
 
     // Reject disabled content types before any body parser runs.
     this.app.use('/v1/traces', (req, res, next) => {
@@ -967,7 +937,7 @@ export async function startOTLPReceiver(
   port?: number,
   host?: string,
   acceptFormats?: OTLPFormat[],
-  extra?: { authToken?: string; redactAttributes?: string[] },
+  extra?: { redactAttributes?: string[] },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
   const receiver = getOTLPReceiver({ acceptFormats, ...extra });

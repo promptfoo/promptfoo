@@ -583,45 +583,6 @@ describe('OTLPReceiver', () => {
     });
   });
 
-  describe('Authorization (authToken)', () => {
-    it('rejects ingest requests without a Bearer token when authToken is configured', async () => {
-      const authedReceiver = new OTLPReceiver({ authToken: 'secret' });
-      (authedReceiver as any).traceStore = mockTraceStore;
-
-      await request(authedReceiver.getApp())
-        .post('/v1/traces')
-        .set('Content-Type', 'application/json')
-        .send({ resourceSpans: [] })
-        .expect(401);
-
-      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
-    });
-
-    it('accepts ingest requests with the matching Bearer token', async () => {
-      const authedReceiver = new OTLPReceiver({ authToken: 'secret' });
-      (authedReceiver as any).traceStore = mockTraceStore;
-
-      await request(authedReceiver.getApp())
-        .post('/v1/traces')
-        .set('Authorization', 'Bearer secret')
-        .set('Content-Type', 'application/json')
-        .send({ resourceSpans: [] })
-        .expect(200);
-    });
-
-    it('rejects requests with a non-matching Bearer token', async () => {
-      const authedReceiver = new OTLPReceiver({ authToken: 'secret' });
-      (authedReceiver as any).traceStore = mockTraceStore;
-
-      await request(authedReceiver.getApp())
-        .post('/v1/traces')
-        .set('Authorization', 'Bearer wrong')
-        .set('Content-Type', 'application/json')
-        .send({ resourceSpans: [] })
-        .expect(401);
-    });
-  });
-
   describe('Ingest-time redaction', () => {
     it('replaces values for matched attribute keys with [REDACTED] before persisting', async () => {
       const redactingReceiver = new OTLPReceiver({

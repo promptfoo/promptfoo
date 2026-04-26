@@ -1075,7 +1075,6 @@ export const TestSuiteSchema = z.object({
               port: z.number(),
               host: z.string().optional(),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).optional(),
-              authToken: z.string().optional(),
               redactAttributes: z.array(z.string()).optional(),
             })
             .optional(),
@@ -1227,8 +1226,6 @@ export const TestSuiteConfigSchema = z.object({
               port: z.number().prefault(4318),
               host: z.string().prefault('0.0.0.0'),
               acceptFormats: z.array(z.enum(['protobuf', 'json'])).prefault(['json', 'protobuf']),
-              // Optional Bearer token required on /v1/traces and /v1/logs ingest endpoints.
-              authToken: z.string().optional(),
               // Attribute keys (case-insensitive substring match) whose values are
               // replaced with [REDACTED] before persistence to the trace store.
               redactAttributes: z.array(z.string()).optional(),
