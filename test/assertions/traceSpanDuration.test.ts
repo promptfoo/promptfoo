@@ -431,4 +431,24 @@ describe('handleTraceSpanDuration', () => {
     expect(result.reason).toContain('warning: small sample N=1');
     expect(result.assertion).toBe(params.assertion);
   });
+
+  it('should invert the result for not-trace-span-duration when latency budget is met', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-duration',
+        value: { pattern: 'cache.*', max: 1000 },
+      },
+      renderedValue: { pattern: 'cache.*', max: 1000 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    // Base assertion passes (cache is fast), inverse fails.
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('not-trace-span-duration');
+    expect(result.reason).toContain('latency budget for pattern "cache.*" was satisfied');
+  });
 });

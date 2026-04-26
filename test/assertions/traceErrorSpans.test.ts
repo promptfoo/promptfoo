@@ -533,4 +533,27 @@ describe('handleTraceErrorSpans', () => {
       assertion: params.assertion,
     });
   });
+
+  it('should invert the result for not-trace-error-spans (errors expected)', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-error-spans',
+        value: { max_count: 0 },
+      },
+      renderedValue: { max_count: 0 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    // Base assertion fails (errors are present), inverse passes.
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('not-trace-error-spans');
+    expect(result.reason).toContain('error budget was not satisfied');
+  });
 });

@@ -325,6 +325,43 @@ describe('handleTraceSpanCount', () => {
     );
   });
 
+  it('should invert the result for not-trace-span-count when count is in the forbidden range', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-count',
+        value: { pattern: 'llm.completion', min: 1, max: 1 },
+      },
+      renderedValue: { pattern: 'llm.completion', min: 1, max: 1 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanCount(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('not-trace-span-count');
+    expect(result.reason).toContain('forbidden count 1 satisfied');
+  });
+
+  it('should pass not-trace-span-count when count is outside the forbidden range', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      assertion: {
+        type: 'not-trace-span-count',
+        value: { pattern: 'llm.completion', min: 5, max: 5 },
+      },
+      renderedValue: { pattern: 'llm.completion', min: 5, max: 5 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanCount(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('not-trace-span-count');
+  });
+
   it('should throw error for missing pattern', () => {
     const params: AssertionParams = {
       ...defaultParams,

@@ -340,7 +340,11 @@ Use this matrix when choosing an assertion:
 
 The raw trace assertions operate on spans. The trajectory assertions operate on normalized steps. If you are unsure which one to use, start with a raw `trace-span-count` to prove the span exists, then add a trajectory assertion once the span has stable tool, command, search, or reasoning semantics.
 
-The matrix lists `not-` variants only for trajectory assertions. Raw trace assertions have no `not-` form: assert "this raw span must not occur" with `trace-span-count` value `{ pattern: <name>, max: 0 }`, and "no error spans" with `trace-error-spans` value `{ pattern: <name>, max_count: 0 }` (or the shorthand `value: 0`).
+All trace and trajectory assertions accept a `not-` prefix that flips the result. The most common shapes:
+
+- `not-trace-span-count` passes when the matched span count falls **outside** the `min`/`max` range (useful for "must not be exactly N"). For "must not occur at all" the simpler `trace-span-count` with `max: 0` is still preferred.
+- `not-trace-error-spans` passes when the error budget was **not** met (i.e. errors are present). Useful in negative tests where you intentionally trigger a tool failure.
+- `not-trace-span-duration` passes when at least one matching span exceeds the budget. Useful when proving that a slow path actually triggers your latency guardrail.
 
 ## Assertion Reference
 
