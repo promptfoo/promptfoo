@@ -341,6 +341,8 @@ Use this matrix when choosing an assertion:
 | `not-trajectory:tool-args-match` | Forbidden tool arguments                 | `{ name/pattern, args or arguments, mode? }`            | Agent passed sensitive, unsafe, or wrong-tenant arguments |
 | `trajectory:tool-sequence`       | Required tool ordering                   | array or `{ mode?: in_order or exact, steps }`          | Agent composed an answer before retrieval or validation   |
 | `not-trajectory:tool-sequence`   | Forbidden tool ordering                  | array or `{ mode?: in_order or exact, steps }`          | Agent read sensitive data and then transmitted it         |
+| `trajectory:tool-set`            | Set membership (any-order tools)         | array or `{ tools, mode?: subset or exact }`            | Parallel agent missed a required tool in the fanout       |
+| `not-trajectory:tool-set`        | Forbidden tool combination               | array or `{ tools, mode?: subset or exact }`            | A combination of tools that should never co-occur did     |
 | `trajectory:step-count`          | Count of normalized steps by type/name   | `{ type?, name?, pattern?, min?, max? }`                | Agent skipped tests, over-searched, or never reasoned     |
 | `not-trajectory:step-count`      | Forbidden count range                    | `{ type?, name?, pattern?, min?, max? }`                | Agent performed too many commands/searches/messages       |
 | `trajectory:goal-success`        | Judge over final output plus trajectory  | string or `{ goal }`, with a `provider`                 | Path looked plausible but did not actually solve the task |
@@ -653,26 +655,16 @@ Three workable patterns:
   value: { pattern: retrieve_document_*, min: 3, max: 3 }
 ```
 
-True any-order set-membership ("these three tools fired in any order, with nothing else between them") is not directly expressible. If you need it, fall back to a `javascript` assertion that filters `context.trace.spans` by name and checks set equality:
+**Pattern 4 — Use `trajectory:tool-set` for any-order set membership.** When order does not matter and you only care that the right tools fired, this is the cleanest assertion:
 
 ```yaml
-- type: javascript
-  value: |
-    const expected = new Set(['search_corpus', 'rerank', 'fetch_document']);
-    const observed = new Set(
-      (context.trace?.spans || [])
-        .map((s) => s.attributes?.['tool.name'])
-        .filter(Boolean),
-    );
-    const missing = [...expected].filter((t) => !observed.has(t));
-    return {
-      pass: missing.length === 0,
-      reason:
-        missing.length === 0
-          ? 'all expected parallel tools fired'
-          : `missing parallel tools: ${missing.join(', ')}`,
-    };
+- type: trajectory:tool-set
+  value:
+    tools: [search_corpus, rerank, fetch_document]
+    mode: subset # default; pass an exact set to forbid extras
 ```
+
+`mode: subset` (the default) requires every expected tool to appear at least once but allows extras. `mode: exact` additionally forbids any tool outside the set. Use the inverse `not-trajectory:tool-set` to assert that a forbidden combination of tools never fired together.
 
 ## CI Gating, Regressions, and Cost Budgets
 
