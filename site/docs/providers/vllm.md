@@ -56,15 +56,16 @@ vllm serve Qwen/Qwen3-0.6B \
   --api-key token-abc123
 ```
 
-### Common judge models
+### Example judge models
 
 Keep `--served-model-name` short and stable; promptfoo uses that alias in
 `openai:chat:<served-model-name>`.
 
 #### GPT-OSS
 
-The [vLLM GPT-OSS recipe](https://docs.vllm.ai/projects/recipes/en/latest/OpenAI/GPT-OSS.html)
-uses `openai/gpt-oss-20b` for smaller deployments and `openai/gpt-oss-120b` for larger GPU hosts:
+For GPT-OSS, use the Hugging Face model name as the vLLM model and expose a short served alias.
+The example below uses `openai/gpt-oss-20b`; use a larger GPT-OSS checkpoint the same way when your
+host has enough memory:
 
 ```bash
 vllm serve openai/gpt-oss-20b \
@@ -74,18 +75,17 @@ vllm serve openai/gpt-oss-20b \
   --api-key token-abc123
 ```
 
-Run GPT-OSS on a Linux CUDA or ROCm host for vLLM. The CPU/ARM path can hit backend limits for
-sliding-window reasoning models.
+Prefer a Linux CUDA or ROCm host for GPT-OSS with vLLM. If CPU or ARM serving fails, check the
+[vLLM GPT-OSS recipe](https://docs.vllm.ai/projects/recipes/en/latest/OpenAI/GPT-OSS.html) for the
+backend support notes that match your vLLM release.
 
 #### GLM-4.7
 
-The [vLLM GLM-4.X recipe](https://docs.vllm.ai/projects/recipes/en/latest/GLM/GLM.html) includes
-GLM-4.7 and GLM-4.7-Flash. GLM-4.7 may require a nightly vLLM build and Transformers from source:
+For GLM-4.7, use a vLLM and Transformers combination that supports the exact GLM checkpoint you are
+serving. The [vLLM GLM recipe](https://docs.vllm.ai/projects/recipes/en/latest/GLM/GLM.html) keeps
+the install guidance for GLM releases:
 
 ```bash
-uv pip install -U vllm --pre --extra-index-url https://wheels.vllm.ai/nightly
-uv pip install git+https://github.com/huggingface/transformers.git
-
 vllm serve zai-org/GLM-4.7-FP8 \
   --host 0.0.0.0 \
   --port 8000 \
@@ -249,7 +249,7 @@ defaultTest:
             enable_thinking: false
 ```
 
-GPT-OSS uses a different chat-completions knob:
+For GPT-OSS-style chat completions, request-level reasoning controls use different fields:
 
 ```yaml
 defaultTest:
