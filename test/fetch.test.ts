@@ -1672,6 +1672,39 @@ describe('fetchWithRetries', () => {
       // Single attempt — quota fail-fast must not retry.
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
+
+    it('bounds streamed 429 body to RATE_LIMIT_BODY_PEEK_BYTES under a single oversized chunk', async () => {
+      // Hostile / buggy upstream: one chunk much larger than the 64KB peek
+      // cap. The classifier must surface a structured error without
+      // buffering the full payload — the truncated body proves the cap is
+      // honored before the stream is drained.
+      const oversize = 1024 * 1024; // 1 MB
+      const payload = `{"x":"${'A'.repeat(oversize - 10)}"}`;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(payload));
+          controller.close();
+        },
+      });
+      const response = createMockResponse({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers(),
+        text: () => Promise.resolve(payload),
+      });
+      Object.defineProperty(response, 'body', { value: stream });
+      Object.defineProperty(response, 'clone', { value: () => response });
+      vi.mocked(global.fetch).mockResolvedValue(response);
+
+      const err = await fetchWithRetries('https://example.com', {}, 1000, 0).catch((e) => e);
+      expect(err).toBeInstanceOf(HttpRateLimitError);
+      const rl = err as HttpRateLimitError;
+      // Body is truncated, so JSON.parse fails and we fall through to raw text.
+      expect(typeof rl.body).toBe('string');
+      expect((rl.body as string).length).toBeLessThanOrEqual(64 * 1024);
+      // Sanity: payload was much larger than the cap.
+      expect((rl.body as string).length).toBeLessThan(payload.length);
+    });
   });
 });
 

@@ -7,7 +7,6 @@ import logger from '../../logger';
 import {
   extractRateLimitErrorCode,
   formatRateLimitErrorMessage,
-  HARD_QUOTA_ERROR_CODES,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
 import { isJavascriptFile } from '../../util/fileExtensions';
@@ -54,30 +53,24 @@ interface FoundryResponseCreateOptions {
 }
 
 /**
- * Detect a 429 from the OpenAI / Azure SDK error shape — `status === 429`
- * with a body-level error code in `.error.code` / `.error.type`. SDK errors
- * don't pass through the structured-error transport path, so we rebuild the
- * same `(kind, code)` classification locally from the SDK shape.
- *
- * Returns null when the error isn't a 429: this is a classifier, not an
- * error filter, so non-matching inputs fall through to other branches.
+ * Adapt a 429 from the OpenAI / Azure SDK error shape (`status === 429`
+ * plus a body-level error code in `.error.code` / `.error.type`) into the
+ * shared {@link HttpRateLimitError} so SDK-raised rate limits flow through
+ * the same formatter and quota/retry classification as fetch-based paths.
+ * Returns null when the input is not a 429.
  */
-function classifySdkRateLimit(error: unknown): {
-  kind: 'quota' | 'rate_limit';
-  code?: string;
-} | null {
+function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   if (typeof error !== 'object' || error === null) {
     return null;
   }
-  const err = error as { status?: unknown; error?: unknown };
+  const err = error as { status?: unknown };
   if (err.status !== 429) {
     return null;
   }
-  const code = extractRateLimitErrorCode(err);
-  return {
-    kind: code !== undefined && HARD_QUOTA_ERROR_CODES.has(code) ? 'quota' : 'rate_limit',
-    code,
-  };
+  return new HttpRateLimitError({
+    status: 429,
+    code: extractRateLimitErrorCode(err),
+  });
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {
@@ -593,10 +586,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     // Adapt to HttpRateLimitError so SDK-raised 429s share the same message
     // formatter; pass the SDK-supplied message as `details` so operator
     // context (deployment name, token counts) is preserved.
-    const sdkRateLimit = classifySdkRateLimit(error);
+    const sdkRateLimit = rateLimitFromSdkError(error);
     if (sdkRateLimit) {
-      const adapted = new HttpRateLimitError({ status: 429, code: sdkRateLimit.code });
-      return { error: formatRateLimitErrorMessage(adapted, errorMessage) };
+      return { error: formatRateLimitErrorMessage(sdkRateLimit, errorMessage) };
     }
 
     if (this.isContentFilterError(errorMessage)) {

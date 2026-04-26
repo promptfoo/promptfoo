@@ -4,8 +4,8 @@ import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import {
   formatRateLimitErrorMessage,
-  HARD_QUOTA_ERROR_CODES,
   HttpRateLimitError,
+  isHardQuotaCode,
 } from '../../util/fetch/errors';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -577,7 +577,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     if (code === 'rate_limit_exceeded') {
       return true;
     }
-    if (code && HARD_QUOTA_ERROR_CODES.has(code)) {
+    if (isHardQuotaCode(code)) {
       return false;
     }
     if (!message) {

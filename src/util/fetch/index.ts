@@ -441,11 +441,19 @@ async function peekRateLimitBody(
 
 /**
  * Drain a Response's body into a string, but stop reading once `maxBytes`
- * have been collected. Falls back to `.text()` when the body stream isn't
- * available (some Response polyfills).
+ * have been collected. Each streamed chunk is bounded to the remaining
+ * budget *before* it enters the in-memory buffer, so a single oversized
+ * chunk cannot exceed `maxBytes` of retained memory. Falls back to
+ * `.text()` when the body stream isn't available (some Response polyfills);
+ * in that path we consult `Content-Length` first to skip materializing
+ * very large bodies entirely.
  */
 async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) {
+    const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
+    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+      return '';
+    }
     const text = await response.text();
     return text.length > maxBytes ? text.slice(0, maxBytes) : text;
   }
@@ -458,8 +466,12 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
       if (done) {
         break;
       }
-      chunks.push(value);
-      total += value.byteLength;
+      const room = maxBytes - total;
+      // Use `.slice()` (copy), not `.subarray()` (view), so the upstream
+      // buffer for an oversized chunk can be released after this iteration.
+      const bounded = value.byteLength <= room ? value : value.slice(0, room);
+      chunks.push(bounded);
+      total += bounded.byteLength;
     }
   } finally {
     try {
@@ -468,16 +480,11 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
       // Reader cancellation can fail if the stream is already closed; safe to ignore.
     }
   }
-  const merged = new Uint8Array(Math.min(total, maxBytes));
+  const merged = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) {
-    const room = maxBytes - offset;
-    if (room <= 0) {
-      break;
-    }
-    const slice = chunk.byteLength <= room ? chunk : chunk.subarray(0, room);
-    merged.set(slice, offset);
-    offset += slice.byteLength;
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
   }
   return new TextDecoder().decode(merged);
 }
