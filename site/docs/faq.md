@@ -45,11 +45,11 @@ Promptfoo's flexible architecture allows for easy integration with new or custom
 
 ### Does Promptfoo forward calls to an intermediate server?
 
-Usually no: the open-source eval runner runs on your machine, and configured provider calls are sent directly to that provider. Promptfoo-operated services may receive data when you use hosted generation or grading, red team target/provider setup helpers, red team target/provider test requests, sharing, Cloud sync, hosted reports, telemetry, account/license checks, or other Cloud-backed features.
+By default, no — the open-source eval runner runs on your machine, and configured provider calls are sent directly to that provider. Promptfoo-operated services may receive data when you opt into a Cloud-backed feature, including hosted generation or grading, red team target/provider setup helpers, red team target/provider test requests, sharing, Cloud sync, hosted reports, telemetry, and account/license checks.
 
 ### Does Promptfoo store API keys?
 
-Promptfoo works best when API keys stay in local environment variables. If you paste credentials into configs, request examples, red team target/provider setup forms, or shareable eval data, they can be included in local artifacts or sent to configured providers, sharing endpoints, or Promptfoo-hosted features that process that data.
+By default, no — API keys are read from local environment variables and are not transmitted on their own. If you paste credentials directly into configs, request examples, red team target/provider setup forms, or shareable eval data, those values are treated like any other config field and may be saved in local artifacts or sent to configured providers, sharing endpoints, or Promptfoo-hosted features that process that data.
 
 ### Does Promptfoo store LLM inputs and outputs?
 

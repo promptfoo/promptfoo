@@ -55,6 +55,8 @@ Treat adversarial providers, models, prompt packs, fixtures, datasets, remote co
 
 **Configured destinations:**
 
+In this document, the terms **Promptfoo-hosted feature** and **Cloud-backed feature** refer to the same set: Promptfoo-operated endpoints that the user invokes, enables, signs into, or uses through a Cloud-backed flow (the full list is enumerated below).
+
 A destination is configured for the data and credentials the user directly selected, invoked, signed into, or configured it to receive as part of the eval, reporting, sharing, hosted-feature, account, or Cloud path. Selecting a provider, grader, report, hosted feature, account login, sharing action, Cloud-backed feature, or other eval component for a run counts as configuring that destination for the data and credentials needed by that component in that path.
 
 For example, an HTTP provider URL is configured to receive that provider's rendered request, and a grading provider is configured to receive prompts and runtime data needed by the selected model-graded assertion. A Promptfoo-hosted service endpoint, telemetry path, browser-loaded resource, or unrelated provider is a separate destination unless the user separately chose or configured it for that same eval path and data or credential.
