@@ -300,7 +300,7 @@ const config: Config = {
             },
             {
               label: 'LLM Red Teaming',
-              to: '/docs/red-team',
+              to: '/docs/red-team/',
             },
             {
               label: 'Foundation Model Reports',
@@ -328,7 +328,7 @@ const config: Config = {
             },
             {
               label: 'Config Validator',
-              to: '/validator',
+              to: '/validator/',
             },
           ],
         },
@@ -459,7 +459,7 @@ const config: Config = {
           },
           {
             from: '/docs',
-            to: '/docs/intro',
+            to: '/docs/intro/',
           },
           {
             from: '/vegas-contact',
@@ -471,7 +471,7 @@ const config: Config = {
           },
           {
             from: '/docs/category/guides',
-            to: '/docs/guides',
+            to: '/docs/guides/',
           },
           {
             from: '/docs/guides/gpt-5-vs-gpt-5-mini-mmlu',
@@ -545,7 +545,7 @@ const config: Config = {
           // Deleted guides redirected to guides index
           {
             from: '/docs/guides/cohere-command-r-benchmark',
-            to: '/docs/guides',
+            to: '/docs/guides/',
           },
           {
             from: '/docs/guides/dbrx-benchmark',

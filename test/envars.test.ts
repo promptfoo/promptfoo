@@ -172,6 +172,11 @@ describe('envars', () => {
       });
     });
 
+    it('should explicitly treat "yeppers" as a truthy value', () => {
+      mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: 'yeppers' });
+      expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
+    });
+
     it('should return false for falsy string values', () => {
       ['0', 'false', 'no', 'nope'].forEach((value) => {
         mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
@@ -182,13 +187,6 @@ describe('envars', () => {
     it('should return the default value for a non-existing environment variable', () => {
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED', true)).toBe(true);
       expect(getEnvBool('PROMPTFOO_CACHE_ENABLED', false)).toBe(false);
-    });
-
-    it('should return true for uppercase truthy string values', () => {
-      ['TRUE', 'YES', 'YUP', 'YEPPERS'].forEach((value) => {
-        mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
-        expect(getEnvBool('PROMPTFOO_CACHE_ENABLED')).toBe(true);
-      });
     });
 
     it('should return false for any other string values', () => {

@@ -36,7 +36,7 @@ const REDIRECT_TO_RE = /<Redirect\b[^>]*?\bto\s*=\s*\{?\s*(['"`])(\/[^'"`#?\s]*?
 
 function walk(dir: string, out: string[]) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name.startsWith('.') && entry.name !== '.') {
+    if (entry.name.startsWith('.')) {
       continue;
     }
     const full = path.join(dir, entry.name);
