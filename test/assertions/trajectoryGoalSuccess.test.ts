@@ -247,6 +247,80 @@ describe('handleTrajectoryGoalSuccess', () => {
     expect(result.reason).toBe(graderFailure.reason);
   });
 
+  it('fails the assertion when the judge exceeds timeoutMs', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(
+        () =>
+          new Promise(() => {
+            /* never resolves; simulate a stuck judge call */
+          }),
+      );
+
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: {
+          type: 'trajectory:goal-success',
+          value: { goal: 'Resolve the order lookup task', timeoutMs: 250 },
+        },
+        renderedValue: { goal: 'Resolve the order lookup task', timeoutMs: 250 },
+      };
+
+      const promise = handleTrajectoryGoalSuccess(params);
+      await vi.advanceTimersByTimeAsync(300);
+      const result = await promise;
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('trajectory:goal-success judge timed out after 250ms');
+      expect(result.assertion).toBe(params.assertion);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('treats a timeout as a forbidden-goal pass for not-trajectory:goal-success', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(matchesTrajectoryGoalSuccess).mockImplementation(() => new Promise(() => {}));
+
+      const params: AssertionParams = {
+        ...defaultParams,
+        inverse: true,
+        assertion: {
+          type: 'not-trajectory:goal-success',
+          value: { goal: 'Send a refund', timeoutMs: 100 },
+        },
+        renderedValue: { goal: 'Send a refund', timeoutMs: 100 },
+      };
+
+      const promise = handleTrajectoryGoalSuccess(params);
+      await vi.advanceTimersByTimeAsync(150);
+      const result = await promise;
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.reason).toBe('Agent did not achieve the forbidden goal: Send a refund');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('throws when timeoutMs is non-positive', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trajectory:goal-success',
+        value: { goal: 'Resolve the order lookup task', timeoutMs: 0 },
+      },
+      renderedValue: { goal: 'Resolve the order lookup task', timeoutMs: 0 },
+    };
+
+    await expect(handleTrajectoryGoalSuccess(params)).rejects.toThrow(
+      'trajectory:goal-success timeoutMs must be a positive number',
+    );
+  });
+
   it('throws when the assertion value does not include a goal', async () => {
     const params: AssertionParams = {
       ...defaultParams,
