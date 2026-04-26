@@ -134,6 +134,33 @@ result for the row, while each `componentResults[]` entry contains the pass/fail
 reason, and assertion metadata for one evaluated assertion. Both `gradingResult` and
 `componentResults` may be absent on error rows or rows without assertions.
 
+To parse assertion-level component results from JSONL:
+
+```ts
+import fs from 'node:fs';
+
+const lines = fs.readFileSync('results.jsonl', 'utf8').split('\n');
+
+for (const line of lines) {
+  if (!line.trim()) {
+    continue;
+  }
+
+  const row = JSON.parse(line);
+  const components = row.gradingResult?.componentResults ?? [];
+
+  for (const component of components) {
+    console.log({
+      pass: component.pass,
+      score: component.score,
+      reason: component.reason,
+    });
+  }
+}
+```
+
+The `?? []` fallback handles rows without assertions or component results.
+
 ### XML Format
 
 Structured data for enterprise integrations:
