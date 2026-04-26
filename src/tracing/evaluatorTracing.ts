@@ -96,7 +96,17 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
       );
     } catch (error) {
-      logger.error(`[EvaluatorTracing] Failed to start OTLP receiver: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      const failOnStartFailure = testSuite.tracing?.failOnReceiverStartFailure === true;
+      if (failOnStartFailure) {
+        logger.error(
+          `[EvaluatorTracing] Failed to start OTLP receiver and tracing.failOnReceiverStartFailure is true: ${message}`,
+        );
+        throw new Error(
+          `Failed to start OTLP tracing receiver: ${message}. Set tracing.failOnReceiverStartFailure: false to swallow this error and continue without traces.`,
+        );
+      }
+      logger.error(`[EvaluatorTracing] Failed to start OTLP receiver: ${message}`);
     }
   } else {
     if (otlpReceiverStarted) {

@@ -1091,6 +1091,7 @@ export const TestSuiteSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean(),
+      failOnReceiverStartFailure: z.boolean().optional(),
       otlp: z
         .object({
           http: z
@@ -1229,6 +1230,10 @@ export const TestSuiteConfigSchema = z.object({
   tracing: z
     .object({
       enabled: z.boolean().prefault(false),
+
+      // When the OTLP receiver fails to start (e.g. port already in use),
+      // throw and fail the eval instead of silently continuing without traces.
+      failOnReceiverStartFailure: z.boolean().prefault(false),
 
       // OTLP receiver configuration
       otlp: z
