@@ -223,6 +223,92 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   };
 };
 
+interface TrajectoryToolSetValue {
+  tools: Array<string | TrajectoryStepMatcher>;
+  mode?: 'subset' | 'exact';
+}
+
+function resolveToolSetValue(value: unknown): TrajectoryToolSetValue {
+  if (Array.isArray(value)) {
+    return { tools: value as Array<string | TrajectoryStepMatcher>, mode: 'subset' };
+  }
+  if (
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Array.isArray((value as TrajectoryToolSetValue).tools)
+  ) {
+    const objValue = value as TrajectoryToolSetValue;
+    const mode = objValue.mode ?? 'subset';
+    if (mode !== 'subset' && mode !== 'exact') {
+      throw new Error('trajectory:tool-set assertion mode must be "subset" or "exact"');
+    }
+    return { tools: objValue.tools, mode };
+  }
+  throw new Error(
+    'trajectory:tool-set assertion must have an array value or an object with a tools array',
+  );
+}
+
+export const handleTrajectoryToolSet = (params: AssertionParams): GradingResult => {
+  const trace = getTraceOrThrow(params);
+  const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
+  const value = resolveToolSetValue(params.renderedValue ?? params.assertion.value);
+
+  if (value.tools.length === 0) {
+    throw new Error('trajectory:tool-set assertion requires at least one expected tool');
+  }
+
+  const expectedMatchers = value.tools.map((tool, index) => {
+    const matcher = normalizeTrajectoryMatcher(tool, 'tool');
+    requireNamedTrajectoryMatcher(matcher, 'trajectory:tool-set', index);
+    return matcher;
+  });
+
+  const missingExpected = expectedMatchers.filter(
+    (matcher) => !toolSteps.some((step) => matchesTrajectoryStep(step, matcher)),
+  );
+  const expectedSatisfied = missingExpected.length === 0;
+
+  const extraSteps = toolSteps.filter(
+    (step) => !expectedMatchers.some((matcher) => matchesTrajectoryStep(step, matcher)),
+  );
+  const extraNames = [...new Set(extraSteps.map((step) => step.name))];
+
+  const basePass =
+    value.mode === 'exact' ? expectedSatisfied && extraSteps.length === 0 : expectedSatisfied;
+  const pass = applyInverse(basePass, params.inverse);
+
+  const expectedLabels = expectedMatchers.map((m) => m.pattern || m.name || '*');
+  const actualTools = toolSteps.map(formatTrajectoryStep);
+
+  let reason: string;
+  if (params.inverse) {
+    reason = basePass
+      ? `Forbidden tool set was satisfied: ${expectedLabels.join(', ')}. Actual tools: ${formatStepList(actualTools)}`
+      : `Forbidden tool set was not satisfied. Missing: ${
+          missingExpected.map((m) => m.pattern || m.name || '*').join(', ') || '(none)'
+        }. Actual tools: ${formatStepList(actualTools)}`;
+  } else if (!expectedSatisfied) {
+    reason = `Missing expected tools: ${missingExpected
+      .map((m) => m.pattern || m.name || '*')
+      .join(', ')}. Actual tools: ${formatStepList(actualTools)}`;
+  } else if (value.mode === 'exact' && extraSteps.length > 0) {
+    reason = `Unexpected tools observed under mode=exact: ${extraNames.join(', ')}. Expected exactly: ${expectedLabels.join(', ')}`;
+  } else {
+    reason = `Observed expected tool set (mode=${value.mode ?? 'subset'}): ${expectedLabels.join(
+      ', ',
+    )}. Actual tools: ${formatStepList(actualTools)}`;
+  }
+
+  return {
+    pass,
+    score: pass ? 1 : 0,
+    reason,
+    assertion: params.assertion,
+  };
+};
+
 function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
   if (Array.isArray(value)) {
     return {

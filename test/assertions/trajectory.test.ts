@@ -3,6 +3,7 @@ import {
   handleTrajectoryStepCount,
   handleTrajectoryToolArgsMatch,
   handleTrajectoryToolSequence,
+  handleTrajectoryToolSet,
   handleTrajectoryToolUsed,
 } from '../../src/assertions/trajectory';
 import {
@@ -931,6 +932,128 @@ describe('trajectory assertions', () => {
 
       expect(() => handleTrajectoryToolSequence(params)).toThrow(
         'trajectory:tool-sequence assertion requires at least one expected step',
+      );
+    });
+  });
+
+  describe('trajectory:tool-set', () => {
+    const setTrace: TraceData = {
+      traceId: 'set-trace',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'a',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 110,
+          attributes: { 'tool.name': 'rerank' },
+        },
+        {
+          spanId: 'b',
+          name: 'tool.call',
+          startTime: 120,
+          endTime: 130,
+          attributes: { 'tool.name': 'search_corpus' },
+        },
+        {
+          spanId: 'c',
+          name: 'tool.call',
+          startTime: 140,
+          endTime: 150,
+          attributes: { 'tool.name': 'fetch_document' },
+        },
+      ],
+    };
+
+    const baseSetParams: AssertionParams = {
+      ...defaultParams,
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: setTrace },
+      baseType: 'trajectory:tool-set',
+    };
+
+    it('passes when all expected tools are present in any order (subset default)', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertion: {
+          type: 'trajectory:tool-set',
+          value: ['fetch_document', 'search_corpus', 'rerank'],
+        },
+        renderedValue: ['fetch_document', 'search_corpus', 'rerank'],
+      };
+      const result = handleTrajectoryToolSet(params);
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.reason).toContain('Observed expected tool set (mode=subset)');
+    });
+
+    it('fails when an expected tool is missing', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertion: {
+          type: 'trajectory:tool-set',
+          value: { tools: ['search_corpus', 'rerank', 'web_search'] },
+        },
+        renderedValue: { tools: ['search_corpus', 'rerank', 'web_search'] },
+      };
+      const result = handleTrajectoryToolSet(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Missing expected tools: web_search');
+    });
+
+    it('fails mode=exact when extra tools are present', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertion: {
+          type: 'trajectory:tool-set',
+          value: { tools: ['search_corpus', 'rerank'], mode: 'exact' },
+        },
+        renderedValue: { tools: ['search_corpus', 'rerank'], mode: 'exact' },
+      };
+      const result = handleTrajectoryToolSet(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Unexpected tools observed under mode=exact');
+      expect(result.reason).toContain('fetch_document');
+    });
+
+    it('inverts the result for not-trajectory:tool-set', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        inverse: true,
+        assertion: {
+          type: 'not-trajectory:tool-set',
+          value: ['rerank', 'search_corpus', 'fetch_document'],
+        },
+        renderedValue: ['rerank', 'search_corpus', 'fetch_document'],
+      };
+      const result = handleTrajectoryToolSet(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Forbidden tool set was satisfied');
+    });
+
+    it('rejects an empty tools array', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertion: { type: 'trajectory:tool-set', value: [] },
+        renderedValue: [],
+      };
+      expect(() => handleTrajectoryToolSet(params)).toThrow(
+        'trajectory:tool-set assertion requires at least one expected tool',
+      );
+    });
+
+    it('rejects an unknown mode', () => {
+      const params: AssertionParams = {
+        ...baseSetParams,
+        assertion: {
+          type: 'trajectory:tool-set',
+          value: { tools: ['search_corpus'], mode: 'fuzzy' as unknown as 'subset' },
+        },
+        renderedValue: { tools: ['search_corpus'], mode: 'fuzzy' as unknown as 'subset' },
+      };
+      expect(() => handleTrajectoryToolSet(params)).toThrow(
+        'trajectory:tool-set assertion mode must be "subset" or "exact"',
       );
     });
   });
