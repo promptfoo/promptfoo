@@ -3,19 +3,42 @@ import { matchesPattern } from './traceUtils';
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
+type PercentileMethod = 'nearest' | 'linear';
+
 interface TraceSpanDurationValue {
   pattern?: string;
   max: number;
   percentile?: number;
+  method?: PercentileMethod;
   requirePresence?: boolean;
 }
 
-function calculatePercentile(durations: number[], percentile: number): number {
+const PERCENTILE_LARGE_SAMPLE_THRESHOLD = 20;
+
+function calculatePercentile(
+  durations: number[],
+  percentile: number,
+  method: PercentileMethod = 'nearest',
+): number {
   if (durations.length === 0) {
     return 0;
   }
 
   const sorted = [...durations].sort((a, b) => a - b);
+
+  if (method === 'linear') {
+    if (sorted.length === 1) {
+      return sorted[0];
+    }
+    // Linear interpolation between closest ranks (NumPy "linear" / Excel PERCENTILE.INC).
+    const rank = (percentile / 100) * (sorted.length - 1);
+    const lower = Math.floor(rank);
+    const upper = Math.min(sorted.length - 1, lower + 1);
+    const weight = rank - lower;
+    return sorted[lower] + (sorted[upper] - sorted[lower]) * weight;
+  }
+
+  // Nearest-rank (default): index = ceil((p/100) * N) - 1, equivalent to max for small N.
   const index = Math.ceil((percentile / 100) * sorted.length) - 1;
   return sorted[Math.max(0, index)];
 }
@@ -33,7 +56,10 @@ export const handleTraceSpanDuration = ({
     throw new Error('trace-span-duration assertion must have a value object with max property');
   }
 
-  const { pattern = '*', max, percentile, requirePresence = false } = value;
+  const { pattern = '*', max, percentile, method = 'nearest', requirePresence = false } = value;
+  if (method !== 'nearest' && method !== 'linear') {
+    throw new Error('trace-span-duration assertion method must be "nearest" or "linear"');
+  }
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern and calculate durations
@@ -89,7 +115,11 @@ export const handleTraceSpanDuration = ({
   } else {
     // Check percentile
     const durations = spanDurations.map((s) => s.duration);
-    const percentileValue = calculatePercentile(durations, percentile);
+    const percentileValue = calculatePercentile(durations, percentile, method);
+    const smallSampleNote =
+      durations.length < PERCENTILE_LARGE_SAMPLE_THRESHOLD
+        ? ` (warning: small sample N=${durations.length}; ${percentile}th percentile is approximate, prefer max or aggregate across more rows)`
+        : '';
 
     if (percentileValue > max) {
       pass = false;
@@ -98,10 +128,10 @@ export const handleTraceSpanDuration = ({
         .sort((a, b) => b.duration - a.duration)
         .slice(0, 3);
 
-      reason = `${percentile}th percentile duration (${percentileValue}ms) exceeds threshold ${max}ms. `;
+      reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) exceeds threshold ${max}ms${smallSampleNote}. `;
       reason += `Slowest spans: ${slowestSpans.map((s) => `${s.name} (${s.duration}ms)`).join(', ')}`;
     } else {
-      reason = `${percentile}th percentile duration (${percentileValue}ms) is within threshold ${max}ms`;
+      reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) is within threshold ${max}ms${smallSampleNote}`;
     }
   }
 

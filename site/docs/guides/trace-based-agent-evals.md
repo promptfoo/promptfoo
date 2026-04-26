@@ -370,7 +370,18 @@ Use `trace-span-duration` when matching spans must stay under a latency budget.
     percentile: 95
 ```
 
-Without `percentile`, every matching span must be under `max` milliseconds. With `percentile`, Promptfoo computes a nearest-rank percentile (no interpolation): for N matching spans the cutoff is the value at index `⌈(p/100) × N⌉ − 1` of the sorted-ascending durations. With small N this collapses to a max check — `percentile: 95` over 3 spans returns the slowest of the three, identical to `max`. Use percentiles when matching spans aggregate to 20+ samples (typically across many test rows) and prefer `max` over a small fixed batch.
+Without `percentile`, every matching span must be under `max` milliseconds. With `percentile`, Promptfoo defaults to a nearest-rank percentile (no interpolation): for N matching spans the cutoff is the value at index `⌈(p/100) × N⌉ − 1` of the sorted-ascending durations. With small N this collapses to a max check — `percentile: 95` over 3 spans returns the slowest of the three, identical to `max`. Set `method: linear` to compute a linearly-interpolated percentile instead (NumPy `linear` / Excel `PERCENTILE.INC`):
+
+```yaml
+- type: trace-span-duration
+  value:
+    pattern: retrieve_document_*
+    max: 350
+    percentile: 95
+    method: linear # NumPy-style interpolation; default is "nearest"
+```
+
+Promptfoo also appends a `warning: small sample N=<count>` note to the assertion reason whenever the percentile is computed over fewer than 20 samples, so the small-N footgun shows up in `output.json` and the UI without you having to remember it. Use percentiles when matching spans aggregate to 20+ samples (typically across many test rows) and prefer `max` over a small fixed batch.
 
 :::warning No-spans pass
 If no spans match the pattern, `trace-span-duration` returns `pass: true` by default. A renamed span, a dropped flush, or a missing `trace-span-count` companion can silently mask a real regression. Set `requirePresence: true` to fail when nothing matches, or pair duration with a separate `trace-span-count` assertion:

@@ -168,13 +168,13 @@ describe('handleTraceSpanDuration', () => {
 
     const result = handleTraceSpanDuration(params);
     // 90th percentile of [5, 50, 500, 1200, 3000] = 3000ms
-    expect(result).toEqual({
-      pass: false,
-      score: 0,
-      reason:
-        '90th percentile duration (3000ms) exceeds threshold 2000ms. Slowest spans: api.external (3000ms)',
-      assertion: params.assertion,
-    });
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('90th percentile duration (3000.00ms, method=nearest)');
+    expect(result.reason).toContain('exceeds threshold 2000ms');
+    expect(result.reason).toContain('warning: small sample N=5');
+    expect(result.reason).toContain('Slowest spans: api.external (3000ms)');
+    expect(result.assertion).toBe(params.assertion);
   });
 
   it('should pass when percentile duration is within limit', () => {
@@ -193,12 +193,48 @@ describe('handleTraceSpanDuration', () => {
 
     const result = handleTraceSpanDuration(params);
     // 50th percentile (median) of [5, 50, 500, 1200, 3000] = 500ms
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: '50th percentile duration (500ms) is within threshold 1500ms',
-      assertion: params.assertion,
-    });
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('50th percentile duration (500.00ms, method=nearest)');
+    expect(result.reason).toContain('within threshold 1500ms');
+    expect(result.reason).toContain('warning: small sample N=5');
+    expect(result.assertion).toBe(params.assertion);
+  });
+
+  it('should compute linear-interpolation percentile when method=linear', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 5000, percentile: 50, method: 'linear' as const },
+      },
+      renderedValue: { max: 5000, percentile: 50, method: 'linear' as const },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    // sorted durations [5, 50, 500, 1200, 3000]; rank = 0.5*(5-1)=2 -> sorted[2] = 500
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('50th percentile duration (500.00ms, method=linear)');
+  });
+
+  it('should reject method values other than nearest or linear', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { max: 1000, percentile: 95, method: 'tdigest' as unknown as 'nearest' },
+      },
+      renderedValue: { max: 1000, percentile: 95, method: 'tdigest' as unknown as 'nearest' },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion method must be "nearest" or "linear"',
+    );
   });
 
   it('should handle spans without endTime', () => {
@@ -388,11 +424,11 @@ describe('handleTraceSpanDuration', () => {
     };
 
     const result = handleTraceSpanDuration(params);
-    expect(result).toEqual({
-      pass: true,
-      score: 1,
-      reason: '95th percentile duration (750ms) is within threshold 1000ms',
-      assertion: params.assertion,
-    });
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+    expect(result.reason).toContain('95th percentile duration (750.00ms, method=nearest)');
+    expect(result.reason).toContain('within threshold 1000ms');
+    expect(result.reason).toContain('warning: small sample N=1');
+    expect(result.assertion).toBe(params.assertion);
   });
 });
