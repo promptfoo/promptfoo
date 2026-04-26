@@ -138,10 +138,14 @@ To parse assertion-level component results from JSONL:
 
 ```ts
 import fs from 'node:fs';
+import readline from 'node:readline';
 
-const lines = fs.readFileSync('results.jsonl', 'utf8').split('\n');
+const rl = readline.createInterface({
+  input: fs.createReadStream('results.jsonl', { encoding: 'utf8' }),
+  crlfDelay: Infinity,
+});
 
-for (const line of lines) {
+for await (const line of rl) {
   if (!line.trim()) {
     continue;
   }
