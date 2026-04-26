@@ -262,6 +262,40 @@ describe('handleTraceSpanDuration', () => {
     });
   });
 
+  it('should fail when no spans match and requirePresence is true', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { pattern: 'missing_span_*', max: 1000, requirePresence: true },
+      },
+      renderedValue: { pattern: 'missing_span_*', max: 1000, requirePresence: true },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('No spans found matching pattern "missing_span_*"');
+    expect(result.reason).toContain('requirePresence: true');
+  });
+
+  it('should still pass on empty match when requirePresence is false (default)', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-span-duration',
+        value: { pattern: 'missing_span_*', max: 1000 },
+      },
+      renderedValue: { pattern: 'missing_span_*', max: 1000 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    const result = handleTraceSpanDuration(params);
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
   it('should fail when no trace data is available', () => {
     const params: AssertionParams = {
       ...defaultParams,

@@ -460,6 +460,27 @@ describe('handleTraceErrorSpans', () => {
     });
   });
 
+  it('should fail when no spans match and requirePresence is true', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: {
+        type: 'trace-error-spans',
+        value: { pattern: 'missing_*', max_count: 0, requirePresence: true },
+      },
+      renderedValue: { pattern: 'missing_*', max_count: 0, requirePresence: true },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceDataWithErrors,
+      },
+    };
+
+    const result = handleTraceErrorSpans(params);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toContain('No spans found matching pattern "missing_*"');
+    expect(result.reason).toContain('requirePresence: true');
+  });
+
   it('should default to max_count 0 when no value specified', () => {
     const params: AssertionParams = {
       ...defaultParams,

@@ -373,17 +373,20 @@ Use `trace-span-duration` when matching spans must stay under a latency budget.
 Without `percentile`, every matching span must be under `max` milliseconds. With `percentile`, Promptfoo computes a nearest-rank percentile (no interpolation): for N matching spans the cutoff is the value at index `⌈(p/100) × N⌉ − 1` of the sorted-ascending durations. With small N this collapses to a max check — `percentile: 95` over 3 spans returns the slowest of the three, identical to `max`. Use percentiles when matching spans aggregate to 20+ samples (typically across many test rows) and prefer `max` over a small fixed batch.
 
 :::warning No-spans pass
-If no spans match the pattern, `trace-span-duration` returns `pass: true` with no warning. A renamed span, a dropped flush, or a missing `trace-span-count` companion can silently mask a real regression. Pair duration with a presence check whenever the span must exist:
+If no spans match the pattern, `trace-span-duration` returns `pass: true` by default. A renamed span, a dropped flush, or a missing `trace-span-count` companion can silently mask a real regression. Set `requirePresence: true` to fail when nothing matches, or pair duration with a separate `trace-span-count` assertion:
 
 ```yaml
-- type: trace-span-count
-  value:
-    pattern: retrieve_document_*
-    min: 1
 - type: trace-span-duration
   value:
     pattern: retrieve_document_*
     max: 350
+    requirePresence: true # fail if no retrieval spans were captured
+
+# or, equivalently for older configs:
+- type: trace-span-count
+  value: { pattern: retrieve_document_*, min: 1 }
+- type: trace-span-duration
+  value: { pattern: retrieve_document_*, max: 350 }
 ```
 
 :::
@@ -402,7 +405,7 @@ Use `trace-error-spans` as a default health gate for traced workflows.
 You can also use `max_percentage` for noisy systems, or a number shorthand such as `value: 0`. Promptfoo treats OTEL error status, HTTP status codes, error-like attributes, and error-like status messages as error signals.
 
 :::warning No-spans pass
-Like `trace-span-duration`, `trace-error-spans` returns `pass: true` when no spans match the pattern. The default `pattern: '*'` matches every span, so a missing trace (receiver bind failure, dropped flush, port conflict) makes the assertion pass for the wrong reason. Pair with a `trace-span-count` assertion on a known-required span name to catch missing traces.
+Like `trace-span-duration`, `trace-error-spans` returns `pass: true` by default when no spans match the pattern. The default `pattern: '*'` matches every span, so a missing trace (receiver bind failure, dropped flush, port conflict) makes the assertion pass for the wrong reason. Set `requirePresence: true` to fail when nothing matches, or pair with a `trace-span-count` assertion on a known-required span name to catch missing traces.
 :::
 
 ### `trajectory:tool-used`
