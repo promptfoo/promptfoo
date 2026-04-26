@@ -1092,6 +1092,7 @@ export const TestSuiteSchema = z.object({
     .object({
       enabled: z.boolean(),
       failOnReceiverStartFailure: z.boolean().optional(),
+      commandToolNames: z.array(z.string()).optional(),
       otlp: z
         .object({
           http: z
@@ -1234,6 +1235,12 @@ export const TestSuiteConfigSchema = z.object({
       // When the OTLP receiver fails to start (e.g. port already in use),
       // throw and fail the eval instead of silently continuing without traces.
       failOnReceiverStartFailure: z.boolean().prefault(false),
+
+      // Extra tool names (case-insensitive) that should normalize spans to the
+      // `command` trajectory step type. The defaults are `shell`, `exec_command`,
+      // and `local_shell`. Add `bash`, `terminal`, etc. if your provider uses
+      // a different name for its shell tool.
+      commandToolNames: z.array(z.string()).optional(),
 
       // OTLP receiver configuration
       otlp: z

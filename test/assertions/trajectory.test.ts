@@ -7,6 +7,7 @@ import {
 } from '../../src/assertions/trajectory';
 import {
   extractTrajectorySteps,
+  setCommandToolNames,
   summarizeTrajectoryForJudge,
 } from '../../src/assertions/trajectoryUtils';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
@@ -109,6 +110,41 @@ const defaultParams = {
 };
 
 describe('trajectory utilities', () => {
+  it('treats configured shell tool names as command steps', () => {
+    const customShellTrace: TraceData = {
+      traceId: 'custom-shell',
+      evaluationId: 'eval-1',
+      testCaseId: 'tc-1',
+      metadata: {},
+      spans: [
+        {
+          spanId: 'span-1',
+          name: 'tool.call',
+          startTime: 100,
+          endTime: 200,
+          attributes: {
+            'tool.name': 'bash',
+            'tool.arguments': JSON.stringify({ cmd: 'pytest tests/' }),
+          },
+        },
+      ],
+    };
+
+    // By default, a tool named 'bash' normalizes to type:tool, not type:command.
+    expect(extractTrajectorySteps(customShellTrace)[0].type).toBe('tool');
+
+    try {
+      setCommandToolNames(['bash']);
+      const steps = extractTrajectorySteps(customShellTrace);
+      expect(steps[0].type).toBe('command');
+      // The command argument should also be reflected in the step name.
+      expect(steps[0].name).toBe('pytest tests/');
+    } finally {
+      // Reset to defaults so other tests aren't polluted.
+      setCommandToolNames([]);
+    }
+  });
+
   it('extracts normalized trajectory steps from trace spans', () => {
     const steps = extractTrajectorySteps(mockTraceData);
 
