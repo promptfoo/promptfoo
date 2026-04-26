@@ -258,12 +258,12 @@ When a fix is released, we will:
 **In scope:**
 
 - Code execution, file access, network access, or secret exposure that bypasses a supported isolation boundary or hardening control outside the documented local eval pipeline
-- Bypasses of documented restrictions or isolation boundaries within the scope where those restrictions are documented to apply
+- Bypasses of documented restrictions or isolation boundaries
 - Data, secret, or credential leakage to destinations not configured to participate in the selected eval, account, reporting, sharing, hosted-feature, or Cloud path, or outside the documented payload for that path
 - Path traversal or arbitrary file read/write that escapes a documented sandbox, authentication/authorization boundary, Cloud/on-prem tenant boundary, or explicit path restriction that Promptfoo identifies as a security boundary
 - Vulnerabilities in CLI, config parsing, or web UI affecting confidentiality, integrity, or availability beyond the intended trust model described above
 - Exposure of privileged local developer interfaces only when it bypasses an explicit authentication or authorization control documented for a remote or multi-user deployment
-- Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls within the scope where those controls are documented to apply
+- Bypasses of documented tenant-isolation, authentication, authorization, redaction, or exclusion controls
 - Sensitive local artifacts that are uploaded, shared, served to other users, or exposed across Cloud/on-prem tenant boundaries outside the documented sharing or Cloud-backed behavior
 - Algorithmic complexity DoS (crafted input causing hang/crash with modest input size)
 

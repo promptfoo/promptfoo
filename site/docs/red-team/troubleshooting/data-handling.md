@@ -37,13 +37,13 @@ Without an `OPENAI_API_KEY` or a usable Codex/ChatGPT login, Promptfoo uses host
 - Your target's response
 - Grading criteria
 
-**Not sent by default generation/grading paths:**
+**Not sent by default during generation/grading:**
 
-- API keys or credentials that are kept only in local environment variables
+- API keys or credentials stored in local environment variables
 - Model weights or training data
 - Files from your filesystem (unless explicitly configured in prompts)
 
-Credentials, authorization headers, provider config fields, and request examples may be sent when you enter them into red team target/provider setup helpers, red team target/provider test requests, sharing, Cloud sync, or other Cloud-backed features. Do not enter real secrets into red team target/provider setup/test flows if you do not want those values sent to Promptfoo-operated services.
+Credentials, authorization headers, provider config fields, and request examples **are** sent if you paste them into red team target/provider setup or test forms, sharing, Cloud sync, or other Cloud-backed features. Don't enter real secrets into those flows. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full hosted-feature list.
 
 ## With Your Own API Key
 
