@@ -309,7 +309,7 @@ function Contact(): React.ReactElement {
                     Discord community
                     <ArrowForwardIcon className={styles.resourceLinkIcon} />
                   </Link>
-                  <Link href="/docs/enterprise" className={styles.resourceLink} underline="none">
+                  <Link href="/docs/enterprise/" className={styles.resourceLink} underline="none">
                     Enterprise documentation
                     <ArrowForwardIcon className={styles.resourceLinkIcon} />
                   </Link>

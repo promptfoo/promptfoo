@@ -21,8 +21,8 @@ import {
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import {
+  getRequestTimeoutMs,
   parseChatPrompt,
-  REQUEST_TIMEOUT_MS,
   transformToolChoice,
   transformTools,
 } from '../shared';
@@ -494,7 +494,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         context?.bustCache ?? context?.debug,
         this.config.maxRetries,

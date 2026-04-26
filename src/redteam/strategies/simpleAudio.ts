@@ -3,7 +3,7 @@ import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
 import {
@@ -61,7 +61,7 @@ export async function textToAudio(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
     );
 
     if (data.error || !data.audioBase64) {
