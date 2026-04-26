@@ -859,8 +859,36 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
 
 **Hardening checklist for shared environments.**
 
-- Bind the OTLP receiver to `127.0.0.1` (the default). The receiver has no auth; binding to `0.0.0.0` on a shared CI runner exposes the port to every other tenant on the host.
-- Disable `tracing.forwarding` in CI unless the destination is trusted and configured for sensitive data. The forwarder does not redact.
+- Bind the OTLP receiver to `127.0.0.1` (the default). Binding to `0.0.0.0` on a shared CI runner exposes the port to every other tenant on the host.
+- If you must bind beyond loopback, set `tracing.otlp.http.authToken` to require a Bearer token on `/v1/traces` and `/v1/logs`. Forged spans from other tenants on the network will then be rejected with a `401`:
+
+  ```yaml
+  tracing:
+    otlp:
+      http:
+        host: 0.0.0.0
+        authToken: '${OTLP_INGEST_TOKEN}'
+  ```
+
+  Provider-side code must include `Authorization: Bearer $OTLP_INGEST_TOKEN` on every export request (e.g. via `OTEL_EXPORTER_OTLP_HEADERS`).
+
+- Use `tracing.otlp.http.redactAttributes` to redact sensitive attribute keys at the receiver, before they hit the SQLite store, the UI, or any forwarder. Substring match is case-insensitive:
+
+  ```yaml
+  tracing:
+    otlp:
+      http:
+        redactAttributes:
+          - tool.arguments
+          - password
+          - authorization
+          - secret
+          - api_key
+  ```
+
+  Spans arrive with the named keys replaced by `[REDACTED]` so the original values never reach disk. Use this as defense in depth — the safer move is to redact at the source in your provider.
+
+- Disable `tracing.forwarding` in CI unless the destination is trusted and configured for sensitive data. The forwarder receives spans after redaction, so the receiver-side `redactAttributes` list also covers what is forwarded.
 - Avoid recording full prompts and full responses on spans by default. The OTel GenAI semantic conventions treat `gen_ai.prompt` and `gen_ai.completion` as opt-in for the same reason.
 - Never put live customer data, secrets, or auth headers in fixture configs that travel through the eval.
 - If your eval database accumulates real production traces, set `PROMPTFOO_CONFIG_DIR` to an ephemeral path in CI so the SQLite file is scoped to the run and discarded with the runner.

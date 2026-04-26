@@ -158,6 +158,10 @@ type OTLPFormat = 'json' | 'protobuf';
 
 interface OTLPReceiverOptions {
   acceptFormats?: OTLPFormat[];
+  /** When set, ingest endpoints (/v1/traces, /v1/logs) require Authorization: Bearer <token>. */
+  authToken?: string;
+  /** Attribute keys (case-insensitive substring match) whose values are replaced with [REDACTED] before persistence. */
+  redactAttributes?: string[];
 }
 
 interface TraceInfo {
@@ -211,17 +215,70 @@ export class OTLPReceiver {
   private traceStore: TraceStore;
   private port?: number;
   private server?: any; // http.Server type
+  private authToken?: string;
+  private redactAttributePatterns: string[] = [];
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
     this.acceptFormats = normalizeAcceptFormats(options.acceptFormats);
     this.traceStore = getTraceStore();
+    this.authToken =
+      options.authToken && options.authToken.trim() ? options.authToken.trim() : undefined;
+    this.redactAttributePatterns = (options.redactAttributes ?? [])
+      .map((p) => (typeof p === 'string' ? p.trim().toLowerCase() : ''))
+      .filter((p) => p.length > 0);
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
     this.setupRoutes();
   }
 
+  /**
+   * Returns true if the attribute key should be redacted given the configured patterns.
+   * Patterns are matched case-insensitively as substrings.
+   */
+  private shouldRedactAttribute(key: string): boolean {
+    if (this.redactAttributePatterns.length === 0) {
+      return false;
+    }
+    const lowered = key.toLowerCase();
+    return this.redactAttributePatterns.some((p) => lowered.includes(p));
+  }
+
+  /**
+   * Apply ingest-time redaction to a span's attributes map. Returns a new map with
+   * sensitive values replaced by '[REDACTED]'. Mutates nothing.
+   */
+  redactAttributes(attributes: Record<string, unknown> | undefined): Record<string, unknown> {
+    if (!attributes || this.redactAttributePatterns.length === 0) {
+      return attributes ?? {};
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(attributes)) {
+      out[key] = this.shouldRedactAttribute(key) ? '[REDACTED]' : value;
+    }
+    return out;
+  }
+
+  /** Express middleware that enforces Bearer-token auth when an authToken is set. */
+  private requireAuth(req: any, res: any, next: any): void {
+    if (!this.authToken) {
+      next();
+      return;
+    }
+    const header = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+    const expected = `Bearer ${this.authToken}`;
+    if (header !== expected) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    next();
+  }
+
   private setupMiddleware(): void {
+    // Auth gate runs before content-type checks for both ingest endpoints.
+    this.app.use('/v1/traces', (req, res, next) => this.requireAuth(req, res, next));
+    this.app.use('/v1/logs', (req, res, next) => this.requireAuth(req, res, next));
+
     // Reject disabled content types before any body parser runs.
     this.app.use('/v1/traces', (req, res, next) => {
       if (req.method !== 'POST') {
@@ -442,7 +499,14 @@ export class OTLPReceiver {
   private async storeSpans(spansByTrace: Map<string, SpanData[]>): Promise<void> {
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
-      await this.traceStore.addSpans(traceId, spans, { skipTraceCheck: true });
+      const sanitized =
+        this.redactAttributePatterns.length > 0
+          ? spans.map((span) => ({
+              ...span,
+              attributes: this.redactAttributes(span.attributes),
+            }))
+          : spans;
+      await this.traceStore.addSpans(traceId, sanitized, { skipTraceCheck: true });
     }
   }
 
@@ -890,9 +954,10 @@ export async function startOTLPReceiver(
   port?: number,
   host?: string,
   acceptFormats?: OTLPFormat[],
+  extra?: { authToken?: string; redactAttributes?: string[] },
 ): Promise<void> {
   logger.debug('[OtlpReceiver] Starting receiver through startOTLPReceiver function');
-  const receiver = getOTLPReceiver({ acceptFormats });
+  const receiver = getOTLPReceiver({ acceptFormats, ...extra });
   await receiver.listen(port, host);
 }
 

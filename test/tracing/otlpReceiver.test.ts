@@ -583,6 +583,102 @@ describe('OTLPReceiver', () => {
     });
   });
 
+  describe('Authorization (authToken)', () => {
+    it('rejects ingest requests without a Bearer token when authToken is configured', async () => {
+      const authedReceiver = new OTLPReceiver({ authToken: 'secret' });
+      (authedReceiver as any).traceStore = mockTraceStore;
+
+      await request(authedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({ resourceSpans: [] })
+        .expect(401);
+
+      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+    });
+
+    it('accepts ingest requests with the matching Bearer token', async () => {
+      const authedReceiver = new OTLPReceiver({ authToken: 'secret' });
+      (authedReceiver as any).traceStore = mockTraceStore;
+
+      await request(authedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Authorization', 'Bearer secret')
+        .set('Content-Type', 'application/json')
+        .send({ resourceSpans: [] })
+        .expect(200);
+    });
+
+    it('rejects requests with a non-matching Bearer token', async () => {
+      const authedReceiver = new OTLPReceiver({ authToken: 'secret' });
+      (authedReceiver as any).traceStore = mockTraceStore;
+
+      await request(authedReceiver.getApp())
+        .post('/v1/traces')
+        .set('Authorization', 'Bearer wrong')
+        .set('Content-Type', 'application/json')
+        .send({ resourceSpans: [] })
+        .expect(401);
+    });
+  });
+
+  describe('Ingest-time redaction', () => {
+    it('replaces values for matched attribute keys with [REDACTED] before persisting', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        redactAttributes: ['password', 'authorization', 'tool.arguments'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+
+      const otlpRequest = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: 'a'.repeat(32),
+                    spanId: '1234567890abcdef',
+                    name: 'tool.call',
+                    startTimeUnixNano: '1000000000',
+                    endTimeUnixNano: '2000000000',
+                    attributes: [
+                      { key: 'tool.name', value: { stringValue: 'lookup_user' } },
+                      {
+                        key: 'tool.arguments',
+                        value: { stringValue: '{"ssn":"123-45-6789"}' },
+                      },
+                      { key: 'http.password', value: { stringValue: 'pw123' } },
+                      { key: 'AUTHORIZATION', value: { stringValue: 'Bearer xyz' } },
+                      { key: 'tool.result', value: { stringValue: 'ok' } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send(otlpRequest)
+        .expect(200);
+
+      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(1);
+      const spans = mockTraceStore.addSpans.mock.calls[0][1];
+      expect(spans).toHaveLength(1);
+      const attrs = spans[0].attributes;
+      expect(attrs['tool.arguments']).toBe('[REDACTED]');
+      expect(attrs['http.password']).toBe('[REDACTED]');
+      // Match is case-insensitive, so AUTHORIZATION is redacted too.
+      expect(attrs['AUTHORIZATION']).toBe('[REDACTED]');
+      // Non-matching keys are untouched.
+      expect(attrs['tool.name']).toBe('lookup_user');
+      expect(attrs['tool.result']).toBe('ok');
+    });
+  });
+
   describe('Base64 to hex conversion', () => {
     it('should correctly convert base64 trace IDs to hex', async () => {
       // Manually override the traceStore property for this test too

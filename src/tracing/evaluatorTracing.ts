@@ -97,8 +97,16 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       const port = testSuite.tracing.otlp.http.port || 4318;
       const host = testSuite.tracing.otlp.http.host || '127.0.0.1';
       const acceptFormats = normalizeOtlpAcceptFormats(testSuite.tracing.otlp.http.acceptFormats);
-      logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
-      await startOTLPReceiver(port, host, acceptFormats);
+      const authToken = testSuite.tracing.otlp.http.authToken;
+      const redactAttributes = testSuite.tracing.otlp.http.redactAttributes;
+      logger.debug(
+        `[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}` +
+          (authToken ? ' (auth: bearer)' : '') +
+          (redactAttributes && redactAttributes.length > 0
+            ? ` (redact: ${redactAttributes.join(',')})`
+            : ''),
+      );
+      await startOTLPReceiver(port, host, acceptFormats, { authToken, redactAttributes });
       otlpReceiverStarted = true;
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
