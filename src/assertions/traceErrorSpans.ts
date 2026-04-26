@@ -66,6 +66,7 @@ function isErrorSpan(span: TraceSpan): boolean {
 export const handleTraceErrorSpans = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-error-spans assertion');
@@ -124,11 +125,11 @@ export const handleTraceErrorSpans = ({
   const errorCount = errorSpans.length;
   const errorPercentage = (errorCount / matchingSpans.length) * 100;
 
-  let pass = true;
+  let basePass = true;
   let reason = '';
 
   if (maxCount !== undefined && errorCount > maxCount) {
-    pass = false;
+    basePass = false;
     const errorDetails = errorSpans.slice(0, 3).map((span) => {
       let detail = span.name;
       if (span.statusMessage) {
@@ -145,7 +146,7 @@ export const handleTraceErrorSpans = ({
       reason += ` and ${errorSpans.length - 3} more`;
     }
   } else if (maxPercentage !== undefined && errorPercentage > maxPercentage) {
-    pass = false;
+    basePass = false;
     reason = `Error rate ${errorPercentage.toFixed(1)}% exceeds threshold ${maxPercentage}% `;
     reason += `(${errorCount} errors out of ${matchingSpans.length} spans)`;
   } else {
@@ -160,6 +161,13 @@ export const handleTraceErrorSpans = ({
         reason += `, within threshold of ${maxPercentage}%`;
       }
     }
+  }
+
+  const pass = inverse ? !basePass : basePass;
+  if (inverse) {
+    reason = basePass
+      ? `not-trace-error-spans: error budget was satisfied for pattern "${pattern}" (${errorCount} errors), which violates the inverse assertion`
+      : `not-trace-error-spans: error budget was not satisfied for pattern "${pattern}" (${errorCount} errors), which is the expected outcome for the inverse assertion`;
   }
 
   return {

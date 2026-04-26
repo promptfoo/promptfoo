@@ -12,6 +12,7 @@ interface TraceSpanCountValue {
 export const handleTraceSpanCount = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-count assertion');
@@ -30,14 +31,14 @@ export const handleTraceSpanCount = ({
   const count = matchingSpans.length;
 
   // Check against constraints
-  let pass = true;
+  let basePass = true;
   let reason = '';
 
   if (min !== undefined && count < min) {
-    pass = false;
+    basePass = false;
     reason = `Found ${count} spans matching pattern "${pattern}", expected at least ${min}`;
   } else if (max !== undefined && count > max) {
-    pass = false;
+    basePass = false;
     reason = `Found ${count} spans matching pattern "${pattern}", expected at most ${max}`;
   } else {
     reason = `Found ${count} spans matching pattern "${pattern}"`;
@@ -54,6 +55,13 @@ export const handleTraceSpanCount = ({
   if (matchingSpans.length > 0) {
     const spanNames = [...new Set(matchingSpans.map((s) => s.name))];
     reason += `. Matched spans: ${spanNames.join(', ')}`;
+  }
+
+  const pass = inverse ? !basePass : basePass;
+  if (inverse) {
+    reason = basePass
+      ? `not-trace-span-count: forbidden count ${count} satisfied the range for pattern "${pattern}"`
+      : `not-trace-span-count: count ${count} did not satisfy the forbidden range for pattern "${pattern}"`;
   }
 
   return {

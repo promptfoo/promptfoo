@@ -46,6 +46,7 @@ function calculatePercentile(
 export const handleTraceSpanDuration = ({
   assertion,
   assertionValueContext,
+  inverse,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-duration assertion');
@@ -95,7 +96,7 @@ export const handleTraceSpanDuration = ({
     };
   });
 
-  let pass = true;
+  let basePass = true;
   let reason = '';
 
   if (percentile === undefined) {
@@ -103,7 +104,7 @@ export const handleTraceSpanDuration = ({
     const slowSpans = spanDurations.filter((s) => s.duration > max);
 
     if (slowSpans.length > 0) {
-      pass = false;
+      basePass = false;
       const top3Slow = slowSpans.sort((a, b) => b.duration - a.duration).slice(0, 3);
 
       reason = `${slowSpans.length} span(s) exceed duration threshold ${max}ms. `;
@@ -122,7 +123,7 @@ export const handleTraceSpanDuration = ({
         : '';
 
     if (percentileValue > max) {
-      pass = false;
+      basePass = false;
       const slowestSpans = spanDurations
         .filter((s) => s.duration >= percentileValue)
         .sort((a, b) => b.duration - a.duration)
@@ -133,6 +134,13 @@ export const handleTraceSpanDuration = ({
     } else {
       reason = `${percentile}th percentile duration (${percentileValue.toFixed(2)}ms, method=${method}) is within threshold ${max}ms${smallSampleNote}`;
     }
+  }
+
+  const pass = inverse ? !basePass : basePass;
+  if (inverse) {
+    reason = basePass
+      ? `not-trace-span-duration: latency budget for pattern "${pattern}" was satisfied, which violates the inverse assertion`
+      : `not-trace-span-duration: latency budget for pattern "${pattern}" was exceeded, which is the expected outcome for the inverse assertion`;
   }
 
   return {
