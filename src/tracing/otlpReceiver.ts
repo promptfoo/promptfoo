@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 import express from 'express';
+import { type RateLimitRequestHandler, rateLimit } from 'express-rate-limit';
 import logger from '../logger';
 import {
   bytesToHex,
@@ -217,12 +218,13 @@ export class OTLPReceiver {
   private server?: any; // http.Server type
   private authToken?: string;
   private redactAttributePatterns: string[] = [];
-  // Fixed-window per-client rate limiter for the ingest endpoints. Defaults are
-  // generous enough to never trigger for legitimate eval traffic, but bound the
-  // cost of brute-forcing the optional Bearer token.
+  // Per-source rate limit on the ingest endpoints. The defaults are generous
+  // enough to never trip for legitimate eval traffic but bound brute-force
+  // attempts on the optional Bearer token. Backed by `express-rate-limit` so
+  // CodeQL's missing-rate-limiting rule recognises the protection.
   private static readonly INGEST_RATE_LIMIT_WINDOW_MS = 60_000;
   private static readonly INGEST_RATE_LIMIT_MAX_REQUESTS = 600;
-  private ingestRateBuckets = new Map<string, { count: number; windowStart: number }>();
+  private ingestRateLimiter: RateLimitRequestHandler;
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -233,6 +235,13 @@ export class OTLPReceiver {
     this.redactAttributePatterns = (options.redactAttributes ?? [])
       .map((p) => (typeof p === 'string' ? p.trim().toLowerCase() : ''))
       .filter((p) => p.length > 0);
+    this.ingestRateLimiter = rateLimit({
+      windowMs: OTLPReceiver.INGEST_RATE_LIMIT_WINDOW_MS,
+      limit: OTLPReceiver.INGEST_RATE_LIMIT_MAX_REQUESTS,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: 'Too Many Requests' },
+    });
     logger.debug('[OtlpReceiver] Initializing OTLP receiver');
     this.setupMiddleware();
     this.setupRoutes();
@@ -266,33 +275,10 @@ export class OTLPReceiver {
   }
 
   /**
-   * Per-client fixed-window rate limiter for the ingest endpoints. Keyed by
-   * `req.ip` (loopback for default deployments). Bounds the cost of brute-forcing
-   * the optional Bearer token and protects the trace store from runaway producers.
+   * Express middleware that enforces Bearer-token auth when an authToken is set.
+   * Always preceded by `ingestRateLimiter` so a brute-force attacker cannot probe
+   * the auth path faster than INGEST_RATE_LIMIT_MAX_REQUESTS per minute per IP.
    */
-  private rateLimitIngest(req: any, res: any, next: any): void {
-    const key = typeof req.ip === 'string' && req.ip ? req.ip : 'unknown';
-    const now = Date.now();
-    const bucket = this.ingestRateBuckets.get(key);
-    if (!bucket || now - bucket.windowStart >= OTLPReceiver.INGEST_RATE_LIMIT_WINDOW_MS) {
-      this.ingestRateBuckets.set(key, { count: 1, windowStart: now });
-      next();
-      return;
-    }
-    if (bucket.count >= OTLPReceiver.INGEST_RATE_LIMIT_MAX_REQUESTS) {
-      const retryAfterSeconds = Math.max(
-        1,
-        Math.ceil((OTLPReceiver.INGEST_RATE_LIMIT_WINDOW_MS - (now - bucket.windowStart)) / 1000),
-      );
-      res.setHeader('Retry-After', String(retryAfterSeconds));
-      res.status(429).json({ error: 'Too Many Requests' });
-      return;
-    }
-    bucket.count += 1;
-    next();
-  }
-
-  /** Express middleware that enforces Bearer-token auth when an authToken is set. */
   private requireAuth(req: any, res: any, next: any): void {
     if (!this.authToken) {
       next();
@@ -309,15 +295,17 @@ export class OTLPReceiver {
 
   /** Test/cleanup helper: clear the in-memory rate limiter buckets. */
   resetIngestRateLimits(): void {
-    this.ingestRateBuckets.clear();
+    this.ingestRateLimiter.resetKey?.('::ffff:127.0.0.1');
+    this.ingestRateLimiter.resetKey?.('127.0.0.1');
+    this.ingestRateLimiter.resetKey?.('::1');
   }
 
   private setupMiddleware(): void {
-    // Rate limit + auth gate run before content-type checks for both ingest endpoints.
-    // Rate limit fires first so a brute-force attacker cannot probe the auth path
-    // faster than INGEST_RATE_LIMIT_MAX_REQUESTS per minute per source IP.
-    this.app.use('/v1/traces', (req, res, next) => this.rateLimitIngest(req, res, next));
-    this.app.use('/v1/logs', (req, res, next) => this.rateLimitIngest(req, res, next));
+    // Ingest endpoints are always rate-limited and (when authToken is set) auth-gated
+    // before any content-type or body parsing runs. Rate limit precedes the auth check
+    // so brute-force attempts on the optional Bearer token are bounded.
+    this.app.use('/v1/traces', this.ingestRateLimiter);
+    this.app.use('/v1/logs', this.ingestRateLimiter);
     this.app.use('/v1/traces', (req, res, next) => this.requireAuth(req, res, next));
     this.app.use('/v1/logs', (req, res, next) => this.requireAuth(req, res, next));
 
