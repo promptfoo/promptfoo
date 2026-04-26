@@ -187,13 +187,13 @@ function Contact(): React.ReactElement {
                   </Button>
                   <Typography variant="body2" color="text.secondary">
                     Or email{' '}
-                    <Link
+                    <MuiLink
                       href="mailto:inquiries@promptfoo.dev"
                       underline="hover"
                       className={styles.emailLink}
                     >
                       inquiries@promptfoo.dev
-                    </Link>
+                    </MuiLink>
                   </Typography>
                 </Box>
               </form>
@@ -270,7 +270,7 @@ function Contact(): React.ReactElement {
                       <Typography variant="body2" className={styles.testimonialQuote}>
                         "{testimonial.quote}"
                       </Typography>
-                      <Link
+                      <MuiLink
                         href={testimonial.href}
                         target="_blank"
                         rel="noreferrer"
@@ -279,7 +279,7 @@ function Contact(): React.ReactElement {
                       >
                         {testimonial.cta}
                         <ArrowForwardIcon className={styles.testimonialLinkIcon} />
-                      </Link>
+                      </MuiLink>
                     </Box>
                   ))}
                 </Box>
