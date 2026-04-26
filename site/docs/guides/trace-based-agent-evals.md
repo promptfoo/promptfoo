@@ -864,6 +864,15 @@ Once the values are redacted, your `trajectory:tool-args-match` assertions need 
 - Avoid recording full prompts and full responses on spans by default. The OTel GenAI semantic conventions treat `gen_ai.prompt` and `gen_ai.completion` as opt-in for the same reason.
 - Never put live customer data, secrets, or auth headers in fixture configs that travel through the eval.
 - If your eval database accumulates real production traces, set `PROMPTFOO_CONFIG_DIR` to an ephemeral path in CI so the SQLite file is scoped to the run and discarded with the runner.
+- For long-running local installs, set `tracing.storage.retentionDays` to enforce automatic pruning. Promptfoo runs `deleteOldTraces` after the OTLP receiver starts and removes traces (and their cascaded spans) older than the configured window:
+
+  ```yaml
+  tracing:
+    enabled: true
+    storage:
+      type: sqlite
+      retentionDays: 30 # delete traces older than 30 days at every eval start
+  ```
 
 ## Managing Drift Over Time
 

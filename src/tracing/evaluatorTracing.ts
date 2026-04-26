@@ -95,6 +95,25 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       logger.info(
         `[EvaluatorTracing] OTLP receiver successfully started on port ${port} for tracing`,
       );
+
+      // Apply retention if configured. Default 30 days from the schema; only run when
+      // the user opts in to a finite retention via tracing.storage.retentionDays > 0.
+      const retentionDays = testSuite.tracing.storage?.retentionDays;
+      if (typeof retentionDays === 'number' && retentionDays > 0) {
+        try {
+          const { getTraceStore } = await import('./store');
+          await getTraceStore().deleteOldTraces(retentionDays);
+          logger.debug(
+            `[EvaluatorTracing] Pruned trace store entries older than ${retentionDays} days`,
+          );
+        } catch (pruneError) {
+          logger.warn(
+            `[EvaluatorTracing] Failed to prune old traces: ${
+              pruneError instanceof Error ? pruneError.message : pruneError
+            }`,
+          );
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const failOnStartFailure = testSuite.tracing?.failOnReceiverStartFailure === true;
