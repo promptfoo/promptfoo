@@ -7,6 +7,7 @@ interface TraceSpanDurationValue {
   pattern?: string;
   max: number;
   percentile?: number;
+  requirePresence?: boolean;
 }
 
 function calculatePercentile(durations: number[], percentile: number): number {
@@ -32,7 +33,7 @@ export const handleTraceSpanDuration = ({
     throw new Error('trace-span-duration assertion must have a value object with max property');
   }
 
-  const { pattern = '*', max, percentile } = value;
+  const { pattern = '*', max, percentile, requirePresence = false } = value;
   const spans = assertionValueContext.trace.spans as TraceSpan[];
 
   // Filter spans by pattern and calculate durations
@@ -45,6 +46,14 @@ export const handleTraceSpanDuration = ({
   });
 
   if (matchingSpans.length === 0) {
+    if (requirePresence) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `No spans found matching pattern "${pattern}" with complete timing data (requirePresence: true)`,
+        assertion,
+      };
+    }
     return {
       pass: true,
       score: 1,

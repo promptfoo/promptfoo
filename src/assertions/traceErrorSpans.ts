@@ -7,6 +7,7 @@ interface TraceErrorSpansValue {
   max_count?: number;
   max_percentage?: number;
   pattern?: string;
+  requirePresence?: boolean;
 }
 
 function isErrorSpan(span: TraceSpan): boolean {
@@ -74,6 +75,7 @@ export const handleTraceErrorSpans = ({
   let maxCount: number | undefined;
   let maxPercentage: number | undefined;
   let pattern = '*';
+  let requirePresence = false;
 
   // Handle simple number value for backwards compatibility
   if (typeof value === 'number') {
@@ -88,6 +90,7 @@ export const handleTraceErrorSpans = ({
     maxCount = objValue.max_count;
     maxPercentage = objValue.max_percentage;
     pattern = objValue.pattern || '*';
+    requirePresence = objValue.requirePresence === true;
   }
 
   if (maxCount === undefined && maxPercentage === undefined) {
@@ -100,6 +103,14 @@ export const handleTraceErrorSpans = ({
   const matchingSpans = spans.filter((span) => matchesPattern(span.name, pattern));
 
   if (matchingSpans.length === 0) {
+    if (requirePresence) {
+      return {
+        pass: false,
+        score: 0,
+        reason: `No spans found matching pattern "${pattern}" (requirePresence: true)`,
+        assertion,
+      };
+    }
     return {
       pass: true,
       score: 1,
