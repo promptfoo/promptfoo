@@ -507,6 +507,12 @@ describe('Telemetry', () => {
           test: 'value',
           packageVersion: '1.0.0',
           isRunningInCi: false,
+          $set: {
+            email: 'test@example.com',
+            isLoggedIntoCloud: false,
+            authMethod: 'none',
+            isRunningInCi: false,
+          },
         },
       });
       expect(mockPostHogInstance.flush).toHaveBeenCalledWith();

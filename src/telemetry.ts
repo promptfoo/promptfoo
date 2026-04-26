@@ -122,10 +122,11 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    const ciFlag = isCI();
     const propertiesWithMetadata = {
       ...properties,
       packageVersion: VERSION,
-      isRunningInCi: isCI(),
+      isRunningInCi: ciFlag,
     };
 
     const client = getPostHogClient();
@@ -134,7 +135,18 @@ export class Telemetry {
         client.capture({
           distinctId: this.id,
           event: eventName,
-          properties: propertiesWithMetadata,
+          properties: {
+            ...propertiesWithMetadata,
+            // Mirror person properties on every event so dashboard filters on person
+            // properties (e.g. excluding CI traffic) work even when the user only
+            // ever fires real events and never the auto-generated $identify.
+            $set: {
+              email: this.email,
+              isLoggedIntoCloud: isLoggedIntoCloud(),
+              authMethod: getAuthMethod(),
+              isRunningInCi: ciFlag,
+            },
+          },
         });
         client.flush().catch(() => {
           // Silently ignore flush errors
