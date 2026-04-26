@@ -1210,6 +1210,57 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('redacts args in failure reasons when redactArgsInFailures is true', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: {
+            traceId: 'sensitive-args',
+            evaluationId: 'eval-1',
+            testCaseId: 'tc-1',
+            metadata: {},
+            spans: [
+              {
+                spanId: 'tool-1',
+                name: 'tool.call',
+                startTime: 100,
+                endTime: 200,
+                attributes: {
+                  'tool.name': 'lookup_user',
+                  'tool.arguments': JSON.stringify({ ssn: '123-45-6789', tenant: 'public' }),
+                },
+              },
+            ],
+          },
+        },
+        baseType: 'trajectory:tool-args-match',
+        assertion: {
+          type: 'trajectory:tool-args-match',
+          value: {
+            name: 'lookup_user',
+            args: { tenant: 'private' },
+            mode: 'partial',
+            redactArgsInFailures: true,
+          },
+        },
+        renderedValue: {
+          name: 'lookup_user',
+          args: { tenant: 'private' },
+          mode: 'partial',
+          redactArgsInFailures: true,
+        },
+      };
+
+      const result = handleTrajectoryToolArgsMatch(params);
+      expect(result.pass).toBe(false);
+      // The expected and observed args must NOT appear verbatim in the reason.
+      expect(result.reason).not.toContain('123-45-6789');
+      expect(result.reason).not.toContain('private');
+      expect(result.reason).not.toContain('public');
+      expect(result.reason).toContain('[redacted]');
+    });
+
     it('rejects values without args', () => {
       const params: AssertionParams = {
         ...defaultParams,

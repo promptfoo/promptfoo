@@ -32,7 +32,10 @@ interface TrajectoryToolArgsMatchValue extends TrajectoryStepMatcher {
   args?: unknown;
   arguments?: unknown;
   mode?: 'exact' | 'partial';
+  redactArgsInFailures?: boolean;
 }
+
+const REDACTED_ARGS_LABEL = '[redacted]';
 
 function getTraceOrThrow(params: AssertionParams) {
   const trace = params.assertionValueContext.trace;
@@ -315,6 +318,7 @@ function resolveToolArgsMatchValue(value: unknown) {
     matcher,
     expectedArgs,
     mode: resolveToolArgsMatchMode((value as TrajectoryToolArgsMatchValue).mode),
+    redactArgsInFailures: (value as TrajectoryToolArgsMatchValue).redactArgsInFailures === true,
   } as const;
 }
 
@@ -392,7 +396,7 @@ export const handleTrajectoryToolSequence = (params: AssertionParams): GradingRe
 export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingResult => {
   const trace = getTraceOrThrow(params);
   const toolSteps = extractTrajectorySteps(trace).filter((step) => step.type === 'tool');
-  const { matcher, expectedArgs, mode } = resolveToolArgsMatchValue(
+  const { matcher, expectedArgs, mode, redactArgsInFailures } = resolveToolArgsMatchValue(
     params.renderedValue ?? params.assertion.value,
   );
   const matcherLabel = matcher.pattern || matcher.name || '*';
@@ -402,23 +406,25 @@ export const handleTrajectoryToolArgsMatch = (params: AssertionParams): GradingR
   const matchedStep = stepsWithArgs.find((step) => matchesToolArgs(step.args, expectedArgs, mode));
   const basePass = matchedStep !== undefined;
   const pass = applyInverse(basePass, params.inverse);
-  const expectedArgsLabel = formatTrajectoryArgs(expectedArgs);
+  const formatArgs = (value: unknown) =>
+    redactArgsInFailures ? REDACTED_ARGS_LABEL : formatTrajectoryArgs(value);
+  const expectedArgsLabel = formatArgs(expectedArgs);
   const observedArgsLabel =
     stepsWithArgs.length > 0
-      ? stepsWithArgs.map((step) => formatTrajectoryArgs(step.args)).join(', ')
+      ? stepsWithArgs.map((step) => formatArgs(step.args)).join(', ')
       : '(none)';
 
   let reason: string;
   if (params.inverse) {
     if (basePass) {
-      reason = `Forbidden argument match for tool "${matcherLabel}" was observed on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}`;
+      reason = `Forbidden argument match for tool "${matcherLabel}" was observed on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatArgs(matchedStep!.args)}`;
     } else if (matchingSteps.length === 0) {
       reason = `Forbidden argument match for tool "${matcherLabel}" was not observed because no tool call matched it`;
     } else {
       reason = `Forbidden argument match for tool "${matcherLabel}" was not observed. Observed args: ${observedArgsLabel}`;
     }
   } else if (basePass) {
-    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatTrajectoryArgs(matchedStep!.args)}`;
+    reason = `Tool "${matcherLabel}" matched expected arguments (${mode}) on ${formatTrajectoryStep(matchedStep!)}. Args: ${formatArgs(matchedStep!.args)}`;
   } else if (matchingSteps.length === 0) {
     reason = `No tool call matched "${matcherLabel}". Actual tools: ${formatStepList(actualTools)}`;
   } else if (stepsWithArgs.length === 0) {

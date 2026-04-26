@@ -459,6 +459,17 @@ Use `trajectory:tool-args-match` when the tool call is only correct with specifi
 
 `mode: partial` checks that the expected object is a subset of the captured arguments. `mode: exact` requires deep equality. Use `partial` unless the full payload is part of the contract. Use `not-trajectory:tool-args-match` to forbid a sensitive or unsafe argument pattern.
 
+When the captured arguments contain sensitive data (PII, tokens, internal identifiers), set `redactArgsInFailures: true` to replace the args with `[redacted]` in the assertion reason — preserving pass/fail signal while keeping full payloads out of `output.json`, the trace DB, and uploaded artefacts:
+
+```yaml
+- type: trajectory:tool-args-match
+  value:
+    name: lookup_user
+    args: { tenant_id: '{{ user.tenant_id }}' }
+    mode: partial
+    redactArgsInFailures: true # never echoes captured args into the failure reason
+```
+
 ### `trajectory:tool-sequence`
 
 Use `trajectory:tool-sequence` when order matters.
