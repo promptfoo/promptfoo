@@ -61,11 +61,21 @@ vi.mock('../src/globalConfig/cloud', () => ({
 }));
 
 vi.mock('undici', () => {
+  const Dispatcher1Wrapper = vi.fn(function (this: any, dispatcher: any) {
+    return {
+      dispatcher,
+      dispatch: vi.fn(),
+      close: vi.fn(),
+      destroy: vi.fn(),
+    };
+  });
+
   // Use regular functions instead of arrow functions for constructors
   const ProxyAgent = vi.fn(function (this: any, options: any) {
     return {
       options,
       addRequest: vi.fn(),
+      dispatch: vi.fn(),
       destroy: vi.fn(),
     };
   });
@@ -74,6 +84,7 @@ vi.mock('undici', () => {
     return {
       options,
       addRequest: vi.fn(),
+      dispatch: vi.fn(),
       destroy: vi.fn(),
     };
   });
@@ -81,6 +92,7 @@ vi.mock('undici', () => {
   return {
     ProxyAgent,
     Agent,
+    Dispatcher1Wrapper,
   };
 });
 

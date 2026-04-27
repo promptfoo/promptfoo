@@ -12,4 +12,10 @@ export interface FetchOptions extends RequestInit {
    * Used by fetchWithRetries to prevent double-retrying.
    */
   disableTransientRetries?: boolean;
+
+  /**
+   * Undici dispatcher passed through to Node's global fetch implementation.
+   * Used for proxy and TLS agent support.
+   */
+  dispatcher?: unknown;
 }

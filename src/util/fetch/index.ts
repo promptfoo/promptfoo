@@ -3,6 +3,7 @@ import path from 'path';
 import type { ConnectionOptions } from 'tls';
 
 import { getProxyForUrl } from 'proxy-from-env';
+import * as undici from 'undici';
 import { Agent, ProxyAgent } from 'undici';
 import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
@@ -28,6 +29,47 @@ import type { FetchOptions } from './types';
 // Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
 // creation time. This is acceptable because these env vars don't change
 // mid-process. If that assumption changes, add cache-invalidation logic.
+const dispatcher1Wrappers: WeakMap<object, unknown> = new WeakMap();
+const dispatcher1WrapperInstances: WeakSet<object> = new WeakSet();
+
+function getDispatcher1Wrapper(): (new (dispatcher: unknown) => unknown) | undefined {
+  const Dispatcher1Wrapper = (
+    undici as { Dispatcher1Wrapper?: new (dispatcher: unknown) => unknown }
+  ).Dispatcher1Wrapper;
+  return typeof Dispatcher1Wrapper === 'function' ? Dispatcher1Wrapper : undefined;
+}
+
+function wrapDispatcherForGlobalFetch(dispatcher: unknown): unknown {
+  if (
+    !dispatcher ||
+    typeof dispatcher !== 'object' ||
+    typeof (dispatcher as { dispatch?: unknown }).dispatch !== 'function'
+  ) {
+    return dispatcher;
+  }
+
+  const Dispatcher1Wrapper = getDispatcher1Wrapper();
+  if (
+    !Dispatcher1Wrapper ||
+    dispatcher instanceof Dispatcher1Wrapper ||
+    dispatcher1WrapperInstances.has(dispatcher)
+  ) {
+    return dispatcher;
+  }
+
+  const cachedWrapper = dispatcher1Wrappers.get(dispatcher);
+  if (cachedWrapper) {
+    return cachedWrapper;
+  }
+
+  const wrappedDispatcher = new Dispatcher1Wrapper(dispatcher);
+  if (wrappedDispatcher && typeof wrappedDispatcher === 'object') {
+    dispatcher1WrapperInstances.add(wrappedDispatcher);
+  }
+  dispatcher1Wrappers.set(dispatcher, wrappedDispatcher);
+  return wrappedDispatcher;
+}
+
 const cachedAgents: Map<number, Agent> = new Map();
 const cachedProxyAgents: Map<string, ProxyAgent> = new Map();
 
@@ -258,7 +300,10 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    const response = await monkeyPatchFetch(finalUrl, finalOptions);
+    const response = await monkeyPatchFetch(finalUrl, {
+      ...finalOptions,
+      dispatcher: wrapDispatcherForGlobalFetch(finalOptions.dispatcher),
+    });
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
