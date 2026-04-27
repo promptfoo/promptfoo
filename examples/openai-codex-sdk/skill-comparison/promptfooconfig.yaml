@@ -1,0 +1,128 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Codex skill versions
+
+prompts:
+  - |
+    Use the review-standards skill.
+    {{ request }}
+
+    Return JSON with this shape:
+    {
+      "summary": "one sentence",
+      "issues": [{"id": "stable-id", "severity": "high|medium|low"}]
+    }
+
+providers:
+  - id: openai:codex-sdk
+    label: review-standards-v1
+    config:
+      model: gpt-5.2
+      working_dir: '{{ env.CODEX_SKILL_COMPARE_V1_DIR | default("./fixtures/v1") }}'
+      skip_git_repo_check: true
+      sandbox_mode: read-only
+      enable_streaming: true
+      output_schema:
+        type: object
+        required: [summary, issues]
+        additionalProperties: false
+        properties:
+          summary:
+            type: string
+          issues:
+            type: array
+            items:
+              type: object
+              required: [id, severity]
+              additionalProperties: false
+              properties:
+                id:
+                  type: string
+                severity:
+                  type: string
+                  enum: [high, medium, low]
+      cli_env:
+        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
+
+  - id: openai:codex-sdk
+    label: review-standards-v2
+    config:
+      model: gpt-5.2
+      working_dir: '{{ env.CODEX_SKILL_COMPARE_V2_DIR | default("./fixtures/v2") }}'
+      skip_git_repo_check: true
+      sandbox_mode: read-only
+      enable_streaming: true
+      output_schema:
+        type: object
+        required: [summary, issues]
+        additionalProperties: false
+        properties:
+          summary:
+            type: string
+          issues:
+            type: array
+            items:
+              type: object
+              required: [id, severity]
+              additionalProperties: false
+              properties:
+                id:
+                  type: string
+                severity:
+                  type: string
+                  enum: [high, medium, low]
+      cli_env:
+        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
+
+defaultTest:
+  assert:
+    - type: skill-used
+      value: review-standards
+      weight: 2
+
+    - type: is-json
+
+    - type: javascript
+      threshold: 0.7
+      value: |
+        const result = JSON.parse(output);
+        const expected = context.vars.expectedIssues.split(',');
+        const found = (result.issues || []).map((issue) => issue.id);
+        const hits = expected.filter((id) => found.includes(id));
+        const extras = found.filter((id) => !expected.includes(id));
+        const recall = hits.length / expected.length;
+        const precision = found.length ? hits.length / found.length : 0;
+        const score = 0.7 * recall + 0.3 * precision;
+
+        return {
+          pass: recall >= 0.75 && precision >= 0.5,
+          score,
+          reason: `matched ${hits.length}/${expected.length} expected issues; ${extras.length} unexpected issues`,
+        };
+
+    - type: cost
+      threshold: 1
+
+    - type: latency
+      threshold: 180000
+
+    - type: max-score
+      value:
+        method: average
+        threshold: 0.7
+        weights:
+          javascript: 4
+          skill-used: 2
+          is-json: 1
+          cost: 0.5
+          latency: 0.5
+
+tests:
+  - description: Finds both auth issues
+    vars:
+      request: Review src/auth.ts for password handling and token comparison issues.
+      expectedIssues: weak-password-hash,timing-unsafe-compare
+
+  - description: Focuses on token comparison
+    vars:
+      request: Review src/auth.ts only for token comparison issues.
+      expectedIssues: timing-unsafe-compare

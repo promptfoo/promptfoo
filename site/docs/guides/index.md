@@ -16,6 +16,7 @@ Learn how to measure specific aspects of LLM output quality.
 - [Preventing Hallucinations](/docs/guides/prevent-llm-hallucinations) — Measure and reduce hallucination rates with perplexity, RAG, and controlled decoding
 - [Evaluating JSON Outputs](/docs/guides/evaluate-json) — Validate structured LLM outputs against schemas
 - [Evaluating Coding Agents](/docs/guides/evaluate-coding-agents) — Test AI coding assistants
+- [Testing Agent Skills](/docs/guides/test-agent-skills) — Compare Claude and Codex skill versions with routing, quality, cost, latency, and trace checks
 - [Evaluating Factuality](/docs/guides/factuality-eval) — Score responses for factual accuracy
 - [Testing LLM Chains](/docs/configuration/testing-llm-chains) — Evaluate multi-step LLM pipelines
 - [Choosing the Right Temperature](/docs/guides/evaluate-llm-temperature) — Find the optimal temperature setting for your use case
