@@ -10,6 +10,10 @@ type XmlTag =
 type OpenXmlTag = { name: string; start: number };
 type XmlCandidate = { start: number; end: number; parentStart?: number };
 
+function getLastOpenTag(stack: OpenXmlTag[]): OpenXmlTag | undefined {
+  return stack.length > 0 ? stack[stack.length - 1] : undefined;
+}
+
 function isXmlNameStartChar(char: string | undefined): boolean {
   return char !== undefined && /[A-Za-z_:]/.test(char);
 }
@@ -166,19 +170,19 @@ function extractXmlCandidates(outputString: string): string[] {
         candidates.push({
           start: tag.start,
           end: tag.end + 1,
-          parentStart: stack.at(-1)?.start,
+          parentStart: getLastOpenTag(stack)?.start,
         });
       } else {
         stack.push({ name: tag.name, start: tag.start });
       }
     } else if (tag.kind === 'closing') {
-      const openTag = stack.at(-1);
+      const openTag = getLastOpenTag(stack);
       if (openTag?.name === tag.name) {
         stack.pop();
         candidates.push({
           start: openTag.start,
           end: tag.end + 1,
-          parentStart: stack.at(-1)?.start,
+          parentStart: getLastOpenTag(stack)?.start,
         });
       } else {
         stack.length = 0;
