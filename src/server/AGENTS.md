@@ -96,3 +96,18 @@ res.json(EvalSchemas.Update.Response.parse({ message: 'Success' }));
 - Error responses use `{ error: string }` shape
 - Use `sendError()` for 500 errors — never expose internal details
 - Handle errors with try-catch
+
+## OpenAPI Generation
+
+The local server OpenAPI spec is generated from route DTO schemas using
+`@asteasolutions/zod-to-openapi`.
+
+```bash
+npm run openapi:generate
+npm run openapi:check
+```
+
+Register new or changed routes in `src/openapi/server.ts` and keep
+`site/static/openapi.json` current. CI regenerates the spec in the `Generate Assets`
+job and fails if the checked-in file is stale. See `docs/agents/openapi.md` for
+concrete JSON body, params/query, binary, redirect, and `204` examples.

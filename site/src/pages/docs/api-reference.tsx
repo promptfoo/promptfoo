@@ -1,6 +1,27 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import Layout from '@theme/Layout';
+
+const OPENAPI_SPEC_URL = '/openapi.json';
+const SCALAR_CONTAINER_ID = 'api-reference';
+const SCALAR_SCRIPT_ID = 'scalar-api-reference-script';
+const SCALAR_SCRIPT_SRC =
+  'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.53.0/dist/browser/standalone.js';
+const SCALAR_SCRIPT_INTEGRITY =
+  'sha384-Jk7jdVoWEv+zbslst2LBkEeZMM1J/QyvsponRKeOwZI6+fosZhElkDmYsFFVVfoF';
+
+type ScalarReference = {
+  destroy?: () => void;
+};
+
+type ScalarWindow = Window & {
+  Scalar?: {
+    createApiReference?: (
+      element: string | Element,
+      configuration: Record<string, unknown>,
+    ) => ScalarReference | undefined;
+  };
+};
 
 function getScalarTheme() {
   if (typeof document === 'undefined') {
@@ -10,33 +31,84 @@ function getScalarTheme() {
 }
 
 export default function ApiReference() {
+  const [isReferenceLoaded, setIsReferenceLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference';
-    script.setAttribute('data-theme', getScalarTheme());
-    script.addEventListener('load', () => {
-      // Once Scalar is loaded from the CDN, we can reference the object
-      (window as any).Scalar.createApiReference('#app', {
-        url: 'https://api.promptfoo.app/static/openapi.json',
+    let scalarReference: ScalarReference | undefined;
+
+    const destroyReference = () => {
+      scalarReference?.destroy?.();
+      scalarReference = undefined;
+    };
+
+    const renderReference = () => {
+      const scalar = (window as ScalarWindow).Scalar;
+      if (!scalar?.createApiReference) {
+        setLoadError(true);
+        return;
+      }
+
+      destroyReference();
+      scalarReference = scalar.createApiReference(`#${SCALAR_CONTAINER_ID}`, {
+        theme: getScalarTheme(),
+        url: OPENAPI_SPEC_URL,
       });
-    });
-    document.head.appendChild(script);
+      setIsReferenceLoaded(true);
+      setLoadError(false);
+    };
+
+    const existingScript = document.getElementById(SCALAR_SCRIPT_ID) as HTMLScriptElement | null;
+    const script = existingScript ?? document.createElement('script');
+
+    const handleLoad = () => {
+      script.dataset.status = 'loaded';
+      renderReference();
+    };
+
+    const handleError = () => {
+      script.dataset.status = 'error';
+      setLoadError(true);
+    };
+
+    if (!existingScript) {
+      script.id = SCALAR_SCRIPT_ID;
+      script.src = SCALAR_SCRIPT_SRC;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.integrity = SCALAR_SCRIPT_INTEGRITY;
+      script.dataset.status = 'loading';
+      script.addEventListener('load', handleLoad);
+      script.addEventListener('error', handleError);
+      document.head.appendChild(script);
+    } else if (
+      script.dataset.status === 'loaded' ||
+      (window as ScalarWindow).Scalar?.createApiReference
+    ) {
+      renderReference();
+    } else if (script.dataset.status === 'error') {
+      setLoadError(true);
+    } else {
+      script.addEventListener('load', handleLoad);
+      script.addEventListener('error', handleError);
+    }
 
     return () => {
-      document.head.removeChild(script);
+      script.removeEventListener('load', handleLoad);
+      script.removeEventListener('error', handleError);
+      destroyReference();
     };
   }, []);
 
-  // Hack to apply the theme to the Scalar app
-  //  The 'light' theme is broken, so we use the 'alternate' theme instead
+  // Scalar's light theme does not match the site palette, so use alternate for light mode.
   useEffect(() => {
-    const app = document.getElementById('app');
-    if (!app) {
+    const apiReference = document.getElementById(SCALAR_CONTAINER_ID);
+    if (!apiReference) {
       return;
     }
 
     const applyTheme = () => {
-      app.dataset.theme = getScalarTheme();
+      apiReference.dataset.theme = getScalarTheme();
     };
 
     applyTheme();
@@ -53,8 +125,37 @@ export default function ApiReference() {
   }, []);
 
   return (
-    <Layout title="API Reference | Promptfoo" description="API Reference">
-      <main id="app"></main>
+    <Layout
+      title="API Reference | Promptfoo"
+      description="Interactive OpenAPI reference for Promptfoo server routes"
+    >
+      <main>
+        <section
+          style={{
+            margin: '0 auto',
+            maxWidth: 'var(--ifm-container-width-xl)',
+            padding: '2rem var(--ifm-spacing-horizontal) 0',
+          }}
+        >
+          <h1>API Reference</h1>
+          <p>
+            Promptfoo publishes this OpenAPI reference from the same Zod DTO schemas used by server
+            route validation. The raw spec is available as{' '}
+            <a href={OPENAPI_SPEC_URL}>OpenAPI JSON</a>.
+          </p>
+          {loadError ? (
+            <p role="alert">
+              The interactive API reference failed to load. The generated{' '}
+              <a href={OPENAPI_SPEC_URL}>OpenAPI JSON</a> is still available.
+            </p>
+          ) : null}
+          <noscript>
+            The generated <a href={OPENAPI_SPEC_URL}>OpenAPI JSON</a> is available without
+            JavaScript.
+          </noscript>
+        </section>
+        <div aria-busy={!isReferenceLoaded && !loadError} id={SCALAR_CONTAINER_ID}></div>
+      </main>
     </Layout>
   );
 }

@@ -349,6 +349,11 @@ const sidebars = {
       id: 'installation',
     },
     {
+      type: 'link',
+      label: 'API Reference',
+      href: '/docs/api-reference/',
+    },
+    {
       type: 'category',
       label: 'Evals',
       collapsible: true,
@@ -532,11 +537,6 @@ const sidebars = {
         { type: 'doc', id: 'enterprise/remediation-reports' },
         { type: 'doc', id: 'enterprise/webhooks' },
         { type: 'doc', id: 'enterprise/audit-logging' },
-        {
-          type: 'link',
-          label: 'API Reference',
-          href: '/docs/api-reference',
-        },
       ],
     },
     {

@@ -262,6 +262,9 @@ jobs:
       - name: Generate JSON Schema
         run: npm run jsonSchema:generate
 
+      - name: Generate OpenAPI Spec
+        run: npm run openapi:generate
+
       - name: Check for changes
         run: |
           if [[ -n $(git status --porcelain) ]]; then
