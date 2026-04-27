@@ -19,14 +19,16 @@ pagination_next: null
 
 # Telemetry
 
-`promptfoo` collects basic anonymous telemetry by default. This telemetry helps us decide how to spend time on development.
+`promptfoo` collects basic usage telemetry by default. This telemetry helps us decide how to spend time on development.
 
 An event is recorded when:
 
 - A command is run (e.g. `init`, `eval`, `view`)
 - An assertion is used (along with the type of assertion, e.g. `is-json`, `similar`, `llm-rubric`)
 
-No additional information is collected. The above list is exhaustive.
+Telemetry events include package version and whether the command is running in CI. When account information is present in the local promptfoo config, hosted telemetry also includes the promptfoo user ID, email address, cloud login status, and authentication method.
+
+Telemetry does not include prompts, model outputs, test cases, provider API keys, or full configuration files.
 
 To disable telemetry, set the following environment variable:
 
