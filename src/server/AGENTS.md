@@ -96,4 +96,4 @@ res.json(EvalSchemas.Update.Response.parse({ message: 'Success' }));
 - Error responses use `{ error: string }` shape
 - Use `sendError()` for 500 errors — never expose internal details
 - Handle errors with try-catch
-- Never add rate limiters or request throttling middleware to local server routes. If CodeQL flags `js/missing-rate-limiting`, keep the route unthrottled and suppress that specific alert inline with `// codeql[js/missing-rate-limiting]` plus nearby context.
+- Never add rate limiters or request throttling middleware to local server routes. If code scanning flags `js/missing-rate-limiting`, keep the route unthrottled, document the route-specific rationale in code, and resolve the alert as an intentional local-server exception.
