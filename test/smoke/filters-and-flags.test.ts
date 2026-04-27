@@ -176,6 +176,23 @@ describe('Count-Based Filter Tests', () => {
     expect(parsed.results.results.length).toBe(0);
   });
 
+  it('1.8.1.10 - --filter-range empty slice suppresses implicit default test', () => {
+    const configPath = path.join(CONFIGS_DIR, 'config-base.yaml');
+    const outputPath = path.join(OUTPUT_DIR, 'range-implicit-empty-output.json');
+
+    const { exitCode } = runCli(
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-range', '0:0'],
+      { cwd: CONFIGS_DIR },
+    );
+
+    expect(exitCode).toBe(0);
+
+    const content = fs.readFileSync(outputPath, 'utf-8');
+    const parsed = JSON.parse(content);
+
+    expect(parsed.results.results.length).toBe(0);
+  });
+
   it('1.8.1.4 - --filter-sample returns exactly N random tests', () => {
     const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'sample-output.json');

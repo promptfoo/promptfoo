@@ -553,6 +553,61 @@ describe('evaluateOptions behavior', () => {
       expect(options.filterRange).toBeUndefined();
     });
 
+    it('should apply filterRange to the implicit default test', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-default.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterRange: '0:1',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.tests).toHaveLength(1);
+      expect(evalRecord.runtimeOptions?.filterRange).toBe('0:1');
+      expect(options.filterRange).toBeUndefined();
+    });
+
+    it('should preserve empty filterRange slices for the implicit default test', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-empty.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterRange: '0:0',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
+      expect(evalRecord.runtimeOptions?.filterRange).toBe('0:0');
+      expect(options.filterRange).toBeUndefined();
+    });
+
     it('should restore persisted filterRange when resuming scenario evals', async () => {
       const resumeEval = new Eval(
         {

@@ -413,9 +413,14 @@ export async function doEval(
     const filterRange = resumeEval
       ? (persistedFilterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange)
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const shouldApplyRangeToImplicitDefaultTest =
+      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
+      if (shouldApplyRangeToImplicitDefaultTest) {
+        testSuite.tests = [{}];
+      }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
         failingOnly: cmdObj.filterFailingOnly,
@@ -430,8 +435,7 @@ export async function doEval(
       if (
         filterRange !== undefined &&
         !hasScenarios &&
-        explicitTestCountBeforeFiltering !== undefined &&
-        explicitTestCountBeforeFiltering > 0 &&
+        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
         testSuite.tests.length === 0
       ) {
         testSuite.scenarios = [];
