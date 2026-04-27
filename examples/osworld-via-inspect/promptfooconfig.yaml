@@ -6,7 +6,7 @@ providers:
   - id: file://provider.py
     label: OSWorld (inspect wrapper)
     config:
-      defaultModel: anthropic/claude-sonnet-4-5
+      defaultModel: openai/gpt-5.5
       # Promptfoo's Python worker timeout, in milliseconds.
       timeout: 1800000
       # Inspect subprocess timeout, in seconds.

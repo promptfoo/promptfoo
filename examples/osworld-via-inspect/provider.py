@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_MODEL = "anthropic/claude-sonnet-4-5"
+DEFAULT_MODEL = "openai/gpt-5.5"
 DEFAULT_TIMEOUT_SECONDS = 1800
 DEFAULT_TASK = "inspect_evals/osworld_small"
 
@@ -368,7 +368,7 @@ def _missing_inspect_message(command: str) -> str:
     if shutil.which(command) is None:
         return (
             f"Could not find Inspect CLI command '{command}'. Install prerequisites with "
-            "`pip install 'inspect-evals[osworld]' anthropic openai` or set "
+            "`pip install 'inspect-evals[osworld]' openai anthropic` or set "
             "providers[0].config.inspectCommand."
         )
     return f"Could not execute Inspect CLI command '{command}'."

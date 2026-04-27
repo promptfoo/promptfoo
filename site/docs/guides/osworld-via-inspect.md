@@ -52,10 +52,10 @@ You need Docker because OSWorld runs a desktop environment:
 Install the Python dependencies:
 
 ```bash
-pip install 'inspect-evals[osworld]' anthropic openai
+pip install 'inspect-evals[osworld]' openai anthropic
 ```
 
-For the default config, export `ANTHROPIC_API_KEY`. To use an OpenAI model, export `OPENAI_API_KEY` and override the model in the test vars or on the command line.
+For the default config, export `OPENAI_API_KEY`. To use Anthropic instead, export `ANTHROPIC_API_KEY` and override the model in the test vars or provider config.
 
 The first run can build an OSWorld Docker image of roughly 8GB. A single sample commonly takes 5-15 minutes and can use many tokens.
 
@@ -80,7 +80,7 @@ To run it from the promptfoo repository source tree:
 npm run local -- eval -c examples/osworld-via-inspect/promptfooconfig.yaml --no-cache
 ```
 
-To test a different Inspect model for one run:
+To test a lower-cost Inspect model for one run:
 
 ```bash
 promptfoo eval -c promptfooconfig.yaml --no-cache --var model=openai/gpt-5-nano
@@ -95,7 +95,7 @@ providers:
   - id: file://provider.py
     label: OSWorld (inspect wrapper)
     config:
-      defaultModel: anthropic/claude-sonnet-4-5
+      defaultModel: openai/gpt-5.5
       timeout: 1800000 # Promptfoo Python worker timeout, in ms
       timeoutSeconds: 1800 # Inspect subprocess timeout, in seconds
 ```

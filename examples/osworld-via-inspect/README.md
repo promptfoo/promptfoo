@@ -16,12 +16,13 @@ You need:
   provider you choose. This installs both SDKs used below:
 
   ```bash
-  pip install 'inspect-evals[osworld]' anthropic openai
+  pip install 'inspect-evals[osworld]' openai anthropic
   ```
 
 - A computer-use-capable model and API key. For the default config, export
-  `ANTHROPIC_API_KEY`. To use the OpenAI example below, export `OPENAI_API_KEY`
-  and set `vars.model` to an Inspect model such as `openai/gpt-5-nano`.
+  `OPENAI_API_KEY`. To use Anthropic instead, export `ANTHROPIC_API_KEY` and set
+  `vars.model` or `providers[0].config.defaultModel` to an Inspect model such as
+  `anthropic/claude-sonnet-4-5`.
 - Disk and time for Inspect's OSWorld Docker image. The first run builds an image of roughly 8GB and can take several minutes before the sample starts.
 - Budget for a non-trivial model run. A single OSWorld sample commonly takes 5-15 minutes and can use many tokens.
 
@@ -79,7 +80,7 @@ It also returns metadata for the promptfoo UI and assertions:
   "score": 1.0,
   "status": "pass",
   "sample_id": "...",
-  "model": "anthropic/claude-sonnet-4-5",
+  "model": "openai/gpt-5.5",
   "num_messages": 42,
   "duration_seconds": 600.0
 }
