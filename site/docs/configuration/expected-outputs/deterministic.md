@@ -459,7 +459,7 @@ Note: The `is-xml` assertion requires the entire output to be valid XML. For che
 
 ### Contains-XML
 
-The `contains-xml` assertion checks if the LLM output contains valid XML content, even if it's not the entire output. It uses the same `value.requiredElements` format as `is-xml`; when required elements are provided, they may appear inside the valid XML fragment rather than at the outermost document root.
+The `contains-xml` assertion checks if the LLM output contains valid XML content, even if it's not the entire output. It uses the same `value.requiredElements` format as `is-xml`; required element paths are checked from the extracted XML fragment's root.
 
 ```xml
 Sure, here is your xml:
@@ -467,7 +467,7 @@ Sure, here is your xml:
 let me know if you have any other questions!
 ```
 
-For example, `contains-xml` with `root.child` passes for both `<root><child>Content</child></root>` and a larger valid fragment such as `<wrapper><root><child>Content</child></root></wrapper>`.
+For example, `contains-xml` with `root.child` passes for `Text <root><child>Content</child></root>`. If the XML fragment is wrapped, use the wrapper in the required path, such as `wrapper.root.child` for `<wrapper><root><child>Content</child></root></wrapper>`.
 
 ### Is-SQL
 
