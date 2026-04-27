@@ -342,6 +342,24 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
 
+    it('should skip fork pull_request_target scans by default', async () => {
+      mocks.github.context.eventName = 'pull_request_target';
+      setPullRequestRepos('external-contributor/test-repo');
+
+      await import('../../code-scan-action/src/main');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.info).toHaveBeenCalledWith(
+          '🔀 Fork PR detected and enable-fork-prs is false; skipping Promptfoo Code Scan',
+        );
+      });
+
+      expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
+      expect(mocks.core.getIDToken).not.toHaveBeenCalled();
+      expect(mocks.exec.exec).not.toHaveBeenCalled();
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
     it('should scan fork pull_request events when enable-fork-prs is true', async () => {
       setPullRequestRepos('external-contributor/test-repo');
       mocks.core.getBooleanInput.mockReturnValue(true);

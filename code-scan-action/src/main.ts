@@ -111,11 +111,11 @@ function getCurrentRepositoryFullName(): string {
 }
 
 function isPullRequestFromFork(): boolean {
-  if (github.context.eventName !== 'pull_request') {
+  const pullRequest = github.context.payload.pull_request as PullRequestForkPayload | undefined;
+  if (!pullRequest) {
     return false;
   }
 
-  const pullRequest = github.context.payload.pull_request as PullRequestForkPayload | undefined;
   const headRepoFullName = pullRequest?.head?.repo?.full_name;
   const baseRepoFullName = pullRequest?.base?.repo?.full_name || getCurrentRepositoryFullName();
 
