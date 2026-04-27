@@ -115,13 +115,13 @@ vi.mock('../src/envars', () => {
     }),
     getEnvBool: vi.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX_ENABLED === 'true';
       }
       if (key === 'PROMPTFOO_INSECURE_SSL') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_INSECURE_SSL === 'true';
       }
       if (key === 'PROMPTFOO_RETRY_5XX') {
-        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true' || false;
+        return (process.env as NodeJS.ProcessEnv).PROMPTFOO_RETRY_5XX === 'true';
       }
       return defaultValue;
     }),
