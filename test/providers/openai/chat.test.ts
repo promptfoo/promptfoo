@@ -167,6 +167,54 @@ describe('OpenAI Provider', () => {
       expect(result.metadata?.choices).toBeUndefined();
     });
 
+    it('should pass n parameter in request body when n > 1', async () => {
+      const mockChoices = [
+        { message: { content: 'First response' }, index: 0 },
+        { message: { content: 'Second response' }, index: 1 },
+      ];
+      const mockResponse = {
+        data: {
+          choices: mockChoices,
+          usage: { total_tokens: 20, prompt_tokens: 5, completion_tokens: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', { config: { n: 2 } });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+      );
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const requestBody = JSON.parse(call[1].body);
+      expect(requestBody.n).toBe(2);
+      expect(result.output).toBe('First response');
+      expect(result.metadata?.choices).toHaveLength(2);
+    });
+
+    it('should not include n in request body when n is undefined or 1', async () => {
+      const mockResponse = {
+        data: {
+          choices: [{ message: { content: 'Single response' }, index: 0 }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      await provider.callApi(JSON.stringify([{ role: 'user', content: 'Test prompt' }]));
+
+      const call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const requestBody = JSON.parse(call[1].body);
+      expect(requestBody.n).toBeUndefined();
+    });
+
     it('should include HTTP metadata in error response', async () => {
       const mockResponse = {
         data: { error: { message: 'Rate limit exceeded' } },

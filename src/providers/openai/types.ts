@@ -156,6 +156,17 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
       };
   stop?: string[];
   seed?: number;
+  /**
+   * Number of chat completion choices to generate per request.
+   * When n > 1, each choice is returned as a separate entry in `metadata.choices`.
+   * The main `output` field contains the text of the first choice.
+   * Use this to generate multiple completions in a single API call instead of
+   * making n separate calls with `--repeat`.
+   *
+   * Note: Using n > 1 increases token usage proportionally.
+   * @see https://platform.openai.com/docs/api-reference/chat/create#chat-create-n
+   */
+  n?: number;
   passthrough?: object;
   reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
