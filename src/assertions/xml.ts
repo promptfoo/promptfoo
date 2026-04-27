@@ -15,22 +15,54 @@ function getLastOpenTag(stack: OpenXmlTag[]): OpenXmlTag | undefined {
   return stack.length > 0 ? stack[stack.length - 1] : undefined;
 }
 
-function isXmlNameStartChar(char: string | undefined): boolean {
-  return char !== undefined && /[A-Za-z_:]/.test(char);
+function getCodePointLength(codePoint: number): number {
+  return codePoint > 0xffff ? 2 : 1;
 }
 
-function isXmlNameChar(char: string | undefined): boolean {
-  return char !== undefined && /[A-Za-z0-9_.:-]/.test(char);
+function isXmlNameStartCodePoint(codePoint: number | undefined): codePoint is number {
+  return (
+    codePoint !== undefined &&
+    (codePoint === 0x3a ||
+      codePoint === 0x5f ||
+      (codePoint >= 0x41 && codePoint <= 0x5a) ||
+      (codePoint >= 0x61 && codePoint <= 0x7a) ||
+      (codePoint >= 0xc0 && codePoint <= 0xd6) ||
+      (codePoint >= 0xd8 && codePoint <= 0xf6) ||
+      (codePoint >= 0xf8 && codePoint <= 0x2ff) ||
+      (codePoint >= 0x370 && codePoint <= 0x37d) ||
+      (codePoint >= 0x37f && codePoint <= 0x1fff) ||
+      (codePoint >= 0x200c && codePoint <= 0x200d) ||
+      (codePoint >= 0x2070 && codePoint <= 0x218f) ||
+      (codePoint >= 0x2c00 && codePoint <= 0x2fef) ||
+      (codePoint >= 0x3001 && codePoint <= 0xd7ff) ||
+      (codePoint >= 0xf900 && codePoint <= 0xfdcf) ||
+      (codePoint >= 0xfdf0 && codePoint <= 0xfffd) ||
+      (codePoint >= 0x10000 && codePoint <= 0xeffff))
+  );
+}
+
+function isXmlNameCodePoint(codePoint: number | undefined): codePoint is number {
+  return (
+    isXmlNameStartCodePoint(codePoint) ||
+    codePoint === 0x2d ||
+    codePoint === 0x2e ||
+    (codePoint !== undefined && codePoint >= 0x30 && codePoint <= 0x39) ||
+    codePoint === 0xb7 ||
+    (codePoint !== undefined && codePoint >= 0x300 && codePoint <= 0x36f) ||
+    (codePoint !== undefined && codePoint >= 0x203f && codePoint <= 0x2040)
+  );
 }
 
 function readXmlName(input: string, start: number): { name: string; end: number } | undefined {
-  if (!isXmlNameStartChar(input[start])) {
+  const firstCodePoint = input.codePointAt(start);
+  if (!isXmlNameStartCodePoint(firstCodePoint)) {
     return undefined;
   }
 
-  let end = start + 1;
-  while (isXmlNameChar(input[end])) {
-    end++;
+  let end = start + getCodePointLength(firstCodePoint);
+  for (let codePoint = input.codePointAt(end); isXmlNameCodePoint(codePoint); ) {
+    end += getCodePointLength(codePoint);
+    codePoint = input.codePointAt(end);
   }
 
   return { name: input.slice(start, end), end };

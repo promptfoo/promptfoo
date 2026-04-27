@@ -208,6 +208,15 @@ describe('containsXml', () => {
     expect(result.isValid).toBe(true);
   });
 
+  it('should find valid XML with non-ASCII element names', () => {
+    const input = 'Text <élément>Content</élément> more';
+
+    expect(containsXml(input, ['élément'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
   it('should ignore pseudo-closing tags inside comments when extracting candidates', () => {
     const input = '<root><!-- </root> --><child>Content</child></root>';
 
