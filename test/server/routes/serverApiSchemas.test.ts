@@ -240,6 +240,17 @@ describe('inline server API DTO validation', () => {
     expect(valid.body).toEqual({ url: 'https://share.example/eval-1' });
   });
 
+  it('returns a 404 DTO when sharing a result whose eval row is missing', async () => {
+    mockedReadResult.mockResolvedValue({ result: { id: 'eval-1' } } as never);
+    mockedEval.findById.mockResolvedValue(null as never);
+
+    const response = await api.post('/api/results/share').send({ id: 'eval-1' });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Eval not found' });
+    expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
+  });
+
   it('validates dataset generation request bodies', async () => {
     mockedSynthesizeFromTestSuite.mockResolvedValue([{ vars: { q: 'generated' } }] as never);
 
@@ -255,7 +266,7 @@ describe('inline server API DTO validation', () => {
   });
 
   it('validates telemetry request bodies and parses success DTOs', async () => {
-    mockedTelemetry.record = vi.fn().mockResolvedValue(undefined);
+    mockedTelemetry.record = vi.fn().mockReturnValue(undefined);
 
     const invalid = await api.post('/api/telemetry').send({ event: 'not-real' });
     const valid = await api
