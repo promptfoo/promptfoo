@@ -1,7 +1,5 @@
-import type { Server } from 'node:http';
-
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
@@ -27,16 +25,10 @@ const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
 
 describe('Providers Routes', () => {
-  let app: Server;
+  let app: ReturnType<typeof createApp>;
 
-  beforeAll(() => {
-    app = createApp().listen(0);
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      app.close((error) => (error ? reject(error) : resolve()));
-    });
+  beforeEach(() => {
+    app = createApp();
   });
 
   afterEach(() => {
