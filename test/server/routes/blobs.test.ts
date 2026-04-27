@@ -1,7 +1,5 @@
-import type { Server } from 'node:http';
-
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -20,22 +18,10 @@ const mockedGetBlobByHash = vi.mocked(getBlobByHash);
 const mockedGetDb = vi.mocked(getDb);
 
 describe('Blobs Routes', () => {
-  let app: Server;
+  let app: ReturnType<typeof createApp>;
 
-  beforeAll(() => {
-    app = createApp().listen(0);
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      app.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
+  beforeEach(() => {
+    app = createApp();
   });
 
   describe('GET /api/blobs/:hash', () => {
