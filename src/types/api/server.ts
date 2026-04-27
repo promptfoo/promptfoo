@@ -92,8 +92,8 @@ export const ShareResponseSchema = z.object({
 });
 
 export const DatasetGenerateRequestSchema = z.object({
-  prompts: z.array(DatasetGeneratePromptSchema),
-  tests: z.array(DatasetGenerateTestSchema),
+  prompts: z.array(DatasetGeneratePromptSchema).min(1),
+  tests: z.array(DatasetGenerateTestSchema).default([]),
 });
 
 export const DatasetGenerateResponseSchema = z.object({
