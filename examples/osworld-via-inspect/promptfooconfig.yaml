@@ -7,6 +7,9 @@ providers:
     label: OSWorld (inspect wrapper)
     config:
       defaultModel: anthropic/claude-sonnet-4-5
+      # Promptfoo's Python worker timeout, in milliseconds.
+      timeout: 1800000
+      # Inspect subprocess timeout, in seconds.
       timeoutSeconds: 1800
 tests:
   - description: libreoffice_calc — first supported sample
@@ -19,9 +22,9 @@ tests:
   # Uncomment to run another expensive OSWorld sample. Each sample can take
   # 5-15 minutes, build an ~8GB Docker image on first use, and consume
   # non-trivial model tokens.
-  # - description: vs_code — first supported sample
+  # - description: vscode — first supported sample
   #   vars:
-  #     app: vs_code
+  #     app: vscode
   #   assert:
   #     - type: python
   #       value: file://assertion.py

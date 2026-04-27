@@ -8,14 +8,20 @@ This is an orchestration wrapper, not a from-scratch promptfoo-native computer-u
 
 You need:
 
-- Docker installed, running, and usable by your current user.
-- Python with `inspect-evals[osworld]` installed:
+- Docker Engine 24.0.6 or newer, running and usable by your current user.
+- Docker Compose V2 available as `docker compose`. Inspect validates this with
+  `docker compose version --format json`; a standalone `docker-compose` binary
+  is not enough unless your `docker` command exposes it as `docker compose`.
+- Python with Inspect's OSWorld dependencies and the SDK for whichever model
+  provider you choose. This installs both SDKs used below:
 
   ```bash
-  pip install 'inspect-evals[osworld]'
+  pip install 'inspect-evals[osworld]' anthropic openai
   ```
 
-- A computer-use-capable model and API key. For the default config, export `ANTHROPIC_API_KEY`. You can also set `vars.model` or `providers[0].config.defaultModel` to an Inspect model such as an OpenAI model and export that provider's key.
+- A computer-use-capable model and API key. For the default config, export
+  `ANTHROPIC_API_KEY`. To use the OpenAI example below, export `OPENAI_API_KEY`
+  and set `vars.model` to an Inspect model such as `openai/gpt-5-nano`.
 - Disk and time for Inspect's OSWorld Docker image. The first run builds an image of roughly 8GB and can take several minutes before the sample starts.
 - Budget for a non-trivial model run. A single OSWorld sample commonly takes 5-15 minutes and can use many tokens.
 
@@ -45,6 +51,16 @@ vars:
 
 To run the Nth task within an app subset, add zero-based `task_index`. The provider maps `task_index: 2` to Inspect `--limit 3-3`.
 
+Inspect filters by OSWorld `related_apps` ids. For example, VS Code is
+`vscode`, not `vs_code`.
+
+The example config sets two timeouts because both layers need enough time:
+
+- `providers[0].config.timeout` is promptfoo's Python worker timeout in
+  milliseconds.
+- `providers[0].config.timeoutSeconds` is the inner Inspect subprocess timeout
+  in seconds.
+
 ## Expected output
 
 The provider returns text like:
@@ -59,7 +75,7 @@ It also returns metadata for the promptfoo UI and assertions:
 
 ```json
 {
-  "inspect_log_path": "examples/osworld-via-inspect/inspect_logs/.../*.eval",
+  "inspect_log_path": "/absolute/path/to/examples/osworld-via-inspect/inspect_logs/.../*.eval",
   "score": 1.0,
   "status": "pass",
   "sample_id": "...",
@@ -83,13 +99,14 @@ inspect view --log-dir examples/osworld-via-inspect/inspect_logs
 
 Bridging Inspect's internal spans into promptfoo traces would require non-trivial trace translation, so this example keeps the integration at the orchestration and scoring layer.
 
-## What was tested
+## Smoke test without model spend
 
-The Inspect CLI shape was verified without running a full OSWorld sample:
+To check the Inspect CLI shape without running a full OSWorld sample:
 
 ```bash
 inspect eval inspect_evals/osworld_small --model mockllm/model --limit 0 -T include_apps=libreoffice_calc --log-dir <dir>
 inspect log dump <file.eval>
 ```
 
-A real end-to-end OSWorld run still requires Docker, the first-run image build, provider credentials, and 5-15 minutes of runtime.
+A real end-to-end OSWorld run still requires Docker, the first-run image build,
+provider credentials, and 5-15 minutes of runtime.

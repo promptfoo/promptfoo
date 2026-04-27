@@ -35,12 +35,14 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     vars_ = context.get("vars") or {}
     app = vars_.get("app")
     if not app:
-        return {"error": "OSWorld app is required. Set vars.app, for example 'libreoffice_calc'."}
+        return {
+            "error": "OSWorld app is required. Set vars.app, for example 'libreoffice_calc'."
+        }
 
     model = vars_.get("model") or config.get("defaultModel") or DEFAULT_MODEL
     timeout_seconds = _int_config(config.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS)
-    base_path = Path(config.get("basePath") or Path(__file__).resolve().parent)
-    log_root = Path(config.get("logRoot") or base_path / "inspect_logs")
+    base_path = _resolve_base_path(config)
+    log_root = _resolve_log_root(config, base_path)
     log_dir = _new_log_dir(log_root, str(app))
     inspect_cmd = _inspect_command(config)
 
@@ -148,12 +150,6 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     score = parsed.get("score")
     status = "pass" if isinstance(score, (int, float)) and score >= 1.0 else "fail"
     sample_id = parsed.get("sample_id") or "unknown sample"
-    final_answer = parsed.get("final_answer") or "(no final assistant text found in Inspect log)"
-    output = (
-        f"Sample {sample_id} on app {app}: score={score if score is not None else 'unknown'} "
-        f"status={status}\n\nFinal answer: {final_answer}"
-    )
-
     metadata = {
         "inspect_log_path": str(eval_log),
         "score": score,
@@ -165,9 +161,33 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         "task": task,
         "app": str(app),
     }
+    token_usage = parsed.get("token_usage")
+
+    inspect_error = _inspect_log_error(parsed)
+    if inspect_error:
+        metadata["status"] = "error"
+        metadata["inspect_status"] = parsed.get("inspect_status")
+        metadata["inspect_error"] = inspect_error
+        result: dict[str, Any] = {
+            "error": (
+                f"Inspect OSWorld run did not produce a score for sample {sample_id}: "
+                f"{inspect_error}"
+            ),
+            "metadata": metadata,
+        }
+        if token_usage:
+            result["tokenUsage"] = token_usage
+        return result
+
+    final_answer = (
+        parsed.get("final_answer") or "(no final assistant text found in Inspect log)"
+    )
+    output = (
+        f"Sample {sample_id} on app {app}: score={score if score is not None else 'unknown'} "
+        f"status={status}\n\nFinal answer: {final_answer}"
+    )
 
     result: dict[str, Any] = {"output": output, "metadata": metadata}
-    token_usage = parsed.get("token_usage")
     if token_usage:
         result["tokenUsage"] = token_usage
     return result
@@ -179,6 +199,21 @@ def _inspect_command(config: dict) -> list[str]:
     if isinstance(command, list):
         return [str(part) for part in command]
     return shlex.split(str(command))
+
+
+def _resolve_base_path(config: dict) -> Path:
+    configured = config.get("basePath")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return Path(__file__).resolve().parent
+
+
+def _resolve_log_root(config: dict, base_path: Path) -> Path:
+    configured = config.get("logRoot")
+    path = Path(configured).expanduser() if configured else base_path / "inspect_logs"
+    if not path.is_absolute():
+        path = base_path / path
+    return path.resolve()
 
 
 def _new_log_dir(log_root: Path, app: str) -> Path:
@@ -203,20 +238,25 @@ def _limit_for_task_index(task_index: Any) -> str:
 
 
 def _find_eval_log(log_dir: Path) -> Path | None:
-    logs = sorted(log_dir.glob("*.eval"), key=lambda path: path.stat().st_mtime, reverse=True)
+    logs = sorted(
+        log_dir.rglob("*.eval"), key=lambda path: path.stat().st_mtime, reverse=True
+    )
     return logs[0] if logs else None
 
 
 def _parse_inspect_log(data: dict[str, Any]) -> dict[str, Any]:
     samples = data.get("samples") or []
     sample = samples[0] if samples else {}
-    score = _sample_score(sample) if sample else _aggregate_score(data)
+    sample_score = _sample_score(sample) if sample else None
+    score = sample_score if sample_score is not None else _aggregate_score(data)
     return {
         "score": score,
         "sample_id": sample.get("id") or sample.get("uuid"),
         "final_answer": _final_answer(sample),
         "num_messages": len(sample.get("messages") or []),
         "token_usage": _token_usage(data, sample),
+        "inspect_status": data.get("status"),
+        "sample_error": sample.get("error"),
     }
 
 
@@ -275,7 +315,10 @@ def _final_answer(sample: dict[str, Any]) -> str | None:
 
 
 def _token_usage(data: dict[str, Any], sample: dict[str, Any]) -> dict[str, int] | None:
-    usage_sources = [sample.get("model_usage"), (data.get("stats") or {}).get("model_usage")]
+    usage_sources = [
+        sample.get("model_usage"),
+        (data.get("stats") or {}).get("model_usage"),
+    ]
     totals = {"prompt": 0, "completion": 0, "total": 0}
     found = False
     for usage_by_model in usage_sources:
@@ -284,7 +327,9 @@ def _token_usage(data: dict[str, Any], sample: dict[str, Any]) -> dict[str, int]
         for usage in usage_by_model.values():
             if not isinstance(usage, dict):
                 continue
-            totals["prompt"] += int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+            totals["prompt"] += int(
+                usage.get("input_tokens") or usage.get("prompt_tokens") or 0
+            )
             totals["completion"] += int(
                 usage.get("output_tokens") or usage.get("completion_tokens") or 0
             )
@@ -295,6 +340,21 @@ def _token_usage(data: dict[str, Any], sample: dict[str, Any]) -> dict[str, int]
     if found and totals["total"] == 0:
         totals["total"] = totals["prompt"] + totals["completion"]
     return totals if found else None
+
+
+def _inspect_log_error(parsed: dict[str, Any]) -> str | None:
+    sample_error = parsed.get("sample_error")
+    if isinstance(sample_error, dict):
+        message = sample_error.get("message") or sample_error.get("traceback")
+        if message:
+            return _tail(str(message), 1000)
+    elif sample_error:
+        return _tail(str(sample_error), 1000)
+
+    if parsed.get("inspect_status") == "error":
+        return "Inspect log status is error and no scorer result was recorded."
+
+    return None
 
 
 def _int_config(value: Any, default: int) -> int:
@@ -308,17 +368,24 @@ def _missing_inspect_message(command: str) -> str:
     if shutil.which(command) is None:
         return (
             f"Could not find Inspect CLI command '{command}'. Install prerequisites with "
-            "`pip install inspect-evals[osworld]` or set providers[0].config.inspectCommand."
+            "`pip install 'inspect-evals[osworld]' anthropic openai` or set "
+            "providers[0].config.inspectCommand."
         )
     return f"Could not execute Inspect CLI command '{command}'."
 
 
-def _humanize_inspect_failure(result: subprocess.CompletedProcess, cmd: list[str]) -> str:
+def _humanize_inspect_failure(
+    result: subprocess.CompletedProcess, cmd: list[str]
+) -> str:
     tail = _tail(result.stderr) or _tail(result.stdout) or "(no output)"
     hint = ""
     lowered = tail.lower()
-    if "docker" in lowered:
+    if "docker compose" in lowered or "compose" in lowered:
+        hint = " Check that Docker Compose V2 is installed and available as `docker compose`."
+    elif "docker" in lowered:
         hint = " Check that Docker is installed, running, and usable by your user."
+    elif "requires optional dependencies" in lowered:
+        hint = " Install the selected Inspect model provider SDK, such as `openai` or `anthropic`."
     elif "api_key" in lowered or "api key" in lowered or "authentication" in lowered:
         hint = " Check that the selected model provider API key is exported."
     elif "model" in lowered:
@@ -326,7 +393,9 @@ def _humanize_inspect_failure(result: subprocess.CompletedProcess, cmd: list[str
     return f"Inspect eval failed with exit code {result.returncode}.{hint}\nCommand: {_redact(cmd)}\n{tail}"
 
 
-def _humanize_log_dump_failure(result: subprocess.CompletedProcess, eval_log: Path) -> str:
+def _humanize_log_dump_failure(
+    result: subprocess.CompletedProcess, eval_log: Path
+) -> str:
     tail = _tail(result.stderr) or _tail(result.stdout) or "(no output)"
     return f"Inspect log dump failed for {eval_log} with exit code {result.returncode}.\n{tail}"
 
