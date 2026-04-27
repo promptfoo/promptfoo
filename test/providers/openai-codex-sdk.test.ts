@@ -55,7 +55,12 @@ vi.mock('@openai/codex-sdk', () => mockCodexSDK);
 // Helper to create mock response matching real SDK format
 const createMockResponse = (
   finalResponse: string,
-  usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number },
+  usage?: {
+    input_tokens?: number;
+    cached_input_tokens?: number;
+    output_tokens?: number;
+    reasoning_output_tokens?: number;
+  },
   items: any[] = [],
 ) => ({
   finalResponse,
@@ -64,6 +69,9 @@ const createMockResponse = (
         input_tokens: usage.input_tokens ?? 0,
         cached_input_tokens: usage.cached_input_tokens ?? 0,
         output_tokens: usage.output_tokens ?? 0,
+        ...(usage.reasoning_output_tokens === undefined
+          ? {}
+          : { reasoning_output_tokens: usage.reasoning_output_tokens }),
       }
     : undefined,
   items,
@@ -258,6 +266,32 @@ describe('OpenAICodexSDKProvider', () => {
         });
 
         expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
+      it('should preserve Codex reasoning token usage details', async () => {
+        mockRun.mockResolvedValue(
+          createMockResponse('Reasoning response', {
+            input_tokens: 10,
+            cached_input_tokens: 2,
+            output_tokens: 20,
+            reasoning_output_tokens: 7,
+          }),
+        );
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage).toEqual({
+          prompt: 10,
+          completion: 20,
+          total: 30,
+          cached: 2,
+          completionDetails: {
+            reasoning: 7,
+          },
+        });
       });
 
       it('should pass structured text and local image prompt inputs to the SDK', async () => {
@@ -1552,7 +1586,12 @@ describe('OpenAICodexSDKProvider', () => {
           };
           yield {
             type: 'turn.completed',
-            usage: { input_tokens: 10, cached_input_tokens: 5, output_tokens: 20 },
+            usage: {
+              input_tokens: 10,
+              cached_input_tokens: 5,
+              output_tokens: 20,
+              reasoning_output_tokens: 3,
+            },
           };
         };
 
@@ -1571,6 +1610,9 @@ describe('OpenAICodexSDKProvider', () => {
           completion: 20,
           total: 30, // 10 + 20
           cached: 5,
+          completionDetails: {
+            reasoning: 3,
+          },
         });
       });
 

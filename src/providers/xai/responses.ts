@@ -7,7 +7,7 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs } from '../shared';
 import { calculateXAICost, GROK_4_MODELS } from './chat';
 
 import type { EnvOverrides } from '../../types/env';
@@ -340,7 +340,7 @@ export class XAIResponsesProvider implements ApiProvider {
           },
           body: JSON.stringify(body),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'json',
         context?.bustCache ?? context?.debug,
         this.config.maxRetries,

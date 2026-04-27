@@ -399,6 +399,7 @@ export async function doEval(
     }
 
     const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const explicitTestCountBeforeFiltering = testSuite.tests?.length;
     const resumeRuntimeOptions = resumeEval?.runtimeOptions as EvaluateOptions | undefined;
     const persistedFilterRange =
       typeof resumeRuntimeOptions?.filterRange === 'string'
@@ -410,8 +411,8 @@ export async function doEval(
       );
     }
     const filterRange = resumeEval
-      ? (persistedFilterRange ?? commandLineOptions?.filterRange)
-      : (cmdObj.filterRange ?? commandLineOptions?.filterRange);
+      ? (persistedFilterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange)
+      : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
@@ -426,6 +427,15 @@ export async function doEval(
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
+      if (
+        filterRange !== undefined &&
+        !hasScenarios &&
+        explicitTestCountBeforeFiltering !== undefined &&
+        explicitTestCountBeforeFiltering > 0 &&
+        testSuite.tests.length === 0
+      ) {
+        testSuite.scenarios = [];
+      }
     }
 
     if (
@@ -711,7 +721,10 @@ export async function doEval(
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
-      const outputTable = generateTable(table);
+      const outputTable = generateTable(
+        table,
+        cmdObj.tableCellMaxLength ?? commandLineOptions?.tableCellMaxLength,
+      );
 
       logger.info('\n' + outputTable.toString());
       if (table.body.length > 25) {
@@ -1079,11 +1092,7 @@ export function evalCommand(
     )
     .option('--table', 'Output table in CLI', defaultConfig?.commandLineOptions?.table ?? true)
     .option('--no-table', 'Do not output table in CLI', defaultConfig?.commandLineOptions?.table)
-    .option(
-      '--table-cell-max-length <number>',
-      'Truncate console table cells to this length',
-      '250',
-    )
+    .option('--table-cell-max-length <number>', 'Truncate console table cells to this length')
     .option('--share', 'Create a shareable URL', defaultConfig?.commandLineOptions?.share)
     .option('--no-share', 'Do not share, this overrides the config file')
     .option(

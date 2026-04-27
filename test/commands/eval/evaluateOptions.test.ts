@@ -10,7 +10,7 @@ import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions } from '../../../src/types/index';
+import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
 
 vi.mock('../../../src/evaluator', async (importOriginal) => {
   return {
@@ -515,6 +515,40 @@ describe('evaluateOptions behavior', () => {
       expect(evaluateMock).toHaveBeenCalled();
       const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
       const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(evalRecord.runtimeOptions?.filterRange).toBe('1:2');
+      expect(options.filterRange).toBeUndefined();
+    });
+
+    it('should use evaluateOptions.filterRange when command-line defaults do not set it', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-evaluate-options-filter-range.yaml', {
+        evaluateOptions: {
+          filterRange: '1:2',
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['two']);
       expect(evalRecord.runtimeOptions?.filterRange).toBe('1:2');
       expect(options.filterRange).toBeUndefined();
     });

@@ -67,12 +67,3 @@ export function filterByRange<T>(
   }
   return sliced;
 }
-
-export function isValidFilterRange(option: string): boolean {
-  try {
-    parseFilterRange(option);
-    return true;
-  } catch {
-    return false;
-  }
-}

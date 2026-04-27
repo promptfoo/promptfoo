@@ -117,7 +117,7 @@
       "express": "^4.22.1"
     },
     "@anthropic-ai/claude-agent-sdk": {
-      "@anthropic-ai/sdk": "^0.90.0"
+      "@anthropic-ai/sdk": "^0.91.1"
     },
     "@isaacs/brace-expansion": ">=5.0.1",
     "fast-xml-parser": "$fast-xml-parser",
@@ -155,17 +155,17 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.117",
-    "@aws-sdk/client-bedrock-agent-runtime": "^3.1031.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.1031.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.119",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.1036.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1036.0",
     "@aws-sdk/client-s3": "^3.1003.0",
-    "@aws-sdk/client-sagemaker-runtime": "^3.1031.0",
+    "@aws-sdk/client-sagemaker-runtime": "^3.1036.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.4.12",
-    "@fal-ai/client": "~1.9.6",
+    "@biomejs/biome": "2.4.13",
+    "@fal-ai/client": "~1.10.0",
     "@ibm-cloud/watsonx-ai": "^1.7.11",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@smithy/types": "^4.13.0",
@@ -215,21 +215,21 @@
     "winston-transport": "^4.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.117",
-    "@aws-sdk/client-bedrock-agent-runtime": "^3.1031.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.1031.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.119",
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.1036.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1036.0",
     "@aws-sdk/client-s3": "^3.1003.0",
-    "@aws-sdk/client-sagemaker-runtime": "^3.1031.0",
+    "@aws-sdk/client-sagemaker-runtime": "^3.1036.0",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@azure/ai-projects": "^2.1.0",
     "@azure/identity": "^4.13.0",
     "@azure/msal-node": "^5.1.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@fal-ai/client": "~1.9.6",
+    "@fal-ai/client": "~1.10.0",
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.11",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.123.0",
+    "@openai/codex-sdk": "^0.125.0",
     "@playwright/browser-chromium": "^1.59.1",
     "@rollup/rollup-linux-x64-gnu": "^4.59.0",
     "@slack/web-api": "^7.15.0",
@@ -253,7 +253,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.90.0",
+    "@anthropic-ai/sdk": "^0.91.1",
     "@apidevtools/json-schema-ref-parser": "^15.3.1",
     "@googleapis/sheets": "^13.0.1",
     "@inquirer/checkbox": "^5.1.0",
@@ -264,7 +264,7 @@
     "@inquirer/select": "^5.1.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@openai/agents": "^0.8.5",
-    "@opencode-ai/sdk": "^1.2.19",
+    "@opencode-ai/sdk": "^1.14.22",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.6.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.215.0",

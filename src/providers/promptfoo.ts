@@ -10,7 +10,7 @@ import {
 } from '../redteam/remoteGeneration';
 import { getRemoteMaterializationContextFromVars } from '../redteam/remoteMaterialization';
 import { fetchWithRetries } from '../util/fetch/index';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -218,7 +218,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       const data = await response.json();
@@ -336,7 +336,7 @@ export class PromptfooSimulatedUserProvider implements ApiProvider {
           body: JSON.stringify(body),
           ...(callApiOptions?.abortSignal && { signal: callApiOptions.abortSignal }),
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       if (!response.ok) {
