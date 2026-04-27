@@ -1,3 +1,4 @@
+import { getEnvBool } from '../envars';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -5,6 +6,10 @@ import logger from '../logger';
 import type { BlobStoreResult } from './types';
 
 function buildRemoteUrl(): string | null {
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    return null;
+  }
+
   const baseUrl = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
 
@@ -40,8 +45,12 @@ export async function uploadBlobRemote(
   },
 ): Promise<BlobStoreResult | null> {
   const url = buildRemoteUrl();
+  if (!url) {
+    return null;
+  }
+
   const apiKey = cloudConfig.getApiKey();
-  if (!url || !apiKey) {
+  if (!apiKey) {
     return null;
   }
 
