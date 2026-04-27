@@ -235,12 +235,12 @@ describe('containsXml', () => {
     });
   });
 
-  it('should satisfy required elements from nested XML inside a valid candidate', () => {
+  it('should keep required elements root-relative within a valid candidate', () => {
     const input = 'Text <wrapper><root><child>Content</child></root></wrapper>';
 
     expect(containsXml(input, ['root.child'])).toEqual({
-      isValid: true,
-      reason: 'XML is valid and contains all required elements',
+      isValid: false,
+      reason: 'No valid XML content found matching the requirements',
     });
   });
 

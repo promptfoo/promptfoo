@@ -308,48 +308,18 @@ function hasElementPath(value: unknown, path: string[]): boolean {
   return true;
 }
 
-function hasElementPathAtAnyDepth(value: unknown, path: string[]): boolean {
-  if (hasElementPath(value, path)) {
-    return true;
-  }
-
-  if (Array.isArray(value)) {
-    return value.some((item) => hasElementPathAtAnyDepth(item, path));
-  }
-
-  if (value !== null && typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>).some((item) =>
-      hasElementPathAtAnyDepth(item, path),
-    );
-  }
-
-  return false;
-}
-
-function getMissingElements(
-  parsedXml: unknown,
-  requiredElements: string[] | undefined,
-  allowNestedRequiredElements: boolean,
-): string[] {
+function getMissingElements(parsedXml: unknown, requiredElements: string[] | undefined): string[] {
   if (!requiredElements || requiredElements.length === 0) {
     return [];
   }
 
   return requiredElements.filter((element) => {
     const path = element.split('.');
-    const hasRequiredElement = allowNestedRequiredElements
-      ? hasElementPathAtAnyDepth(parsedXml, path)
-      : hasElementPath(parsedXml, path);
-
-    return !hasRequiredElement;
+    return !hasElementPath(parsedXml, path);
   });
 }
 
-function validateXmlCandidate(
-  xmlString: string,
-  requiredElements?: string[],
-  allowNestedRequiredElements = false,
-): XmlValidationResult {
+function validateXmlCandidate(xmlString: string, requiredElements?: string[]): XmlValidationResult {
   if (!xmlString.startsWith('<')) {
     return { isValid: false, reason: 'XML is missing opening tag', isWellFormed: false };
   }
@@ -363,11 +333,7 @@ function validateXmlCandidate(
 
   try {
     const parsedXml = parser.parse(xmlString);
-    const missingElements = getMissingElements(
-      parsedXml,
-      requiredElements,
-      allowNestedRequiredElements,
-    );
+    const missingElements = getMissingElements(parsedXml, requiredElements);
 
     if (missingElements.length > 0) {
       return {
@@ -422,7 +388,6 @@ export function containsXml(
     const { isValid, isWellFormed, reason } = validateXmlCandidate(
       outputString.slice(xmlCandidate.start, xmlCandidate.end),
       requiredElements,
-      true,
     );
     if (isValid) {
       return { isValid: true, reason };
