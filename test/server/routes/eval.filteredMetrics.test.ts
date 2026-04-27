@@ -8,22 +8,30 @@
  * 4. Handles errors gracefully
  */
 
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
 import { createApp } from '../../../src/server/server';
 import EvalFactory from '../../factories/evalFactory';
 
 describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: Server;
 
   beforeAll(async () => {
     await runDbMigrations();
+    app = createApp().listen(0);
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app.close((error) => (error ? reject(error) : resolve()));
+    });
   });
 
   beforeEach(async () => {
-    app = createApp();
     const db = getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');

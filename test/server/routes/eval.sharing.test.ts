@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/index', () => ({
@@ -33,7 +35,23 @@ const mockedEvaluate = vi.mocked(promptfoo.evaluate);
 const mockedShouldShareResults = vi.mocked(shouldShareResults);
 
 describe('Eval Routes - Sharing behavior', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: Server;
+
+  beforeAll(() => {
+    app = createApp().listen(0);
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -44,8 +62,6 @@ describe('Eval Routes - Sharing behavior', () => {
     } as any);
 
     mockedShouldShareResults.mockReturnValue(false);
-
-    app = createApp();
   });
 
   afterEach(() => {
