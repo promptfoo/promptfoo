@@ -29,6 +29,20 @@ interface ActionInputs {
   guidanceText: string;
   guidanceFile: string;
   githubToken: string;
+  enableForkPrs: boolean;
+}
+
+interface PullRequestForkPayload {
+  head?: {
+    repo?: {
+      full_name?: string | null;
+    } | null;
+  } | null;
+  base?: {
+    repo?: {
+      full_name?: string | null;
+    } | null;
+  } | null;
 }
 
 function formatError(error: unknown): string {
@@ -43,6 +57,7 @@ function getActionInputs(): ActionInputs {
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
+    enableForkPrs: core.getBooleanInput('enable-fork-prs'),
   };
 }
 
@@ -88,6 +103,34 @@ function isSetupPR(files: FileChange[]): boolean {
     files[0].path === setupWorkflowPath &&
     files[0].status === FileChangeStatus.ADDED
   );
+}
+
+function getCurrentRepositoryFullName(): string {
+  const repository = github.context.payload.repository as { full_name?: string } | undefined;
+  return repository?.full_name || `${github.context.repo.owner}/${github.context.repo.repo}`;
+}
+
+function isPullRequestFromFork(): boolean {
+  if (github.context.eventName !== 'pull_request') {
+    return false;
+  }
+
+  const pullRequest = github.context.payload.pull_request as PullRequestForkPayload | undefined;
+  const headRepoFullName = pullRequest?.head?.repo?.full_name;
+  const baseRepoFullName = pullRequest?.base?.repo?.full_name || getCurrentRepositoryFullName();
+
+  if (!headRepoFullName || !baseRepoFullName) {
+    core.warning(
+      'Unable to determine PR source repository from GitHub event payload; treating it as a fork PR',
+    );
+    return true;
+  }
+
+  return headRepoFullName !== baseRepoFullName;
+}
+
+function shouldSkipForkPullRequest(enableForkPrs: boolean): boolean {
+  return !enableForkPrs && isPullRequestFromFork();
 }
 
 async function authenticateWithOidc(): Promise<void> {
@@ -421,6 +464,14 @@ async function runCodeScan(): Promise<void> {
 
   const context = await getGitHubContext(inputs.githubToken);
   core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
+
+  if (shouldSkipForkPullRequest(inputs.enableForkPrs)) {
+    core.info('🔀 Fork PR detected and enable-fork-prs is false; skipping Promptfoo Code Scan');
+    core.info(
+      'A maintainer can trigger a scan by commenting @promptfoo-scanner, or enable fork PR scans with enable-fork-prs: true',
+    );
+    return;
+  }
 
   core.info('🔎 Checking if this is a setup PR...');
   const files = await getPRFiles(inputs.githubToken, context);
