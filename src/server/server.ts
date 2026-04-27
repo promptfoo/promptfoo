@@ -246,7 +246,6 @@ export function createApp() {
   });
 
   // Local server routes intentionally do not use route throttling; see src/server/AGENTS.md.
-  // codeql[js/missing-rate-limiting]
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ServerSchemas.Share.Request.safeParse(req.body);
     if (!bodyResult.success) {
