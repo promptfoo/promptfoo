@@ -354,6 +354,11 @@ const sidebars = {
       href: '/docs/api-reference/',
     },
     {
+      type: 'link',
+      label: 'Local Server API',
+      href: '/docs/local-server-api-reference/',
+    },
+    {
       type: 'category',
       label: 'Evals',
       collapsible: true,
