@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
@@ -25,12 +27,25 @@ const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
 
 describe('Providers Routes', () => {
-  describe('GET /providers/config-status', () => {
-    let app: ReturnType<typeof createApp>;
+  let app: Server;
 
+  beforeAll(() => {
+    app = createApp().listen(0);
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  describe('GET /providers/config-status', () => {
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     it('should return hasCustomConfig: false when no custom config exists', async () => {
@@ -62,15 +77,24 @@ describe('Providers Routes', () => {
         data: { hasCustomConfig: true },
       });
     });
+
+    it('should return standardized 500 errors when config status loading fails', async () => {
+      mockedGetAvailableProviders.mockImplementation(() => {
+        throw new Error('config unavailable');
+      });
+
+      const response = await request(app).get('/api/providers/config-status');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load provider config status' });
+    });
   });
 
   describe('POST /providers/test', () => {
-    let app: ReturnType<typeof createApp>;
     let mockProvider: ApiProvider;
 
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
 
       // Setup mock provider
       mockProvider = {
@@ -408,11 +432,8 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/http-generator validation', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     it('should return 400 for empty body', async () => {
@@ -443,11 +464,8 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/test-session validation', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     it('should return 400 for empty body', async () => {
@@ -512,14 +530,22 @@ describe('Providers Routes', () => {
 
       expect(response.status).toBe(200);
     });
+
+    it('should return standardized 500 errors when session provider loading fails', async () => {
+      mockedLoadApiProvider.mockRejectedValue(new Error('provider unavailable'));
+
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({ provider: { id: 'http://example.com/api' } });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to test session' });
+    });
   });
 
   describe('POST /providers/discover validation', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     it('should return 400 for empty body (missing id)', async () => {

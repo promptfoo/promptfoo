@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { ProviderOptionsSchema } from '../../validators/providers';
 
+const OpenObjectSchema = z.record(z.string(), z.unknown());
+
 // Refined ProviderOptionsSchema that requires id as a non-empty string at runtime.
 // The base ProviderOptionsSchema uses z.custom<ProviderId>().optional() which provides
 // no runtime type checking. Routes that require id use this stricter version.
@@ -16,7 +18,50 @@ export const TestProviderRequestSchema = z.object({
   providerOptions: ProviderOptionsWithIdSchema,
 });
 
+const ProviderTransformResultSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    result: z.unknown(),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+    result: z.unknown().optional(),
+  }),
+]);
+
+export const ConfigStatusResponseSchema = z.union([
+  z.object({
+    success: z.literal(true),
+    data: z.object({
+      hasCustomConfig: z.boolean(),
+    }),
+  }),
+  z.object({
+    success: z.literal(false),
+    error: z.string(),
+  }),
+]);
+
+export const TestProviderResponseSchema = z
+  .object({
+    testResult: z
+      .object({
+        success: z.boolean(),
+        message: z.string(),
+        error: z.string().optional(),
+        changes_needed: z.boolean().optional(),
+        changes_needed_reason: z.string().optional(),
+        changes_needed_suggestions: z.array(z.string()).optional(),
+      })
+      .passthrough(),
+    providerResponse: z.unknown().optional(),
+    transformedRequest: z.unknown().optional(),
+  })
+  .passthrough();
+
 export type TestProviderRequest = z.infer<typeof TestProviderRequestSchema>;
+export type TestProviderResponse = z.infer<typeof TestProviderResponseSchema>;
 
 // POST /api/providers/test-request-transform
 
@@ -46,6 +91,9 @@ export const HttpGeneratorRequestSchema = z.object({
   responseExample: z.string().optional(),
 });
 
+export const DiscoverResponseSchema = OpenObjectSchema;
+export const HttpGeneratorResponseSchema = z.unknown();
+
 export type HttpGeneratorRequest = z.infer<typeof HttpGeneratorRequestSchema>;
 
 // POST /api/providers/test-session
@@ -62,14 +110,37 @@ export const TestSessionRequestSchema = z.object({
   mainInputVariable: z.string().optional(),
 });
 
+export const TestRequestTransformResponseSchema = ProviderTransformResultSchema;
+export const TestResponseTransformResponseSchema = ProviderTransformResultSchema;
+export const TestSessionResponseSchema = z
+  .object({
+    success: z.boolean(),
+    message: z.string().optional(),
+    error: z.string().optional(),
+  })
+  .passthrough();
+
 export type TestSessionRequest = z.infer<typeof TestSessionRequestSchema>;
+export type ConfigStatusResponse = z.infer<typeof ConfigStatusResponseSchema>;
+export type DiscoverResponse = z.infer<typeof DiscoverResponseSchema>;
+export type HttpGeneratorResponse = z.infer<typeof HttpGeneratorResponseSchema>;
+export type TestRequestTransformResponse = z.infer<typeof TestRequestTransformResponseSchema>;
+export type TestResponseTransformResponse = z.infer<typeof TestResponseTransformResponseSchema>;
+export type TestSessionResponse = z.infer<typeof TestSessionResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const ProviderSchemas = {
-  Test: { Request: TestProviderRequestSchema },
-  Discover: { Request: ProviderOptionsWithIdSchema },
-  HttpGenerator: { Request: HttpGeneratorRequestSchema },
-  TestRequestTransform: { Request: TestRequestTransformSchema },
-  TestResponseTransform: { Request: TestResponseTransformSchema },
-  TestSession: { Request: TestSessionRequestSchema },
+  ConfigStatus: { Response: ConfigStatusResponseSchema },
+  Test: { Request: TestProviderRequestSchema, Response: TestProviderResponseSchema },
+  Discover: { Request: ProviderOptionsWithIdSchema, Response: DiscoverResponseSchema },
+  HttpGenerator: { Request: HttpGeneratorRequestSchema, Response: HttpGeneratorResponseSchema },
+  TestRequestTransform: {
+    Request: TestRequestTransformSchema,
+    Response: TestRequestTransformResponseSchema,
+  },
+  TestResponseTransform: {
+    Request: TestResponseTransformSchema,
+    Response: TestResponseTransformResponseSchema,
+  },
+  TestSession: { Request: TestSessionRequestSchema, Response: TestSessionResponseSchema },
 } as const;
