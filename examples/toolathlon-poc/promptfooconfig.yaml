@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Toolathlon-style agentic reconciliation PoC
+
+prompts:
+  - |
+    Reconcile our orders and customers in /workspace. Anyone who has placed an order but isn't in our customer list should be added to customers.csv (use the email as both name and email if we don't have anything else, and today's date for joined_at in YYYY-MM-DD form). Then mark all `pending` orders for known customers as `confirmed` in the sqlite database. When you're done, write a `summary.json` at /workspace/summary.json with `{"added_customers": int, "confirmed_orders": int}`.
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    label: claude-agent-sdk-toolathlon-poc
+    config:
+      apiKeyRequired: false
+      model: claude-sonnet-4-5
+      max_turns: 20
+      working_dir: '{{env.PROMPTFOO_TOOLATHLON_WORKSPACE}}'
+      permission_mode: bypassPermissions
+      allow_dangerously_skip_permissions: true
+      allow_all_tools: true
+      mcp:
+        servers:
+          - name: filesystem
+            command: npx
+            args:
+              - -y
+              - '@modelcontextprotocol/server-filesystem'
+              - '{{env.PROMPTFOO_TOOLATHLON_WORKSPACE}}'
+          - name: sqlite
+            command: uvx
+            args:
+              - mcp-server-sqlite
+              - --db-path
+              - '{{env.PROMPTFOO_TOOLATHLON_DB}}'
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://grade.py
+      threshold: 1
+
+scenarios: []
+
+tests:
+  - description: reconcile-orders
+    vars: {}
+
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      acceptFormats:
+        - json
