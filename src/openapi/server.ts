@@ -24,6 +24,7 @@ import { VersionSchemas } from '../types/api/version';
 extendZodWithOpenApi(z);
 
 const APPLICATION_JSON = 'application/json';
+const TEXT_CSV = 'text/csv';
 const SERVER_OPENAPI_VERSION = '3.1.0';
 
 const OpenApiLooseObjectSchema = z.record(z.string(), z.unknown());
@@ -63,6 +64,11 @@ const OpenApiTestSessionRequestSchema = z.object({
     .optional(),
   mainInputVariable: z.string().optional(),
 });
+
+const OpenApiEvalTableJsonResponseSchema = z.union([
+  EvalSchemas.Table.Response,
+  EvalSchemas.Table.JsonExportResponse,
+]);
 
 export const SERVER_OPENAPI_ROUTE_COUNT = 67;
 
@@ -114,6 +120,23 @@ export function createServerOpenApiRegistry() {
       content: {
         [APPLICATION_JSON]: {
           schema: schema(name, zodSchema),
+        },
+      },
+    };
+  }
+
+  function evalTableResponse(): ResponseConfig {
+    return {
+      description:
+        'Evaluation table data. `format=json` returns an exported table object and `format=csv` returns CSV.',
+      content: {
+        [APPLICATION_JSON]: {
+          schema: schema('EvalTableJsonResponse', OpenApiEvalTableJsonResponseSchema),
+        },
+        [TEXT_CSV]: {
+          schema: {
+            type: 'string',
+          },
         },
       },
     };
@@ -492,7 +515,7 @@ export function createServerOpenApiRegistry() {
       query: query('EvalTableQuery', EvalSchemas.Table.Query),
     },
     responses: {
-      200: jsonResponse('EvalTableResponse', EvalSchemas.Table.Response),
+      200: evalTableResponse(),
       400: validationError(),
       404: notFound('Evaluation not found'),
       413: errorResponse('Evaluation table is too large'),

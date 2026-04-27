@@ -115,7 +115,7 @@ export const EvalTableResponseSchema = z
   })
   .passthrough();
 
-export const EvalTableJsonExportResponseSchema = z.unknown();
+export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
 
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
