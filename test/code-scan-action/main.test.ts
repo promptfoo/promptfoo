@@ -314,6 +314,18 @@ describe('code-scan-action main', () => {
   describe('fork PR controls', () => {
     it('should skip fork pull_request scans by default before fetching files or starting auth', async () => {
       setPullRequestRepos('external-contributor/test-repo');
+      mocks.core.getInput.mockImplementation((name: string) => {
+        if (name === 'github-token') {
+          return 'fake-token';
+        }
+        if (name === 'min-severity' || name === 'minimum-severity') {
+          return 'medium';
+        }
+        if (name === 'guidance-file') {
+          return '/tmp/missing-guidance.md';
+        }
+        return '';
+      });
 
       await import('../../code-scan-action/src/main');
 
@@ -327,6 +339,7 @@ describe('code-scan-action main', () => {
       expect(mocks.core.getIDToken).not.toHaveBeenCalled();
       expect(mocks.config.generateConfigFile).not.toHaveBeenCalled();
       expect(mocks.exec.exec).not.toHaveBeenCalled();
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
 
     it('should scan fork pull_request events when enable-fork-prs is true', async () => {

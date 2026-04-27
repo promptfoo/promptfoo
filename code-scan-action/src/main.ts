@@ -458,12 +458,6 @@ function cleanupConfig(configPath: string, finalConfigPath: string): void {
 
 async function runCodeScan(): Promise<void> {
   const inputs = getActionInputs();
-  const guidance = loadGuidance(inputs);
-
-  core.info('🔍 Starting Promptfoo Code Scan...');
-
-  const context = await getGitHubContext(inputs.githubToken);
-  core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
 
   if (shouldSkipForkPullRequest(inputs.enableForkPrs)) {
     core.info('🔀 Fork PR detected and enable-fork-prs is false; skipping Promptfoo Code Scan');
@@ -472,6 +466,13 @@ async function runCodeScan(): Promise<void> {
     );
     return;
   }
+
+  const guidance = loadGuidance(inputs);
+
+  core.info('🔍 Starting Promptfoo Code Scan...');
+
+  const context = await getGitHubContext(inputs.githubToken);
+  core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
 
   core.info('🔎 Checking if this is a setup PR...');
   const files = await getPRFiles(inputs.githubToken, context);
