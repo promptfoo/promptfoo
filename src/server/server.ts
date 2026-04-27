@@ -9,6 +9,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 import express from 'express';
+import { MemoryStore, rateLimit } from 'express-rate-limit';
 import { Server as SocketIOServer } from 'socket.io';
 import { z } from 'zod';
 import { getDefaultPort, VERSION } from '../constants';
@@ -55,6 +56,23 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs', '.cjs']);
 
 // Express middleware limits
 const REQUEST_SIZE_LIMIT = '100mb';
+export const SHARE_RATE_LIMIT_MAX_REQUESTS = 30;
+const SHARE_RATE_LIMIT_WINDOW_MS = 60_000;
+const SHARE_RATE_LIMIT_MESSAGE = 'Too many share requests. Please try again later.';
+
+const shareRateLimitStore = new MemoryStore();
+const shareRateLimiter = rateLimit({
+  windowMs: SHARE_RATE_LIMIT_WINDOW_MS,
+  limit: SHARE_RATE_LIMIT_MAX_REQUESTS,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: SHARE_RATE_LIMIT_MESSAGE },
+  store: shareRateLimitStore,
+});
+
+export async function resetShareRateLimitForTesting(): Promise<void> {
+  await shareRateLimitStore.resetAll();
+}
 
 /**
  * Middleware to set proper MIME types for JavaScript files.
@@ -245,37 +263,41 @@ export function createApp() {
     res.json(ServerSchemas.ShareCheckDomain.Response.parse({ domain, isCloudEnabled }));
   });
 
-  app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
-    const bodyResult = ServerSchemas.Share.Request.safeParse(req.body);
-    if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
-      return;
-    }
-    const { id } = bodyResult.data;
-    logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
+  app.post(
+    '/api/results/share',
+    shareRateLimiter,
+    async (req: Request, res: Response): Promise<void> => {
+      const bodyResult = ServerSchemas.Share.Request.safeParse(req.body);
+      if (!bodyResult.success) {
+        res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+        return;
+      }
+      const { id } = bodyResult.data;
+      logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
 
-    const result = await readResult(id);
-    if (!result) {
-      logger.warn('Result not found for share request', { id });
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-    const eval_ = await Eval.findById(id);
-    if (!eval_) {
-      logger.warn('Eval not found for share request', { id });
-      res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
+      const result = await readResult(id);
+      if (!result) {
+        logger.warn('Result not found for share request', { id });
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
+      const eval_ = await Eval.findById(id);
+      if (!eval_) {
+        logger.warn('Eval not found for share request', { id });
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
 
-    try {
-      const url = await createShareableUrl(eval_, { showAuth: true });
-      logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url || '') });
-      res.json(ServerSchemas.Share.Response.parse({ url }));
-    } catch (error) {
-      logger.error('Failed to generate share URL for eval', { error, id });
-      res.status(500).json({ error: 'Failed to generate share URL' });
-    }
-  });
+      try {
+        const url = await createShareableUrl(eval_, { showAuth: true });
+        logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url || '') });
+        res.json(ServerSchemas.Share.Response.parse({ url }));
+      } catch (error) {
+        logger.error('Failed to generate share URL for eval', { error, id });
+        res.status(500).json({ error: 'Failed to generate share URL' });
+      }
+    },
+  );
 
   app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ServerSchemas.DatasetGenerate.Request.safeParse(req.body);

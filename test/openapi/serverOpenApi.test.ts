@@ -84,6 +84,7 @@ describe('server OpenAPI generation', () => {
     const getBlobOperation = paths['/api/blobs/{hash}']?.get as any;
     const listBlobLibraryOperation = paths['/api/blobs/library']?.get as any;
     const modelAuditScanOperation = paths['/api/model-audit/scan']?.post as any;
+    const shareResultOperation = paths['/api/results/share']?.post as any;
     const userEmailStatusOperation = paths['/api/user/email/status']?.get as any;
     const includeProvidersParam = paths['/api/results']?.get?.parameters?.find(
       (param: any) => param.name === 'includeProviders',
@@ -120,6 +121,9 @@ describe('server OpenAPI generation', () => {
           Location: expect.objectContaining({ description: 'Redirect target URL' }),
         }),
       }),
+    );
+    expect(shareResultOperation?.responses['429']).toEqual(
+      expect.objectContaining({ description: 'Rate limit exceeded' }),
     );
     expect(includeProvidersParam?.schema).toEqual({
       oneOf: [{ type: 'boolean' }, { type: 'string' }],
