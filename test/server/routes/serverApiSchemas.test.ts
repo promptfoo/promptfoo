@@ -1,7 +1,5 @@
-import type { Server } from 'node:http';
-
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 vi.mock('../../../src/globalConfig/cloud', () => ({
@@ -84,22 +82,10 @@ const mockedGetTestCases = vi.mocked(getTestCases);
 const mockedReadResult = vi.mocked(readResult);
 
 describe('inline server API DTO validation', () => {
-  let server: Server;
+  let app: ReturnType<typeof createApp>;
 
-  beforeAll(() => {
-    server = createApp().listen(0);
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      });
-    });
+  beforeEach(() => {
+    app = createApp();
   });
 
   afterEach(() => {
@@ -110,7 +96,7 @@ describe('inline server API DTO validation', () => {
     mockedGetRemoteHealthUrl.mockReturnValue('https://api.example.test/health');
     mockedCheckRemoteHealth.mockResolvedValue({ status: 'OK', message: 'healthy' });
 
-    const response = await request(server).get('/api/remote-health');
+    const response = await request(app).get('/api/remote-health');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: 'OK', message: 'healthy' });
@@ -119,7 +105,7 @@ describe('inline server API DTO validation', () => {
   it('returns the disabled remote health DTO when remote generation is disabled', async () => {
     mockedGetRemoteHealthUrl.mockReturnValue(null);
 
-    const response = await request(server).get('/api/remote-health');
+    const response = await request(app).get('/api/remote-health');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -140,7 +126,7 @@ describe('inline server API DTO validation', () => {
       } as never,
     ]);
 
-    const response = await request(server).get('/api/results?type=redteam&includeProviders=true');
+    const response = await request(app).get('/api/results?type=redteam&includeProviders=true');
 
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
@@ -148,7 +134,7 @@ describe('inline server API DTO validation', () => {
   });
 
   it('rejects invalid /api/results query params', async () => {
-    const response = await request(server).get('/api/results?type=sideways');
+    const response = await request(app).get('/api/results?type=sideways');
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('type');
@@ -158,7 +144,7 @@ describe('inline server API DTO validation', () => {
   it('returns JSON error DTOs for missing result files', async () => {
     mockedReadResult.mockResolvedValue(undefined);
 
-    const response = await request(server).get('/api/results/missing-eval');
+    const response = await request(app).get('/api/results/missing-eval');
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: 'Result not found' });
@@ -168,7 +154,7 @@ describe('inline server API DTO validation', () => {
     const hash = 'a'.repeat(64);
     mockedGetPromptsForTestCasesHash.mockResolvedValue([{ raw: 'hello', label: 'hello' }] as never);
 
-    const response = await request(server).get(`/api/prompts/${hash}`);
+    const response = await request(app).get(`/api/prompts/${hash}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ data: [{ raw: 'hello', label: 'hello' }] });
@@ -176,7 +162,7 @@ describe('inline server API DTO validation', () => {
   });
 
   it('rejects invalid prompt hash params', async () => {
-    const response = await request(server).get('/api/prompts/not-a-sha');
+    const response = await request(app).get('/api/prompts/not-a-sha');
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('sha256hash');
@@ -185,7 +171,7 @@ describe('inline server API DTO validation', () => {
   it('validates history query params and returns history DTOs', async () => {
     mockedGetStandaloneEvals.mockResolvedValue([{ id: 'eval-1' }] as never);
 
-    const response = await request(server).get('/api/history?tagName=env&tagValue=prod');
+    const response = await request(app).get('/api/history?tagName=env&tagValue=prod');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ data: [{ id: 'eval-1' }] });
@@ -199,8 +185,8 @@ describe('inline server API DTO validation', () => {
     mockedGetPrompts.mockResolvedValue([{ raw: 'p', label: 'p' }] as never);
     mockedGetTestCases.mockResolvedValue([{ vars: { q: 'hello' } }] as never);
 
-    const prompts = await request(server).get('/api/prompts');
-    const datasets = await request(server).get('/api/datasets');
+    const prompts = await request(app).get('/api/prompts');
+    const datasets = await request(app).get('/api/datasets');
 
     expect(prompts.status).toBe(200);
     expect(prompts.body).toEqual({ data: [{ raw: 'p', label: 'p' }] });
@@ -209,7 +195,7 @@ describe('inline server API DTO validation', () => {
   });
 
   it('validates share-domain query params', async () => {
-    const response = await request(server).get('/api/results/share/check-domain');
+    const response = await request(app).get('/api/results/share/check-domain');
 
     expect(response.status).toBe(400);
     expect(response.body.error).toContain('id');
@@ -221,7 +207,7 @@ describe('inline server API DTO validation', () => {
     mockedDetermineShareDomain.mockReturnValue({ domain: 'https://app.promptfoo.dev' } as never);
     mockedCloudConfig.isEnabled.mockReturnValue(true);
 
-    const response = await request(server).get('/api/results/share/check-domain?id=eval-1');
+    const response = await request(app).get('/api/results/share/check-domain?id=eval-1');
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -235,8 +221,8 @@ describe('inline server API DTO validation', () => {
     mockedEval.findById.mockResolvedValue({ id: 'eval-1' } as never);
     mockedCreateShareableUrl.mockResolvedValue('https://share.example/eval-1');
 
-    const invalid = await request(server).post('/api/results/share').send({});
-    const valid = await request(server).post('/api/results/share').send({ id: 'eval-1' });
+    const invalid = await request(app).post('/api/results/share').send({});
+    const valid = await request(app).post('/api/results/share').send({ id: 'eval-1' });
 
     expect(invalid.status).toBe(400);
     expect(invalid.body.error).toContain('id');
@@ -247,8 +233,8 @@ describe('inline server API DTO validation', () => {
   it('validates dataset generation request bodies', async () => {
     mockedSynthesizeFromTestSuite.mockResolvedValue([{ vars: { q: 'generated' } }] as never);
 
-    const invalid = await request(server).post('/api/dataset/generate').send({ prompts: [] });
-    const valid = await request(server)
+    const invalid = await request(app).post('/api/dataset/generate').send({ prompts: [] });
+    const valid = await request(app)
       .post('/api/dataset/generate')
       .send({ prompts: ['Prompt'], tests: [{ vars: { q: 'seed' } }] });
 
@@ -261,8 +247,8 @@ describe('inline server API DTO validation', () => {
   it('validates telemetry request bodies and parses success DTOs', async () => {
     mockedTelemetry.record = vi.fn().mockResolvedValue(undefined);
 
-    const invalid = await request(server).post('/api/telemetry').send({ event: 'not-real' });
-    const valid = await request(server)
+    const invalid = await request(app).post('/api/telemetry').send({ event: 'not-real' });
+    const valid = await request(app)
       .post('/api/telemetry')
       .send({ event: 'webui_api', properties: { route: '/api/results' } });
 

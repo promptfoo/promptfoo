@@ -2,10 +2,9 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { Server } from 'node:http';
 
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 import { asMockChildProcess, createMockChildProcess } from '../../util/mockChildProcess';
 
@@ -34,19 +33,10 @@ const mockedCheckModelAuditInstalled = vi.mocked(checkModelAuditInstalled);
 const mockedSpawn = vi.mocked(spawn);
 
 describe('Model Audit Routes', () => {
-  let app: Server;
-
-  beforeAll(() => {
-    app = createApp().listen(0);
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      app.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
+    app = createApp();
     // Reset mock implementations to ensure test isolation when tests run in random order.
     // vi.clearAllMocks() only clears call history, not mockResolvedValue/mockReturnValue.
     mockedCheckModelAuditInstalled.mockReset();
@@ -439,20 +429,14 @@ describe('Model Audit Routes', () => {
 });
 
 describe('Model Audit Routes - DB-backed', () => {
-  let app: Server;
+  let app: ReturnType<typeof createApp>;
 
   beforeAll(async () => {
     await runDbMigrations();
-    app = createApp().listen(0);
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      app.close((error) => (error ? reject(error) : resolve()));
-    });
   });
 
   beforeEach(async () => {
+    app = createApp();
     mockedCheckModelAuditInstalled.mockReset();
     mockedSpawn.mockReset();
     // Clean up model_audits table
