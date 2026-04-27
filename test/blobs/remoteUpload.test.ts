@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from '../../src/blobs/remoteUpload';
 import { getEnvBool } from '../../src/envars';
 import { isLoggedIntoCloud } from '../../src/globalConfig/accounts';
@@ -46,6 +46,10 @@ describe('remote blob upload', () => {
         },
       }),
     } as Response);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   it('attempts remote upload when sharing is enabled and Cloud auth is configured', () => {
