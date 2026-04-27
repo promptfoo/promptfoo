@@ -50,6 +50,8 @@ describe('remote blob upload', () => {
 
   it('attempts remote upload when sharing is enabled and Cloud auth is configured', () => {
     expect(shouldAttemptRemoteBlobUpload()).toBe(true);
+    expect(cloudConfig.getApiHost).toHaveBeenCalledTimes(1);
+    expect(cloudConfig.getApiKey).toHaveBeenCalledTimes(1);
   });
 
   it('does not attempt remote upload when PROMPTFOO_DISABLE_SHARING is set', async () => {
@@ -86,5 +88,7 @@ describe('remote blob upload', () => {
         }),
       }),
     );
+    expect(cloudConfig.getApiHost).toHaveBeenCalledTimes(1);
+    expect(cloudConfig.getApiKey).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,7 +5,12 @@ import logger from '../logger';
 
 import type { BlobStoreResult } from './types';
 
-function buildRemoteUrl(): string | null {
+interface RemoteBlobUploadTarget {
+  url: string;
+  apiKey: string;
+}
+
+function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     return null;
   }
@@ -19,7 +24,7 @@ function buildRemoteUrl(): string | null {
 
   try {
     const url = new URL('/api/blobs', baseUrl);
-    return url.toString();
+    return { url: url.toString(), apiKey };
   } catch (error) {
     logger.debug('[RemoteBlob] Invalid remote blob URL', {
       error: error instanceof Error ? error.message : String(error),
@@ -30,7 +35,7 @@ function buildRemoteUrl(): string | null {
 }
 
 export function shouldAttemptRemoteBlobUpload(): boolean {
-  return buildRemoteUrl() !== null;
+  return buildRemoteUploadTarget() !== null;
 }
 
 export async function uploadBlobRemote(
@@ -44,23 +49,18 @@ export async function uploadBlobRemote(
     kind?: string;
   },
 ): Promise<BlobStoreResult | null> {
-  const url = buildRemoteUrl();
-  if (!url) {
-    return null;
-  }
-
-  const apiKey = cloudConfig.getApiKey();
-  if (!apiKey) {
+  const target = buildRemoteUploadTarget();
+  if (!target) {
     return null;
   }
 
   try {
     const { fetchWithProxy } = await import('../util/fetch');
-    const response = await fetchWithProxy(url, {
+    const response = await fetchWithProxy(target.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${target.apiKey}`,
       },
       body: JSON.stringify({
         data: buffer.toString('base64'),
