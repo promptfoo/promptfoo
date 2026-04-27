@@ -122,9 +122,7 @@ describe('server OpenAPI generation', () => {
         }),
       }),
     );
-    expect(shareResultOperation?.responses['429']).toEqual(
-      expect.objectContaining({ description: 'Rate limit exceeded' }),
-    );
+    expect(shareResultOperation?.responses['429']).toBeUndefined();
     expect(includeProvidersParam?.schema).toEqual({
       oneOf: [{ type: 'boolean' }, { type: 'string' }],
     });
