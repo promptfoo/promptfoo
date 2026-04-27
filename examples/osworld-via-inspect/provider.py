@@ -1,0 +1,342 @@
+"""Promptfoo provider that orchestrates inspect_evals' OSWorld task.
+
+This is intentionally wrapper-shaped: Inspect owns the computer-use agent loop,
+Docker sandbox, screenshots, tool calls, and OSWorld scorer. Promptfoo starts one
+Inspect eval, dumps the Inspect `.eval` log to JSON, and exposes the final score.
+
+Observed `inspect log dump` shape with Inspect 0.3.213:
+  data["results"]["scores"][0]["metrics"]["accuracy"]["value"] -> aggregate pass rate
+  data["samples"][0]["scores"][<scorer_name>]["value"] -> per-sample score
+  data["samples"][0]["output"]["completion"] -> final assistant text when present
+  data["stats"]["model_usage"][<model>] -> token counts
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+DEFAULT_MODEL = "anthropic/claude-sonnet-4-5"
+DEFAULT_TIMEOUT_SECONDS = 1800
+DEFAULT_TASK = "inspect_evals/osworld_small"
+
+
+def call_api(prompt: str, options: dict, context: dict) -> dict:
+    """Run one OSWorld sample through inspect_evals and return Promptfoo output."""
+    del prompt
+    config = options.get("config") or {}
+    vars_ = context.get("vars") or {}
+    app = vars_.get("app")
+    if not app:
+        return {"error": "OSWorld app is required. Set vars.app, for example 'libreoffice_calc'."}
+
+    model = vars_.get("model") or config.get("defaultModel") or DEFAULT_MODEL
+    timeout_seconds = _int_config(config.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS)
+    base_path = Path(config.get("basePath") or Path(__file__).resolve().parent)
+    log_root = Path(config.get("logRoot") or base_path / "inspect_logs")
+    log_dir = _new_log_dir(log_root, str(app))
+    inspect_cmd = _inspect_command(config)
+
+    task_index = vars_.get("task_index")
+    try:
+        limit = _limit_for_task_index(task_index)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    task = config.get("task") or DEFAULT_TASK
+
+    eval_cmd = [
+        *inspect_cmd,
+        "eval",
+        task,
+        "--model",
+        str(model),
+        "--limit",
+        limit,
+        "-T",
+        f"include_apps={app}",
+        "--log-dir",
+        str(log_dir),
+    ]
+
+    started = time.monotonic()
+    try:
+        eval_result = subprocess.run(
+            eval_cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            cwd=str(base_path),
+        )
+    except FileNotFoundError:
+        return {"error": _missing_inspect_message(inspect_cmd[0])}
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "error": (
+                f"Inspect OSWorld run timed out after {timeout_seconds}s. "
+                "Increase providers[0].config.timeoutSeconds for real runs."
+            ),
+            "metadata": {
+                "inspect_log_path": str(log_dir),
+                "status": "error",
+                "duration_seconds": round(time.monotonic() - started, 3),
+                "stdout_tail": _tail(exc.stdout),
+                "stderr_tail": _tail(exc.stderr),
+            },
+        }
+
+    duration = time.monotonic() - started
+    if eval_result.returncode != 0:
+        return {
+            "error": _humanize_inspect_failure(eval_result, eval_cmd),
+            "metadata": {
+                "inspect_log_path": str(log_dir),
+                "status": "error",
+                "duration_seconds": round(duration, 3),
+                "stdout_tail": _tail(eval_result.stdout),
+                "stderr_tail": _tail(eval_result.stderr),
+            },
+        }
+
+    eval_log = _find_eval_log(log_dir)
+    if eval_log is None:
+        return {
+            "error": f"Inspect completed but no .eval log was found in {log_dir}.",
+            "metadata": {"inspect_log_path": str(log_dir), "status": "error"},
+        }
+
+    dump_cmd = [*inspect_cmd, "log", "dump", str(eval_log)]
+    try:
+        dump_result = subprocess.run(
+            dump_cmd,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=str(base_path),
+        )
+    except FileNotFoundError:
+        return {"error": _missing_inspect_message(inspect_cmd[0])}
+    except subprocess.TimeoutExpired:
+        return {
+            "error": f"Timed out while dumping Inspect log {eval_log} to JSON.",
+            "metadata": {"inspect_log_path": str(eval_log), "status": "error"},
+        }
+
+    if dump_result.returncode != 0:
+        return {
+            "error": _humanize_log_dump_failure(dump_result, eval_log),
+            "metadata": {"inspect_log_path": str(eval_log), "status": "error"},
+        }
+
+    try:
+        log_json = json.loads(dump_result.stdout)
+    except json.JSONDecodeError as exc:
+        return {
+            "error": f"Could not parse Inspect log dump JSON for {eval_log}: {exc}",
+            "metadata": {"inspect_log_path": str(eval_log), "status": "error"},
+        }
+
+    parsed = _parse_inspect_log(log_json)
+    score = parsed.get("score")
+    status = "pass" if isinstance(score, (int, float)) and score >= 1.0 else "fail"
+    sample_id = parsed.get("sample_id") or "unknown sample"
+    final_answer = parsed.get("final_answer") or "(no final assistant text found in Inspect log)"
+    output = (
+        f"Sample {sample_id} on app {app}: score={score if score is not None else 'unknown'} "
+        f"status={status}\n\nFinal answer: {final_answer}"
+    )
+
+    metadata = {
+        "inspect_log_path": str(eval_log),
+        "score": score,
+        "status": status,
+        "sample_id": sample_id,
+        "model": str(model),
+        "num_messages": parsed.get("num_messages", 0),
+        "duration_seconds": round(duration, 3),
+        "task": task,
+        "app": str(app),
+    }
+
+    result: dict[str, Any] = {"output": output, "metadata": metadata}
+    token_usage = parsed.get("token_usage")
+    if token_usage:
+        result["tokenUsage"] = token_usage
+    return result
+
+
+def _inspect_command(config: dict) -> list[str]:
+    env_command = os.environ.get("PROMPTFOO_OSWORLD_INSPECT_COMMAND")
+    command = config.get("inspectCommand") or env_command or "inspect"
+    if isinstance(command, list):
+        return [str(part) for part in command]
+    return shlex.split(str(command))
+
+
+def _new_log_dir(log_root: Path, app: str) -> Path:
+    safe_app = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in app)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = log_root / f"{stamp}-{safe_app}-{os.getpid()}"
+    path.mkdir(parents=True, exist_ok=False)
+    return path
+
+
+def _limit_for_task_index(task_index: Any) -> str:
+    if task_index in (None, ""):
+        return "1"
+    try:
+        index = int(task_index)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("task_index must be an integer starting at 0") from exc
+    if index < 0:
+        raise ValueError("task_index must be >= 0")
+    one_based = index + 1
+    return f"{one_based}-{one_based}"
+
+
+def _find_eval_log(log_dir: Path) -> Path | None:
+    logs = sorted(log_dir.glob("*.eval"), key=lambda path: path.stat().st_mtime, reverse=True)
+    return logs[0] if logs else None
+
+
+def _parse_inspect_log(data: dict[str, Any]) -> dict[str, Any]:
+    samples = data.get("samples") or []
+    sample = samples[0] if samples else {}
+    score = _sample_score(sample) if sample else _aggregate_score(data)
+    return {
+        "score": score,
+        "sample_id": sample.get("id") or sample.get("uuid"),
+        "final_answer": _final_answer(sample),
+        "num_messages": len(sample.get("messages") or []),
+        "token_usage": _token_usage(data, sample),
+    }
+
+
+def _sample_score(sample: dict[str, Any]) -> float | None:
+    scores = sample.get("scores") or {}
+    for score in scores.values():
+        if not isinstance(score, dict):
+            continue
+        value = score.get("value")
+        numeric = _coerce_score(value)
+        if numeric is not None:
+            return numeric
+    return None
+
+
+def _aggregate_score(data: dict[str, Any]) -> float | None:
+    for score in (data.get("results") or {}).get("scores") or []:
+        metrics = score.get("metrics") or {}
+        accuracy = metrics.get("accuracy") or {}
+        numeric = _coerce_score(accuracy.get("value"))
+        if numeric is not None:
+            return numeric
+    return None
+
+
+def _coerce_score(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        normalized = value.strip().upper()
+        if normalized == "C":
+            return 1.0
+        if normalized == "I":
+            return 0.0
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _final_answer(sample: dict[str, Any]) -> str | None:
+    output = sample.get("output") or {}
+    completion = output.get("completion")
+    if isinstance(completion, str) and completion.strip():
+        return completion.strip()
+
+    for message in reversed(sample.get("messages") or []):
+        if message.get("role") == "assistant":
+            content = message.get("content")
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+    return None
+
+
+def _token_usage(data: dict[str, Any], sample: dict[str, Any]) -> dict[str, int] | None:
+    usage_sources = [sample.get("model_usage"), (data.get("stats") or {}).get("model_usage")]
+    totals = {"prompt": 0, "completion": 0, "total": 0}
+    found = False
+    for usage_by_model in usage_sources:
+        if not isinstance(usage_by_model, dict):
+            continue
+        for usage in usage_by_model.values():
+            if not isinstance(usage, dict):
+                continue
+            totals["prompt"] += int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+            totals["completion"] += int(
+                usage.get("output_tokens") or usage.get("completion_tokens") or 0
+            )
+            totals["total"] += int(usage.get("total_tokens") or 0)
+            found = True
+        if found:
+            break
+    if found and totals["total"] == 0:
+        totals["total"] = totals["prompt"] + totals["completion"]
+    return totals if found else None
+
+
+def _int_config(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _missing_inspect_message(command: str) -> str:
+    if shutil.which(command) is None:
+        return (
+            f"Could not find Inspect CLI command '{command}'. Install prerequisites with "
+            "`pip install inspect-evals[osworld]` or set providers[0].config.inspectCommand."
+        )
+    return f"Could not execute Inspect CLI command '{command}'."
+
+
+def _humanize_inspect_failure(result: subprocess.CompletedProcess, cmd: list[str]) -> str:
+    tail = _tail(result.stderr) or _tail(result.stdout) or "(no output)"
+    hint = ""
+    lowered = tail.lower()
+    if "docker" in lowered:
+        hint = " Check that Docker is installed, running, and usable by your user."
+    elif "api_key" in lowered or "api key" in lowered or "authentication" in lowered:
+        hint = " Check that the selected model provider API key is exported."
+    elif "model" in lowered:
+        hint = " Check providers[0].config.defaultModel or vars.model."
+    return f"Inspect eval failed with exit code {result.returncode}.{hint}\nCommand: {_redact(cmd)}\n{tail}"
+
+
+def _humanize_log_dump_failure(result: subprocess.CompletedProcess, eval_log: Path) -> str:
+    tail = _tail(result.stderr) or _tail(result.stdout) or "(no output)"
+    return f"Inspect log dump failed for {eval_log} with exit code {result.returncode}.\n{tail}"
+
+
+def _tail(text: Any, limit: int = 4000) -> str:
+    if not text:
+        return ""
+    text = text.decode(errors="replace") if isinstance(text, bytes) else str(text)
+    return text[-limit:]
+
+
+def _redact(cmd: list[str]) -> str:
+    return " ".join(shlex.quote(part) for part in cmd)

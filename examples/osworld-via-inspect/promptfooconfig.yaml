@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OSWorld via inspect_evals wrapper PoC
+prompts:
+  - 'Run OSWorld sample on app {{app}}'
+providers:
+  - id: file://provider.py
+    label: OSWorld (inspect wrapper)
+    config:
+      defaultModel: anthropic/claude-sonnet-4-5
+      timeoutSeconds: 1800
+tests:
+  - description: libreoffice_calc — first supported sample
+    vars:
+      app: libreoffice_calc
+    assert:
+      - type: python
+        value: file://assertion.py
+
+  # Uncomment to run another expensive OSWorld sample. Each sample can take
+  # 5-15 minutes, build an ~8GB Docker image on first use, and consume
+  # non-trivial model tokens.
+  # - description: vs_code — first supported sample
+  #   vars:
+  #     app: vs_code
+  #   assert:
+  #     - type: python
+  #       value: file://assertion.py
