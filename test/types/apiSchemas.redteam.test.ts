@@ -75,11 +75,26 @@ describe('API schema red-team coverage', () => {
           tests: [{ vars: { q: 'seed' } }],
         }).success,
       ).toBe(true);
+      expect(
+        ServerSchemas.DatasetGenerate.Request.safeParse({
+          prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+          tests: [{ vars: { q: 'seed' } }],
+        }).success,
+      ).toBe(true);
       expect(ServerSchemas.DatasetGenerate.Request.safeParse({ prompts: ['Prompt'] }).success).toBe(
         false,
       );
       expect(
         ServerSchemas.DatasetGenerate.Request.safeParse({ prompts: 'Prompt', tests: [] }).success,
+      ).toBe(false);
+      expect(
+        ServerSchemas.DatasetGenerate.Request.safeParse({ prompts: [null], tests: [] }).success,
+      ).toBe(false);
+      expect(
+        ServerSchemas.DatasetGenerate.Request.safeParse({
+          prompts: ['Prompt'],
+          tests: [null],
+        }).success,
       ).toBe(false);
     });
 

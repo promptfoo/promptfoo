@@ -285,8 +285,14 @@ export function createApp() {
       res.status(400).json({ error: z.prettifyError(bodyResult.error) });
       return;
     }
+    const prompts = bodyResult.data.prompts.map((prompt): Prompt => {
+      if (typeof prompt === 'string') {
+        return { raw: prompt, label: prompt };
+      }
+      return { ...prompt, label: prompt.label ?? prompt.raw };
+    });
     const testSuite: TestSuite = {
-      prompts: bodyResult.data.prompts as Prompt[],
+      prompts,
       tests: bodyResult.data.tests as TestCase[],
       providers: [],
     };
