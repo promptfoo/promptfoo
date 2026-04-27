@@ -678,7 +678,8 @@
                           "additionalProperties": {}
                         }
                       ]
-                    }
+                    },
+                    "minItems": 1
                   },
                   "tests": {
                     "type": "array",
@@ -691,10 +692,11 @@
                         }
                       },
                       "additionalProperties": {}
-                    }
+                    },
+                    "default": []
                   }
                 },
-                "required": ["prompts", "tests"]
+                "required": ["prompts"]
               }
             }
           }
