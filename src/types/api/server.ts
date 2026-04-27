@@ -4,6 +4,20 @@ import { BooleanQueryParamSchema, JsonObjectSchema } from './common';
 
 const UnknownArraySchema = z.array(z.unknown());
 const DataResponseSchema = z.object({ data: z.unknown() });
+const DatasetGeneratePromptSchema = z.union([
+  z.string(),
+  z
+    .object({
+      raw: z.string(),
+      label: z.string().optional(),
+    })
+    .passthrough(),
+]);
+const DatasetGenerateTestSchema = z
+  .object({
+    vars: JsonObjectSchema.optional(),
+  })
+  .passthrough();
 
 export const HealthResponseSchema = z.object({
   status: z.string(),
@@ -78,8 +92,8 @@ export const ShareResponseSchema = z.object({
 });
 
 export const DatasetGenerateRequestSchema = z.object({
-  prompts: UnknownArraySchema,
-  tests: UnknownArraySchema,
+  prompts: z.array(DatasetGeneratePromptSchema),
+  tests: z.array(DatasetGenerateTestSchema),
 });
 
 export const DatasetGenerateResponseSchema = z.object({
