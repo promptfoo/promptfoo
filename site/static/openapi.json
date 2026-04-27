@@ -616,31 +616,6 @@
               }
             }
           },
-          "429": {
-            "description": "Rate limit exceeded",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "details": {},
-                    "suggestion": {
-                      "type": "string"
-                    },
-                    "success": {
-                      "type": "boolean",
-                      "enum": [false]
-                    }
-                  },
-                  "required": ["error"],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          },
           "500": {
             "description": "Server error",
             "content": {
