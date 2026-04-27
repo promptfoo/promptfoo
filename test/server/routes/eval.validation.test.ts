@@ -1,11 +1,9 @@
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/models/eval');
 vi.mock('../../../src/globalConfig/accounts');
-
-import type { Server } from 'node:http';
 
 import Eval, { EvalQueries } from '../../../src/models/eval';
 // Import after mocking
@@ -15,23 +13,14 @@ const mockedEval = vi.mocked(Eval);
 const mockedEvalQueries = vi.mocked(EvalQueries);
 
 describe('Eval Routes - Zod Validation', () => {
-  let app: Server;
+  let app: ReturnType<typeof createApp>;
   let mockFindById: ReturnType<typeof vi.fn>;
   let mockSave: ReturnType<typeof vi.fn>;
   let mockGetMetadataKeysFromEval: ReturnType<typeof vi.fn>;
   let mockGetMetadataValuesFromEval: ReturnType<typeof vi.fn>;
 
-  beforeAll(() => {
-    app = createApp().listen(0);
-  });
-
-  afterAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      app.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
-
   beforeEach(() => {
+    app = createApp();
     vi.resetAllMocks();
 
     // Setup mock methods
