@@ -27,6 +27,7 @@ import {
   GetScanResponseSchema,
   ListScannersResponseSchema,
   ListScansResponseSchema,
+  ModelAuditSchemas,
 } from '../../../src/types/api/modelAudit';
 
 const mockedCheckModelAuditInstalled = vi.mocked(checkModelAuditInstalled);
@@ -323,6 +324,52 @@ describe('Model Audit Routes', () => {
         );
       } finally {
         createSpy.mockRestore();
+        fs.unlinkSync(testFilePath);
+      }
+    });
+
+    it('should fall back to a 500 response when scan success DTO parsing fails', async () => {
+      mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-response-parse.pkl');
+      fs.writeFileSync(testFilePath, 'test data');
+
+      const mockScanOutput = JSON.stringify({
+        total_checks: 1,
+        passed_checks: 1,
+        failed_checks: 0,
+        files_scanned: 1,
+        bytes_scanned: 9,
+        has_errors: false,
+        issues: [],
+        checks: [],
+      });
+
+      mockedSpawn.mockReturnValue(
+        asMockChildProcess(
+          createMockChildProcess({
+            exitCode: 0,
+            stdoutData: mockScanOutput,
+          }),
+        ),
+      );
+      const parseSpy = vi
+        .spyOn(ModelAuditSchemas.Scan.Response, 'parse')
+        .mockImplementationOnce(() => {
+          throw new Error('bad scan response DTO');
+        });
+
+      try {
+        const response = await request(app)
+          .post('/api/model-audit/scan')
+          .timeout({ deadline: 1000 })
+          .send({ paths: [testFilePath], options: { persist: false } });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toEqual({ error: 'Error processing scan results' });
+        expect(parseSpy).toHaveBeenCalled();
+      } finally {
+        parseSpy.mockRestore();
         fs.unlinkSync(testFilePath);
       }
     });
