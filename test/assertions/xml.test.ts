@@ -1,6 +1,11 @@
 import dedent from 'dedent';
-import { describe, expect, it } from 'vitest';
+import { XMLParser } from 'fast-xml-parser';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { containsXml, validateXml } from '../../src/assertions/xml';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('validateXml', () => {
   it('should validate a simple valid XML string', () => {
@@ -201,6 +206,44 @@ describe('containsXml', () => {
     const input = 'Text <unclosed><root><child>Content</child></root>';
     const result = containsXml(input, ['root.child']);
     expect(result.isValid).toBe(true);
+  });
+
+  it('should ignore pseudo-closing tags inside comments when extracting candidates', () => {
+    const input = '<root><!-- </root> --><child>Content</child></root>';
+
+    expect(containsXml(input, ['root.child'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should ignore pseudo-closing tags inside CDATA when extracting candidates', () => {
+    const input = '<root><![CDATA[</root>]]><child>Content</child></root>';
+
+    expect(containsXml(input, ['root.child'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should satisfy required elements from nested XML inside a valid candidate', () => {
+    const input = 'Text <wrapper><root><child>Content</child></root></wrapper>';
+
+    expect(containsXml(input, ['root.child'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should not parse every nested candidate when required elements are missing', () => {
+    const parseSpy = vi.spyOn(XMLParser.prototype, 'parse');
+    const input = `${'<a>'.repeat(1000)}${'</a>'.repeat(1000)}`;
+
+    expect(containsXml(input, ['a.missing'])).toEqual({
+      isValid: false,
+      reason: 'No valid XML content found matching the requirements',
+    });
+    expect(parseSpy).toHaveBeenCalledTimes(1);
   });
 
   it('should reject malformed opening tag streams without catastrophic backtracking', () => {

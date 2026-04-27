@@ -9,6 +9,7 @@ type XmlTag =
 
 type OpenXmlTag = { name: string; start: number };
 type XmlCandidate = { start: number; end: number; parentStart?: number };
+type XmlValidationResult = { isValid: boolean; reason: string; isWellFormed: boolean };
 
 function getLastOpenTag(stack: OpenXmlTag[]): OpenXmlTag | undefined {
   return stack.length > 0 ? stack[stack.length - 1] : undefined;
@@ -60,6 +61,56 @@ function findTagEnd(input: string, start: number): number {
   return -1;
 }
 
+function findDelimitedDeclarationEnd(input: string, start: number, delimiter: string): number {
+  for (let i = start; i <= input.length - delimiter.length; i++) {
+    if (input.startsWith(delimiter, i)) {
+      return i + delimiter.length - 1;
+    }
+  }
+
+  return input.length - 1;
+}
+
+function findDeclarationEnd(input: string, start: number): number {
+  if (input.startsWith('<!--', start)) {
+    return findDelimitedDeclarationEnd(input, start + 4, '-->');
+  }
+
+  if (input.startsWith('<![CDATA[', start)) {
+    return findDelimitedDeclarationEnd(input, start + 9, ']]>');
+  }
+
+  let quote: string | undefined;
+  let bracketDepth = 0;
+
+  for (let i = start + 2; i < input.length; i++) {
+    const char = input[i];
+
+    if (quote) {
+      if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === '[') {
+      bracketDepth++;
+    } else if (char === ']' && bracketDepth > 0) {
+      bracketDepth--;
+    } else if (char === '>' && bracketDepth === 0) {
+      return i;
+    }
+  }
+
+  return input.length - 1;
+}
+
+function findProcessingInstructionEnd(input: string, start: number): number {
+  return findDelimitedDeclarationEnd(input, start + 2, '?>');
+}
+
 function isSelfClosingTag(input: string, start: number, end: number): boolean {
   let lastNonWhitespace = end - 1;
   while (lastNonWhitespace > start && /\s/.test(input[lastNonWhitespace])) {
@@ -76,13 +127,11 @@ function readXmlTag(input: string, start: number): XmlTag | undefined {
   }
 
   if (nextChar === '!') {
-    const end = findTagEnd(input, start);
-    return end === -1 ? undefined : { kind: 'declaration', start, end };
+    return { kind: 'declaration', start, end: findDeclarationEnd(input, start) };
   }
 
   if (nextChar === '?') {
-    const end = findTagEnd(input, start);
-    return end === -1 ? undefined : { kind: 'declaration', start, end };
+    return { kind: 'declaration', start, end: findProcessingInstructionEnd(input, start) };
   }
 
   if (nextChar === '/') {
@@ -118,6 +167,7 @@ function orderXmlCandidates(candidates: XmlCandidate[]): XmlCandidate[] {
   const ordered: XmlCandidate[] = [];
   const seen = new Set<string>();
   const byParent = new Map<number | undefined, XmlCandidate[]>();
+  const candidateStarts = new Set(candidates.map((candidate) => candidate.start));
 
   const addCandidate = (candidate: XmlCandidate) => {
     const key = `${candidate.start}:${candidate.end}`;
@@ -136,22 +186,34 @@ function orderXmlCandidates(candidates: XmlCandidate[]): XmlCandidate[] {
     }
   }
 
-  for (const siblings of byParent.values()) {
+  for (const [parentStart, siblings] of byParent.entries()) {
+    if (siblings.length <= 1 || (parentStart !== undefined && candidateStarts.has(parentStart))) {
+      continue;
+    }
+
     siblings.sort((a, b) => a.start - b.start || a.end - b.end);
     addCandidate({
       start: siblings[0].start,
       end: siblings[siblings.length - 1].end,
+      parentStart,
     });
   }
 
-  for (const candidate of candidates) {
+  const maximalCandidates = candidates
+    .filter(
+      (candidate) =>
+        candidate.parentStart === undefined || !candidateStarts.has(candidate.parentStart),
+    )
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+
+  for (const candidate of maximalCandidates) {
     addCandidate(candidate);
   }
 
   return ordered;
 }
 
-function extractXmlCandidates(outputString: string): string[] {
+function extractXmlCandidates(outputString: string): XmlCandidate[] {
   const stack: OpenXmlTag[] = [];
   const candidates: XmlCandidate[] = [];
 
@@ -192,18 +254,74 @@ function extractXmlCandidates(outputString: string): string[] {
     i = tag.end;
   }
 
-  return orderXmlCandidates(candidates).map((candidate) =>
-    outputString.slice(candidate.start, candidate.end),
-  );
+  return orderXmlCandidates(candidates);
 }
 
-export function validateXml(
+function hasElementPath(value: unknown, path: string[]): boolean {
+  let current = value;
+
+  for (const key of path) {
+    if (current === null || typeof current !== 'object' || Array.isArray(current)) {
+      return false;
+    }
+
+    const record = current as Record<string, unknown>;
+    if (record[key] === undefined) {
+      return false;
+    }
+
+    current = record[key];
+  }
+
+  return true;
+}
+
+function hasElementPathAtAnyDepth(value: unknown, path: string[]): boolean {
+  if (hasElementPath(value, path)) {
+    return true;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((item) => hasElementPathAtAnyDepth(item, path));
+  }
+
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((item) =>
+      hasElementPathAtAnyDepth(item, path),
+    );
+  }
+
+  return false;
+}
+
+function getMissingElements(
+  parsedXml: unknown,
+  requiredElements: string[] | undefined,
+  allowNestedRequiredElements: boolean,
+): string[] {
+  if (!requiredElements || requiredElements.length === 0) {
+    return [];
+  }
+
+  return requiredElements.filter((element) => {
+    const path = element.split('.');
+    const hasRequiredElement = allowNestedRequiredElements
+      ? hasElementPathAtAnyDepth(parsedXml, path)
+      : hasElementPath(parsedXml, path);
+
+    return !hasRequiredElement;
+  });
+}
+
+function validateXmlCandidate(
   xmlString: string,
   requiredElements?: string[],
-): { isValid: boolean; reason: string } {
+  allowNestedRequiredElements = false,
+): XmlValidationResult {
   if (!xmlString.startsWith('<')) {
-    return { isValid: false, reason: 'XML is missing opening tag' };
+    return { isValid: false, reason: 'XML is missing opening tag', isWellFormed: false };
   }
+
   const parser = new XMLParser({
     allowBooleanAttributes: true,
     ignoreAttributes: false,
@@ -213,31 +331,40 @@ export function validateXml(
 
   try {
     const parsedXml = parser.parse(xmlString);
-    if (requiredElements && requiredElements.length > 0) {
-      const missingElements = requiredElements.filter((element) => {
-        const path = element.split('.');
-        let current = parsedXml;
-        for (const key of path) {
-          if (current[key] === undefined) {
-            return true;
-          }
-          current = current[key];
-        }
-        return false;
-      });
+    const missingElements = getMissingElements(
+      parsedXml,
+      requiredElements,
+      allowNestedRequiredElements,
+    );
 
-      if (missingElements.length > 0) {
-        return {
-          isValid: false,
-          reason: `XML is missing required elements: ${missingElements.join(', ')}`,
-        };
-      }
+    if (missingElements.length > 0) {
+      return {
+        isValid: false,
+        reason: `XML is missing required elements: ${missingElements.join(', ')}`,
+        isWellFormed: true,
+      };
     }
 
-    return { isValid: true, reason: 'XML is valid and contains all required elements' };
+    return {
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+      isWellFormed: true,
+    };
   } catch (err) {
-    return { isValid: false, reason: `XML parsing failed: ${(err as Error).message}` };
+    return {
+      isValid: false,
+      reason: `XML parsing failed: ${(err as Error).message}`,
+      isWellFormed: false,
+    };
   }
+}
+
+export function validateXml(
+  xmlString: string,
+  requiredElements?: string[],
+): { isValid: boolean; reason: string } {
+  const result = validateXmlCandidate(xmlString, requiredElements);
+  return { isValid: result.isValid, reason: result.reason };
 }
 
 export function containsXml(
@@ -245,15 +372,31 @@ export function containsXml(
   requiredElements?: string[],
 ): { isValid: boolean; reason: string } {
   const xmlCandidates = extractXmlCandidates(outputString);
+  const wellFormedContainers: XmlCandidate[] = [];
 
   if (xmlCandidates.length === 0) {
     return { isValid: false, reason: 'No XML content found in the output' };
   }
 
   for (const xmlCandidate of xmlCandidates) {
-    const { isValid, reason } = validateXml(xmlCandidate, requiredElements);
+    if (
+      wellFormedContainers.some(
+        (container) => xmlCandidate.start >= container.start && xmlCandidate.end <= container.end,
+      )
+    ) {
+      continue;
+    }
+
+    const { isValid, isWellFormed, reason } = validateXmlCandidate(
+      outputString.slice(xmlCandidate.start, xmlCandidate.end),
+      requiredElements,
+      true,
+    );
     if (isValid) {
       return { isValid: true, reason };
+    }
+    if (isWellFormed) {
+      wellFormedContainers.push(xmlCandidate);
     }
   }
 
