@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 
 import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 vi.mock('../../../src/globalConfig/cloud', () => ({
@@ -96,6 +96,10 @@ describe('inline server API DTO validation', () => {
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
+  });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
   });
 
   afterEach(() => {
@@ -254,26 +258,39 @@ describe('inline server API DTO validation', () => {
   it('validates dataset generation request bodies', async () => {
     mockedSynthesizeFromTestSuite.mockResolvedValue([{ vars: { q: 'generated' } }] as never);
 
-    const missingTests = await api.post('/api/dataset/generate').send({ prompts: [] });
+    const emptyPrompts = await api.post('/api/dataset/generate').send({ prompts: [], tests: [] });
     const invalidPrompt = await api
       .post('/api/dataset/generate')
       .send({ prompts: [null], tests: [] });
     const invalidTest = await api
       .post('/api/dataset/generate')
       .send({ prompts: ['Prompt'], tests: [null] });
+    const promptOnly = await api.post('/api/dataset/generate').send({ prompts: ['Prompt'] });
     const valid = await api
       .post('/api/dataset/generate')
       .send({ prompts: ['Prompt'], tests: [{ vars: { q: 'seed' } }] });
 
-    expect(missingTests.status).toBe(400);
-    expect(missingTests.body.error).toContain('tests');
+    expect(emptyPrompts.status).toBe(400);
+    expect(emptyPrompts.body.error).toContain('prompts');
     expect(invalidPrompt.status).toBe(400);
     expect(invalidPrompt.body.error).toContain('prompts');
     expect(invalidTest.status).toBe(400);
     expect(invalidTest.body.error).toContain('tests');
+    expect(promptOnly.status).toBe(200);
+    expect(promptOnly.body).toEqual({ results: [{ vars: { q: 'generated' } }] });
     expect(valid.status).toBe(200);
     expect(valid.body).toEqual({ results: [{ vars: { q: 'generated' } }] });
-    expect(mockedSynthesizeFromTestSuite).toHaveBeenCalledWith(
+    expect(mockedSynthesizeFromTestSuite).toHaveBeenNthCalledWith(
+      1,
+      {
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: [],
+        providers: [],
+      },
+      {},
+    );
+    expect(mockedSynthesizeFromTestSuite).toHaveBeenNthCalledWith(
+      2,
       {
         prompts: [{ raw: 'Prompt', label: 'Prompt' }],
         tests: [{ vars: { q: 'seed' } }],
@@ -284,7 +301,7 @@ describe('inline server API DTO validation', () => {
   });
 
   it('validates telemetry request bodies and parses success DTOs', async () => {
-    mockedTelemetry.record = vi.fn().mockReturnValue(undefined);
+    mockedTelemetry.record.mockReturnValue(undefined);
 
     const invalid = await api.post('/api/telemetry').send({ event: 'not-real' });
     const valid = await api
