@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockGetEnvInt = vi.hoisted(() => vi.fn().mockReturnValue(undefined));
@@ -235,7 +237,7 @@ describe('MCPClient', () => {
 
       expect(StdioClientTransport).toHaveBeenCalledWith({
         command: process.execPath,
-        args: ['/tmp/simple-mcp/example-server.js'],
+        args: [path.resolve(cliState.basePath, './example-server.js')],
         env: process.env as Record<string, string>,
       });
     });
