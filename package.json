@@ -229,7 +229,7 @@
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.11",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
-    "@openai/codex-sdk": "^0.123.0",
+    "@openai/codex-sdk": "^0.125.0",
     "@playwright/browser-chromium": "^1.59.1",
     "@rollup/rollup-linux-x64-gnu": "^4.59.0",
     "@slack/web-api": "^7.15.0",

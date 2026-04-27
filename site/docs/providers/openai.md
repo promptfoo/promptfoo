@@ -2405,6 +2405,8 @@ See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full co
 
 For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports GPT-5.5, GPT-5.4, and Codex-optimized GPT-5 models for code generation. You can select a model inline with `openai:codex:gpt-5.5` or via `config.model` when you need additional options:
 
+Promptfoo preserves SDK-reported input, output, cached input, and reasoning output tokens in `tokenUsage` when Codex returns them.
+
 ```yaml
 providers:
   - id: openai:codex-sdk
