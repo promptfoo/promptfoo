@@ -67,7 +67,18 @@ const createMockSessionResponse = (id = 'test-session-123') => ({
 // SDK session.prompt() returns: { info: AssistantMessage, parts: Part[] }
 const createMockPromptResponse = (
   parts: Array<{ type: string; text?: string }>,
-  tokens?: { input?: number; output?: number; reasoning?: number; cache?: number },
+  tokens?: {
+    total?: number;
+    input?: number;
+    output?: number;
+    reasoning?: number;
+    cache?:
+      | number
+      | {
+          read?: number;
+          write?: number;
+        };
+  },
   cost?: number,
   structured?: unknown,
 ) => ({
@@ -85,8 +96,9 @@ const createMockPromptResponse = (
         ? {
             input: tokens.input ?? 0,
             output: tokens.output ?? 0,
-            reasoning: tokens.reasoning ?? 0,
-            cache: tokens.cache ?? 0,
+            ...(tokens.total === undefined ? {} : { total: tokens.total }),
+            ...(tokens.reasoning === undefined ? {} : { reasoning: tokens.reasoning }),
+            ...(tokens.cache === undefined ? {} : { cache: tokens.cache }),
           }
         : undefined,
       cost: cost ?? 0,
@@ -296,6 +308,39 @@ describe('OpenCodeSDKProvider', () => {
             parts: [{ type: 'text', text: 'Test prompt' }],
           }),
         );
+      });
+
+      it('should preserve reasoning and cache token details', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse(
+            [{ type: 'text', text: 'Test response' }],
+            {
+              input: 10,
+              output: 20,
+              total: 42,
+              reasoning: 7,
+              cache: { read: 3, write: 2 },
+            },
+            0.001,
+          ),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage).toEqual({
+          prompt: 10,
+          completion: 20,
+          total: 42,
+          cached: 3,
+          completionDetails: {
+            reasoning: 7,
+            cacheReadInputTokens: 3,
+            cacheCreationInputTokens: 2,
+          },
+        });
       });
 
       it('should fall back to the v1 nested request shape when v2 is unavailable', async () => {

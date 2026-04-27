@@ -454,10 +454,20 @@ interface OpenCodeSessionContext {
   ephemeralSession?: OpenCodeSessionHandle;
 }
 
+type OpenCodeTokenCache =
+  | number
+  | {
+      read?: number;
+      write?: number;
+    };
+
 interface OpenCodeAssistantMessage {
   tokens?: {
+    total?: number;
     input?: number;
     output?: number;
+    reasoning?: number;
+    cache?: OpenCodeTokenCache;
   };
   cost?: number;
   structured?: unknown;
@@ -551,6 +561,51 @@ function unwrapOpenCodeResult<T>(result: OpenCodeSdkResult<T> | undefined): T | 
     return result.data as T | undefined;
   }
   return result as T;
+}
+
+function getOpenCodeCacheDetails(cache: OpenCodeTokenCache | undefined): {
+  read: number;
+  write: number;
+} {
+  if (typeof cache === 'number') {
+    return { read: cache, write: 0 };
+  }
+  if (!cache || typeof cache !== 'object') {
+    return { read: 0, write: 0 };
+  }
+  return {
+    read: cache.read ?? 0,
+    write: cache.write ?? 0,
+  };
+}
+
+function buildOpenCodeTokenUsage(
+  tokens: OpenCodeAssistantMessage['tokens'],
+): ProviderResponse['tokenUsage'] {
+  if (!tokens) {
+    return undefined;
+  }
+
+  const prompt = tokens.input ?? 0;
+  const completion = tokens.output ?? 0;
+  const cache = getOpenCodeCacheDetails(tokens.cache);
+  const completionDetails: NonNullable<ProviderResponse['tokenUsage']>['completionDetails'] = {};
+
+  if (typeof tokens.reasoning === 'number') {
+    completionDetails.reasoning = tokens.reasoning;
+  }
+  if (tokens.cache !== undefined) {
+    completionDetails.cacheReadInputTokens = cache.read;
+    completionDetails.cacheCreationInputTokens = cache.write;
+  }
+
+  return {
+    prompt,
+    completion,
+    total: tokens.total ?? prompt + completion,
+    ...(tokens.cache === undefined ? {} : { cached: cache.read }),
+    ...(Object.keys(completionDetails).length > 0 ? { completionDetails } : {}),
+  };
 }
 
 function getSessionPath(sessionId: string): OpenCodeSessionPath {
@@ -1270,13 +1325,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
     return {
       output,
-      tokenUsage: tokens
-        ? {
-            prompt: tokens.input ?? 0,
-            completion: tokens.output ?? 0,
-            total: (tokens.input ?? 0) + (tokens.output ?? 0),
-          }
-        : undefined,
+      tokenUsage: buildOpenCodeTokenUsage(tokens),
       cost: assistantMessage?.cost ?? 0,
       raw: JSON.stringify(response),
       sessionId,
