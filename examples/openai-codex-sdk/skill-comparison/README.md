@@ -1,4 +1,13 @@
-# skill-comparison (Codex Skill Comparison)
+# openai-codex-sdk/skill-comparison (Codex Skill Comparison)
+
+You can run this example with:
+
+```bash
+npx promptfoo@latest init --example openai-codex-sdk/skill-comparison
+cd openai-codex-sdk/skill-comparison
+```
+
+## Overview
 
 This example compares two versions of the same Codex skill against identical review tasks.
 
