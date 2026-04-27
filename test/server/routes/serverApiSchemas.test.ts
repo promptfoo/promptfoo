@@ -2,11 +2,7 @@ import type { Server } from 'node:http';
 
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createApp,
-  resetShareRateLimitForTesting,
-  SHARE_RATE_LIMIT_MAX_REQUESTS,
-} from '../../../src/server/server';
+import { createApp } from '../../../src/server/server';
 
 vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: {
@@ -102,14 +98,12 @@ describe('inline server API DTO validation', () => {
     });
   });
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.resetAllMocks();
-    await resetShareRateLimitForTesting();
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.resetAllMocks();
-    await resetShareRateLimitForTesting();
   });
 
   it('validates and parses remote health responses', async () => {
@@ -261,20 +255,17 @@ describe('inline server API DTO validation', () => {
     expect(mockedCreateShareableUrl).not.toHaveBeenCalled();
   });
 
-  it('rate-limits share URL creation attempts', async () => {
+  it('does not rate-limit share URL creation attempts', async () => {
     mockedReadResult.mockResolvedValue(undefined);
 
-    for (let i = 0; i < SHARE_RATE_LIMIT_MAX_REQUESTS; i++) {
+    const attempts = 35;
+    for (let i = 0; i < attempts; i++) {
       const response = await api.post('/api/results/share').send({ id: `eval-${i}` });
       expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Eval not found' });
     }
 
-    const limited = await api.post('/api/results/share').send({ id: 'eval-over-limit' });
-
-    expect(limited.status).toBe(429);
-    expect(limited.body).toEqual({ error: 'Too many share requests. Please try again later.' });
-    expect(limited.headers['ratelimit']).toBeDefined();
-    expect(mockedReadResult).toHaveBeenCalledTimes(SHARE_RATE_LIMIT_MAX_REQUESTS);
+    expect(mockedReadResult).toHaveBeenCalledTimes(attempts);
   });
 
   it('validates dataset generation request bodies', async () => {
