@@ -7,6 +7,12 @@ import { afterEach, expect, vi } from 'vitest';
 import { restoreBrowserMocks } from './tests/browserMocks';
 import { restoreTestTimers } from './tests/timers';
 
+(
+  globalThis as typeof globalThis & {
+    IS_REACT_ACT_ENVIRONMENT?: boolean;
+  }
+).IS_REACT_ACT_ENVIRONMENT = true;
+
 class MemoryStorage implements Storage {
   private store = new Map<string, string>();
 

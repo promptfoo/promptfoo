@@ -1,12 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   mockBrowserProperty,
   mockIndexedDB,
+  mockIntersectionObserver,
+  mockObjectUrl,
   mockWindowLocation,
   restoreBrowserMocks,
 } from './browserMocks';
 
 describe('browserMocks', () => {
+  afterEach(() => {
+    restoreBrowserMocks();
+  });
+
   it('restores original properties after spies wrap mocked values', () => {
     const target = {
       open: () => 'original',
@@ -34,6 +40,37 @@ describe('browserMocks', () => {
 
     restoreBrowserMocks();
     expect(globalThis.indexedDB).toBe(originalIndexedDB);
+  });
+
+  it('mocks IntersectionObserver without nonportable properties', () => {
+    const onCreate = vi.fn();
+    const callback: IntersectionObserverCallback = vi.fn();
+
+    mockIntersectionObserver({ onCreate });
+
+    const observer = new window.IntersectionObserver(callback);
+
+    expect(onCreate).toHaveBeenCalledWith(callback);
+    expect(observer.root).toBeNull();
+    expect(observer.rootMargin).toBe('');
+    expect(observer.thresholds).toEqual([]);
+    expect('scrollMargin' in observer).toBe(false);
+  });
+
+  it('allows object URL mocks to be restored individually or together', () => {
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+
+    const objectUrl = mockObjectUrl('blob:browser-mock-test');
+
+    expect(URL.createObjectURL(new Blob())).toBe('blob:browser-mock-test');
+
+    objectUrl.restoreCreateObjectURL();
+    expect(URL.createObjectURL).toBe(originalCreateObjectURL);
+    expect(URL.revokeObjectURL).toBe(objectUrl.revokeObjectURL);
+
+    objectUrl.restore();
+    expect(URL.revokeObjectURL).toBe(originalRevokeObjectURL);
   });
 
   it('updates and restores window.location through history state', () => {

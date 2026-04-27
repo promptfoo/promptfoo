@@ -1,11 +1,13 @@
 import dedent from 'dedent';
+import cliState from '../../cliState';
 import logger from '../../logger';
-import { matchesLlmRubric } from '../../matchers';
+import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
   getGeneratedPromptOverLimit,
@@ -200,7 +202,7 @@ export abstract class RedteamPluginBase {
       let rejectedPromptLimit: number | undefined;
 
       for (const prompt of parsedPrompts) {
-        const promptText = '__prompt' in prompt ? String(prompt.__prompt) : JSON.stringify(prompt);
+        const promptText = '__prompt' in prompt ? prompt.__prompt : JSON.stringify(prompt);
         // TODO(ian): In multi-input mode, validate the generated user-facing field values rather
         // than the serialized JSON envelope stored in __prompt, which overcounts keys/braces.
         const violation = getGeneratedPromptOverLimit(promptText, this.config.maxCharsPerMessage);
@@ -249,32 +251,48 @@ export abstract class RedteamPluginBase {
    * @param prompts - An array of { __prompt: string } objects.
    * @returns An array of test cases.
    */
-  protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
+  protected async promptsToTestCases(prompts: { __prompt: string }[]): Promise<TestCase[]> {
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
-    return prompts.sort().map((promptObj) => {
-      // Extract input vars from the prompt for multi-input mode
-      const inputVars = hasMultipleInputs
-        ? extractInputVarsFromPrompt(promptObj.__prompt, this.config.inputs)
-        : undefined;
+    return Promise.all(
+      [...prompts]
+        .sort((a, b) => a.__prompt.localeCompare(b.__prompt))
+        .map(async (promptObj, materializationIndex) => {
+          // Extract input vars from the prompt for multi-input mode
+          const inputVars = hasMultipleInputs
+            ? extractInputVarsFromPrompt(promptObj.__prompt, this.config.inputs)
+            : undefined;
+          const materializedInputVars =
+            inputVars && this.config.inputs
+              ? await materializeInputVariablesWithMetadata(inputVars, this.config.inputs, {
+                  materializationIndex,
+                  pluginId: getShortPluginId(this.id),
+                  provider: this.provider,
+                  purpose: this.purpose,
+                })
+              : undefined;
 
-      // Use the configured injectVar (will be MULTI_INPUT_VAR in multi-input mode)
-      const vars: Record<string, string> = {
-        [this.injectVar]: promptObj.__prompt,
-        ...(inputVars || {}),
-      };
+          // Use the configured injectVar (will be MULTI_INPUT_VAR in multi-input mode)
+          const vars: Record<string, string> = {
+            [this.injectVar]: promptObj.__prompt,
+            ...(materializedInputVars?.vars || {}),
+          };
 
-      return {
-        vars,
-        assert: this.getAssertions(promptObj.__prompt),
-        metadata: {
-          pluginId: getShortPluginId(this.id),
-          pluginConfig: this.config,
-          // Include extracted input vars in metadata for multi-turn strategies
-          ...(inputVars ? { inputVars } : {}),
-        },
-      };
-    });
+          return {
+            vars,
+            assert: this.getAssertions(promptObj.__prompt),
+            metadata: {
+              pluginId: getShortPluginId(this.id),
+              pluginConfig: this.config,
+              ...(materializedInputVars?.metadata
+                ? { inputMaterialization: materializedInputVars.metadata }
+                : {}),
+              // Include extracted input vars in metadata for multi-turn strategies
+              ...(inputVars ? { inputVars } : {}),
+            },
+          };
+        }),
+    );
   }
 
   /**
@@ -499,10 +517,24 @@ export abstract class RedteamGraderBase {
       };
     }
 
-    const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
+    const defaultTest =
+      typeof cliState.config?.defaultTest === 'object'
+        ? (cliState.config.defaultTest as TestCase)
+        : undefined;
+    const hasConfiguredGradingProvider = Boolean(
+      cliState.config?.redteam?.provider || defaultTest?.options?.provider,
+    );
+    const grading = {
       ...test.options,
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
-    })) as GradingResult;
+    };
+    if (!hasConfiguredGradingProvider) {
+      Object.defineProperty(grading, '__promptfooPreferRemote', {
+        value: true,
+      });
+      logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
+    }
+    const grade = (await matchesLlmRubric(finalRubric, llmOutput, grading)) as GradingResult;
 
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 

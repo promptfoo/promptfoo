@@ -1,5 +1,6 @@
 import { mockClipboard } from '@app/tests/browserMocks';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
+import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptDialog from './PromptDialog';
@@ -132,13 +133,18 @@ const mockSelectedPromptThreeEvals: ServerPromptWithMetadata = {
 };
 
 describe('PromptDialog', () => {
+  const clickElement = (element: Element) => {
+    act(() => {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+  };
+
   beforeEach(() => {
-    vi.useFakeTimers();
+    useTestTimers();
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    restoreTestTimers({ runPending: true });
   });
 
   it('should render the dialog with prompt details, prompt text, and eval history when openDialog is true and a valid selectedPrompt is provided', () => {
@@ -209,7 +215,7 @@ describe('PromptDialog', () => {
     // CopyButton has aria-label="Copy"
     const copyButton = screen.getByRole('button', { name: 'Copy' });
 
-    fireEvent.click(copyButton);
+    clickElement(copyButton);
 
     expect(writeTextMock).toHaveBeenCalledWith(mockSelectedPromptNoEvals.prompt.raw);
 
@@ -217,7 +223,7 @@ describe('PromptDialog', () => {
     // The button itself changes its icon to show copy success
   });
 
-  it('should call handleClose when the close button is clicked', () => {
+  it('should call handleClose when the close button is clicked', async () => {
     const handleClose = vi.fn();
 
     render(
@@ -235,7 +241,7 @@ describe('PromptDialog', () => {
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
     expect(footerCloseButton).toBeDefined();
-    fireEvent.click(footerCloseButton!);
+    clickElement(footerCloseButton!);
 
     expect(handleClose).toHaveBeenCalled();
   });
@@ -472,7 +478,7 @@ describe('PromptDialog', () => {
 
     // CopyButton has aria-label="Copy"
     const copyButton = screen.getByRole('button', { name: 'Copy' });
-    fireEvent.click(copyButton);
+    clickElement(copyButton);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);

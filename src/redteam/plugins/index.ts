@@ -4,7 +4,7 @@ import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import { checkRemoteHealth } from '../../util/apiHealth';
 import { retryWithDeduplication } from '../../util/generation';
 import invariant from '../../util/invariant';
@@ -16,12 +16,19 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { buildPromptInputDescriptions } from '../inputVariables';
 import {
+  getRemoteGenerationExplicitlyDisabledError,
   getRemoteGenerationUrl,
   getRemoteHealthUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../remoteGeneration';
+import {
+  assertRemoteMaterializationHandled,
+  type RemoteMaterializationResponse,
+  requiresRemoteMaterialization,
+} from '../remoteMaterialization';
 import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
@@ -98,7 +105,7 @@ function computeModifiersFromConfig(config: PluginConfig | undefined): Record<st
     modifiers.language = config.language;
   }
   if (config?.inputs && Object.keys(config.inputs).length > 0) {
-    const schema = Object.entries(config.inputs as Record<string, string>)
+    const schema = Object.entries(buildPromptInputDescriptions(config.inputs) ?? {})
       .map(([k, description]) => `"${k}": "${description}"`)
       .join(', ');
     modifiers.__outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
@@ -255,11 +262,16 @@ function dedupeTestCases(testCases: TestCase[]): TestCase[] {
 }
 
 function buildMaxCharsRetryInstructions(rejectedPromptLengths: number[], limit?: number): string {
+  const longestRejectedPromptText =
+    rejectedPromptLengths.length > 0
+      ? `${Math.max(...rejectedPromptLengths)} characters`
+      : 'unknown length';
+
   return dedent`
     Your previous response included ${rejectedPromptLengths.length} generated prompt${
       rejectedPromptLengths.length === 1 ? '' : 's'
     } that exceeded the ${limit ?? 'configured'}-character limit.
-    The longest rejected prompt was ${Math.max(...rejectedPromptLengths)} characters.
+    The longest rejected prompt was ${longestRejectedPromptText}.
     Generate replacement prompts only, and keep every user message within the character limit.
   `.trim();
 }
@@ -356,7 +368,7 @@ async function fetchRemoteTestCases(
     config: configForRemote,
     injectVar,
     // Send inputs at top level for server compatibility (server expects it there)
-    inputs: config?.inputs as Record<string, string> | undefined,
+    inputs: config?.inputs,
     n,
     purpose,
     task: key,
@@ -364,7 +376,7 @@ async function fetchRemoteTestCases(
     email: getUserEmail(),
   });
 
-  interface PluginGenerationResponse {
+  interface PluginGenerationResponse extends RemoteMaterializationResponse {
     result?: TestCase[];
   }
 
@@ -378,11 +390,14 @@ async function fetchRemoteTestCases(
         },
         body,
       },
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
     );
     if (status !== 200 || !data || !data.result || !Array.isArray(data.result)) {
       logger.error(`Error generating test cases for ${key}: ${statusText} ${JSON.stringify(data)}`);
       return [];
+    }
+    if (requiresRemoteMaterialization(config?.inputs)) {
+      assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
     const ret = data.result;
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
@@ -411,6 +426,7 @@ function createPluginFactory<T extends PluginConfig>(
           delayMs,
         );
       }
+      const pluginId = getShortPluginId(key);
       const testCases = await fetchRemoteTestCases(
         key,
         purpose,
@@ -424,7 +440,7 @@ function createPluginFactory<T extends PluginConfig>(
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: getShortPluginId(key),
+          pluginId,
           // Add computed config with modifiers so strategies can access them
           pluginConfig: {
             ...configWithDefaults,
@@ -510,7 +526,7 @@ const pluginFactories: PluginFactory[] = [
     key: category,
     action: async (params: PluginActionParams) => {
       if (neverGenerateRemote()) {
-        logger.error(`${category} plugin requires remote generation to be enabled`);
+        logger.error(getRemoteGenerationExplicitlyDisabledError(`${category} plugin`));
         return [];
       }
 
@@ -535,6 +551,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (shouldGenerateRemote()) {
+      const pluginId = getShortPluginId(category);
       const testCases = await fetchRemoteTestCases(
         category,
         params.purpose,
@@ -547,7 +564,7 @@ const piiPlugins: PluginFactory[] = PII_PLUGINS.map((category: string) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: getShortPluginId(category),
+          pluginId,
           pluginConfig: {
             ...params.config,
             modifiers: computedModifiers,
@@ -571,10 +588,11 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
   key: category,
   action: async (params: PluginActionParams) => {
     if (neverGenerateRemote()) {
-      logger.error(`${category} plugin requires remote generation to be enabled`);
+      logger.error(getRemoteGenerationExplicitlyDisabledError(`${category} plugin`));
       return [];
     }
 
+    const pluginId = getShortPluginId(category);
     const testCases = await fetchRemoteTestCases(
       category,
       params.purpose,
@@ -587,7 +605,7 @@ const biasPlugins: PluginFactory[] = BIAS_PLUGINS.map((category: string) => ({
       ...testCase,
       metadata: {
         ...testCase.metadata,
-        pluginId: getShortPluginId(category),
+        pluginId,
         pluginConfig: {
           ...params.config,
           modifiers: computedModifiers,
@@ -608,9 +626,10 @@ function createRemotePlugin<T extends PluginConfig>(
       const configWithDefaults = applyDefaultRemotePluginConfig(key, config);
 
       if (neverGenerateRemote()) {
-        logger.error(`${key} plugin requires remote generation to be enabled`);
+        logger.error(getRemoteGenerationExplicitlyDisabledError(`${key} plugin`));
         return [];
       }
+      const pluginId = getShortPluginId(key);
       const testCases: TestCase[] = await fetchRemoteTestCases(
         key,
         purpose,
@@ -623,7 +642,7 @@ function createRemotePlugin<T extends PluginConfig>(
         ...testCase,
         metadata: {
           ...testCase.metadata,
-          pluginId: getShortPluginId(key),
+          pluginId,
           pluginConfig: {
             ...configWithDefaults,
             modifiers: computedModifiers,

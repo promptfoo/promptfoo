@@ -56,12 +56,15 @@ export interface WebSearchToolConfig20260209 extends BaseWebSearchToolConfig {
   type: 'web_search_20260209';
 }
 
+export type MemoryToolConfig = Anthropic.Messages.MemoryTool20250818;
+
 export type AnthropicToolConfig =
   | WebFetchToolConfig
   | WebFetchToolConfig20260209
   | WebFetchToolConfigV2
   | WebSearchToolConfig
-  | WebSearchToolConfig20260209;
+  | WebSearchToolConfig20260209
+  | MemoryToolConfig;
 
 // Structured outputs configuration (JSON schema)
 export interface OutputFormat {
@@ -78,9 +81,19 @@ export interface OutputFormat {
 export interface AnthropicMessageOptions {
   apiBaseUrl?: string;
   apiKey?: string;
+  /**
+   * When `false`, skip promptfoo's upfront API key check and authenticate
+   * through a local Claude Code session (OAuth credential from the macOS
+   * keychain or `$HOME/.claude/.credentials.json`). Lets Claude.ai Max /
+   * Pro subscribers run evals — including `llm-rubric` grading — without a
+   * separate Anthropic Console API key. Defaults to `true`.
+   */
+  apiKeyRequired?: boolean;
   cache_control?: Anthropic.Messages.CacheControlEphemeral | null; // Top-level cache control - auto-applies to last cacheable block
   cost?: number;
-  effort?: 'low' | 'medium' | 'high' | 'max'; // Controls output quality/speed tradeoff
+  inputCost?: number;
+  outputCost?: number;
+  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; // Controls output quality/speed tradeoff
   extra_body?: Record<string, any>;
   headers?: Record<string, string>;
   max_tokens?: number;

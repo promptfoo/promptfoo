@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BabelFileResult } from '@babel/core';
 
+const mockReactCompilerPreset = vi.hoisted(() => vi.fn());
+
 vi.mock('@babel/core', () => ({
   transformAsync: vi.fn(),
 }));
 
 vi.mock('@vitejs/plugin-react', () => ({
-  reactCompilerPreset: vi.fn(() => ({
-    preset: () => ({ plugins: [['babel-plugin-react-compiler', {}]] }),
-  })),
+  reactCompilerPreset: mockReactCompilerPreset,
 }));
 
 function createMockBabelResult(code: string, map: BabelFileResult['map'] | null): BabelFileResult {
@@ -24,6 +24,10 @@ describe('reactCompilerPlugin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    mockReactCompilerPreset.mockReset();
+    mockReactCompilerPreset.mockReturnValue({
+      preset: () => ({ plugins: [['babel-plugin-react-compiler', {}]] }),
+    });
   });
 
   it('skips files from node_modules', async () => {
@@ -91,5 +95,47 @@ describe('reactCompilerPlugin', () => {
       code: transformedCode,
       map: null,
     });
+  });
+
+  it('disables the compiler when preset creation fails', async () => {
+    mockReactCompilerPreset.mockImplementation(() => {
+      throw new Error('plugin-react preset changed');
+    });
+
+    const { reactCompilerPlugin } = await import('./vite.shared');
+    const { transformAsync } = await import('@babel/core');
+    const plugin = reactCompilerPlugin();
+    const warn = vi.fn();
+
+    if (typeof plugin.buildStart === 'function') {
+      plugin.buildStart.call({ warn } as never, {} as never);
+    }
+    const result = await plugin.transform?.(
+      'const Component = () => <div>Hello</div>;',
+      '/project/src/Component.tsx',
+    );
+
+    expect(result).toBeNull();
+    expect(transformAsync).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('React Compiler will be disabled'));
+  });
+
+  it('disables the compiler when preset extraction fails', async () => {
+    mockReactCompilerPreset.mockReturnValue({
+      preset: () => {
+        throw new Error('preset extraction changed');
+      },
+    });
+
+    const { reactCompilerPlugin } = await import('./vite.shared');
+    const { transformAsync } = await import('@babel/core');
+
+    const result = await reactCompilerPlugin().transform?.(
+      'const Component = () => <div>Hello</div>;',
+      '/project/src/Component.tsx',
+    );
+
+    expect(result).toBeNull();
+    expect(transformAsync).not.toHaveBeenCalled();
   });
 });

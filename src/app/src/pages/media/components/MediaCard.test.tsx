@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockIntersectionObserver, mockMatchMedia } from '@app/tests/browserMocks';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MediaCard } from './MediaCard';
@@ -29,6 +29,15 @@ const Wrapper = ({ children }: { children: ReactNode }) => (
 );
 
 const renderWithProviders = (ui: ReactNode) => render(ui, { wrapper: Wrapper });
+
+const getPrimaryAction = (name: string | RegExp = 'Image: Test Evaluation') =>
+  screen.getByRole('button', { name });
+
+const getCardContainer = (name?: string | RegExp) => {
+  const primaryAction = getPrimaryAction(name);
+  expect(primaryAction.parentElement).not.toBeNull();
+  return primaryAction.parentElement as HTMLElement;
+};
 
 const createMockMediaItem = (overrides: Partial<MediaItem> = {}): MediaItem => ({
   hash: 'abc123',
@@ -58,11 +67,11 @@ describe('MediaCard', () => {
   describe('rendering', () => {
     it('renders the media card with an accessible primary action button', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      const card = container.querySelector('[data-media-card]');
+      const card = getPrimaryAction();
       expect(card).toBeInTheDocument();
-      expect(card?.tagName).toBe('BUTTON');
+      expect(card.tagName).toBe('BUTTON');
     });
 
     it('renders image preview for image kind', () => {
@@ -186,10 +195,9 @@ describe('MediaCard', () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={onClick} />);
+      renderWithProviders(<MediaCard item={item} onClick={onClick} />);
 
-      const card = container.querySelector('[data-media-card]');
-      await user.click(card!);
+      await user.click(getPrimaryAction());
 
       expect(onClick).toHaveBeenCalledTimes(1);
     });
@@ -198,10 +206,10 @@ describe('MediaCard', () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={onClick} />);
+      renderWithProviders(<MediaCard item={item} onClick={onClick} />);
 
-      const card = container.querySelector('[data-media-card]') as HTMLElement;
-      card.focus();
+      await user.tab();
+      expect(getPrimaryAction()).toHaveFocus();
       await user.keyboard('{Enter}');
 
       expect(onClick).toHaveBeenCalledTimes(1);
@@ -211,10 +219,10 @@ describe('MediaCard', () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={onClick} />);
+      renderWithProviders(<MediaCard item={item} onClick={onClick} />);
 
-      const card = container.querySelector('[data-media-card]') as HTMLElement;
-      card.focus();
+      await user.tab();
+      expect(getPrimaryAction()).toHaveFocus();
       await user.keyboard(' ');
 
       expect(onClick).toHaveBeenCalledTimes(1);
@@ -276,7 +284,7 @@ describe('MediaCard', () => {
       const onClick = vi.fn();
       const onToggleSelection = vi.fn();
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaCard
           item={item}
           onClick={onClick}
@@ -286,8 +294,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      const card = container.querySelector('[data-media-card]');
-      await user.click(card!);
+      await user.click(getPrimaryAction('Image: Test Evaluation (not selected)'));
 
       expect(onToggleSelection).toHaveBeenCalledWith('abc123');
       expect(onClick).not.toHaveBeenCalled();
@@ -347,18 +354,17 @@ describe('MediaCard', () => {
   describe('visual states', () => {
     it('applies viewing styles when isViewing is true', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(
-        <MediaCard item={item} onClick={vi.fn()} isViewing={true} />,
-      );
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} isViewing={true} />);
 
-      // Styling is on the card container div, not the overlay button
-      const cardContainer = container.querySelector('[data-media-card]')?.closest('.group');
-      expect(cardContainer).toHaveClass('border-primary', 'ring-2');
+      expect(getCardContainer('Image: Test Evaluation (currently viewing)')).toHaveClass(
+        'border-primary',
+        'ring-2',
+      );
     });
 
     it('applies selected styles when isSelected is true', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaCard
           item={item}
           onClick={vi.fn()}
@@ -368,43 +374,37 @@ describe('MediaCard', () => {
         />,
       );
 
-      const cardContainer = container.querySelector('[data-media-card]')?.closest('.group');
-      expect(cardContainer).toHaveClass('border-primary');
+      expect(getCardContainer('Image: Test Evaluation (selected)')).toHaveClass('border-primary');
     });
 
     it('applies focused styles when isFocused is true', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(
-        <MediaCard item={item} onClick={vi.fn()} isFocused={true} />,
-      );
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} isFocused={true} />);
 
-      const cardContainer = container.querySelector('[data-media-card]')?.closest('.group');
-      expect(cardContainer).toHaveClass('ring-2');
+      expect(getCardContainer()).toHaveClass('ring-2');
     });
   });
 
   describe('accessibility', () => {
     it('has correct aria-label for basic card', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      const card = container.querySelector('[data-media-card]');
+      const card = getPrimaryAction();
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('Image'));
     });
 
     it('includes viewing state in aria-label', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(
-        <MediaCard item={item} onClick={vi.fn()} isViewing={true} />,
-      );
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} isViewing={true} />);
 
-      const card = container.querySelector('[data-media-card]');
+      const card = getPrimaryAction('Image: Test Evaluation (currently viewing)');
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('currently viewing'));
     });
 
     it('includes selection state in aria-label', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(
+      renderWithProviders(
         <MediaCard
           item={item}
           onClick={vi.fn()}
@@ -414,32 +414,26 @@ describe('MediaCard', () => {
         />,
       );
 
-      const card = container.querySelector('[data-media-card]');
+      const card = getPrimaryAction('Image: Test Evaluation (selected)');
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('selected'));
     });
 
-    it('calls onFocus callback', () => {
+    it('calls onFocus callback', async () => {
+      const user = userEvent.setup();
       const onFocus = vi.fn();
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(
-        <MediaCard item={item} onClick={vi.fn()} onFocus={onFocus} />,
-      );
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} onFocus={onFocus} />);
 
-      // Get the main card div (not the nested download button)
-      const card = container.querySelector('[data-media-card]');
-      fireEvent.focus(card!);
+      await user.tab();
 
       expect(onFocus).toHaveBeenCalledTimes(1);
     });
 
     it('supports custom tabIndex', () => {
       const item = createMockMediaItem();
-      const { container } = renderWithProviders(
-        <MediaCard item={item} onClick={vi.fn()} tabIndex={-1} />,
-      );
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} tabIndex={-1} />);
 
-      // Get the main card div (not the nested download button)
-      const card = container.querySelector('[data-media-card]');
+      const card = getPrimaryAction();
       expect(card).toHaveAttribute('tabIndex', '-1');
     });
   });
@@ -447,20 +441,16 @@ describe('MediaCard', () => {
   describe('media types', () => {
     it('renders video badge for video kind', () => {
       const item = createMockMediaItem({ kind: 'video', mimeType: 'video/mp4' });
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      // Video badge should be visible - look for svg icons
-      const svgIcons = container.querySelectorAll('svg');
-      expect(svgIcons.length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Play video preview' })).toBeInTheDocument();
     });
 
     it('renders audio badge for audio kind', () => {
       const item = createMockMediaItem({ kind: 'audio', mimeType: 'audio/mp3' });
-      const { container } = renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
+      renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      // Audio icon should be present
-      const svgIcons = container.querySelectorAll('svg');
-      expect(svgIcons.length).toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Play audio preview' })).toBeInTheDocument();
     });
 
     it('renders file icon for other kind', () => {

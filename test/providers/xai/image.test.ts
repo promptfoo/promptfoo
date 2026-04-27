@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
-import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
+import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
+import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/logger');
 vi.mock('../../../src/providers/openai/image', async () => {
@@ -116,7 +117,7 @@ describe('XAI Image Provider', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${mockApiKey}`,
         },
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
       );
 
       expect(result).toEqual({
@@ -212,8 +213,8 @@ describe('XAI Image Provider', () => {
       const originalOpenAiKey = process.env.OPENAI_API_KEY;
 
       // Clear all possible API key environment variables
-      delete process.env.XAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ XAI_API_KEY: undefined });
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         // Create provider with no API key in config or environment
@@ -226,10 +227,10 @@ describe('XAI Image Provider', () => {
       } finally {
         // Restore the original environment variables
         if (originalXaiKey) {
-          process.env.XAI_API_KEY = originalXaiKey;
+          mockProcessEnv({ XAI_API_KEY: originalXaiKey });
         }
         if (originalOpenAiKey) {
-          process.env.OPENAI_API_KEY = originalOpenAiKey;
+          mockProcessEnv({ OPENAI_API_KEY: originalOpenAiKey });
         }
       }
     });

@@ -17,6 +17,7 @@ const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
 const ROOT_DIR = path.resolve(__dirname, '../..');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const CONFIGS_DIR = path.resolve(FIXTURES_DIR, 'configs');
+const FRONTEND_TS_PROJECT_DIR = path.resolve(FIXTURES_DIR, 'frontend-ts-provider');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-jsts');
 
 /**
@@ -217,6 +218,29 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
       expect(parsed.results.results[0].success).toBe(true);
       expect(parsed.results.results[0].response.output).toContain('TypeScript Transitive Echo:');
     });
+
+    it('3.3.3 - TypeScript provider with enum and tsconfig path alias', () => {
+      const configPath = path.join(FRONTEND_TS_PROJECT_DIR, 'promptfooconfig.yaml');
+      const outputPath = path.join(OUTPUT_DIR, 'ts-provider-frontend-output.json');
+
+      const { exitCode, stderr } = runCli(
+        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
+        {
+          cwd: FRONTEND_TS_PROJECT_DIR,
+          env: {
+            PROMPTFOO_CONFIG_DIR: path.join(OUTPUT_DIR, 'frontend-ts-config'),
+            PROMPTFOO_LOG_DIR: path.join(OUTPUT_DIR, 'frontend-ts-logs'),
+          },
+        },
+      );
+
+      expect(exitCode, stderr).toBe(0);
+
+      const content = fs.readFileSync(outputPath, 'utf-8');
+      const parsed = JSON.parse(content);
+      expect(parsed.results.results[0].success).toBe(true);
+      expect(parsed.results.results[0].response.output).toContain('frontend enum: hello frontend');
+    });
   });
 });
 
@@ -321,7 +345,6 @@ describe('Script Assertion Smoke Tests', () => {
       if (exitCode !== 0) {
         const output = stdout + stderr;
         if (output.toLowerCase().includes('python') && output.toLowerCase().includes('not found')) {
-          console.warn('Skipping Python assertion test - Python not available');
           return;
         }
       }

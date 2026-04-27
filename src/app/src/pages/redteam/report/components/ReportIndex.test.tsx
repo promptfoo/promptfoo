@@ -1,6 +1,7 @@
 import { mockCallApiResponse, resetCallApiMock } from '@app/tests/apiMocks';
 import { formatDataGridDate } from '@app/utils/date';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
@@ -210,6 +211,7 @@ describe('ReportIndex', () => {
 
   describe('ReportsTable navigation', () => {
     it('should navigate to /reports?evalId={evalId} when a row is clicked', async () => {
+      const user = userEvent.setup();
       mockCallApiResponse({ data: mockData });
 
       const navigate = vi.fn();
@@ -226,7 +228,7 @@ describe('ReportIndex', () => {
       });
 
       const linkElement = screen.getByRole('link', { name: 'My First Redteam Report' });
-      fireEvent.click(linkElement);
+      await user.click(linkElement);
 
       expect(navigate).toHaveBeenCalledWith('/reports?evalId=eval-1');
     });

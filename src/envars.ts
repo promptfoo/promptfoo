@@ -1,5 +1,5 @@
 import dotenv from 'dotenv';
-import cliState from './cliState';
+import { getEnvOverrides } from './envOverrides';
 
 import type { EnvOverrides } from './types/env';
 
@@ -230,6 +230,10 @@ type EnvVars = {
   //=========================================================================
   // Provider-specific settings
   //=========================================================================
+  // Abliteration
+  ABLIT_API_BASE_URL?: string;
+  ABLIT_KEY?: string;
+
   // AI21
   AI21_API_BASE_URL?: string;
   AI21_API_KEY?: string;
@@ -369,6 +373,7 @@ type EnvVars = {
   // OpenClaw
   OPENCLAW_CONFIG_PATH?: string;
   OPENCLAW_GATEWAY_PASSWORD?: string;
+  OPENCLAW_GATEWAY_PORT?: number | string;
   OPENCLAW_GATEWAY_TOKEN?: string;
   OPENCLAW_GATEWAY_URL?: string;
 
@@ -444,10 +449,9 @@ export type EnvVarKey = keyof EnvVars;
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  // First check if the key exists in CLI state env config
-  if (cliState.config?.env && typeof cliState.config.env === 'object') {
-    // Handle both ProviderEnvOverridesSchema and Record<string, string|number|boolean> type
-    const envValue = cliState.config.env[key as keyof typeof cliState.config.env];
+  const envOverrides = getEnvOverrides();
+  if (envOverrides) {
+    const envValue = envOverrides[key as string];
     if (envValue !== undefined) {
       return String(envValue);
     }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import { Card, CardContent } from '@app/components/ui/card';
@@ -14,7 +14,7 @@ import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 
-import type { ScanResult } from '../model-audit/ModelAudit.types';
+import type { ScannerCatalogEntry, ScanResult } from '../model-audit/ModelAudit.types';
 
 export default function ModelAuditSetupPage() {
   const navigate = useNavigate();
@@ -41,11 +41,64 @@ export default function ModelAuditSetupPage() {
   } = useModelAuditConfigStore();
 
   const { fetchHistoricalScans } = useModelAuditHistoryStore();
+  const [scannerCatalog, setScannerCatalog] = useState<ScannerCatalogEntry[]>([]);
+  const [isLoadingScanners, setIsLoadingScanners] = useState(false);
+  const [scannerCatalogError, setScannerCatalogError] = useState<string | null>(null);
+  const isOptionsDialogOpenRef = useRef(showOptionsDialog);
+
+  useLayoutEffect(() => {
+    isOptionsDialogOpenRef.current = showOptionsDialog;
+  }, [showOptionsDialog]);
 
   useEffect(() => {
     useModelAuditConfigStore.persist.rehydrate();
     checkInstallation();
   }, [checkInstallation]);
+
+  useEffect(() => {
+    if (!showOptionsDialog) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadScannerCatalog() {
+      setIsLoadingScanners(true);
+      setScannerCatalogError(null);
+
+      const shouldApplyScannerUpdate = () => !cancelled && isOptionsDialogOpenRef.current;
+
+      try {
+        const response = await callApi('/model-audit/scanners');
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => null);
+          throw new Error(errorBody?.error || 'Unable to load scanner catalog');
+        }
+
+        const data = (await response.json()) as { scanners?: ScannerCatalogEntry[] };
+        if (shouldApplyScannerUpdate()) {
+          setScannerCatalog(Array.isArray(data.scanners) ? data.scanners : []);
+        }
+      } catch (error) {
+        if (shouldApplyScannerUpdate()) {
+          setScannerCatalog([]);
+          setScannerCatalogError(
+            error instanceof Error ? error.message : 'Unable to load scanners',
+          );
+        }
+      } finally {
+        if (shouldApplyScannerUpdate()) {
+          setIsLoadingScanners(false);
+        }
+      }
+    }
+
+    loadScannerCatalog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showOptionsDialog]);
 
   const handleScan = useCallback(async () => {
     setIsScanning(true);
@@ -229,6 +282,9 @@ export default function ModelAuditSetupPage() {
           onClose={() => setShowOptionsDialog(false)}
           scanOptions={scanOptions}
           onOptionsChange={setScanOptions}
+          scannerCatalog={scannerCatalog}
+          isLoadingScanners={isLoadingScanners}
+          scannerCatalogError={scannerCatalogError}
         />
 
         {scanResults && (

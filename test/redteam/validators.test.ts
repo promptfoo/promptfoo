@@ -21,6 +21,10 @@ import {
   ALL_STRATEGIES as REDTEAM_ALL_STRATEGIES,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
 } from '../../src/redteam/constants';
+import {
+  CODING_AGENT_CORE_PLUGINS,
+  CODING_AGENT_PLUGINS,
+} from '../../src/redteam/constants/codingAgents';
 import { InputsSchema } from '../../src/redteam/types';
 import {
   RedteamConfigSchema,
@@ -371,10 +375,23 @@ describe('redteamConfigSchema', () => {
     expect(result.data?.strategies).toBeDefined();
 
     // Verify the structure is correct
-    const filteredPlugins = samplePlugins.filter((id) => !COLLECTIONS.includes(id as any));
+    const collectionIds = new Set<string>(COLLECTIONS);
+    const filteredPlugins = samplePlugins.filter((id) => !collectionIds.has(id));
     expect(result.data?.plugins).toHaveLength(filteredPlugins.length);
 
     expect(result.data?.strategies?.length).toBeGreaterThan(0);
+  });
+
+  it('should validate every defined plugin id individually', () => {
+    for (const pluginId of REDTEAM_ALL_PLUGINS) {
+      expect(RedteamPluginSchema.safeParse(pluginId).success, pluginId).toBe(true);
+    }
+  });
+
+  it('should validate every defined strategy id individually', () => {
+    for (const strategyId of REDTEAM_ALL_STRATEGIES) {
+      expect(RedteamStrategySchema.safeParse(strategyId).success, strategyId).toBe(true);
+    }
   });
 
   it('should expand harmful plugin to all harm categories', () => {
@@ -855,6 +872,32 @@ describe('redteamConfigSchema', () => {
       expect(strategies).toHaveLength(strategyIds.size);
     });
 
+    it('should expand current and legacy MITRE ATLAS aliases', () => {
+      const currentAlias = RedteamConfigSchema.safeParse({
+        plugins: ['mitre:atlas:persistence'],
+        numTests: 3,
+      });
+      expect(currentAlias.success).toBe(true);
+      expect(currentAlias.data?.plugins).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'agentic:memory-poisoning', numTests: 3 }),
+          expect.objectContaining({ id: 'rag-poisoning', numTests: 3 }),
+        ]),
+      );
+
+      const legacyAlias = RedteamConfigSchema.safeParse({
+        plugins: ['mitre:atlas:ml-attack-staging'],
+        numTests: 3,
+      });
+      expect(legacyAlias.success).toBe(true);
+      expect(legacyAlias.data?.plugins).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'ascii-smuggling', numTests: 3 }),
+          expect.objectContaining({ id: 'rag-poisoning', numTests: 3 }),
+        ]),
+      );
+    });
+
     it('should not duplicate strategies when using multiple aliased names', () => {
       const input = {
         plugins: ['owasp:llm', 'owasp:llm:01', 'owasp:llm:02'],
@@ -1015,6 +1058,28 @@ describe('RedteamConfigSchema transform', () => {
       true,
     );
     expect(result.plugins?.every((p: RedteamPluginObject) => p.numTests === 5)).toBe(true);
+  });
+
+  it('should expand coding-agent collections correctly', () => {
+    const coreResult = RedteamConfigSchema.parse({
+      numTests: 5,
+      plugins: ['coding-agent:core'],
+    });
+    expect(coreResult.plugins?.map((plugin) => plugin.id)).toEqual(
+      expect.arrayContaining([...CODING_AGENT_CORE_PLUGINS]),
+    );
+    expect(coreResult.plugins).toHaveLength(CODING_AGENT_CORE_PLUGINS.length);
+    expect(coreResult.plugins?.every((plugin) => plugin.numTests === 5)).toBe(true);
+
+    const allResult = RedteamConfigSchema.parse({
+      numTests: 10,
+      plugins: ['coding-agent:all'],
+    });
+    expect(allResult.plugins?.map((plugin) => plugin.id)).toEqual(
+      expect.arrayContaining([...CODING_AGENT_PLUGINS]),
+    );
+    expect(allResult.plugins).toHaveLength(CODING_AGENT_PLUGINS.length);
+    expect(allResult.plugins?.every((plugin) => plugin.numTests === 10)).toBe(true);
   });
 
   it('should handle plugin aliases and their associated strategies', () => {

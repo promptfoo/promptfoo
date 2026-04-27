@@ -1,5 +1,6 @@
 import { mockBrowserProperty } from '@app/tests/browserMocks';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomIntentPluginSection from './CustomIntentPluginSection';
 
@@ -85,11 +86,14 @@ describe('CustomIntentPluginSection', () => {
 
   describe('Intent Management', () => {
     it('adds new intent when add button is clicked', async () => {
+      const user = userEvent.setup();
       render(<CustomIntentPluginSection />);
 
       // First fill the empty field to enable the Add button
       const textField = screen.getByRole('textbox');
-      fireEvent.change(textField, { target: { value: 'Test intent' } });
+      await user.click(textField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('Test intent');
 
       // Wait for the Add button to be enabled
       await waitFor(() => {
@@ -98,7 +102,7 @@ describe('CustomIntentPluginSection', () => {
       });
 
       const addButton = screen.getByText('Add Intent');
-      fireEvent.click(addButton);
+      await user.click(addButton);
 
       // Should have 2 text fields now (with longer timeout for state update)
       await waitFor(
@@ -111,15 +115,19 @@ describe('CustomIntentPluginSection', () => {
     });
 
     it('updates intent text when typing', async () => {
+      const user = userEvent.setup();
       render(<CustomIntentPluginSection />);
 
       const textField = screen.getByRole('textbox');
-      fireEvent.change(textField, { target: { value: 'New intent text' } });
+      await user.click(textField);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('New intent text');
 
       expect(textField).toHaveValue('New intent text');
     });
 
     it('removes intent when delete button is clicked', async () => {
+      const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithIntents,
         updatePlugins: mockUpdatePlugins,
@@ -132,7 +140,7 @@ describe('CustomIntentPluginSection', () => {
       const deleteButtons = Array.from(deleteIcons).map((icon) => icon.closest('button')!);
       expect(deleteButtons).toHaveLength(3);
 
-      fireEvent.click(deleteButtons[0]);
+      await user.click(deleteButtons[0]);
 
       // Should have 2 text fields after deletion
       await waitFor(() => {
@@ -150,7 +158,8 @@ describe('CustomIntentPluginSection', () => {
   });
 
   describe('Clear All Functionality', () => {
-    it('shows confirmation dialog when Clear All is clicked', () => {
+    it('shows confirmation dialog when Clear All is clicked', async () => {
+      const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithIntents,
         updatePlugins: mockUpdatePlugins,
@@ -159,7 +168,7 @@ describe('CustomIntentPluginSection', () => {
       render(<CustomIntentPluginSection />);
 
       const clearAllButton = screen.getByText('Clear All');
-      fireEvent.click(clearAllButton);
+      await user.click(clearAllButton);
 
       expect(screen.getByText('Clear All Intents')).toBeInTheDocument();
       expect(
@@ -170,6 +179,7 @@ describe('CustomIntentPluginSection', () => {
     });
 
     it('clears all intents when confirmed', async () => {
+      const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithIntents,
         updatePlugins: mockUpdatePlugins,
@@ -178,10 +188,10 @@ describe('CustomIntentPluginSection', () => {
       render(<CustomIntentPluginSection />);
 
       const clearAllButton = screen.getByText('Clear All');
-      fireEvent.click(clearAllButton);
+      await user.click(clearAllButton);
 
       const confirmButton = screen.getByRole('button', { name: 'Clear All' });
-      fireEvent.click(confirmButton);
+      await user.click(confirmButton);
 
       await waitFor(() => {
         expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();
@@ -189,6 +199,7 @@ describe('CustomIntentPluginSection', () => {
     });
 
     it('cancels clear operation when Cancel is clicked', async () => {
+      const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithIntents,
         updatePlugins: mockUpdatePlugins,
@@ -197,10 +208,10 @@ describe('CustomIntentPluginSection', () => {
       render(<CustomIntentPluginSection />);
 
       const clearAllButton = screen.getByText('Clear All');
-      fireEvent.click(clearAllButton);
+      await user.click(clearAllButton);
 
       const cancelButton = screen.getByText('Cancel');
-      fireEvent.click(cancelButton);
+      await user.click(cancelButton);
 
       await waitFor(() => {
         expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();
@@ -317,29 +328,46 @@ describe('CustomIntentPluginSection', () => {
 
   describe('Plugin Configuration Updates', () => {
     it('calls updatePlugins when intents are modified', async () => {
+      const user = userEvent.setup();
       const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
       render(<CustomIntentPluginSection />);
 
-      const textField = screen.getByRole('textbox');
-      fireEvent.change(textField, { target: { value: 'New intent' } });
+      try {
+        const textField = screen.getByRole('textbox');
+        await user.click(textField);
+        await user.keyboard('{Control>}a{/Control}');
+        await user.paste('New intent');
 
-      const draftCallback = setTimeoutSpy.mock.calls[0]?.[0] as (() => void) | undefined;
-      act(() => {
-        draftCallback?.();
-      });
+        const runLatestTimerCallback = async (delay: number) => {
+          let callback: unknown;
+          for (let index = setTimeoutSpy.mock.calls.length - 1; index >= 0; index--) {
+            const [timerCallback, timerDelay] = setTimeoutSpy.mock.calls[index];
+            if (timerDelay === delay) {
+              callback = timerCallback;
+              break;
+            }
+          }
 
-      const debounceCallback = setTimeoutSpy.mock.calls[setTimeoutSpy.mock.calls.length - 1]?.[0] as
-        | (() => void)
-        | undefined;
-      act(() => {
-        debounceCallback?.();
-      });
+          if (typeof callback === 'function') {
+            await act(async () => {
+              callback();
+            });
+          }
+        };
 
-      expect(mockUpdatePlugins).toHaveBeenCalled();
-      setTimeoutSpy.mockRestore();
+        await runLatestTimerCallback(50);
+        await runLatestTimerCallback(1000);
+
+        await waitFor(() => {
+          expect(mockUpdatePlugins).toHaveBeenCalledTimes(1);
+        });
+      } finally {
+        setTimeoutSpy.mockRestore();
+      }
     });
 
     it('shows clear all confirmation dialog', async () => {
+      const user = userEvent.setup();
       mockUseRedTeamConfig.mockReturnValue({
         config: configWithIntents,
         updatePlugins: mockUpdatePlugins,
@@ -349,7 +377,7 @@ describe('CustomIntentPluginSection', () => {
 
       // Clear all intents
       const clearAllButton = screen.getByText('Clear All');
-      fireEvent.click(clearAllButton);
+      await user.click(clearAllButton);
 
       // Should show dialog
       expect(screen.getByText('Clear All Intents')).toBeInTheDocument();
@@ -360,7 +388,7 @@ describe('CustomIntentPluginSection', () => {
       ).toBeInTheDocument();
 
       const confirmButton = screen.getByRole('button', { name: 'Clear All' });
-      fireEvent.click(confirmButton);
+      await user.click(confirmButton);
 
       await waitFor(() => {
         expect(screen.queryByText('Clear All Intents')).not.toBeInTheDocument();

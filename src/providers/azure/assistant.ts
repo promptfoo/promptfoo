@@ -1,10 +1,13 @@
+import { createHmac } from 'crypto';
+
 import { fetchWithCache, getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
-import { REQUEST_TIMEOUT_MS, toTitleCase } from '../shared';
+import { getRequestTimeoutMs, toTitleCase } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type {
@@ -97,6 +100,67 @@ interface RunStepsResponse {
   }>;
 }
 
+const AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY = 'promptfoo-azure-assistant-cache-key-v1';
+
+function normalizeAzureAssistantCacheValue(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (Array.isArray(value)) {
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+    seen.add(value);
+    const normalized = value.map((item) => normalizeAzureAssistantCacheValue(item, seen));
+    seen.delete(value);
+    return normalized;
+  }
+
+  if (value && typeof value === 'object') {
+    if (seen.has(value)) {
+      return '[Circular]';
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {
+      return value;
+    }
+
+    seen.add(value);
+    const normalized = Object.keys(value)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = normalizeAzureAssistantCacheValue((value as Record<string, unknown>)[key], seen);
+        return acc;
+      }, {});
+    seen.delete(value);
+    return normalized;
+  }
+
+  return value;
+}
+
+function hmacAzureAssistantCacheValue(value: unknown) {
+  const serialized = safeJsonStringify(normalizeAzureAssistantCacheValue(value));
+  invariant(
+    serialized !== undefined,
+    'Azure Assistant cache key input contains values that cannot be serialized',
+  );
+
+  return createHmac('sha256', AZURE_ASSISTANT_CACHE_KEY_HMAC_KEY).update(serialized).digest('hex');
+}
+
+function getAuthHeadersCacheIdentity(authHeaders: Record<string, string>) {
+  const entries = Object.entries(authHeaders).sort(([nameA], [nameB]) =>
+    nameA.localeCompare(nameB),
+  );
+  if (entries.length === 0) {
+    return { headerNames: [], namespace: 'no-auth' };
+  }
+
+  return {
+    headerNames: entries.map(([name]) => name),
+    namespace: hmacAzureAssistantCacheValue(['auth', entries]),
+  };
+}
+
 export class AzureAssistantProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   private functionCallbackHandler = new FunctionCallbackHandler();
@@ -127,10 +191,16 @@ export class AzureAssistantProvider extends AzureGenericProvider {
     }
 
     const apiVersion = this.assistantConfig.apiVersion || '2024-04-01-preview';
+    const loadedTools = await maybeLoadToolsFromExternalFile(
+      this.assistantConfig.tools,
+      context?.vars,
+    );
 
     // Create a simple cache key based on the input and configuration
-    const cacheKey = `azure_assistant:${this.deploymentName}:${JSON.stringify({
+    const cacheKey = `azure_assistant:${this.deploymentName}:${hmacAzureAssistantCacheValue({
+      apiBaseUrl,
       apiVersion,
+      auth: getAuthHeadersCacheIdentity(this.authHeaders),
       instructions: this.assistantConfig.instructions,
       max_tokens: this.assistantConfig.max_tokens,
       model: this.assistantConfig.modelName,
@@ -139,9 +209,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
       temperature: this.assistantConfig.temperature,
       tool_choice: this.assistantConfig.tool_choice,
       tool_resources: this.assistantConfig.tool_resources,
-      tools: JSON.stringify(
-        await maybeLoadToolsFromExternalFile(this.assistantConfig.tools, context?.vars),
-      ),
+      tools: loadedTools,
       top_p: this.assistantConfig.top_p,
     })}`;
 
@@ -152,7 +220,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
 
         if (cachedResult) {
-          logger.debug(`Cache hit for assistant prompt: ${prompt.substring(0, 50)}...`);
+          logger.debug('Cache hit for assistant prompt', { promptLength: prompt.length });
           return { ...cachedResult, cached: true };
         }
       } catch (err) {
@@ -173,7 +241,10 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         },
       );
 
-      logger.debug(`Created thread ${threadResponse.id} for prompt: ${prompt.substring(0, 30)}...`);
+      logger.debug('Created thread for assistant prompt', {
+        threadId: threadResponse.id,
+        promptLength: prompt.length,
+      });
 
       // Create a message
       await this.makeRequest(
@@ -207,10 +278,6 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         runOptions.tool_choice = this.assistantConfig.tool_choice;
       }
       if (this.assistantConfig.tools) {
-        const loadedTools = await maybeLoadToolsFromExternalFile(
-          this.assistantConfig.tools,
-          context?.vars,
-        );
         if (loadedTools !== undefined) {
           runOptions.tools = loadedTools;
         }
@@ -305,7 +372,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
         try {
           const cache = await getCache();
           await cache.set(cacheKey, result);
-          logger.debug(`Cached assistant response for prompt: ${prompt.substring(0, 50)}...`);
+          logger.debug('Cached assistant response for prompt', { promptLength: prompt.length });
         } catch (err) {
           logger.warn(`Error caching result: ${err}`);
           // Continue even if caching fails
@@ -365,7 +432,7 @@ export class AzureAssistantProvider extends AzureGenericProvider {
    * Helper method to make HTTP requests using fetchWithCache
    */
   private async makeRequest<T>(url: string, options: RequestInit): Promise<T> {
-    const timeoutMs = this.assistantConfig.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    const timeoutMs = this.assistantConfig.timeoutMs ?? getRequestTimeoutMs();
     const retries = this.assistantConfig.retryOptions?.maxRetries ?? 4;
 
     // These operations should never be cached

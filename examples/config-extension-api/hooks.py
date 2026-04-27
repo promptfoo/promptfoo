@@ -136,3 +136,4 @@ def extension_hook(hook_name: str, context: dict) -> Optional[dict]:
         logging.info(f"Total token usage: {total_token_usage}")
 
     logging.info("")  # Add a blank line for readability between hooks
+    return None

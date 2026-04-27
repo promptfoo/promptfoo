@@ -2,9 +2,11 @@ import fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildOpenClawModelName,
   createOpenClawProvider,
   OpenClawAgentProvider,
   OpenClawChatProvider,
+  OpenClawEmbeddingProvider,
   OpenClawResponsesProvider,
   OpenClawToolInvokeProvider,
   readOpenClawConfig,
@@ -13,6 +15,7 @@ import {
   resolveGatewayUrl,
   resolveGatewayWsUrl,
 } from '../../src/providers/openclaw';
+import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/envars', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/envars')>();
@@ -31,14 +34,17 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-const websocketMocks = vi.hoisted(() => {
-  let factory: (() => any) | null = null;
+type WebSocketMockInstance = Record<string, unknown>;
+type WebSocketFactory = () => WebSocketMockInstance;
 
-  const WebSocketMock = vi.fn(function (_url: string, ..._args: any[]) {
+const websocketMocks = vi.hoisted(() => {
+  let factory: WebSocketFactory | null = null;
+
+  const WebSocketMock = vi.fn(function (_url: string, ..._args: unknown[]) {
     return factory?.() ?? {};
   });
 
-  const setFactory = (nextFactory: () => any) => {
+  const setFactory = (nextFactory: WebSocketFactory) => {
     factory = nextFactory;
   };
 
@@ -59,6 +65,15 @@ vi.mock('../../src/cache', () => ({
   fetchWithCache: mockFetchWithCache,
 }));
 
+const deviceAuthMocks = vi.hoisted(() => ({
+  buildSignedOpenClawDevice: vi.fn(),
+  clearOpenClawDeviceAuthToken: vi.fn(),
+  loadOpenClawDeviceAuthToken: vi.fn(),
+  loadOrCreateOpenClawDeviceIdentity: vi.fn(),
+  storeOpenClawDeviceAuthToken: vi.fn(),
+}));
+vi.mock('../../src/providers/openclaw/device-auth', () => deviceAuthMocks);
+
 describe('OpenClaw Provider', () => {
   const originalEnv = { ...process.env };
 
@@ -68,18 +83,37 @@ describe('OpenClaw Provider', () => {
     mockFetchWithProxy.mockReset();
     mockFetchWithCache.mockReset();
     resetConfigCache();
-    process.env = { ...originalEnv };
-    delete process.env.CLAWDBOT_GATEWAY_PASSWORD;
-    delete process.env.CLAWDBOT_GATEWAY_TOKEN;
-    delete process.env.CLAWDBOT_GATEWAY_URL;
-    delete process.env.OPENCLAW_CONFIG_PATH;
-    delete process.env.OPENCLAW_GATEWAY_PASSWORD;
-    delete process.env.OPENCLAW_GATEWAY_URL;
-    delete process.env.OPENCLAW_GATEWAY_TOKEN;
+    deviceAuthMocks.buildSignedOpenClawDevice.mockReset();
+    deviceAuthMocks.clearOpenClawDeviceAuthToken.mockReset();
+    deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReset();
+    deviceAuthMocks.loadOrCreateOpenClawDeviceIdentity.mockReset();
+    deviceAuthMocks.storeOpenClawDeviceAuthToken.mockReset();
+    deviceAuthMocks.loadOrCreateOpenClawDeviceIdentity.mockReturnValue({
+      deviceId: 'device-1',
+      publicKeyPem: 'public-key-pem',
+      privateKeyPem: 'private-key-pem',
+    });
+    deviceAuthMocks.buildSignedOpenClawDevice.mockImplementation((params: any) => ({
+      id: params.identity.deviceId,
+      publicKey: 'public-key',
+      signature: `signature:${params.nonce}:${params.token ?? ''}`,
+      signedAt: 1234,
+      nonce: params.nonce,
+    }));
+    deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue(undefined);
+    mockProcessEnv({ ...originalEnv }, { clear: true });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_PASSWORD: undefined });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_TOKEN: undefined });
+    mockProcessEnv({ CLAWDBOT_GATEWAY_URL: undefined });
+    mockProcessEnv({ OPENCLAW_CONFIG_PATH: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_PASSWORD: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_PORT: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_URL: undefined });
+    mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: undefined });
   });
 
   afterEach(() => {
-    process.env = originalEnv;
+    mockProcessEnv(originalEnv, { clear: true });
     vi.restoreAllMocks();
   });
 
@@ -90,7 +124,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should respect OPENCLAW_CONFIG_PATH when set', () => {
-      process.env.OPENCLAW_CONFIG_PATH = '/tmp/custom-openclaw.json';
+      mockProcessEnv({ OPENCLAW_CONFIG_PATH: '/tmp/custom-openclaw.json' });
       const existsSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
       readOpenClawConfig();
@@ -323,12 +357,12 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use environment variable second', () => {
-      process.env.OPENCLAW_GATEWAY_URL = 'http://env-host:8888';
+      mockProcessEnv({ OPENCLAW_GATEWAY_URL: 'http://env-host:8888' });
       expect(resolveGatewayUrl()).toBe('http://env-host:8888');
     });
 
     it('should fall back to legacy CLAWDBOT gateway URL environment variable', () => {
-      process.env.CLAWDBOT_GATEWAY_URL = 'http://legacy-host:8888';
+      mockProcessEnv({ CLAWDBOT_GATEWAY_URL: 'http://legacy-host:8888' });
       expect(resolveGatewayUrl()).toBe('http://legacy-host:8888');
     });
 
@@ -410,6 +444,29 @@ describe('OpenClaw Provider', () => {
       expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
     });
 
+    it('should use OPENCLAW_GATEWAY_PORT for local auto-detection', () => {
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10210 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify({ gateway: { port: 20000 } }));
+
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:19999');
+    });
+
+    it('should use OPENCLAW_GATEWAY_PORT for default local URLs', () => {
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:19999');
+    });
+
+    it('should ignore malformed OPENCLAW_GATEWAY_PORT values', () => {
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999x' });
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+      expect(resolveGatewayUrl()).toBe('http://127.0.0.1:18789');
+    });
+
     it('should use https when local gateway TLS is enabled', () => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(true);
       vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 10250 } as fs.Stats);
@@ -433,7 +490,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should prefer per-provider env override over process env', () => {
-      process.env.OPENCLAW_GATEWAY_URL = 'http://process-env:8888';
+      mockProcessEnv({ OPENCLAW_GATEWAY_URL: 'http://process-env:8888' });
       expect(resolveGatewayUrl(undefined, { OPENCLAW_GATEWAY_URL: 'http://override:7777' })).toBe(
         'http://override:7777',
       );
@@ -480,6 +537,28 @@ describe('OpenClaw Provider', () => {
 
       expect(resolveGatewayWsUrl()).toBe('wss://remote.example:443');
     });
+
+    it('should use OPENCLAW_GATEWAY_PORT for default local websocket URLs', () => {
+      mockProcessEnv({ OPENCLAW_GATEWAY_PORT: '19999' });
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+
+      expect(resolveGatewayWsUrl()).toBe('ws://127.0.0.1:19999');
+    });
+  });
+
+  describe('buildOpenClawModelName', () => {
+    it('should build slash-style OpenClaw agent target model names', () => {
+      expect(buildOpenClawModelName('main')).toBe('openclaw/main');
+      expect(buildOpenClawModelName('default')).toBe('openclaw/default');
+      expect(buildOpenClawModelName('openclaw:beta')).toBe('openclaw/beta');
+      expect(buildOpenClawModelName('agent:beta')).toBe('openclaw/beta');
+      expect(buildOpenClawModelName('openclaw/beta')).toBe('openclaw/beta');
+      expect(buildOpenClawModelName('openclaw: beta ')).toBe('openclaw/beta');
+      expect(buildOpenClawModelName('agent: beta ')).toBe('openclaw/beta');
+      expect(buildOpenClawModelName('openclaw:')).toBe('openclaw/default');
+      expect(buildOpenClawModelName('openclaw/')).toBe('openclaw/default');
+      expect(buildOpenClawModelName('agent:')).toBe('openclaw/default');
+    });
   });
 
   describe('resolveAuthToken', () => {
@@ -488,12 +567,12 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should use environment variable second', () => {
-      process.env.OPENCLAW_GATEWAY_TOKEN = 'env-token';
+      mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: 'env-token' });
       expect(resolveAuthToken()).toBe('env-token');
     });
 
     it('should use password environment variable when token is unset', () => {
-      process.env.OPENCLAW_GATEWAY_PASSWORD = 'env-password';
+      mockProcessEnv({ OPENCLAW_GATEWAY_PASSWORD: 'env-password' });
       expect(resolveAuthToken()).toBe('env-password');
     });
 
@@ -568,7 +647,7 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should prefer per-provider env override over process env', () => {
-      process.env.OPENCLAW_GATEWAY_TOKEN = 'process-token';
+      mockProcessEnv({ OPENCLAW_GATEWAY_TOKEN: 'process-token' });
       expect(resolveAuthToken(undefined, { OPENCLAW_GATEWAY_TOKEN: 'override-token' })).toBe(
         'override-token',
       );
@@ -579,8 +658,25 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should fall back to legacy CLAWDBOT token environment variables', () => {
-      process.env.CLAWDBOT_GATEWAY_TOKEN = 'legacy-token';
+      mockProcessEnv({ CLAWDBOT_GATEWAY_TOKEN: 'legacy-token' });
       expect(resolveAuthToken()).toBe('legacy-token');
+    });
+
+    it('should ignore SecretRef-shaped config tokens when env token is unavailable', () => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ mtimeMs: 12180 } as fs.Stats);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(
+        JSON.stringify({
+          gateway: {
+            auth: {
+              mode: 'token',
+              token: { source: 'env', provider: 'default', id: 'OPENCLAW_GATEWAY_TOKEN' },
+            },
+          },
+        }),
+      );
+
+      expect(resolveAuthToken()).toBeUndefined();
     });
 
     it('should return undefined when no token available', () => {
@@ -628,6 +724,11 @@ describe('OpenClaw Provider', () => {
       expect(provider.config.headers?.['x-openclaw-agent-id']).toBe('coding-agent');
     });
 
+    it('should use OpenClaw slash-style model names', () => {
+      const provider = new OpenClawChatProvider('coding-agent', {});
+      expect(provider.modelName).toBe('openclaw/coding-agent');
+    });
+
     it('should set session key header when provided', () => {
       const provider = new OpenClawChatProvider('main', {
         config: { session_key: 'my-session' },
@@ -648,13 +749,13 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should not fall back to OPENAI_API_KEY', () => {
-      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.getApiKey()).toBeUndefined();
     });
 
     it('should not fall back to OPENAI_BASE_URL', () => {
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      mockProcessEnv({ OPENAI_BASE_URL: 'https://api.openai.com/v1' });
       const provider = new OpenClawChatProvider('main', {});
       expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
     });
@@ -675,6 +776,33 @@ describe('OpenClaw Provider', () => {
       });
       expect(provider.config.headers?.['x-custom']).toBe('value');
       expect(provider.config.headers?.['x-openclaw-agent-id']).toBe('main');
+    });
+
+    it('should set OpenClaw context headers from typed config', () => {
+      const provider = new OpenClawChatProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4',
+          message_channel: 'slack',
+          account_id: 'work',
+          scopes: ['operator.read', 'operator.write'],
+        },
+      });
+
+      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
+      expect(provider.config.headers?.['x-openclaw-message-channel']).toBe('slack');
+      expect(provider.config.headers?.['x-openclaw-account-id']).toBe('work');
+      expect(provider.config.headers?.['x-openclaw-scopes']).toBe('operator.read,operator.write');
+    });
+
+    it('should prefer typed OpenClaw context config over custom header values', () => {
+      const provider = new OpenClawChatProvider('main', {
+        config: {
+          backend_model: 'openai/gpt-5.4',
+          headers: { 'x-openclaw-model': 'stale-model' },
+        },
+      });
+
+      expect(provider.config.headers?.['x-openclaw-model']).toBe('openai/gpt-5.4');
     });
   });
 
@@ -732,13 +860,13 @@ describe('OpenClaw Provider', () => {
     });
 
     it('should not fall back to OPENAI_API_KEY', () => {
-      process.env.OPENAI_API_KEY = 'sk-openai-key';
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
       const provider = new OpenClawResponsesProvider('main', {});
       expect(provider.getApiKey()).toBeUndefined();
     });
 
     it('should not fall back to OPENAI_BASE_URL', () => {
-      process.env.OPENAI_BASE_URL = 'https://api.openai.com/v1';
+      mockProcessEnv({ OPENAI_BASE_URL: 'https://api.openai.com/v1' });
       const provider = new OpenClawResponsesProvider('main', {});
       expect(provider.getApiUrl()).toBe('http://127.0.0.1:18789/v1');
     });
@@ -775,6 +903,83 @@ describe('OpenClaw Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(mockFetchWithCache.mock.calls[0][0]).toBe('http://test:18789/v1/responses');
       expect(mockFetchWithCache.mock.calls[0][1].headers.Authorization).toBeUndefined();
+    });
+  });
+
+  describe('OpenClawEmbeddingProvider', () => {
+    beforeEach(() => {
+      vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    });
+
+    it('should initialize with correct agent ID', () => {
+      const provider = new OpenClawEmbeddingProvider('main', {});
+      expect(provider.id()).toBe('openclaw:embedding:main');
+    });
+
+    it('should return correct string representation', () => {
+      const provider = new OpenClawEmbeddingProvider('coding-agent', {});
+      expect(provider.toString()).toBe('[OpenClaw Embedding Provider coding-agent]');
+    });
+
+    it('should use explicit gateway URL from config', () => {
+      const provider = new OpenClawEmbeddingProvider('main', {
+        config: { gateway_url: 'http://myhost:9999' },
+      });
+      expect(provider.config.apiBaseUrl).toBe('http://myhost:9999/v1');
+    });
+
+    it('should not fall back to OPENAI_API_KEY', () => {
+      mockProcessEnv({ OPENAI_API_KEY: 'sk-openai-key' });
+      const provider = new OpenClawEmbeddingProvider('main', {});
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
+    it('should call the embeddings endpoint without requiring an OpenAI API key', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          data: [{ embedding: [0.1, 0.2, 0.3] }],
+          usage: { total_tokens: 3, prompt_tokens: 3 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawEmbeddingProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const result = await provider.callEmbeddingApi('embed this');
+
+      expect(result.embedding).toEqual([0.1, 0.2, 0.3]);
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(mockFetchWithCache.mock.calls[0][0]).toBe('http://test:18789/v1/embeddings');
+      expect(mockFetchWithCache.mock.calls[0][1].headers.Authorization).toBeUndefined();
+      expect(JSON.parse(mockFetchWithCache.mock.calls[0][1].body).model).toBe('openclaw/main');
+    });
+
+    it('should send backend embedding model override as an OpenClaw header', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: { data: [{ embedding: [1] }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {},
+      });
+
+      const provider = new OpenClawEmbeddingProvider('main', {
+        config: {
+          backend_model: 'openai/text-embedding-3-small',
+          gateway_url: 'http://test:18789',
+        },
+      });
+
+      await provider.callEmbeddingApi('embed this');
+
+      expect(mockFetchWithCache.mock.calls[0][1].headers['x-openclaw-model']).toBe(
+        'openai/text-embedding-3-small',
+      );
     });
   });
 
@@ -855,6 +1060,20 @@ describe('OpenClaw Provider', () => {
 
       const result = await provider.callApi('{"command": "bad"}');
       expect(result.error).toBe('command not found');
+    });
+
+    it('should handle structured OpenClaw tool errors', async () => {
+      const provider = new OpenClawToolInvokeProvider('bash', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: false, error: { type: 'forbidden', message: 'not allowed' } }),
+      } as Response);
+
+      const result = await provider.callApi('{"command": "bad"}');
+      expect(result.error).toBe('not allowed');
     });
 
     it('should handle HTTP errors', async () => {
@@ -944,6 +1163,28 @@ describe('OpenClaw Provider', () => {
       expect(headers['x-openclaw-message-channel']).toBe('slack');
     });
 
+    it('should include typed OpenClaw context headers in tool invoke requests', async () => {
+      const provider = new OpenClawToolInvokeProvider('sessions_list', {
+        config: {
+          account_id: 'work',
+          gateway_url: 'http://test:18789',
+          message_channel: 'slack',
+        },
+      });
+
+      mockFetchWithProxy.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: true, result: 'ok' }),
+      } as Response);
+
+      await provider.callApi('{}');
+
+      const fetchCall = mockFetchWithProxy.mock.calls[0];
+      const headers = fetchCall[1]?.headers as Record<string, string>;
+      expect(headers['x-openclaw-message-channel']).toBe('slack');
+      expect(headers['x-openclaw-account-id']).toBe('work');
+    });
+
     it('should stringify non-string results', async () => {
       const provider = new OpenClawToolInvokeProvider('bash', {
         config: { gateway_url: 'http://test:18789' },
@@ -1024,14 +1265,47 @@ describe('OpenClaw Provider', () => {
   });
 
   describe('OpenClawAgentProvider', () => {
+    type AgentTestMessageHandler = (data: Buffer) => void;
+    type AgentTestErrorHandler = (error: Error) => void;
+    type AgentTestCloseHandler = () => void;
+    type AgentTestEventHandler =
+      | AgentTestMessageHandler
+      | AgentTestErrorHandler
+      | AgentTestCloseHandler;
+
+    interface ConnectResponsePayload {
+      type: string;
+      [key: string]: unknown;
+    }
+
     let mockWs: any;
-    let messageHandlers: Map<string, Function>;
+    let messageHandlers: Map<string, AgentTestEventHandler>;
+
+    function getWebSocketHandler<T extends AgentTestEventHandler>(event: string): T {
+      const handler = messageHandlers.get(event);
+      if (!handler) {
+        throw new Error(`Expected WebSocket ${event} handler to be registered`);
+      }
+      return handler as T;
+    }
+
+    function getMessageHandler() {
+      return getWebSocketHandler<AgentTestMessageHandler>('message');
+    }
+
+    function getErrorHandler() {
+      return getWebSocketHandler<AgentTestErrorHandler>('error');
+    }
+
+    function getCloseHandler() {
+      return getWebSocketHandler<AgentTestCloseHandler>('close');
+    }
 
     beforeEach(() => {
       vi.spyOn(fs, 'existsSync').mockReturnValue(false);
       messageHandlers = new Map();
       mockWs = {
-        on: vi.fn((event: string, handler: Function) => {
+        on: vi.fn((event: string, handler: AgentTestEventHandler) => {
           messageHandlers.set(event, handler);
         }),
         send: vi.fn(),
@@ -1052,7 +1326,10 @@ describe('OpenClaw Provider', () => {
     });
 
     /** Helper: simulate challenge → connect → agent accepted flow, return agent req ID */
-    function simulateHandshake(onMessage: Function) {
+    function simulateHandshake(
+      onMessage: AgentTestMessageHandler,
+      connectPayload: ConnectResponsePayload = { type: 'hello-ok' },
+    ) {
       // Challenge
       onMessage(
         Buffer.from(
@@ -1072,7 +1349,7 @@ describe('OpenClaw Provider', () => {
             type: 'res',
             id: connectReq.id,
             ok: true,
-            payload: { type: 'hello-ok' },
+            payload: connectPayload,
           }),
         ),
       );
@@ -1101,13 +1378,31 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello agent');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { connectReq, agentReq, waitReq } = simulateHandshake(onMessage);
 
       // Verify connect request
       expect(connectReq.type).toBe('req');
       expect(connectReq.method).toBe('connect');
       expect(connectReq.params.auth.token).toBe('test-token');
+      expect(connectReq.params.device).toEqual({
+        id: 'device-1',
+        publicKey: 'public-key',
+        signature: 'signature:abc:test-token',
+        signedAt: 1234,
+        nonce: 'abc',
+      });
+      expect(deviceAuthMocks.buildSignedOpenClawDevice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clientId: 'gateway-client',
+          clientMode: 'cli',
+          nonce: 'abc',
+          platform: process.platform,
+          role: 'operator',
+          scopes: ['operator.read', 'operator.write'],
+          token: 'test-token',
+        }),
+      );
 
       // Verify agent request
       expect(agentReq.method).toBe('agent');
@@ -1158,7 +1453,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Streaming events — text is accumulated (full text so far), not incremental
@@ -1204,13 +1499,96 @@ describe('OpenClaw Provider', () => {
       expect(result.output).toBe('Hello world!');
     });
 
+    it('should accumulate assistant delta streaming events', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'assistant',
+              data: { delta: 'Hello' },
+              seq: 1,
+              ts: 1,
+            },
+          }),
+        ),
+      );
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'assistant',
+              data: { delta: ' world!' },
+              seq: 2,
+              ts: 2,
+            },
+          }),
+        ),
+      );
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('Hello world!');
+    });
+
+    it('should persist issued device tokens from hello-ok', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789', device_auth_path: '/tmp/device-auth.json' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { waitReq } = simulateHandshake(onMessage, {
+        type: 'hello-ok',
+        auth: {
+          deviceToken: 'issued-device-token',
+          role: 'operator',
+          scopes: ['operator.read'],
+        },
+      });
+
+      expect(deviceAuthMocks.storeOpenClawDeviceAuthToken).toHaveBeenCalledWith({
+        deviceId: 'device-1',
+        role: 'operator',
+        token: 'issued-device-token',
+        scopes: ['operator.read'],
+        filePath: '/tmp/device-auth.json',
+      });
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      await promise;
+    });
+
     it('should ignore streaming events from other runIds', async () => {
       const provider = new OpenClawAgentProvider('main', {
         config: { gateway_url: 'http://test:18789' },
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Event from a different run should be ignored
@@ -1264,7 +1642,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       // Challenge
       onMessage(
@@ -1300,7 +1678,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       // Challenge → connect
       onMessage(
@@ -1340,7 +1718,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       onMessage(
         Buffer.from(
@@ -1379,7 +1757,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onError = messageHandlers.get('error')!;
+      const onError = getErrorHandler();
       onError(new Error('Connection refused'));
 
       const result = await promise;
@@ -1414,7 +1792,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { agentReq, waitReq } = simulateHandshake(onMessage);
 
       expect(agentReq.params.sessionKey).toBe('my-session');
@@ -1436,13 +1814,120 @@ describe('OpenClaw Provider', () => {
       expect(result.output).toBe('No output from agent');
     });
 
+    it('should scope generated session keys for non-main agents', async () => {
+      const provider = new OpenClawAgentProvider('dev', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.agentId).toBe('dev');
+      expect(agentReq.params.sessionKey).toMatch(/^agent:dev:promptfoo-[0-9a-f-]{36}$/);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      await promise;
+    });
+
+    it('should scope unscoped configured session keys for non-main agents', async () => {
+      const provider = new OpenClawAgentProvider('dev', {
+        config: { gateway_url: 'http://test:18789', session_key: 'my-session' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.agentId).toBe('dev');
+      expect(agentReq.params.sessionKey).toBe('agent:dev:my-session');
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      await promise;
+    });
+
+    it('should include channel and account context when configured', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: {
+          gateway_url: 'http://test:18789',
+          message_channel: 'slack',
+          account_id: 'work',
+        },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { agentReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(agentReq.params.channel).toBe('slack');
+      expect(agentReq.params.accountId).toBe('work');
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: waitReq.id,
+            ok: true,
+            payload: { status: 'ok' },
+          }),
+        ),
+      );
+
+      await promise;
+    });
+
+    it('should include device family in both client metadata and the signed payload', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: {
+          gateway_url: 'http://test:18789',
+          auth_token: 'test-token',
+          device_family: 'promptfoo-e2e',
+        },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { connectReq, waitReq } = simulateHandshake(onMessage);
+
+      expect(connectReq.params.client.deviceFamily).toBe('promptfoo-e2e');
+      expect(deviceAuthMocks.buildSignedOpenClawDevice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deviceFamily: 'promptfoo-e2e',
+          token: 'test-token',
+        }),
+      );
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: waitReq.id,
+            ok: true,
+            payload: { status: 'ok' },
+          }),
+        ),
+      );
+
+      await promise;
+    });
+
     it('should send password auth during connect when auth_password is configured', async () => {
       const provider = new OpenClawAgentProvider('main', {
         config: { gateway_url: 'http://test:18789', auth_password: 'my-password' },
       });
 
       void provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       onMessage(
         Buffer.from(
@@ -1457,6 +1942,62 @@ describe('OpenClaw Provider', () => {
       const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
       expect(connectReq.params.auth.password).toBe('my-password');
       expect(connectReq.params.auth.token).toBeUndefined();
+      expect(connectReq.params.device.signature).toBe('signature:n:');
+      expect(deviceAuthMocks.buildSignedOpenClawDevice).toHaveBeenCalledWith(
+        expect.objectContaining({ token: null }),
+      );
+    });
+
+    it('should omit device identity when disabled explicitly', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { disable_device_auth: true, gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'n', ts: 1 },
+          }),
+        ),
+      );
+
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(connectReq.params.device).toBeUndefined();
+      expect(deviceAuthMocks.loadOrCreateOpenClawDeviceIdentity).not.toHaveBeenCalled();
+
+      const onError = getErrorHandler();
+      onError(new Error('test cleanup'));
+      await promise;
+    });
+
+    it('should pass custom websocket headers', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: {
+          gateway_url: 'http://test:18789',
+          headers: { 'x-trusted-user': 'alice' },
+          ws_headers: { 'x-openclaw-account-id': 'work' },
+        },
+      });
+
+      const promise = provider.callApi('Hello');
+
+      const wsConstructorCall = websocketMocks.WebSocketMock.mock.calls[0];
+      const wsConstructorOptions = wsConstructorCall[1] as {
+        headers?: Record<string, string>;
+      };
+      expect(wsConstructorOptions.headers).toEqual({
+        'x-trusted-user': 'alice',
+        'x-openclaw-account-id': 'work',
+      });
+
+      const onError = getErrorHandler();
+      onError(new Error('test cleanup'));
+      await promise;
     });
 
     it('should include extraSystemPrompt when configured', async () => {
@@ -1468,7 +2009,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { agentReq, waitReq } = simulateHandshake(onMessage);
 
       expect(agentReq.params.extraSystemPrompt).toBe('Be terse.');
@@ -1494,7 +2035,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Wait response with error
@@ -1513,13 +2054,138 @@ describe('OpenClaw Provider', () => {
       expect(result.error).toContain('Agent crashed during execution');
     });
 
+    it('should surface terminal agent.wait error payloads', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: waitReq.id,
+            ok: true,
+            payload: { status: 'error', error: 'LLM request failed: network connection error.' },
+          }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.error).toContain('LLM request failed');
+    });
+
+    it('should surface terminal agent.wait timeout payloads', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: waitReq.id,
+            ok: true,
+            payload: { status: 'timeout' },
+          }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.error).toContain('timed out waiting for run run-1');
+    });
+
+    it('should surface lifecycle error events when wait returns without output', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'lifecycle',
+              data: { phase: 'error', error: 'LLM request failed: network connection error.' },
+            },
+          }),
+        ),
+      );
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.error).toContain('LLM request failed');
+    });
+
+    it('should prefer recovered assistant output over earlier lifecycle errors', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+      const { waitReq } = simulateHandshake(onMessage);
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'lifecycle',
+              data: { phase: 'error', error: 'transient model error' },
+            },
+          }),
+        ),
+      );
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: {
+              runId: 'run-1',
+              stream: 'assistant',
+              data: { text: 'Recovered answer' },
+            },
+          }),
+        ),
+      );
+      onMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('Recovered answer');
+    });
+
     it('should resolve with error on unexpected WS close', async () => {
       const provider = new OpenClawAgentProvider('main', {
         config: { gateway_url: 'http://test:18789' },
       });
 
       const promise = provider.callApi('Hello');
-      const onClose = messageHandlers.get('close')!;
+      const onClose = getCloseHandler();
 
       // Server closes connection unexpectedly
       onClose();
@@ -1560,7 +2226,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       // Challenge
       onMessage(
@@ -1575,11 +2241,167 @@ describe('OpenClaw Provider', () => {
 
       const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
       expect(connectReq.params.auth).toBeUndefined();
+      expect(connectReq.params.device.signature).toBe('signature:abc:');
 
       // Clean up: error to resolve the promise
-      const onError = messageHandlers.get('error')!;
+      const onError = getErrorHandler();
       onError(new Error('test cleanup'));
       await promise;
+    });
+
+    it('should preserve required agent write scopes when reusing a read-only cached device token', async () => {
+      deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue({
+        token: 'read-only-device-token',
+        role: 'operator',
+        scopes: ['operator.read'],
+        updatedAtMs: 1,
+      });
+
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'abc', ts: Date.now() },
+          }),
+        ),
+      );
+
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      expect(connectReq.params.auth.deviceToken).toBe('read-only-device-token');
+      expect(connectReq.params.scopes).toEqual(['operator.read', 'operator.write']);
+      expect(deviceAuthMocks.buildSignedOpenClawDevice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scopes: ['operator.read', 'operator.write'],
+          token: 'read-only-device-token',
+        }),
+      );
+
+      const onError = getErrorHandler();
+      onError(new Error('test cleanup'));
+      await promise;
+    });
+
+    it('should reconnect with a cached device token on auth token mismatch', async () => {
+      const wsInstances: Array<{ handlers: Map<string, Function>; send: any; close: any }> = [];
+      websocketMocks.setFactory(() => {
+        const handlers = new Map<string, Function>();
+        const ws = {
+          handlers,
+          on: vi.fn((event: string, handler: Function) => handlers.set(event, handler)),
+          send: vi.fn(),
+          close: vi.fn(),
+        };
+        wsInstances.push(ws);
+        return ws;
+      });
+      deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue({
+        token: 'cached-device-token',
+        role: 'operator',
+        scopes: ['operator.read'],
+        updatedAtMs: 1,
+      });
+
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789', auth_token: 'bad-token' },
+      });
+
+      const promise = provider.callApi('Hello');
+      const firstOnMessage = wsInstances[0].handlers.get('message')!;
+      firstOnMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'first', ts: 1 },
+          }),
+        ),
+      );
+      const firstConnectReq = JSON.parse(wsInstances[0].send.mock.calls[0][0]);
+      expect(firstConnectReq.params.auth.token).toBe('bad-token');
+
+      firstOnMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: firstConnectReq.id,
+            ok: false,
+            error: {
+              code: 'AUTH_UNAUTHORIZED',
+              message: 'Invalid token',
+              details: {
+                code: 'AUTH_TOKEN_MISMATCH',
+                canRetryWithDeviceToken: true,
+                recommendedNextStep: 'retry_with_device_token',
+              },
+            },
+          }),
+        ),
+      );
+
+      await vi.waitFor(
+        () => {
+          expect(wsInstances).toHaveLength(2);
+        },
+        { timeout: 1000 },
+      );
+
+      const secondOnMessage = wsInstances[1].handlers.get('message')!;
+      secondOnMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'second', ts: 2 },
+          }),
+        ),
+      );
+      const secondConnectReq = JSON.parse(wsInstances[1].send.mock.calls[0][0]);
+      expect(secondConnectReq.params.auth.deviceToken).toBe('cached-device-token');
+      expect(secondConnectReq.params.scopes).toEqual(['operator.read', 'operator.write']);
+      expect(secondConnectReq.params.device.signature).toBe('signature:second:cached-device-token');
+
+      secondOnMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: secondConnectReq.id, ok: true, payload: {} }),
+        ),
+      );
+      const agentReq = JSON.parse(wsInstances[1].send.mock.calls[1][0]);
+      secondOnMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: agentReq.id,
+            ok: true,
+            payload: { runId: 'run-1', status: 'accepted' },
+          }),
+        ),
+      );
+      const waitReq = JSON.parse(wsInstances[1].send.mock.calls[2][0]);
+      secondOnMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'agent',
+            payload: { runId: 'run-1', stream: 'assistant', data: { text: 'retried' } },
+          }),
+        ),
+      );
+      secondOnMessage(
+        Buffer.from(
+          JSON.stringify({ type: 'res', id: waitReq.id, ok: true, payload: { status: 'ok' } }),
+        ),
+      );
+
+      const result = await promise;
+      expect(result.output).toBe('retried');
     });
 
     it('should ignore malformed JSON frames', async () => {
@@ -1588,7 +2410,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
 
       // Send malformed JSON — should be silently ignored
       onMessage(Buffer.from('not valid json {{{'));
@@ -1622,7 +2444,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Non-assistant stream events should be ignored
@@ -1663,7 +2485,7 @@ describe('OpenClaw Provider', () => {
       });
 
       const promise = provider.callApi('Hello');
-      const onMessage = messageHandlers.get('message')!;
+      const onMessage = getMessageHandler();
       const { waitReq } = simulateHandshake(onMessage);
 
       // Wait response with no streaming events
@@ -1675,6 +2497,69 @@ describe('OpenClaw Provider', () => {
 
       const result = await promise;
       expect(result.output).toBe('No output from agent');
+    });
+
+    /** Helper: simulate challenge → connect mismatch error, return the resolved promise */
+    async function simulateDeviceTokenMismatch(provider: OpenClawAgentProvider) {
+      const promise = provider.callApi('Hello');
+      const onMessage = getMessageHandler();
+
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'event',
+            event: 'connect.challenge',
+            payload: { nonce: 'n', ts: 1 },
+          }),
+        ),
+      );
+
+      const connectReq = JSON.parse(mockWs.send.mock.calls[0][0]);
+      onMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: 'res',
+            id: connectReq.id,
+            ok: false,
+            error: {
+              code: 'AUTH_DEVICE_TOKEN_MISMATCH',
+              message: 'Device token mismatch',
+            },
+          }),
+        ),
+      );
+
+      return promise;
+    }
+
+    it('should clear stored device token on AUTH_DEVICE_TOKEN_MISMATCH', async () => {
+      deviceAuthMocks.loadOpenClawDeviceAuthToken.mockReturnValue({
+        token: 'stale-token',
+        role: 'operator',
+        scopes: ['operator.read'],
+        updatedAtMs: 1,
+      });
+
+      const provider = new OpenClawAgentProvider('main', {
+        config: { gateway_url: 'http://test:18789' },
+      });
+
+      await simulateDeviceTokenMismatch(provider);
+      expect(deviceAuthMocks.clearOpenClawDeviceAuthToken).toHaveBeenCalledWith(
+        expect.objectContaining({ deviceId: 'device-1', role: 'operator' }),
+      );
+    });
+
+    it('should not clear config-provided device token on mismatch', async () => {
+      const provider = new OpenClawAgentProvider('main', {
+        config: {
+          gateway_url: 'http://test:18789',
+          device_token: 'config-device-token',
+        },
+      });
+
+      await simulateDeviceTokenMismatch(provider);
+      expect(deviceAuthMocks.clearOpenClawDeviceAuthToken).not.toHaveBeenCalled();
     });
   });
 
@@ -1711,6 +2596,18 @@ describe('OpenClaw Provider', () => {
       const provider = createOpenClawProvider('openclaw:responses:beta');
       expect(provider).toBeInstanceOf(OpenClawResponsesProvider);
       expect(provider.id()).toBe('openclaw:responses:beta');
+    });
+
+    it('should create embedding provider for openclaw:embedding', () => {
+      const provider = createOpenClawProvider('openclaw:embedding');
+      expect(provider).toBeInstanceOf(OpenClawEmbeddingProvider);
+      expect(provider.id()).toBe('openclaw:embedding:main');
+    });
+
+    it('should create embedding provider with agent ID and plural alias', () => {
+      const provider = createOpenClawProvider('openclaw:embeddings:beta');
+      expect(provider).toBeInstanceOf(OpenClawEmbeddingProvider);
+      expect(provider.id()).toBe('openclaw:embedding:beta');
     });
 
     it('should create agent provider for openclaw:agent', () => {

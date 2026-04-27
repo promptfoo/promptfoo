@@ -2,7 +2,7 @@ import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useStore } from '@app/stores/evalConfig';
 import { mockCallApiRoutes, rejectCallApi, resetCallApiMock } from '@app/tests/apiMocks';
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RunTestSuiteButton from './RunTestSuiteButton';
@@ -92,7 +92,8 @@ describe('RunTestSuiteButton', () => {
 
     // Click the button with fake timers active to control the interval
     await act(async () => {
-      fireEvent.click(button);
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
     });
 
     // Advance timers to trigger the polling interval (1000ms in the component)

@@ -119,7 +119,7 @@ redteam:
     - 'jailbreak-templates'
 ```
 
-You can also browse the full document-based example in GitHub: [examples/redteam-multi-input](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-multi-input).
+You can also browse runnable examples in GitHub: [examples/redteam-multi-input](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-multi-input) for a standard multi-field app, or [examples/redteam-docx-document-upload](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-docx-document-upload) for a DOCX upload workflow.
 
 ### Step 2: Run the Red Team
 
@@ -182,11 +182,37 @@ targets:
       # ... rest of config
 ```
 
-Each key becomes a variable that plugins will generate adversarial content for. The value is a description that guides test case generation.
+Each key becomes a variable that plugins will generate adversarial content for. The value can be a plain description string, or a structured definition with `description`, optional `type`, and optional `config`.
 
 :::note
 Define only your real application inputs here. In multi-input mode, Promptfoo automatically builds the internal `__prompt` payload from these fields for generation and grading, so you should not set `redteam.injectVar`, add a synthetic `prompt` input, or rewrite your target to use `{{prompt}}` just to make multi-input work.
 :::
+
+### Typed Document And Media Inputs
+
+For upload or multimodal targets, use a structured input definition. Set `type` to `docx`, `pdf`, or `image` when Promptfoo should materialize generated text into that file or media value before calling your provider. Use `config.inputPurpose` to describe what a normal uploaded file should look like, `config.injectionPlacements` to choose where injected instructions may be placed, and `config.benign: true` for companion fields that should remain natural.
+
+DOCX inputs support `body`, `comment`, `footnote`, `header`, and `footer` placements. PDF and image inputs support `body`, `header`, and `footer` placements.
+
+```yaml
+targets:
+  - id: file://provider.js
+    inputs:
+      document:
+        type: docx
+        description: DOCX document content to upload and summarize
+        config:
+          inputPurpose: A realistic business document uploaded by an internal user
+          injectionPlacements:
+            - body
+            - comment
+      question:
+        description: A normal user request about the uploaded document
+        config:
+          benign: true
+```
+
+The provider receives `document` as a DOCX data URI and `question` as ordinary text. See the [DOCX document upload example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-docx-document-upload) for a complete provider and configuration.
 
 ### Variable Naming
 
@@ -370,6 +396,7 @@ Standard single-input mode is simpler for applications with a single prompt fiel
 ## Related Concepts
 
 - [GitHub Example: redteam-multi-input](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-multi-input) — Browse the full runnable multi-input example
+- [GitHub Example: redteam-docx-document-upload](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-docx-document-upload) — Test indirect prompt injection through uploaded DOCX files
 - [BOLA Plugin](/docs/red-team/plugins/bola/) — Test broken object-level authorization
 - [BFLA Plugin](/docs/red-team/plugins/bfla/) — Test broken function-level authorization
 - [HTTP Provider](/docs/providers/http/) — Configure HTTP API targets

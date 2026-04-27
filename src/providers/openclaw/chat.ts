@@ -1,5 +1,10 @@
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import { buildOpenClawProviderOptions, DEFAULT_GATEWAY_HOST, DEFAULT_GATEWAY_PORT } from './shared';
+import {
+  buildOpenClawModelName,
+  buildOpenClawProviderOptions,
+  DEFAULT_GATEWAY_HOST,
+  DEFAULT_GATEWAY_PORT,
+} from './shared';
 
 import type { ProviderOptions } from '../../types/providers';
 
@@ -22,7 +27,7 @@ export class OpenClawChatProvider extends OpenAiChatCompletionProvider {
   private agentId: string;
 
   constructor(agentId: string, providerOptions: ProviderOptions = {}) {
-    super(`openclaw:${agentId}`, buildOpenClawProviderOptions(agentId, providerOptions));
+    super(buildOpenClawModelName(agentId), buildOpenClawProviderOptions(agentId, providerOptions));
     this.agentId = agentId;
   }
 

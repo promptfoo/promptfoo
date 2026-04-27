@@ -21,15 +21,31 @@ import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../util/oauth';
 import { safeResolve } from '../util/pathUtils';
-import { sanitizeObject, sanitizeUrl } from '../util/sanitizer';
+import {
+  isSecretField,
+  looksLikeSecret,
+  REDACTED,
+  sanitizeObject,
+  sanitizeUrl,
+} from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  HttpMultipartConfigSchema,
+  type RenderedHttpMultipartBody,
+  renderHttpMultipartBody,
+} from './httpMultipart';
 import {
   createTransformRequest,
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS, type ToolFormat, transformToolChoice, transformTools } from './shared';
+import {
+  getRequestTimeoutMs,
+  type ToolFormat,
+  transformToolChoice,
+  transformTools,
+} from './shared';
 import { loadTransformModule } from './transformUtils';
 
 export { loadTransformModule } from './transformUtils';
@@ -846,6 +862,7 @@ export const HttpProviderConfigSchema = z.object({
   headers: z.record(z.string(), z.string()).optional(),
   maxRetries: z.number().min(0).optional(),
   method: z.string().optional(),
+  multipart: HttpMultipartConfigSchema.optional(),
   queryParams: z.record(z.string(), z.string()).optional(),
   request: z.string().optional(),
   /**
@@ -918,6 +935,43 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
   });
 }
 
+function removeMultipartContentType(headers: Record<string, string>): void {
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === 'content-type') {
+      delete headers[key];
+    }
+  }
+}
+
+function sanitizeMultipartFields(fields: RenderedHttpMultipartBody['fields']) {
+  return fields.map((field) => ({
+    ...field,
+    value: isSecretField(field.field) || looksLikeSecret(field.value) ? REDACTED : field.value,
+  }));
+}
+
+function sanitizeMultipartFiles(files: RenderedHttpMultipartBody['files']) {
+  return files.map((file) => ({
+    field: isSecretField(file.field) ? REDACTED : file.field,
+    filename: looksLikeSecret(file.filename) ? REDACTED : file.filename,
+    contentType: file.contentType,
+    sizeBytes: file.sizeBytes,
+    source: file.source,
+  }));
+}
+
+function validateMultipartConfig(config: HttpProviderConfig): void {
+  if (!config.multipart) {
+    return;
+  }
+  if (config.request) {
+    throw new Error('HTTP provider config cannot include both request and multipart');
+  }
+  if (config.body != null) {
+    throw new Error('HTTP provider config cannot include both body and multipart');
+  }
+}
+
 interface SessionParserData {
   headers?: Record<string, string> | null;
   body?: Record<string, any> | string | null;
@@ -929,6 +983,15 @@ function hasOwnProperty(obj: Record<string, any>, key: string): boolean {
 
 function parseFileAuthReference(filePath: string): { filePath: string; functionName?: string } {
   return filePath.startsWith('file://') ? parseFileUrl(filePath) : { filePath };
+}
+
+function formatFileAuthFreshness(expiration?: number | null): string {
+  if (expiration == null) {
+    return 'never expires';
+  }
+
+  const freshForSeconds = Math.max(0, Math.ceil((expiration - Date.now()) / 1000));
+  return `expires in ${freshForSeconds} seconds`;
 }
 
 export async function createSessionParser(
@@ -1117,12 +1180,12 @@ function parseRawRequest(input: string) {
     return {
       method: requestModel.method,
       url: requestModel.target,
-      headers: requestModel.headers.reduce(
+      headers: requestModel.headers.reduce<Record<string, string>>(
         (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
           return acc;
         },
-        {} as Record<string, string>,
+        {},
       ),
       body: requestModel.body,
     };
@@ -1454,6 +1517,7 @@ export class HttpProvider implements ApiProvider {
 
   constructor(url: string, options: ProviderOptions) {
     this.config = HttpProviderConfigSchema.parse(options.config);
+    validateMultipartConfig(this.config);
     if (!this.config.tokenEstimation && cliState.config?.redteam) {
       this.config.tokenEstimation = { enabled: true, multiplier: 1.3 };
     }
@@ -1487,7 +1551,7 @@ export class HttpProvider implements ApiProvider {
       this.config.request = maybeLoadFromExternalFile(this.config.request) as string;
     } else {
       invariant(
-        this.config.body || this.config.method === 'GET',
+        this.config.body || this.config.multipart || this.config.method === 'GET',
         `Expected HTTP provider ${this.url} to have a config containing {body}, but instead got ${safeJsonStringify(
           this.config,
         )}`,
@@ -1632,7 +1696,7 @@ export class HttpProvider implements ApiProvider {
       const response = await fetchWithCache(
         oauthConfig.tokenUrl,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         true, // Always bust cache for token requests
         0, // No retries for token requests
@@ -1699,15 +1763,20 @@ export class HttpProvider implements ApiProvider {
     return false;
   }
 
-  private async refreshTokenWithLock(refreshToken: () => Promise<void>): Promise<void> {
+  private async refreshTokenWithLock(
+    refreshToken: () => Promise<void>,
+    onLockAcquired?: () => void,
+  ): Promise<void> {
     while (this.tokenRefreshLock != null) {
       if (await this.waitForInFlightTokenRefresh()) {
         return;
       }
     }
 
-    const refreshLock = { promise: refreshToken() };
+    const refreshLock = { promise: Promise.resolve() as Promise<void> };
     this.tokenRefreshLock = refreshLock;
+    onLockAcquired?.();
+    refreshLock.promise = refreshToken();
 
     try {
       await refreshLock.promise;
@@ -1735,7 +1804,12 @@ export class HttpProvider implements ApiProvider {
     }
 
     logger.debug('[HTTP Provider Auth]: Starting or waiting for file auth token refresh');
-    await this.refreshTokenWithLock(() => this.performFileTokenRefresh(prompt, vars, context));
+    await this.refreshTokenWithLock(
+      () => this.performFileTokenRefresh(prompt, vars, context),
+      () => {
+        logger.debug('[HTTP Provider Auth]: Acquired file auth refresh lock');
+      },
+    );
   }
 
   private async performFileTokenRefresh(
@@ -1754,6 +1828,9 @@ export class HttpProvider implements ApiProvider {
     };
 
     try {
+      logger.debug(
+        `[HTTP Provider Auth]: Invoking file auth function ${filePath}#${functionName ?? defaultFunctionName}`,
+      );
       const authFn = await loadFunction<
         (authContext: CallApiContextParams) => Promise<FileAuthResult> | FileAuthResult
       >({
@@ -1764,7 +1841,9 @@ export class HttpProvider implements ApiProvider {
       const result = FileAuthResultSchema.parse(await authFn(authContext));
       this.lastToken = result.token;
       this.lastTokenExpiresAt = result.expiration ?? undefined;
-      logger.debug('[HTTP Provider Auth]: Successfully refreshed file auth token');
+      logger.info(
+        `[HTTP Provider Auth]: Successfully refreshed file auth token (${formatFileAuthFreshness(result.expiration)})`,
+      );
     } catch (err) {
       logger.error(`[HTTP Provider Auth]: Failed to refresh file auth token: ${String(err)}`);
       throw new Error(`Failed to refresh file auth token: ${String(err)}`);
@@ -1915,7 +1994,7 @@ export class HttpProvider implements ApiProvider {
     const response = await fetchWithCache(
       url,
       fetchOptions,
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'text',
       true, // Always bust cache for session requests
       this.config.maxRetries,
@@ -1981,6 +2060,9 @@ export class HttpProvider implements ApiProvider {
 
   private getDefaultHeaders(body: any): Record<string, string> {
     if (this.config.method === 'GET') {
+      return {};
+    }
+    if (this.config.multipart) {
       return {};
     }
     if (typeof body === 'object' && body !== null) {
@@ -2215,7 +2297,11 @@ export class HttpProvider implements ApiProvider {
       headers.tracestate = context.tracestate;
     }
 
-    this.validateContentTypeAndBody(headers, this.config.body);
+    if (this.config.multipart) {
+      removeMultipartContentType(headers);
+    } else {
+      this.validateContentTypeAndBody(headers, this.config.body);
+    }
 
     // Transform prompt using request transform
     const transformedPrompt = await (await this.transformRequest)(prompt, vars, context);
@@ -2225,14 +2311,19 @@ export class HttpProvider implements ApiProvider {
 
     const renderedConfig: Partial<HttpProviderConfig> = {
       url: getNunjucksEngine().renderString(this.url, vars),
-      method: getNunjucksEngine().renderString(this.config.method || 'GET', vars),
-      headers,
-      body: determineRequestBody(
-        contentTypeIsJson(headers),
-        transformedPrompt,
-        this.config.body,
+      method: getNunjucksEngine().renderString(
+        this.config.method || (this.config.multipart ? 'POST' : 'GET'),
         vars,
       ),
+      headers,
+      body: this.config.multipart
+        ? undefined
+        : determineRequestBody(
+            contentTypeIsJson(headers),
+            transformedPrompt,
+            this.config.body,
+            vars,
+          ),
       queryParams: (() => {
         const baseQueryParams = this.config.queryParams
           ? Object.fromEntries(
@@ -2259,6 +2350,9 @@ export class HttpProvider implements ApiProvider {
 
     invariant(typeof method === 'string', 'Expected method to be a string');
     invariant(typeof headers === 'object', 'Expected headers to be an object');
+    if (this.config.multipart && ['GET', 'HEAD'].includes(method.toUpperCase())) {
+      throw new Error(`HTTP provider ${method} requests cannot use multipart`);
+    }
 
     // Template the base URL first, then construct URL with query parameters
     let url = renderedConfig.url as string;
@@ -2282,6 +2376,17 @@ export class HttpProvider implements ApiProvider {
       config: renderedConfig,
     });
 
+    const multipartBody: RenderedHttpMultipartBody | undefined = this.config.multipart
+      ? await renderHttpMultipartBody(
+          this.config.multipart,
+          {
+            ...vars,
+            prompt: transformedPrompt,
+          },
+          options?.abortSignal,
+        )
+      : undefined;
+
     // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
@@ -2289,6 +2394,11 @@ export class HttpProvider implements ApiProvider {
       headers: renderedConfig.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
+        multipartBody && {
+          body: multipartBody.body,
+        }),
+      ...(method !== 'GET' &&
+        !multipartBody &&
         renderedConfig.body != null && {
           body: contentTypeIsJson(headers)
             ? typeof renderedConfig.body === 'string'
@@ -2323,9 +2433,9 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
-        context?.bustCache ?? context?.debug,
+        multipartBody ? true : (context?.bustCache ?? context?.debug),
         this.config.maxRetries,
       ));
     } catch (err) {
@@ -2356,7 +2466,14 @@ export class HttpProvider implements ApiProvider {
     };
     if (context?.debug) {
       ret.metadata.transformedRequest = transformedPrompt;
-      ret.metadata.finalRequestBody = renderedConfig.body;
+      if (multipartBody) {
+        ret.metadata.multipart = {
+          fields: sanitizeMultipartFields(multipartBody.fields),
+          files: sanitizeMultipartFiles(multipartBody.files),
+        };
+      } else {
+        ret.metadata.finalRequestBody = renderedConfig.body;
+      }
     }
 
     const rawText = data as string;
@@ -2547,7 +2664,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         context?.bustCache ?? context?.debug,
         this.config.maxRetries,

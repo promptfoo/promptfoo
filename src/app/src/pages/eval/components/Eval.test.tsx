@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { callApi } from '@app/utils/api';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -128,7 +129,7 @@ describe('Eval', () => {
     baseMockResultsViewSettings.setComparisonEvalIds.mockClear();
     mockShowToast.mockClear();
 
-    vi.useFakeTimers();
+    useTestTimers();
 
     // Use stable mock to prevent infinite loops
     vi.mocked(useResultsViewSettingsStore).mockReturnValue(baseMockResultsViewSettings);
@@ -139,8 +140,7 @@ describe('Eval', () => {
   });
 
   afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    restoreTestTimers({ runPending: true });
   });
 
   it('should call resetFilters when mounted with a new fetchId', async () => {

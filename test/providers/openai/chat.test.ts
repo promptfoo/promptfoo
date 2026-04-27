@@ -6,6 +6,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
 vi.mock('../../../src/cache', async (importOriginal) => {
@@ -41,21 +42,21 @@ describe('OpenAI Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     disableCache();
-    process.env.OPENAI_API_KEY = 'test-api-key';
-    process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
+    mockProcessEnv({ OPENAI_API_KEY: 'test-api-key' });
+    mockProcessEnv({ DEEPSEEK_API_KEY: 'test-deepseek-key' });
   });
 
   afterEach(() => {
     enableCache();
     if (originalOpenAiApiKey) {
-      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+      mockProcessEnv({ OPENAI_API_KEY: originalOpenAiApiKey });
     } else {
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
     }
     if (originalDeepseekApiKey) {
-      process.env.DEEPSEEK_API_KEY = originalDeepseekApiKey;
+      mockProcessEnv({ DEEPSEEK_API_KEY: originalDeepseekApiKey });
     } else {
-      delete process.env.DEEPSEEK_API_KEY;
+      mockProcessEnv({ DEEPSEEK_API_KEY: undefined });
     }
   });
 
@@ -1588,6 +1589,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     it('should identify GPT-5 models correctly including prefixed names', async () => {
       // Direct model names
       const gpt5Provider = new OpenAiChatCompletionProvider('gpt-5');
+      const gpt55Provider = new OpenAiChatCompletionProvider('gpt-5.5');
       const gpt54MiniProvider = new OpenAiChatCompletionProvider('gpt-5.4-mini');
       const gpt54NanoProvider = new OpenAiChatCompletionProvider('gpt-5.4-nano');
       const gpt5MiniProvider = new OpenAiChatCompletionProvider('gpt-5-mini');
@@ -1595,6 +1597,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Prefixed model names (used by GitHub Models)
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
+      const prefixedGpt55Provider = new OpenAiChatCompletionProvider('openai/gpt-5.5');
       const prefixedGpt54MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-mini');
       const prefixedGpt54NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano');
       const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
@@ -1605,11 +1608,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const gpt4oProvider = new OpenAiChatCompletionProvider('openai/gpt-4o');
 
       expect(gpt5Provider['isGPT5Model']()).toBe(true);
+      expect(gpt55Provider['isGPT5Model']()).toBe(true);
       expect(gpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(gpt54NanoProvider['isGPT5Model']()).toBe(true);
       expect(gpt5MiniProvider['isGPT5Model']()).toBe(true);
       expect(gpt5NanoProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt5Provider['isGPT5Model']()).toBe(true);
+      expect(prefixedGpt55Provider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt54MiniProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt54NanoProvider['isGPT5Model']()).toBe(true);
       expect(prefixedGpt5MiniProvider['isGPT5Model']()).toBe(true);
@@ -1624,6 +1629,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const prefixedO3Provider = new OpenAiChatCompletionProvider('openai/o3-mini');
       const prefixedO4Provider = new OpenAiChatCompletionProvider('openai/o4-mini');
       const prefixedGpt5Provider = new OpenAiChatCompletionProvider('openai/gpt-5');
+      const prefixedGpt55Provider = new OpenAiChatCompletionProvider('openai/gpt-5.5');
       const prefixedGpt54MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-mini');
       const prefixedGpt54NanoProvider = new OpenAiChatCompletionProvider('openai/gpt-5.4-nano');
       const prefixedGpt5MiniProvider = new OpenAiChatCompletionProvider('openai/gpt-5-mini');
@@ -1635,6 +1641,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(prefixedO3Provider['isReasoningModel']()).toBe(true);
       expect(prefixedO4Provider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt5Provider['isReasoningModel']()).toBe(true);
+      expect(prefixedGpt55Provider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt54MiniProvider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt54NanoProvider['isReasoningModel']()).toBe(true);
       expect(prefixedGpt5MiniProvider['isReasoningModel']()).toBe(true);
@@ -2297,7 +2304,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     it('should use generic error message with fallback when apiKeyEnvar is undefined', async () => {
       // Clear any existing API key environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -2308,7 +2315,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
       }
     });
@@ -2317,8 +2324,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Clear any existing API key environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
       const originalCustomEnv = process.env.CUSTOM_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -2331,10 +2338,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
         if (originalCustomEnv) {
-          process.env.CUSTOM_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_API_KEY: originalCustomEnv });
         }
       }
     });
@@ -2359,8 +2366,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Clear environment variables
       const originalEnv = process.env.OPENAI_API_KEY;
       const originalCustomEnv = process.env.CUSTOM_PROVIDER_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_PROVIDER_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      mockProcessEnv({ CUSTOM_PROVIDER_API_KEY: undefined });
 
       try {
         const provider = new CustomProvider('custom-model');
@@ -2375,10 +2382,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       } finally {
         // Restore original environment
         if (originalEnv) {
-          process.env.OPENAI_API_KEY = originalEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalEnv });
         }
         if (originalCustomEnv) {
-          process.env.CUSTOM_PROVIDER_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_PROVIDER_API_KEY: originalCustomEnv });
         }
       }
     });
@@ -2488,7 +2495,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
     it('should work with apiKeyRequired: false and API key from environment', () => {
       const originalEnv = process.env.CUSTOM_LOCAL_API_KEY;
-      process.env.CUSTOM_LOCAL_API_KEY = 'test-local-key';
+      mockProcessEnv({ CUSTOM_LOCAL_API_KEY: 'test-local-key' });
 
       try {
         const provider = new OpenAiChatCompletionProvider('local-model', {
@@ -2506,9 +2513,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(provider.requiresApiKey()).toBe(false);
       } finally {
         if (originalEnv === undefined) {
-          delete process.env.CUSTOM_LOCAL_API_KEY;
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: undefined });
         } else {
-          process.env.CUSTOM_LOCAL_API_KEY = originalEnv;
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: originalEnv });
         }
       }
     });
@@ -2517,8 +2524,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Ensure no API key is set in the environment
       const originalCustomEnv = process.env.CUSTOM_LOCAL_API_KEY;
       const originalOpenAIEnv = process.env.OPENAI_API_KEY;
-      delete process.env.CUSTOM_LOCAL_API_KEY;
-      delete process.env.OPENAI_API_KEY;
+      mockProcessEnv({ CUSTOM_LOCAL_API_KEY: undefined });
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
         const provider = new OpenAiChatCompletionProvider('local-model', {
@@ -2562,10 +2569,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(headers.Authorization).toBeUndefined();
       } finally {
         if (originalCustomEnv !== undefined) {
-          process.env.CUSTOM_LOCAL_API_KEY = originalCustomEnv;
+          mockProcessEnv({ CUSTOM_LOCAL_API_KEY: originalCustomEnv });
         }
         if (originalOpenAIEnv !== undefined) {
-          process.env.OPENAI_API_KEY = originalOpenAIEnv;
+          mockProcessEnv({ OPENAI_API_KEY: originalOpenAIEnv });
         }
       }
     });

@@ -1,6 +1,10 @@
 import { vi } from 'vitest';
 
 type RestoreBrowserMock = () => void;
+type MockedBrowserProperty<V> = {
+  value: V;
+  restore: RestoreBrowserMock;
+};
 const mockWindowLocationUrlKeys = [
   'hash',
   'host',
@@ -23,11 +27,11 @@ export function restoreBrowserMocks() {
   }
 }
 
-export function mockBrowserProperty<T extends object, V>(
+function mockBrowserPropertyWithRestore<T extends object, V>(
   target: T,
   property: PropertyKey,
   value: V,
-) {
+): MockedBrowserProperty<V> {
   const descriptor = Object.getOwnPropertyDescriptor(target, property);
 
   Object.defineProperty(target, property, {
@@ -36,18 +40,42 @@ export function mockBrowserProperty<T extends object, V>(
     value,
   });
 
+  let restored = false;
   const restore = () => {
+    if (restored) {
+      return;
+    }
+    restored = true;
+
     if (descriptor) {
       Object.defineProperty(target, property, descriptor);
     } else {
       Reflect.deleteProperty(target, property);
     }
+
+    const restoreIndex = restoreCallbacks.lastIndexOf(restore);
+    if (restoreIndex !== -1) {
+      restoreCallbacks.splice(restoreIndex, 1);
+    }
   };
 
   restoreCallbacks.push(restore);
 
-  return value;
+  return { value, restore };
 }
+
+export function mockBrowserProperty<T extends object, V>(
+  target: T,
+  property: PropertyKey,
+  value: V,
+) {
+  return mockBrowserPropertyWithRestore(target, property, value).value;
+}
+
+type MockIntersectionObserverInstance = Pick<
+  IntersectionObserver,
+  'root' | 'rootMargin' | 'thresholds' | 'observe' | 'unobserve' | 'disconnect' | 'takeRecords'
+>;
 
 export function mockClipboard(overrides: Partial<Clipboard> = {}) {
   return mockBrowserProperty(navigator, 'clipboard', {
@@ -115,13 +143,12 @@ export function mockIntersectionObserver(options: IntersectionObserverMockOption
     return {
       root: null,
       rootMargin: '',
-      scrollMargin: '',
       thresholds: [],
       observe: options.observe ?? vi.fn(),
       unobserve: options.unobserve ?? vi.fn(),
       disconnect: options.disconnect ?? vi.fn(),
       takeRecords: vi.fn(() => []),
-    } satisfies IntersectionObserver;
+    } satisfies MockIntersectionObserverInstance;
   });
 
   return mockBrowserProperty(
@@ -139,10 +166,29 @@ export function mockObjectUrl(url = 'blob:test') {
   const createObjectURL = vi.fn(() => url);
   const revokeObjectURL = vi.fn();
 
-  mockBrowserProperty(URL, 'createObjectURL', createObjectURL as typeof URL.createObjectURL);
-  mockBrowserProperty(URL, 'revokeObjectURL', revokeObjectURL as typeof URL.revokeObjectURL);
+  const { restore: restoreCreateObjectURL } = mockBrowserPropertyWithRestore(
+    URL,
+    'createObjectURL',
+    createObjectURL as typeof URL.createObjectURL,
+  );
+  const { restore: restoreRevokeObjectURL } = mockBrowserPropertyWithRestore(
+    URL,
+    'revokeObjectURL',
+    revokeObjectURL as typeof URL.revokeObjectURL,
+  );
 
-  return { createObjectURL, revokeObjectURL };
+  const restore = () => {
+    restoreRevokeObjectURL();
+    restoreCreateObjectURL();
+  };
+
+  return {
+    createObjectURL,
+    revokeObjectURL,
+    restoreCreateObjectURL,
+    restoreRevokeObjectURL,
+    restore,
+  };
 }
 
 function createMockWindowLocationUrl(value: MockWindowLocationValue) {

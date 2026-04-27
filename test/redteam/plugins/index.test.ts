@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
+import logger from '../../../src/logger';
 import {
   ADDITIONAL_PLUGINS,
   ALL_PLUGINS,
@@ -14,9 +15,14 @@ import {
 import { Plugins } from '../../../src/redteam/plugins/index';
 import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
+import {
+  createMockProvider,
+  createProviderResponse,
+  type MockApiProvider,
+} from '../../factories/provider';
 
 import type { FetchWithCacheResult } from '../../../src/cache';
-import type { ApiProvider, TestCase } from '../../../src/types/index';
+import type { TestCase } from '../../../src/types/index';
 
 vi.mock('../../../src/cache');
 vi.mock('../../../src/cliState', () => ({
@@ -54,16 +60,15 @@ function mockFetchResponse(result: any[]): FetchWithCacheResult<unknown> {
 }
 
 describe('Plugins', () => {
-  let mockProvider: ApiProvider;
+  let mockProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockProvider = {
-      callApi: vi.fn().mockResolvedValue({
+    mockProvider = createMockProvider({
+      response: createProviderResponse({
         output: 'Sample output',
-        error: null,
+        error: null as any,
       }),
-      id: vi.fn().mockReturnValue('test-provider'),
-    };
+    });
 
     // Reset all mocks
     vi.clearAllMocks();
@@ -368,6 +373,140 @@ describe('Plugins', () => {
       expect(result![0].metadata?.pluginConfig).toHaveProperty('language', 'en');
     });
 
+    it('should accept server-materialized multi-input remote generation results', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          materializationHandled: true,
+          result: [
+            {
+              metadata: {
+                inputMaterialization: {
+                  document: {
+                    injectionPlacement: 'comment',
+                    wrapperSummary: 'Internal planning memo with reviewer note.',
+                  },
+                },
+              },
+              vars: {
+                document:
+                  'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+                testVar: '{"document":"Summarize the reviewer notes."}',
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {
+          inputs: {
+            document: {
+              description: 'Uploaded planning document',
+              type: 'docx',
+            },
+          },
+        },
+        delayMs: 0,
+      });
+
+      expect(result).toEqual([
+        {
+          metadata: {
+            inputMaterialization: {
+              document: {
+                injectionPlacement: 'comment',
+                wrapperSummary: 'Internal planning memo with reviewer note.',
+              },
+            },
+            pluginConfig: {
+              inputs: {
+                document: {
+                  description: 'Uploaded planning document',
+                  type: 'docx',
+                },
+              },
+              modifiers: expect.objectContaining({
+                __outputFormat: expect.stringContaining('<Prompt>'),
+              }),
+            },
+            pluginId: 'ssrf',
+          },
+          vars: {
+            document:
+              'data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,Zm9v',
+            testVar: '{"document":"Summarize the reviewer notes."}',
+          },
+        },
+      ]);
+    });
+
+    it('should fail fast when remote multi-input generation hits an older server', async () => {
+      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(neverGenerateRemote).mockImplementation(function () {
+        return false;
+      });
+
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          result: [
+            {
+              vars: {
+                testVar: '{"document":"Summarize the reviewer notes."}',
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => {});
+
+      await expect(
+        plugin?.action({
+          provider: mockProvider,
+          purpose: 'test',
+          injectVar: 'testVar',
+          n: 1,
+          config: {
+            inputs: {
+              document: {
+                description: 'Uploaded planning document',
+                type: 'docx',
+              },
+            },
+          },
+          delayMs: 0,
+        }),
+      ).resolves.toEqual([]);
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Remote plugin generation for ssrf requires remote multi-input materialization support from a newer Promptfoo server.',
+        ),
+      );
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('http://test-url'));
+    });
+
     it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
@@ -401,7 +540,10 @@ describe('Plugins', () => {
       ]);
     });
 
-    it('should preserve coding-agent collection canary-breaking strategy exclusions in metadata', async () => {
+    it.each([
+      'coding-agent:core',
+      'coding-agent:all',
+    ])('should preserve %s canary-breaking strategy exclusions in metadata', async (pluginId) => {
       vi.mocked(shouldGenerateRemote).mockImplementation(function () {
         return true;
       });
@@ -412,7 +554,7 @@ describe('Plugins', () => {
       const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
-      const plugin = Plugins.find((p) => p.key === 'coding-agent:core');
+      const plugin = Plugins.find((p) => p.key === pluginId);
       const result = await plugin?.action({
         provider: mockProvider,
         purpose: 'test',
@@ -627,15 +769,10 @@ describe('Plugins', () => {
         ...ADDITIONAL_PLUGINS,
       ];
 
-      // Check that each expected plugin is registered
-      expectedPlugins.forEach((pluginKey) => {
-        const plugin = Plugins.find((p) => p.key === pluginKey);
-        expect(plugin).toBeDefined();
-      });
-
-      // Check the actual count matches the expected count
+      // Verify all expected plugin keys are present in the registry
       // Note: We don't expect exact equality because some plugins like collections may not be in the expected list
-      expect(Plugins.length).toBeGreaterThanOrEqual(expectedPlugins.length);
+      const registeredPluginKeys = Plugins.map((p) => p.key);
+      expect(registeredPluginKeys).toEqual(expect.arrayContaining(expectedPlugins));
     });
 
     it('should have unique plugin keys', () => {
