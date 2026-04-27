@@ -289,6 +289,10 @@ type EnvVars = {
   COHERE_P?: string;
   COHERE_TEMPERATURE?: string;
 
+  // Microsoft Copilot Studio Direct Line
+  COPILOT_DIRECT_LINE_SECRET?: string;
+  COPILOT_STUDIO_DIRECT_LINE_SECRET?: string;
+
   // Cloudflare
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_KEY?: string;

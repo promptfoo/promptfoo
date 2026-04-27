@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Copilot Studio Direct Line
+
+prompts:
+  - '{{question}}'
+
+providers:
+  - id: copilot-studio-directline
+    config:
+      directLineSecret: '{{env.COPILOT_STUDIO_DIRECT_LINE_SECRET}}'
+      userId: dl_promptfoo_example
+      locale: en-US
+      pollTimeoutMs: 30000
+      pollIntervalMs: 750
+      replyIdleTimeoutMs: 1000
+
+tests:
+  - vars:
+      question: What can you help me with?
+    assert:
+      - type: not-empty
+  - vars:
+      question: How do I contact support?
+    assert:
+      - type: not-empty

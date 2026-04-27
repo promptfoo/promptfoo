@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Copilot Studio custom Direct Line provider
+
+prompts:
+  - '{{question}}'
+
+providers:
+  - id: file://customProvider.cjs
+    label: Copilot Studio custom Direct Line
+
+tests:
+  - vars:
+      sessionId: example-session
+      question: What can you help me with?
+    assert:
+      - type: not-empty
+  - vars:
+      sessionId: example-session
+      question: How do I contact support?
+    assert:
+      - type: not-empty

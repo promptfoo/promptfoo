@@ -34,6 +34,8 @@ export const ProviderEnvOverridesSchema = z.object({
   COMETAPI_KEY: z.string().optional(),
   COHERE_API_KEY: z.string().optional(),
   COHERE_CLIENT_NAME: z.string().optional(),
+  COPILOT_DIRECT_LINE_SECRET: z.string().optional(),
+  COPILOT_STUDIO_DIRECT_LINE_SECRET: z.string().optional(),
   DATABRICKS_TOKEN: z.string().optional(),
   DATABRICKS_WORKSPACE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_BASE_URL: z.string().optional(),

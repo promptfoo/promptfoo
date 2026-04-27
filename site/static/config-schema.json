@@ -266,6 +266,12 @@
         "COHERE_CLIENT_NAME": {
           "type": "string"
         },
+        "COPILOT_DIRECT_LINE_SECRET": {
+          "type": "string"
+        },
+        "COPILOT_STUDIO_DIRECT_LINE_SECRET": {
+          "type": "string"
+        },
         "DATABRICKS_TOKEN": {
           "type": "string"
         },
@@ -1686,6 +1692,12 @@
                       "type": "string"
                     },
                     "COHERE_CLIENT_NAME": {
+                      "type": "string"
+                    },
+                    "COPILOT_DIRECT_LINE_SECRET": {
+                      "type": "string"
+                    },
+                    "COPILOT_STUDIO_DIRECT_LINE_SECRET": {
                       "type": "string"
                     },
                     "DATABRICKS_TOKEN": {

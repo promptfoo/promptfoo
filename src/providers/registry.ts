@@ -24,6 +24,7 @@ import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
 import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere';
+import { CopilotStudioDirectLineProvider } from './copilotStudioDirectLine';
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
@@ -168,6 +169,19 @@ export const providerMap: ProviderFactory[] = [
         return new AlibabaEmbeddingProvider(modelName || modelType, providerOptions);
       }
       return new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath === 'copilot-studio-directline',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return new CopilotStudioDirectLineProvider({
+        config: providerOptions.config,
+        env: context.env,
+      });
     },
   },
   {
