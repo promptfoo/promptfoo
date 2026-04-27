@@ -254,15 +254,33 @@ describe('inline server API DTO validation', () => {
   it('validates dataset generation request bodies', async () => {
     mockedSynthesizeFromTestSuite.mockResolvedValue([{ vars: { q: 'generated' } }] as never);
 
-    const invalid = await api.post('/api/dataset/generate').send({ prompts: [] });
+    const missingTests = await api.post('/api/dataset/generate').send({ prompts: [] });
+    const invalidPrompt = await api
+      .post('/api/dataset/generate')
+      .send({ prompts: [null], tests: [] });
+    const invalidTest = await api
+      .post('/api/dataset/generate')
+      .send({ prompts: ['Prompt'], tests: [null] });
     const valid = await api
       .post('/api/dataset/generate')
       .send({ prompts: ['Prompt'], tests: [{ vars: { q: 'seed' } }] });
 
-    expect(invalid.status).toBe(400);
-    expect(invalid.body.error).toContain('tests');
+    expect(missingTests.status).toBe(400);
+    expect(missingTests.body.error).toContain('tests');
+    expect(invalidPrompt.status).toBe(400);
+    expect(invalidPrompt.body.error).toContain('prompts');
+    expect(invalidTest.status).toBe(400);
+    expect(invalidTest.body.error).toContain('tests');
     expect(valid.status).toBe(200);
     expect(valid.body).toEqual({ results: [{ vars: { q: 'generated' } }] });
+    expect(mockedSynthesizeFromTestSuite).toHaveBeenCalledWith(
+      {
+        prompts: [{ raw: 'Prompt', label: 'Prompt' }],
+        tests: [{ vars: { q: 'seed' } }],
+        providers: [],
+      },
+      {},
+    );
   });
 
   it('validates telemetry request bodies and parses success DTOs', async () => {
