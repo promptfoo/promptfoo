@@ -116,6 +116,14 @@ export class MlflowGatewayChatCompletionProvider extends OpenAiChatCompletionPro
     return undefined;
   }
 
+  // Do not fall back to OPENAI_API_HOST / OPENAI_API_BASE_URL / OPENAI_BASE_URL:
+  // these are configured for cloud OpenAI, not the MLflow gateway. If the user
+  // has any of those set for other providers, inheriting OpenAiGenericProvider's
+  // getApiUrl() would silently route mlflow-gateway:* requests to the wrong URL.
+  getApiUrl(): string {
+    return this.config.apiBaseUrl || this.getApiUrlDefault();
+  }
+
   protected getMissingApiKeyErrorMessage(): string {
     return (
       `MLflow Gateway API key is not set. Set the ${this.config.apiKeyEnvar || MLFLOW_GATEWAY_API_KEY_ENV_VAR} ` +

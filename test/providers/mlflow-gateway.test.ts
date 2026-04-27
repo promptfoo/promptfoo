@@ -15,6 +15,9 @@ describe('MlflowGatewayChatCompletionProvider', () => {
         MLFLOW_GATEWAY_API_KEY: undefined,
         OPENAI_API_KEY: undefined,
         OPENAI_ORGANIZATION: undefined,
+        OPENAI_API_HOST: undefined,
+        OPENAI_API_BASE_URL: undefined,
+        OPENAI_BASE_URL: undefined,
       },
       { clear: false },
     );
@@ -214,5 +217,32 @@ describe('MlflowGatewayChatCompletionProvider', () => {
     });
     expect(provider['getMissingApiKeyErrorMessage']()).toContain('MLFLOW_GATEWAY_API_KEY');
     expect(provider['getMissingApiKeyErrorMessage']()).not.toContain('OPENAI_API_KEY');
+  });
+
+  it('should NOT route to OPENAI_API_HOST when set in env', () => {
+    // Regression test: OpenAiGenericProvider.getApiUrl() prioritizes
+    // OPENAI_API_HOST over apiBaseUrl. We must not inherit that fallback,
+    // or mlflow-gateway:* requests would silently go to the wrong service.
+    mockProcessEnv({ OPENAI_API_HOST: 'evil.example.com' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.getApiUrl()).toBe('http://localhost:5000/gateway/mlflow/v1');
+  });
+
+  it('should NOT route to OPENAI_API_BASE_URL when set in env', () => {
+    mockProcessEnv({ OPENAI_API_BASE_URL: 'http://other-service.example.com/v1' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.getApiUrl()).toBe('http://localhost:5000/gateway/mlflow/v1');
+  });
+
+  it('should NOT route to OPENAI_BASE_URL when set in env', () => {
+    mockProcessEnv({ OPENAI_BASE_URL: 'http://other-service.example.com/v1' });
+    const provider = new MlflowGatewayChatCompletionProvider('my-endpoint', {
+      config: { gatewayUrl: 'http://localhost:5000' },
+    });
+    expect(provider.getApiUrl()).toBe('http://localhost:5000/gateway/mlflow/v1');
   });
 });
