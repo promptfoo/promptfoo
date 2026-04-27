@@ -31,7 +31,6 @@ import {
   getTestCases,
   readResult,
 } from '../util/database';
-import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { csrfProtection } from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
@@ -262,7 +261,11 @@ export function createApp() {
       return;
     }
     const eval_ = await Eval.findById(id);
-    invariant(eval_, 'Eval not found');
+    if (!eval_) {
+      logger.warn(`Eval not found for id: ${id}`);
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
 
     try {
       const url = await createShareableUrl(eval_, { showAuth: true });
