@@ -9,7 +9,7 @@ import http from 'node:http';
 import path from 'node:path';
 
 import express from 'express';
-import { MemoryStore, rateLimit } from 'express-rate-limit';
+import { ipKeyGenerator, MemoryStore, rateLimit } from 'express-rate-limit';
 import { Server as SocketIOServer } from 'socket.io';
 import { z } from 'zod';
 import { getDefaultPort, VERSION } from '../constants';
@@ -64,6 +64,10 @@ const shareRateLimitStore = new MemoryStore();
 const shareRateLimiter = rateLimit({
   windowMs: SHARE_RATE_LIMIT_WINDOW_MS,
   limit: SHARE_RATE_LIMIT_MAX_REQUESTS,
+  keyGenerator: (req) => {
+    const ip = req.ip ?? req.socket.remoteAddress;
+    return ip ? ipKeyGenerator(ip) : 'unknown';
+  },
   standardHeaders: 'draft-8',
   legacyHeaders: false,
   message: { error: SHARE_RATE_LIMIT_MESSAGE },
