@@ -2104,13 +2104,92 @@
         ],
         "responses": {
           "200": {
-            "description": "Successful response",
+            "description": "Evaluation table data. `format=json` returns an exported table object and `format=csv` returns CSV.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "table": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "table": {
+                          "type": "object",
+                          "properties": {
+                            "head": {
+                              "type": "object",
+                              "properties": {
+                                "prompts": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "additionalProperties": {}
+                                  }
+                                },
+                                "vars": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": ["prompts", "vars"]
+                            },
+                            "body": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
+                            }
+                          },
+                          "required": ["head", "body"],
+                          "additionalProperties": {}
+                        },
+                        "totalCount": {
+                          "type": "number"
+                        },
+                        "filteredCount": {
+                          "type": "number"
+                        },
+                        "filteredMetrics": {
+                          "type": ["array", "null"],
+                          "items": {}
+                        },
+                        "config": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
+                        "author": {
+                          "type": ["string", "null"]
+                        },
+                        "version": {
+                          "oneOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "number"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "stats": {}
+                      },
+                      "required": [
+                        "table",
+                        "totalCount",
+                        "filteredCount",
+                        "filteredMetrics",
+                        "config",
+                        "author",
+                        "version",
+                        "id"
+                      ],
+                      "additionalProperties": {}
+                    },
+                    {
                       "type": "object",
                       "properties": {
                         "head": {
@@ -2142,50 +2221,13 @@
                       },
                       "required": ["head", "body"],
                       "additionalProperties": {}
-                    },
-                    "totalCount": {
-                      "type": "number"
-                    },
-                    "filteredCount": {
-                      "type": "number"
-                    },
-                    "filteredMetrics": {
-                      "type": ["array", "null"],
-                      "items": {}
-                    },
-                    "config": {
-                      "type": "object",
-                      "additionalProperties": {}
-                    },
-                    "author": {
-                      "type": ["string", "null"]
-                    },
-                    "version": {
-                      "oneOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "number"
-                        }
-                      ]
-                    },
-                    "id": {
-                      "type": "string"
-                    },
-                    "stats": {}
-                  },
-                  "required": [
-                    "table",
-                    "totalCount",
-                    "filteredCount",
-                    "filteredMetrics",
-                    "config",
-                    "author",
-                    "version",
-                    "id"
-                  ],
-                  "additionalProperties": {}
+                    }
+                  ]
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
