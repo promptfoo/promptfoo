@@ -30,6 +30,9 @@ import {
   type TransformResponseContext,
 } from './httpTransforms';
 import { REQUEST_TIMEOUT_MS, type ToolFormat, transformToolChoice, transformTools } from './shared';
+import { loadTransformModule } from './transformUtils';
+
+export { loadTransformModule } from './transformUtils';
 
 import type {
   ApiProvider,
@@ -918,46 +921,6 @@ function contentTypeIsJson(headers: Record<string, string> | undefined) {
 interface SessionParserData {
   headers?: Record<string, string> | null;
   body?: Record<string, any> | string | null;
-}
-
-/**
- * Loads a module from a file:// reference if needed
- * This function should be called before passing transforms to createTransformResponse/createTransformRequest
- *
- * @param transform - The transform config (string or function)
- * @returns The loaded function, or the original value if not a file:// reference
- */
-export async function loadTransformModule(
-  transform: string | Function | undefined,
-): Promise<string | Function | undefined> {
-  if (!transform) {
-    return transform;
-  }
-  if (typeof transform === 'function') {
-    return transform;
-  }
-  if (typeof transform === 'string' && transform.startsWith('file://')) {
-    let filename = transform.slice('file://'.length);
-    let functionName: string | undefined;
-    if (filename.includes(':')) {
-      const splits = filename.split(':');
-      if (splits[0] && isJavascriptFile(splits[0])) {
-        [filename, functionName] = splits;
-      }
-    }
-    const requiredModule = await importModule(
-      path.resolve(cliState.basePath || '', filename),
-      functionName,
-    );
-    if (typeof requiredModule === 'function') {
-      return requiredModule;
-    }
-    throw new Error(
-      `Transform module malformed: ${filename} must export a function or have a default export as a function`,
-    );
-  }
-  // For string expressions, return as-is
-  return transform;
 }
 
 function hasOwnProperty(obj: Record<string, any>, key: string): boolean {

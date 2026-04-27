@@ -12,7 +12,7 @@ export interface TransformResponseContext {
 
 // This is in another module so it can be imported by the frontend
 // Useful to test these in the UI before running an eval
-// Note: file:// references should be pre-loaded in http.ts using loadTransformModule
+// Note: file:// references should be pre-loaded using loadTransformModule
 // before being passed to this function. This is because we can't use importModule in the frontend.
 export async function createTransformResponse(
   parser: string | Function | undefined,
@@ -39,7 +39,7 @@ export async function createTransformResponse(
     };
   }
   if (typeof parser === 'string' && parser.startsWith('file://')) {
-    // This should have been pre-loaded in http.ts using loadTransformModule
+    // This should have been pre-loaded using loadTransformModule
     throw new Error(
       `Response transform with file:// reference should be pre-loaded before calling createTransformResponse. This is a bug in the HTTP provider implementation.`,
     );
@@ -106,7 +106,7 @@ export async function createTransformRequest(
   }
 
   if (typeof transform === 'string' && transform.startsWith('file://')) {
-    // This should have been pre-loaded in http.ts using loadTransformModule
+    // This should have been pre-loaded using loadTransformModule
     throw new Error(
       `Request transform with file:// reference should be pre-loaded before calling createTransformRequest. This is a bug in the HTTP provider implementation.`,
     );
