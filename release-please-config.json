@@ -3,6 +3,7 @@
   "include-component-in-tag": false,
   "include-v-in-tag": false,
   "include-v-in-release-name": false,
+  "last-release-sha": "195df77800b749679f73ed3f258d858d33d55b48",
   "separate-pull-requests": true,
   "packages": {
     ".": {
