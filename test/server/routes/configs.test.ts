@@ -1,6 +1,8 @@
+import type { Server } from 'node:http';
+
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { getDb } from '../../../src/database/index';
 import { configsTable } from '../../../src/database/tables';
 import { runDbMigrations } from '../../../src/migrate';
@@ -13,15 +15,24 @@ import {
 } from '../../../src/types/api/configs';
 
 describe('configs routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: Server;
   const testConfigIds = new Set<string>();
 
   beforeAll(async () => {
     await runDbMigrations();
+    app = createApp().listen(0);
   });
 
-  beforeEach(() => {
-    app = createApp();
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
   });
 
   afterEach(async () => {

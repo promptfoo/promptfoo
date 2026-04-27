@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { EmailSchema } from './common';
+import { BooleanQueryParamSchema, EmailSchema } from './common';
 
 /** Email status values returned by the server. */
 export const EmailStatusEnum = z.enum([
@@ -44,13 +44,16 @@ export const UpdateUserResponseSchema = z.object({
 export type UpdateUserRequest = z.infer<typeof UpdateUserRequestSchema>;
 export type UpdateUserResponse = z.infer<typeof UpdateUserResponseSchema>;
 
+// PUT /api/user/email/clear
+
+export const ClearUserEmailResponseSchema = UpdateUserResponseSchema;
+
+export type ClearUserEmailResponse = z.infer<typeof ClearUserEmailResponseSchema>;
+
 // GET /api/user/email-status
 
 export const GetEmailStatusQuerySchema = z.object({
-  validate: z
-    .unknown()
-    .optional()
-    .transform((v) => v === 'true'),
+  validate: BooleanQueryParamSchema,
 });
 
 export type GetEmailStatusQuery = z.infer<typeof GetEmailStatusQuerySchema>;
@@ -123,6 +126,9 @@ export const UserSchemas = {
   Update: {
     Request: UpdateUserRequestSchema,
     Response: UpdateUserResponseSchema,
+  },
+  ClearEmail: {
+    Response: ClearUserEmailResponseSchema,
   },
   EmailStatus: {
     Query: GetEmailStatusQuerySchema,

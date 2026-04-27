@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { MediaStorageProvider } from '../../../src/storage/types';
@@ -15,16 +17,25 @@ const mockedMediaExists = vi.mocked(mediaExists);
 const mockedRetrieveMedia = vi.mocked(retrieveMedia);
 
 describe('Media Routes', () => {
+  let app: Server;
+
+  beforeAll(() => {
+    app = createApp().listen(0);
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+
   afterEach(() => {
     vi.resetAllMocks();
   });
 
   describe('GET /api/media/stats', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     it('should return success with providerId when storage has no stats', async () => {
@@ -84,11 +95,8 @@ describe('Media Routes', () => {
   });
 
   describe('GET /api/media/info/:type/:filename', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     it('should return 400 for invalid type', async () => {
@@ -160,6 +168,30 @@ describe('Media Routes', () => {
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
+    it('should return info when URL generation is unsupported', async () => {
+      const mockStorage = {
+        providerId: 'custom-storage',
+        getUrl: vi.fn().mockResolvedValue(null),
+      } as unknown as MediaStorageProvider;
+
+      mockedMediaExists.mockResolvedValue(true);
+      mockedGetMediaStorage.mockReturnValue(mockStorage);
+
+      const response = await request(app).get('/api/media/info/audio/abcdef123456.mp3');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          key: 'audio/abcdef123456.mp3',
+          exists: true,
+          url: null,
+        },
+      });
+      expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
+      expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
+    });
+
     it.each(['video', 'image'] as const)('should accept valid %s type', async (type) => {
       const ext = type === 'video' ? 'mp4' : 'png';
       const mockStorage = {
@@ -189,11 +221,8 @@ describe('Media Routes', () => {
   });
 
   describe('GET /api/media/:type/:filename', () => {
-    let app: ReturnType<typeof createApp>;
-
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     it('should return 400 for invalid type', async () => {

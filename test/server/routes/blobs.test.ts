@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -18,8 +20,25 @@ const mockedGetBlobByHash = vi.mocked(getBlobByHash);
 const mockedGetDb = vi.mocked(getDb);
 
 describe('Blobs Routes', () => {
+  let app: Server;
+
+  beforeAll(() => {
+    app = createApp().listen(0);
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    });
+  });
+
   describe('GET /api/blobs/:hash', () => {
-    let app: ReturnType<typeof createApp>;
     const validHash = 'a'.repeat(64);
 
     // Create chainable mock DB that returns assetResult on first .get() and referenceResult on second
@@ -60,7 +79,6 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {
@@ -216,8 +234,6 @@ describe('Blobs Routes', () => {
   });
 
   describe('GET /api/blobs/library', () => {
-    let app: ReturnType<typeof createApp>;
-
     /**
      * Create a mock DB for library queries.
      * The /library route executes 3 chained queries:
@@ -255,7 +271,6 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {
@@ -572,8 +587,6 @@ describe('Blobs Routes', () => {
   });
 
   describe('GET /api/blobs/library/evals', () => {
-    let app: ReturnType<typeof createApp>;
-
     function createEvalsMockDb(evals: any[]) {
       return {
         selectDistinct: vi.fn().mockReturnThis(),
@@ -588,7 +601,6 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      app = createApp();
     });
 
     afterEach(() => {

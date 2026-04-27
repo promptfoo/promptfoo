@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies before imports
@@ -16,7 +18,21 @@ const mockedCheckEmailStatus = vi.mocked(checkEmailStatus);
 const mockedTelemetry = vi.mocked(telemetry);
 
 describe('User Routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: Server;
+
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app = createApp()
+        .listen(0, '127.0.0.1', () => resolve())
+        .once('error', reject);
+    });
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -24,8 +40,6 @@ describe('User Routes', () => {
     // Setup telemetry mock
     mockedTelemetry.record = vi.fn().mockResolvedValue(undefined);
     mockedTelemetry.saveConsent = vi.fn().mockResolvedValue(undefined);
-
-    app = createApp();
   });
 
   afterEach(() => {
