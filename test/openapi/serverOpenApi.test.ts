@@ -98,6 +98,10 @@ describe('server OpenAPI generation', () => {
     const evalTableLimitParam = evalTableOperation?.parameters?.find(
       (param: any) => param.name === 'limit',
     ) as any;
+    const evalTableResponseContent = evalTableOperation?.responses['200']?.content;
+    const evalTableJsonSchema = evalTableResponseContent?.['application/json']?.schema as
+      | { anyOf?: unknown[]; oneOf?: unknown[] }
+      | undefined;
 
     expect(document.openapi).toBe('3.1.0');
     expect(paths['/api/results']?.get?.parameters).toEqual(
@@ -133,6 +137,10 @@ describe('server OpenAPI generation', () => {
       enum: ['csv', 'json'],
       type: 'string',
     });
+    expect(evalTableResponseContent?.['text/csv']?.schema).toEqual(
+      expect.objectContaining({ type: 'string' }),
+    );
+    expect(evalTableJsonSchema?.oneOf ?? evalTableJsonSchema?.anyOf).toHaveLength(2);
     expect(evalTableLimitParam?.schema).toEqual(
       expect.objectContaining({ default: 50, type: 'integer' }),
     );
