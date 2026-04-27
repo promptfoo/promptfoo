@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { VERSION } from '../../constants';
+import { TELEMETRY_EVENTS } from '../../telemetry';
 import { BooleanQueryParamSchema, JsonObjectSchema } from './common';
 
 const UnknownArraySchema = z.array(z.unknown());
@@ -19,106 +20,89 @@ const DatasetGenerateTestSchema = z
   })
   .passthrough();
 
-export const HealthResponseSchema = z.object({
+const HealthResponseSchema = z.object({
   status: z.string(),
   version: z.string(),
 });
 
-export const RemoteHealthResponseSchema = z.object({
+const RemoteHealthResponseSchema = z.object({
   status: z.string(),
   message: z.string(),
 });
 
-export const ListResultsQuerySchema = z.object({
+const ListResultsQuerySchema = z.object({
   datasetId: z.string().min(1).optional(),
   type: z.enum(['redteam', 'eval']).optional(),
   includeProviders: BooleanQueryParamSchema,
 });
 
-export const ListResultsResponseSchema = z.object({
+const ListResultsResponseSchema = z.object({
   data: z.array(JsonObjectSchema),
 });
 
-export const ResultParamsSchema = z.object({
+const ResultParamsSchema = z.object({
   id: z.string().min(1),
 });
 
-export const ResultResponseSchema = DataResponseSchema;
+const ResultResponseSchema = DataResponseSchema;
 
-export const PromptsResponseSchema = z.object({
+const PromptsResponseSchema = z.object({
   data: UnknownArraySchema,
 });
 
-export const HistoryQuerySchema = z.object({
+const HistoryQuerySchema = z.object({
   tagName: z.string().min(1).optional(),
   tagValue: z.string().min(1).optional(),
   description: z.string().min(1).optional(),
 });
 
-export const HistoryResponseSchema = z.object({
+const HistoryResponseSchema = z.object({
   data: UnknownArraySchema,
 });
 
-export const PromptHashParamsSchema = z.object({
+const PromptHashParamsSchema = z.object({
   sha256hash: z.string().regex(/^[a-f0-9]{64}$/i, 'Invalid SHA-256 hash'),
 });
 
-export const PromptResponseSchema = z.object({
+const PromptResponseSchema = z.object({
   data: UnknownArraySchema,
 });
 
-export const DatasetsResponseSchema = z.object({
+const DatasetsResponseSchema = z.object({
   data: UnknownArraySchema,
 });
 
-export const ShareCheckDomainQuerySchema = z.object({
+const ShareCheckDomainQuerySchema = z.object({
   id: z
     .string()
     .min(1)
     .refine((value) => value !== 'undefined', { message: 'id is required' }),
 });
 
-export const ShareCheckDomainResponseSchema = z.object({
+const ShareCheckDomainResponseSchema = z.object({
   domain: z.string(),
   isCloudEnabled: z.boolean(),
 });
 
-export const ShareRequestSchema = z.object({
+const ShareRequestSchema = z.object({
   id: z.string().min(1),
 });
 
-export const ShareResponseSchema = z.object({
+const ShareResponseSchema = z.object({
   url: z.string().nullable().optional(),
 });
 
-export const DatasetGenerateRequestSchema = z.object({
+const DatasetGenerateRequestSchema = z.object({
   prompts: z.array(DatasetGeneratePromptSchema).min(1),
   tests: z.array(DatasetGenerateTestSchema).default([]),
 });
 
-export const DatasetGenerateResponseSchema = z.object({
+const DatasetGenerateResponseSchema = z.object({
   results: z.unknown(),
 });
 
-export const TelemetryEventSchema = z.object({
-  event: z.enum([
-    'assertion_used',
-    'command_used',
-    'eval setup',
-    'eval_ran',
-    'feature_used',
-    'funnel',
-    'redteam discover',
-    'redteam generate',
-    'redteam init',
-    'redteam poison',
-    'redteam report',
-    'redteam run',
-    'redteam setup',
-    'webui_action',
-    'webui_api',
-    'webui_page_view',
-  ]),
+const TelemetryEventSchema = z.object({
+  event: z.enum(TELEMETRY_EVENTS),
   packageVersion: z.string().optional().prefault(VERSION),
   properties: z.record(
     z.string(),
@@ -126,11 +110,9 @@ export const TelemetryEventSchema = z.object({
   ),
 });
 
-export const TelemetryResponseSchema = z.object({
+const TelemetryResponseSchema = z.object({
   success: z.literal(true),
 });
-
-export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 
 export const ServerSchemas = {
   Health: {
@@ -139,7 +121,7 @@ export const ServerSchemas = {
   RemoteHealth: {
     Response: RemoteHealthResponseSchema,
   },
-  Results: {
+  ResultList: {
     Query: ListResultsQuerySchema,
     Response: ListResultsResponseSchema,
   },
@@ -177,4 +159,4 @@ export const ServerSchemas = {
     Request: TelemetryEventSchema,
     Response: TelemetryResponseSchema,
   },
-} as const;
+};

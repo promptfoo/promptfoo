@@ -6,9 +6,28 @@ import { getAuthMethod, getUserEmail, getUserId, isLoggedIntoCloud } from './glo
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
 
-import type { TelemetryEvent } from './types/api/server';
-export type TelemetryEventTypes = TelemetryEvent['event'];
-export type EventProperties = TelemetryEvent['properties'];
+/** Closed list of telemetry event names. The DTO layer derives its Zod enum from this. */
+export const TELEMETRY_EVENTS = [
+  'assertion_used',
+  'command_used',
+  'eval setup',
+  'eval_ran',
+  'feature_used',
+  'funnel',
+  'redteam discover',
+  'redteam generate',
+  'redteam init',
+  'redteam poison',
+  'redteam report',
+  'redteam run',
+  'redteam setup',
+  'webui_action',
+  'webui_api',
+  'webui_page_view',
+] as const;
+
+export type TelemetryEventTypes = (typeof TELEMETRY_EVENTS)[number];
+export type EventProperties = Record<string, string | number | boolean | string[]>;
 
 let posthogClient: PostHog | null = null;
 let isShuttingDown = false;
