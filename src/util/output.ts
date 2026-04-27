@@ -86,6 +86,7 @@ async function writeJsonOutputSafely(
 
   try {
     const summary = await evalRecord.toEvaluateSummary();
+    const traces = typeof evalRecord.getTraces === 'function' ? await evalRecord.getTraces() : [];
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const outputData: OutputFile = {
       evalId: evalRecord.id,
@@ -93,6 +94,7 @@ async function writeJsonOutputSafely(
       config: redactedConfig,
       shareableUrl,
       metadata,
+      ...(traces.length > 0 && { traces }),
     };
 
     // Use standard JSON.stringify with proper formatting

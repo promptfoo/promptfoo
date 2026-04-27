@@ -1,3 +1,5 @@
 workspace/
 .env
 output.json
+.venv/
+toolathlon-azure-output.json

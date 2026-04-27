@@ -6,30 +6,14 @@ prompts:
     Reconcile our orders and customers in /workspace. Anyone who has placed an order but isn't in our customer list should be added to customers.csv (use the email as both name and email if we don't have anything else, and today's date for joined_at in YYYY-MM-DD form). Then mark all `pending` orders for known customers as `confirmed` in the sqlite database. When you're done, write a `summary.json` at /workspace/summary.json with `{"added_customers": int, "confirmed_orders": int}`.
 
 providers:
-  - id: anthropic:claude-agent-sdk
-    label: claude-agent-sdk-toolathlon-poc
+  - id: file://agent_provider.py:call_api
+    label: gpt-5.5-azure-toolathlon
     config:
-      apiKeyRequired: false
-      model: claude-sonnet-4-5
+      # Azure deployment discovery: gpt-5.5 works on this resource and resolves
+      # to model gpt-5.5-2026-04-24 with the 2025-04-01-preview API.
+      azure_deployment: gpt-5.5
+      azure_api_version: 2025-04-01-preview
       max_turns: 20
-      working_dir: '{{env.PROMPTFOO_TOOLATHLON_WORKSPACE}}'
-      permission_mode: bypassPermissions
-      allow_dangerously_skip_permissions: true
-      allow_all_tools: true
-      mcp:
-        servers:
-          - name: filesystem
-            command: npx
-            args:
-              - -y
-              - '@modelcontextprotocol/server-filesystem'
-              - '{{env.PROMPTFOO_TOOLATHLON_WORKSPACE}}'
-          - name: sqlite
-            command: uvx
-            args:
-              - mcp-server-sqlite
-              - --db-path
-              - '{{env.PROMPTFOO_TOOLATHLON_DB}}'
 
 defaultTest:
   assert:

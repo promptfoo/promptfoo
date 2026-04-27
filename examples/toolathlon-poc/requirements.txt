@@ -1,0 +1,2 @@
+openai-agents
+openai>=1.40

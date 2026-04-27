@@ -1358,6 +1358,7 @@ export interface OutputFile {
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
   metadata?: OutputMetadata;
+  traces?: TraceData[];
 }
 
 // Live eval job state
