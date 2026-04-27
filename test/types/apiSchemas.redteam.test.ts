@@ -82,8 +82,11 @@ describe('API schema red-team coverage', () => {
         }).success,
       ).toBe(true);
       expect(ServerSchemas.DatasetGenerate.Request.safeParse({ prompts: ['Prompt'] }).success).toBe(
-        false,
+        true,
       );
+      expect(
+        ServerSchemas.DatasetGenerate.Request.safeParse({ prompts: [], tests: [] }).success,
+      ).toBe(false);
       expect(
         ServerSchemas.DatasetGenerate.Request.safeParse({ prompts: 'Prompt', tests: [] }).success,
       ).toBe(false);
