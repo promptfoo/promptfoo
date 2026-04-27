@@ -146,10 +146,6 @@ export function createServerOpenApiRegistry() {
     return errorResponse('Server error');
   }
 
-  function rateLimitError() {
-    return errorResponse('Rate limit exceeded');
-  }
-
   function noContent(description = 'No content'): ResponseConfig {
     return { description };
   }
@@ -319,7 +315,6 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('ShareResponse', ServerSchemas.Share.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
-      429: rateLimitError(),
       500: serverError(),
     },
   });

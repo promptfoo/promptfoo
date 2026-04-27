@@ -96,6 +96,7 @@ res.json(EvalSchemas.Update.Response.parse({ message: 'Success' }));
 - Error responses use `{ error: string }` shape
 - Use `sendError()` for 500 errors — never expose internal details
 - Handle errors with try-catch
+- Never add rate limiters or request throttling middleware to local server routes
 
 ## OpenAPI Generation
 

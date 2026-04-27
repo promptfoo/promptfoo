@@ -1,7 +1,6 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
 import { Duplex } from 'node:stream';
 
-import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createServerOpenApiDocument,
@@ -9,7 +8,6 @@ import {
 } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
 import type { Express } from 'express';
-import type { Test } from 'supertest';
 
 const mocks = vi.hoisted(() => ({
   checkEmailStatus: vi.fn(),
@@ -359,7 +357,6 @@ function routeKey(testCase: Pick<SmokeCase, 'method' | 'openApiPath'>) {
 
 const validUuid = '00000000-0000-4000-8000-000000000000';
 const validMediaFilename = 'abcdef123456.mp3';
-const RATE_LIMITED_ROUTE_KEYS = new Set(['POST /api/results/share']);
 
 const smokeCases: SmokeCase[] = [
   { method: 'get', openApiPath: '/health', path: '/health', expectedStatus: 200 },
@@ -746,10 +743,6 @@ const smokeCases: SmokeCase[] = [
 ];
 
 async function sendRequest(app: Express, testCase: SmokeCase) {
-  if (RATE_LIMITED_ROUTE_KEYS.has(routeKey(testCase))) {
-    return sendSupertestRequest(app, testCase);
-  }
-
   const socket = new MockSocket();
   const req = new IncomingMessage(socket as never);
   req.method = testCase.method.toUpperCase();
@@ -831,27 +824,6 @@ async function sendRequest(app: Express, testCase: SmokeCase) {
   app(req, res);
 
   return response;
-}
-
-async function sendSupertestRequest(app: Express, testCase: SmokeCase) {
-  let req: Test = request(app)
-    [testCase.method](testCase.path)
-    .set('Accept', 'application/json')
-    .set('Host', '127.0.0.1');
-
-  if (testCase.rawJsonBody !== undefined) {
-    req = req.set('Content-Type', 'application/json').send(testCase.rawJsonBody);
-  } else if ('body' in testCase) {
-    req = req.send(testCase.body as object | string | undefined);
-  }
-
-  const response = await req;
-  return {
-    body: response.body,
-    headers: response.headers,
-    status: response.status,
-    text: response.text ?? '',
-  };
 }
 
 describe.sequential('server route end-to-end smoke coverage', () => {
