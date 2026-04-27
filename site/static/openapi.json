@@ -659,11 +659,39 @@
                 "properties": {
                   "prompts": {
                     "type": "array",
-                    "items": {}
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "raw": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            }
+                          },
+                          "required": ["raw"],
+                          "additionalProperties": {}
+                        }
+                      ]
+                    }
                   },
                   "tests": {
                     "type": "array",
-                    "items": {}
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "vars": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        }
+                      },
+                      "additionalProperties": {}
+                    }
                   }
                 },
                 "required": ["prompts", "tests"]
