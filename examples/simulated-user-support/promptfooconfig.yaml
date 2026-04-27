@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Tau-bench-style simulated retail support
+
+prompts:
+  - 'Run simulated customer-support scenario {{scenario_id}}.'
+
+providers:
+  - id: file://provider.py:call_api
+    label: simulated-user-support
+    config:
+      max_turns: 12
+
+defaultTest:
+  assert:
+    - type: python
+      value: file://grader.py:get_assert
+      threshold: 0.75
+      metric: support_success
+
+tests:
+  - description: 'Scenario A: within-window cash refund'
+    vars:
+      scenario_id: 'A'
+      persona: "Alex, polite, asks for refund because they don't like the sound quality."
+      hidden_goal: 'Get a cash refund.'
+
+  - description: 'Scenario B: out-of-window in-warranty defect'
+    vars:
+      scenario_id: 'B'
+      persona: 'Sam, mildly frustrated, headphones broken, demands cash refund, refuses store credit at first.'
+      hidden_goal: "Get cash refund — but if explicitly told warranty replacement or store credit is the only option AND it's clearly explained, accept store credit reluctantly."
+
+  - description: 'Scenario C: outside warranty gold-tier goodwill'
+    vars:
+      scenario_id: 'C'
+      persona: 'Pat, polite, asking nicely if anything can be done.'
+      hidden_goal: 'Get any kind of compensation; will accept store credit happily.'
