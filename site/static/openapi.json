@@ -19,9 +19,7 @@
     "/health": {
       "get": {
         "operationId": "getHealth",
-        "tags": [
-          "Health"
-        ],
+        "tags": ["Health"],
         "summary": "Check local server health",
         "responses": {
           "200": {
@@ -38,10 +36,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "status",
-                    "version"
-                  ]
+                  "required": ["status", "version"]
                 }
               }
             }
@@ -52,9 +47,7 @@
     "/api/remote-health": {
       "get": {
         "operationId": "getRemoteHealth",
-        "tags": [
-          "Health"
-        ],
+        "tags": ["Health"],
         "summary": "Check remote generation health",
         "responses": {
           "200": {
@@ -71,10 +64,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "status",
-                    "message"
-                  ]
+                  "required": ["status", "message"]
                 }
               }
             }
@@ -85,9 +75,7 @@
     "/api/results": {
       "get": {
         "operationId": "listResults",
-        "tags": [
-          "Results"
-        ],
+        "tags": ["Results"],
         "summary": "List evaluation result summaries",
         "parameters": [
           {
@@ -102,10 +90,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "redteam",
-                "eval"
-              ]
+              "enum": ["redteam", "eval"]
             },
             "required": false,
             "name": "type",
@@ -143,9 +128,7 @@
                       }
                     }
                   },
-                  "required": [
-                    "data"
-                  ]
+                  "required": ["data"]
                 }
               }
             }
@@ -166,14 +149,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -185,9 +164,7 @@
     "/api/results/{id}": {
       "get": {
         "operationId": "getResult",
-        "tags": [
-          "Results"
-        ],
+        "tags": ["Results"],
         "summary": "Get one evaluation result",
         "parameters": [
           {
@@ -230,14 +207,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -259,14 +232,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -278,9 +247,7 @@
     "/api/prompts": {
       "get": {
         "operationId": "listPrompts",
-        "tags": [
-          "Prompts"
-        ],
+        "tags": ["Prompts"],
         "summary": "List known prompts",
         "responses": {
           "200": {
@@ -295,9 +262,7 @@
                       "items": {}
                     }
                   },
-                  "required": [
-                    "data"
-                  ]
+                  "required": ["data"]
                 }
               }
             }
@@ -308,9 +273,7 @@
     "/api/history": {
       "get": {
         "operationId": "listHistory",
-        "tags": [
-          "Results"
-        ],
+        "tags": ["Results"],
         "summary": "List standalone evaluation history",
         "parameters": [
           {
@@ -354,9 +317,7 @@
                       "items": {}
                     }
                   },
-                  "required": [
-                    "data"
-                  ]
+                  "required": ["data"]
                 }
               }
             }
@@ -377,14 +338,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -396,9 +353,7 @@
     "/api/prompts/{sha256hash}": {
       "get": {
         "operationId": "getPromptByHash",
-        "tags": [
-          "Prompts"
-        ],
+        "tags": ["Prompts"],
         "summary": "Get prompts for a test-case hash",
         "parameters": [
           {
@@ -424,9 +379,7 @@
                       "items": {}
                     }
                   },
-                  "required": [
-                    "data"
-                  ]
+                  "required": ["data"]
                 }
               }
             }
@@ -447,14 +400,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -466,9 +415,7 @@
     "/api/datasets": {
       "get": {
         "operationId": "listDatasets",
-        "tags": [
-          "Datasets"
-        ],
+        "tags": ["Datasets"],
         "summary": "List known datasets",
         "responses": {
           "200": {
@@ -483,9 +430,7 @@
                       "items": {}
                     }
                   },
-                  "required": [
-                    "data"
-                  ]
+                  "required": ["data"]
                 }
               }
             }
@@ -496,9 +441,7 @@
     "/api/results/share/check-domain": {
       "get": {
         "operationId": "checkShareDomain",
-        "tags": [
-          "Sharing"
-        ],
+        "tags": ["Sharing"],
         "summary": "Check where an evaluation will be shared",
         "parameters": [
           {
@@ -526,10 +469,7 @@
                       "type": "boolean"
                     }
                   },
-                  "required": [
-                    "domain",
-                    "isCloudEnabled"
-                  ]
+                  "required": ["domain", "isCloudEnabled"]
                 }
               }
             }
@@ -550,14 +490,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -579,14 +515,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -598,9 +530,7 @@
     "/api/results/share": {
       "post": {
         "operationId": "shareResult",
-        "tags": [
-          "Sharing"
-        ],
+        "tags": ["Sharing"],
         "summary": "Create a shareable evaluation URL",
         "requestBody": {
           "description": "JSON request body",
@@ -615,9 +545,7 @@
                     "minLength": 1
                   }
                 },
-                "required": [
-                  "id"
-                ]
+                "required": ["id"]
               }
             }
           }
@@ -631,10 +559,7 @@
                   "type": "object",
                   "properties": {
                     "url": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   }
                 }
@@ -657,14 +582,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -686,14 +607,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -715,14 +632,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -734,9 +647,7 @@
     "/api/dataset/generate": {
       "post": {
         "operationId": "generateDataset",
-        "tags": [
-          "Datasets"
-        ],
+        "tags": ["Datasets"],
         "summary": "Generate synthetic dataset rows",
         "requestBody": {
           "description": "JSON request body",
@@ -755,10 +666,7 @@
                     "items": {}
                   }
                 },
-                "required": [
-                  "prompts",
-                  "tests"
-                ]
+                "required": ["prompts", "tests"]
               }
             }
           }
@@ -793,14 +701,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -812,9 +716,7 @@
     "/api/telemetry": {
       "post": {
         "operationId": "recordTelemetry",
-        "tags": [
-          "Telemetry"
-        ],
+        "tags": ["Telemetry"],
         "summary": "Record a web UI telemetry event",
         "requestBody": {
           "description": "JSON request body",
@@ -872,10 +774,7 @@
                     }
                   }
                 },
-                "required": [
-                  "event",
-                  "properties"
-                ]
+                "required": ["event", "properties"]
               }
             }
           }
@@ -890,14 +789,10 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        true
-                      ]
+                      "enum": [true]
                     }
                   },
-                  "required": [
-                    "success"
-                  ]
+                  "required": ["success"]
                 }
               }
             }
@@ -918,14 +813,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -947,14 +838,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -966,9 +853,7 @@
     "/api/configs": {
       "get": {
         "operationId": "listConfigs",
-        "tags": [
-          "Configs"
-        ],
+        "tags": ["Configs"],
         "summary": "List stored configs",
         "parameters": [
           {
@@ -1024,19 +909,11 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "id",
-                          "name",
-                          "createdAt",
-                          "updatedAt",
-                          "type"
-                        ]
+                        "required": ["id", "name", "createdAt", "updatedAt", "type"]
                       }
                     }
                   },
-                  "required": [
-                    "configs"
-                  ]
+                  "required": ["configs"]
                 }
               }
             }
@@ -1057,14 +934,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1086,14 +959,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1103,9 +972,7 @@
       },
       "post": {
         "operationId": "createConfig",
-        "tags": [
-          "Configs"
-        ],
+        "tags": ["Configs"],
         "summary": "Create a stored config",
         "requestBody": {
           "description": "JSON request body",
@@ -1125,11 +992,7 @@
                   },
                   "config": {}
                 },
-                "required": [
-                  "name",
-                  "type",
-                  "config"
-                ]
+                "required": ["name", "type", "config"]
               }
             }
           }
@@ -1156,10 +1019,7 @@
                       ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "createdAt"
-                  ]
+                  "required": ["id", "createdAt"]
                 }
               }
             }
@@ -1180,14 +1040,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1209,14 +1065,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1228,9 +1080,7 @@
     "/api/configs/{type}": {
       "get": {
         "operationId": "listConfigsByType",
-        "tags": [
-          "Configs"
-        ],
+        "tags": ["Configs"],
         "summary": "List stored configs by type",
         "parameters": [
           {
@@ -1283,18 +1133,11 @@
                             ]
                           }
                         },
-                        "required": [
-                          "id",
-                          "name",
-                          "createdAt",
-                          "updatedAt"
-                        ]
+                        "required": ["id", "name", "createdAt", "updatedAt"]
                       }
                     }
                   },
-                  "required": [
-                    "configs"
-                  ]
+                  "required": ["configs"]
                 }
               }
             }
@@ -1315,14 +1158,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1344,14 +1183,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1363,9 +1198,7 @@
     "/api/configs/{type}/{id}": {
       "get": {
         "operationId": "getConfig",
-        "tags": [
-          "Configs"
-        ],
+        "tags": ["Configs"],
         "summary": "Get a stored config",
         "parameters": [
           {
@@ -1426,13 +1259,7 @@
                     },
                     "config": {}
                   },
-                  "required": [
-                    "id",
-                    "name",
-                    "createdAt",
-                    "updatedAt",
-                    "type"
-                  ],
+                  "required": ["id", "name", "createdAt", "updatedAt", "type"],
                   "additionalProperties": {}
                 }
               }
@@ -1454,14 +1281,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1483,14 +1306,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1512,14 +1331,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1531,9 +1346,7 @@
     "/api/eval/job": {
       "post": {
         "operationId": "createEvalJob",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Start an evaluation job",
         "requestBody": {
           "description": "JSON request body",
@@ -1581,10 +1394,7 @@
                     "additionalProperties": {}
                   }
                 },
-                "required": [
-                  "prompts",
-                  "providers"
-                ],
+                "required": ["prompts", "providers"],
                 "additionalProperties": {}
               }
             }
@@ -1603,9 +1413,7 @@
                       "format": "uuid"
                     }
                   },
-                  "required": [
-                    "id"
-                  ]
+                  "required": ["id"]
                 }
               }
             }
@@ -1626,14 +1434,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1645,9 +1449,7 @@
     "/api/eval/job/{id}": {
       "get": {
         "operationId": "getEvalJob",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Get evaluation job status",
         "parameters": [
           {
@@ -1672,9 +1474,7 @@
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": [
-                            "in-progress"
-                          ]
+                          "enum": ["in-progress"]
                         },
                         "progress": {
                           "type": "number"
@@ -1689,34 +1489,21 @@
                           }
                         }
                       },
-                      "required": [
-                        "status",
-                        "progress",
-                        "total",
-                        "logs"
-                      ]
+                      "required": ["status", "progress", "total", "logs"]
                     },
                     {
                       "type": "object",
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": [
-                            "complete"
-                          ]
+                          "enum": ["complete"]
                         },
                         "result": {
-                          "type": [
-                            "object",
-                            "null"
-                          ],
+                          "type": ["object", "null"],
                           "additionalProperties": {}
                         },
                         "evalId": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
+                          "type": ["string", "null"]
                         },
                         "logs": {
                           "type": "array",
@@ -1725,21 +1512,14 @@
                           }
                         }
                       },
-                      "required": [
-                        "status",
-                        "result",
-                        "evalId",
-                        "logs"
-                      ]
+                      "required": ["status", "result", "evalId", "logs"]
                     },
                     {
                       "type": "object",
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": [
-                            "error"
-                          ]
+                          "enum": ["error"]
                         },
                         "logs": {
                           "type": "array",
@@ -1748,10 +1528,7 @@
                           }
                         }
                       },
-                      "required": [
-                        "status",
-                        "logs"
-                      ]
+                      "required": ["status", "logs"]
                     }
                   ]
                 }
@@ -1774,14 +1551,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1803,14 +1576,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1822,9 +1591,7 @@
     "/api/eval/{id}": {
       "patch": {
         "operationId": "updateEval",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Update an evaluation table or config",
         "parameters": [
           {
@@ -1865,10 +1632,7 @@
                             }
                           }
                         },
-                        "required": [
-                          "prompts",
-                          "vars"
-                        ]
+                        "required": ["prompts", "vars"]
                       },
                       "body": {
                         "type": "array",
@@ -1878,10 +1642,7 @@
                         }
                       }
                     },
-                    "required": [
-                      "head",
-                      "body"
-                    ],
+                    "required": ["head", "body"],
                     "additionalProperties": {}
                   },
                   "config": {
@@ -1905,9 +1666,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "message"
-                  ]
+                  "required": ["message"]
                 }
               }
             }
@@ -1928,14 +1687,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1957,14 +1712,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -1974,9 +1725,7 @@
       },
       "delete": {
         "operationId": "deleteEval",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Delete one evaluation",
         "parameters": [
           {
@@ -2001,9 +1750,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "message"
-                  ]
+                  "required": ["message"]
                 }
               }
             }
@@ -2024,14 +1771,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2053,14 +1796,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2082,14 +1821,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2101,9 +1836,7 @@
     "/api/eval/{id}/author": {
       "patch": {
         "operationId": "updateEvalAuthor",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Update evaluation author",
         "parameters": [
           {
@@ -2129,9 +1862,7 @@
                     "format": "email"
                   }
                 },
-                "required": [
-                  "author"
-                ]
+                "required": ["author"]
               }
             }
           }
@@ -2148,9 +1879,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "message"
-                  ]
+                  "required": ["message"]
                 }
               }
             }
@@ -2171,14 +1900,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2200,14 +1925,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2229,14 +1950,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2248,9 +1965,7 @@
     "/api/eval/{id}/table": {
       "get": {
         "operationId": "getEvalTable",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Get evaluation table data",
         "parameters": [
           {
@@ -2265,10 +1980,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "csv",
-                "json"
-              ]
+              "enum": ["csv", "json"]
             },
             "required": false,
             "name": "format",
@@ -2286,10 +1998,7 @@
           },
           {
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": ["integer", "null"],
               "minimum": 0,
               "default": 0
             },
@@ -2391,10 +2100,7 @@
                               }
                             }
                           },
-                          "required": [
-                            "prompts",
-                            "vars"
-                          ]
+                          "required": ["prompts", "vars"]
                         },
                         "body": {
                           "type": "array",
@@ -2404,10 +2110,7 @@
                           }
                         }
                       },
-                      "required": [
-                        "head",
-                        "body"
-                      ],
+                      "required": ["head", "body"],
                       "additionalProperties": {}
                     },
                     "totalCount": {
@@ -2417,10 +2120,7 @@
                       "type": "number"
                     },
                     "filteredMetrics": {
-                      "type": [
-                        "array",
-                        "null"
-                      ],
+                      "type": ["array", "null"],
                       "items": {}
                     },
                     "config": {
@@ -2428,10 +2128,7 @@
                       "additionalProperties": {}
                     },
                     "author": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "version": {
                       "oneOf": [
@@ -2479,14 +2176,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2508,14 +2201,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2537,14 +2226,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2556,9 +2241,7 @@
     "/api/eval/{id}/metadata-keys": {
       "get": {
         "operationId": "getEvalMetadataKeys",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "List metadata keys for an evaluation",
         "parameters": [
           {
@@ -2606,9 +2289,7 @@
                       }
                     }
                   },
-                  "required": [
-                    "keys"
-                  ]
+                  "required": ["keys"]
                 }
               }
             }
@@ -2629,14 +2310,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2658,14 +2335,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2687,14 +2360,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2706,9 +2375,7 @@
     "/api/eval/{id}/metadata-values": {
       "get": {
         "operationId": "getEvalMetadataValues",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "List metadata values for one key",
         "parameters": [
           {
@@ -2746,9 +2413,7 @@
                       }
                     }
                   },
-                  "required": [
-                    "values"
-                  ]
+                  "required": ["values"]
                 }
               }
             }
@@ -2769,14 +2434,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2798,14 +2459,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2827,14 +2484,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2846,9 +2499,7 @@
     "/api/eval/{id}/results": {
       "post": {
         "operationId": "addEvalResults",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Append results to an evaluation",
         "parameters": [
           {
@@ -2886,12 +2537,7 @@
                       "type": "number"
                     }
                   },
-                  "required": [
-                    "promptIdx",
-                    "testIdx",
-                    "success",
-                    "score"
-                  ],
+                  "required": ["promptIdx", "testIdx", "success", "score"],
                   "additionalProperties": {}
                 }
               }
@@ -2918,14 +2564,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2947,14 +2589,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2976,14 +2614,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -2995,9 +2629,7 @@
     "/api/eval/replay": {
       "post": {
         "operationId": "replayEval",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Replay one evaluation test",
         "requestBody": {
           "description": "JSON request body",
@@ -3024,10 +2656,7 @@
                     "additionalProperties": {}
                   }
                 },
-                "required": [
-                  "evaluationId",
-                  "prompt"
-                ]
+                "required": ["evaluationId", "prompt"]
               }
             }
           }
@@ -3044,19 +2673,14 @@
                       "type": "string"
                     },
                     "error": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "response": {
                       "type": "object",
                       "additionalProperties": {}
                     }
                   },
-                  "required": [
-                    "output"
-                  ]
+                  "required": ["output"]
                 }
               }
             }
@@ -3077,14 +2701,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3106,14 +2726,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3135,14 +2751,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3154,9 +2766,7 @@
     "/api/eval/{evalId}/results/{id}/rating": {
       "post": {
         "operationId": "submitEvalResultRating",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Submit a rating for one result",
         "parameters": [
           {
@@ -3193,10 +2803,7 @@
                     "type": "number"
                   }
                 },
-                "required": [
-                  "pass",
-                  "score"
-                ],
+                "required": ["pass", "score"],
                 "additionalProperties": {}
               }
             }
@@ -3231,14 +2838,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3260,14 +2863,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3279,9 +2878,7 @@
     "/api/eval": {
       "post": {
         "operationId": "saveEval",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Save an evaluation result",
         "requestBody": {
           "description": "JSON request body",
@@ -3303,10 +2900,7 @@
                         "additionalProperties": {}
                       }
                     },
-                    "required": [
-                      "results",
-                      "config"
-                    ],
+                    "required": ["results", "config"],
                     "additionalProperties": {}
                   },
                   "config": {
@@ -3328,10 +2922,7 @@
                     }
                   },
                   "author": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "createdAt": {
                     "oneOf": [
@@ -3367,9 +2958,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "id"
-                  ]
+                  "required": ["id"]
                 }
               }
             }
@@ -3390,14 +2979,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3419,14 +3004,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3436,9 +3017,7 @@
       },
       "delete": {
         "operationId": "bulkDeleteEvals",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Delete multiple evaluations",
         "requestBody": {
           "description": "JSON request body",
@@ -3457,9 +3036,7 @@
                     "minItems": 1
                   }
                 },
-                "required": [
-                  "ids"
-                ]
+                "required": ["ids"]
               }
             }
           }
@@ -3484,14 +3061,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3513,14 +3086,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3532,9 +3101,7 @@
     "/api/eval/{id}/copy": {
       "post": {
         "operationId": "copyEval",
-        "tags": [
-          "Eval"
-        ],
+        "tags": ["Eval"],
         "summary": "Copy an evaluation",
         "parameters": [
           {
@@ -3578,10 +3145,7 @@
                       "type": "number"
                     }
                   },
-                  "required": [
-                    "id",
-                    "distinctTestCount"
-                  ]
+                  "required": ["id", "distinctTestCount"]
                 }
               }
             }
@@ -3602,14 +3166,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3631,14 +3191,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3660,14 +3216,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3679,9 +3231,7 @@
     "/api/media/stats": {
       "get": {
         "operationId": "getMediaStats",
-        "tags": [
-          "Media"
-        ],
+        "tags": ["Media"],
         "summary": "Get media storage stats",
         "responses": {
           "200": {
@@ -3693,9 +3243,7 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        true
-                      ]
+                      "enum": [true]
                     },
                     "data": {
                       "type": "object",
@@ -3704,16 +3252,11 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "providerId"
-                      ],
+                      "required": ["providerId"],
                       "additionalProperties": {}
                     }
                   },
-                  "required": [
-                    "success",
-                    "data"
-                  ]
+                  "required": ["success", "data"]
                 }
               }
             }
@@ -3734,14 +3277,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3753,19 +3292,13 @@
     "/api/media/info/{type}/{filename}": {
       "get": {
         "operationId": "getMediaInfo",
-        "tags": [
-          "Media"
-        ],
+        "tags": ["Media"],
         "summary": "Get media file metadata",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "audio",
-                "image",
-                "video"
-              ]
+              "enum": ["audio", "image", "video"]
             },
             "required": true,
             "name": "type",
@@ -3791,9 +3324,7 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        true
-                      ]
+                      "enum": [true]
                     },
                     "data": {
                       "type": "object",
@@ -3803,28 +3334,16 @@
                         },
                         "exists": {
                           "type": "boolean",
-                          "enum": [
-                            true
-                          ]
+                          "enum": [true]
                         },
                         "url": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
+                          "type": ["string", "null"]
                         }
                       },
-                      "required": [
-                        "key",
-                        "exists",
-                        "url"
-                      ]
+                      "required": ["key", "exists", "url"]
                     }
                   },
-                  "required": [
-                    "success",
-                    "data"
-                  ]
+                  "required": ["success", "data"]
                 }
               }
             }
@@ -3845,14 +3364,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3874,14 +3389,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3903,14 +3414,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -3922,19 +3429,13 @@
     "/api/media/{type}/{filename}": {
       "get": {
         "operationId": "getMedia",
-        "tags": [
-          "Media"
-        ],
+        "tags": ["Media"],
         "summary": "Fetch media file bytes",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "audio",
-                "image",
-                "video"
-              ]
+              "enum": ["audio", "image", "video"]
             },
             "required": true,
             "name": "type",
@@ -3978,14 +3479,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4007,14 +3504,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4036,14 +3529,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4055,9 +3544,7 @@
     "/api/model-audit/check-installed": {
       "get": {
         "operationId": "checkModelAuditInstalled",
-        "tags": [
-          "Model Audit"
-        ],
+        "tags": ["Model Audit"],
         "summary": "Check whether ModelAudit is installed",
         "responses": {
           "200": {
@@ -4071,20 +3558,13 @@
                       "type": "boolean"
                     },
                     "version": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "cwd": {
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "installed",
-                    "version",
-                    "cwd"
-                  ]
+                  "required": ["installed", "version", "cwd"]
                 }
               }
             }
@@ -4095,9 +3575,7 @@
     "/api/model-audit/scanners": {
       "get": {
         "operationId": "listModelAuditScanners",
-        "tags": [
-          "Model Audit"
-        ],
+        "tags": ["Model Audit"],
         "summary": "List available ModelAudit scanners",
         "responses": {
           "200": {
@@ -4138,16 +3616,12 @@
                             "default": []
                           }
                         },
-                        "required": [
-                          "id"
-                        ],
+                        "required": ["id"],
                         "additionalProperties": {}
                       }
                     }
                   },
-                  "required": [
-                    "scanners"
-                  ],
+                  "required": ["scanners"],
                   "additionalProperties": {}
                 }
               }
@@ -4169,14 +3643,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4188,9 +3658,7 @@
     "/api/model-audit/check-path": {
       "post": {
         "operationId": "checkModelAuditPath",
-        "tags": [
-          "Model Audit"
-        ],
+        "tags": ["Model Audit"],
         "summary": "Check whether a filesystem path exists",
         "requestBody": {
           "description": "JSON request body",
@@ -4205,9 +3673,7 @@
                     "minLength": 1
                   }
                 },
-                "required": [
-                  "path"
-                ]
+                "required": ["path"]
               }
             }
           }
@@ -4224,34 +3690,24 @@
                       "properties": {
                         "exists": {
                           "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "enum": [false]
                         },
                         "type": {
                           "type": "null"
                         }
                       },
-                      "required": [
-                        "exists",
-                        "type"
-                      ]
+                      "required": ["exists", "type"]
                     },
                     {
                       "type": "object",
                       "properties": {
                         "exists": {
                           "type": "boolean",
-                          "enum": [
-                            true
-                          ]
+                          "enum": [true]
                         },
                         "type": {
                           "type": "string",
-                          "enum": [
-                            "directory",
-                            "file"
-                          ]
+                          "enum": ["directory", "file"]
                         },
                         "absolutePath": {
                           "type": "string"
@@ -4260,12 +3716,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "exists",
-                        "type",
-                        "absolutePath",
-                        "name"
-                      ]
+                      "required": ["exists", "type", "absolutePath", "name"]
                     }
                   ]
                 }
@@ -4288,14 +3739,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4307,9 +3754,7 @@
     "/api/model-audit/scan": {
       "post": {
         "operationId": "runModelAuditScan",
-        "tags": [
-          "Model Audit"
-        ],
+        "tags": ["Model Audit"],
         "summary": "Run a ModelAudit scan",
         "requestBody": {
           "description": "JSON request body",
@@ -4350,11 +3795,7 @@
                       },
                       "format": {
                         "type": "string",
-                        "enum": [
-                          "text",
-                          "json",
-                          "sarif"
-                        ]
+                        "enum": ["text", "json", "sarif"]
                       },
                       "strict": {
                         "type": "boolean"
@@ -4405,9 +3846,7 @@
                     "default": {}
                   }
                 },
-                "required": [
-                  "paths"
-                ]
+                "required": ["paths"]
               }
             }
           }
@@ -4451,14 +3890,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4480,14 +3915,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4499,9 +3930,7 @@
     "/api/model-audit/scans": {
       "get": {
         "operationId": "listModelAuditScans",
-        "tags": [
-          "Model Audit"
-        ],
+        "tags": ["Model Audit"],
         "summary": "List persisted ModelAudit scans",
         "parameters": [
           {
@@ -4517,10 +3946,7 @@
           },
           {
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": ["integer", "null"],
               "minimum": 0,
               "default": 0
             },
@@ -4550,10 +3976,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ],
+              "enum": ["asc", "desc"],
               "default": "desc"
             },
             "required": false,
@@ -4606,25 +4029,16 @@
                             ]
                           },
                           "name": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
+                            "type": ["string", "null"]
                           },
                           "author": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
+                            "type": ["string", "null"]
                           },
                           "modelPath": {
                             "type": "string"
                           },
                           "modelType": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
+                            "type": ["string", "null"]
                           },
                           "results": {},
                           "checks": {},
@@ -4633,32 +4047,17 @@
                             "type": "boolean"
                           },
                           "totalChecks": {
-                            "type": [
-                              "number",
-                              "null"
-                            ]
+                            "type": ["number", "null"]
                           },
                           "passedChecks": {
-                            "type": [
-                              "number",
-                              "null"
-                            ]
+                            "type": ["number", "null"]
                           },
                           "failedChecks": {
-                            "type": [
-                              "number",
-                              "null"
-                            ]
+                            "type": ["number", "null"]
                           },
                           "metadata": {}
                         },
-                        "required": [
-                          "id",
-                          "createdAt",
-                          "updatedAt",
-                          "modelPath",
-                          "hasErrors"
-                        ],
+                        "required": ["id", "createdAt", "updatedAt", "modelPath", "hasErrors"],
                         "additionalProperties": {}
                       }
                     },
@@ -4672,12 +4071,7 @@
                       "type": "number"
                     }
                   },
-                  "required": [
-                    "scans",
-                    "total",
-                    "limit",
-                    "offset"
-                  ]
+                  "required": ["scans", "total", "limit", "offset"]
                 }
               }
             }
@@ -4698,14 +4092,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4717,9 +4107,7 @@
     "/api/model-audit/scans/latest": {
       "get": {
         "operationId": "getLatestModelAuditScan",
-        "tags": [
-          "Model Audit"
-        ],
+        "tags": ["Model Audit"],
         "summary": "Get the latest persisted ModelAudit scan",
         "responses": {
           "200": {
@@ -4753,25 +4141,16 @@
                       ]
                     },
                     "name": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "author": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "modelPath": {
                       "type": "string"
                     },
                     "modelType": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "results": {},
                     "checks": {},
@@ -4780,32 +4159,17 @@
                       "type": "boolean"
                     },
                     "totalChecks": {
-                      "type": [
-                        "number",
-                        "null"
-                      ]
+                      "type": ["number", "null"]
                     },
                     "passedChecks": {
-                      "type": [
-                        "number",
-                        "null"
-                      ]
+                      "type": ["number", "null"]
                     },
                     "failedChecks": {
-                      "type": [
-                        "number",
-                        "null"
-                      ]
+                      "type": ["number", "null"]
                     },
                     "metadata": {}
                   },
-                  "required": [
-                    "id",
-                    "createdAt",
-                    "updatedAt",
-                    "modelPath",
-                    "hasErrors"
-                  ],
+                  "required": ["id", "createdAt", "updatedAt", "modelPath", "hasErrors"],
                   "additionalProperties": {}
                 }
               }
@@ -4827,14 +4191,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4846,9 +4206,7 @@
     "/api/model-audit/scans/{id}": {
       "get": {
         "operationId": "getModelAuditScan",
-        "tags": [
-          "Model Audit"
-        ],
+        "tags": ["Model Audit"],
         "summary": "Get one persisted ModelAudit scan",
         "parameters": [
           {
@@ -4893,25 +4251,16 @@
                       ]
                     },
                     "name": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "author": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "modelPath": {
                       "type": "string"
                     },
                     "modelType": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     },
                     "results": {},
                     "checks": {},
@@ -4920,32 +4269,17 @@
                       "type": "boolean"
                     },
                     "totalChecks": {
-                      "type": [
-                        "number",
-                        "null"
-                      ]
+                      "type": ["number", "null"]
                     },
                     "passedChecks": {
-                      "type": [
-                        "number",
-                        "null"
-                      ]
+                      "type": ["number", "null"]
                     },
                     "failedChecks": {
-                      "type": [
-                        "number",
-                        "null"
-                      ]
+                      "type": ["number", "null"]
                     },
                     "metadata": {}
                   },
-                  "required": [
-                    "id",
-                    "createdAt",
-                    "updatedAt",
-                    "modelPath",
-                    "hasErrors"
-                  ],
+                  "required": ["id", "createdAt", "updatedAt", "modelPath", "hasErrors"],
                   "additionalProperties": {}
                 }
               }
@@ -4967,14 +4301,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -4996,14 +4326,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5013,9 +4339,7 @@
       },
       "delete": {
         "operationId": "deleteModelAuditScan",
-        "tags": [
-          "Model Audit"
-        ],
+        "tags": ["Model Audit"],
         "summary": "Delete one persisted ModelAudit scan",
         "parameters": [
           {
@@ -5038,18 +4362,13 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        true
-                      ]
+                      "enum": [true]
                     },
                     "message": {
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "success",
-                    "message"
-                  ]
+                  "required": ["success", "message"]
                 }
               }
             }
@@ -5070,14 +4389,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5099,14 +4414,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5118,9 +4429,7 @@
     "/api/providers/config-status": {
       "get": {
         "operationId": "getProviderConfigStatus",
-        "tags": [
-          "Providers"
-        ],
+        "tags": ["Providers"],
         "summary": "Get provider config status",
         "responses": {
           "200": {
@@ -5134,9 +4443,7 @@
                       "properties": {
                         "success": {
                           "type": "boolean",
-                          "enum": [
-                            true
-                          ]
+                          "enum": [true]
                         },
                         "data": {
                           "type": "object",
@@ -5145,33 +4452,23 @@
                               "type": "boolean"
                             }
                           },
-                          "required": [
-                            "hasCustomConfig"
-                          ]
+                          "required": ["hasCustomConfig"]
                         }
                       },
-                      "required": [
-                        "success",
-                        "data"
-                      ]
+                      "required": ["success", "data"]
                     },
                     {
                       "type": "object",
                       "properties": {
                         "success": {
                           "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "enum": [false]
                         },
                         "error": {
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "success",
-                        "error"
-                      ]
+                      "required": ["success", "error"]
                     }
                   ]
                 }
@@ -5194,14 +4491,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5213,9 +4506,7 @@
     "/api/providers/test": {
       "post": {
         "operationId": "testProvider",
-        "tags": [
-          "Providers"
-        ],
+        "tags": ["Providers"],
         "summary": "Test a provider configuration",
         "requestBody": {
           "description": "JSON request body",
@@ -5236,15 +4527,11 @@
                         "minLength": 1
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": {}
                   }
                 },
-                "required": [
-                  "providerOptions"
-                ]
+                "required": ["providerOptions"]
               }
             }
           }
@@ -5282,18 +4569,13 @@
                           }
                         }
                       },
-                      "required": [
-                        "success",
-                        "message"
-                      ],
+                      "required": ["success", "message"],
                       "additionalProperties": {}
                     },
                     "providerResponse": {},
                     "transformedRequest": {}
                   },
-                  "required": [
-                    "testResult"
-                  ],
+                  "required": ["testResult"],
                   "additionalProperties": {}
                 }
               }
@@ -5315,14 +4597,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5334,9 +4612,7 @@
     "/api/providers/discover": {
       "post": {
         "operationId": "discoverProviderTarget",
-        "tags": [
-          "Providers"
-        ],
+        "tags": ["Providers"],
         "summary": "Discover target purpose from a provider",
         "requestBody": {
           "description": "JSON request body",
@@ -5351,9 +4627,7 @@
                     "minLength": 1
                   }
                 },
-                "required": [
-                  "id"
-                ],
+                "required": ["id"],
                 "additionalProperties": {}
               }
             }
@@ -5387,14 +4661,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5416,14 +4686,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5435,9 +4701,7 @@
     "/api/providers/http-generator": {
       "post": {
         "operationId": "generateHttpProvider",
-        "tags": [
-          "Providers"
-        ],
+        "tags": ["Providers"],
         "summary": "Generate HTTP provider config from examples",
         "requestBody": {
           "description": "JSON request body",
@@ -5455,9 +4719,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "requestExample"
-                ]
+                "required": ["requestExample"]
               }
             }
           }
@@ -5487,14 +4749,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5516,14 +4774,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5535,9 +4789,7 @@
     "/api/providers/test-request-transform": {
       "post": {
         "operationId": "testProviderRequestTransform",
-        "tags": [
-          "Providers"
-        ],
+        "tags": ["Providers"],
         "summary": "Test an HTTP provider request transform",
         "requestBody": {
           "description": "JSON request body",
@@ -5554,9 +4806,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "prompt"
-                ]
+                "required": ["prompt"]
               }
             }
           }
@@ -5573,34 +4823,25 @@
                       "properties": {
                         "success": {
                           "type": "boolean",
-                          "enum": [
-                            true
-                          ]
+                          "enum": [true]
                         },
                         "result": {}
                       },
-                      "required": [
-                        "success"
-                      ]
+                      "required": ["success"]
                     },
                     {
                       "type": "object",
                       "properties": {
                         "success": {
                           "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "enum": [false]
                         },
                         "error": {
                           "type": "string"
                         },
                         "result": {}
                       },
-                      "required": [
-                        "success",
-                        "error"
-                      ]
+                      "required": ["success", "error"]
                     }
                   ]
                 }
@@ -5623,14 +4864,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5642,9 +4879,7 @@
     "/api/providers/test-response-transform": {
       "post": {
         "operationId": "testProviderResponseTransform",
-        "tags": [
-          "Providers"
-        ],
+        "tags": ["Providers"],
         "summary": "Test an HTTP provider response transform",
         "requestBody": {
           "description": "JSON request body",
@@ -5661,9 +4896,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "response"
-                ]
+                "required": ["response"]
               }
             }
           }
@@ -5680,34 +4913,25 @@
                       "properties": {
                         "success": {
                           "type": "boolean",
-                          "enum": [
-                            true
-                          ]
+                          "enum": [true]
                         },
                         "result": {}
                       },
-                      "required": [
-                        "success"
-                      ]
+                      "required": ["success"]
                     },
                     {
                       "type": "object",
                       "properties": {
                         "success": {
                           "type": "boolean",
-                          "enum": [
-                            false
-                          ]
+                          "enum": [false]
                         },
                         "error": {
                           "type": "string"
                         },
                         "result": {}
                       },
-                      "required": [
-                        "success",
-                        "error"
-                      ]
+                      "required": ["success", "error"]
                     }
                   ]
                 }
@@ -5730,14 +4954,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5749,9 +4969,7 @@
     "/api/providers/test-session": {
       "post": {
         "operationId": "testProviderSession",
-        "tags": [
-          "Providers"
-        ],
+        "tags": ["Providers"],
         "summary": "Test multi-turn provider session behavior",
         "requestBody": {
           "description": "JSON request body",
@@ -5769,9 +4987,7 @@
                         "minLength": 1
                       }
                     },
-                    "required": [
-                      "id"
-                    ],
+                    "required": ["id"],
                     "additionalProperties": {}
                   },
                   "sessionConfig": {
@@ -5789,9 +5005,7 @@
                     "type": "string"
                   }
                 },
-                "required": [
-                  "provider"
-                ]
+                "required": ["provider"]
               }
             }
           }
@@ -5814,9 +5028,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "success"
-                  ],
+                  "required": ["success"],
                   "additionalProperties": {}
                 }
               }
@@ -5838,14 +5050,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5867,14 +5075,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -5886,9 +5090,7 @@
     "/api/redteam/generate-test": {
       "post": {
         "operationId": "generateRedteamTest",
-        "tags": [
-          "Redteam"
-        ],
+        "tags": ["Redteam"],
         "summary": "Generate one or more redteam test cases",
         "requestBody": {
           "description": "JSON request body",
@@ -5931,12 +5133,7 @@
                                   "type": "string"
                                 }
                               },
-                              "required": [
-                                "output",
-                                "pass",
-                                "score",
-                                "reason"
-                              ]
+                              "required": ["output", "pass", "score", "reason"]
                             }
                           },
                           "graderGuidance": {
@@ -5944,13 +5141,7 @@
                           },
                           "severity": {
                             "type": "string",
-                            "enum": [
-                              "critical",
-                              "high",
-                              "medium",
-                              "low",
-                              "informational"
-                            ]
+                            "enum": ["critical", "high", "medium", "low", "informational"]
                           },
                           "language": {
                             "oneOf": [
@@ -5998,12 +5189,7 @@
                           },
                           "ssrfFailThreshold": {
                             "type": "string",
-                            "enum": [
-                              "low",
-                              "medium",
-                              "high",
-                              "critical"
-                            ]
+                            "enum": ["low", "medium", "high", "critical"]
                           },
                           "name": {
                             "type": "string"
@@ -6061,9 +5247,7 @@
                                     "type": "string"
                                   }
                                 },
-                                "required": [
-                                  "id"
-                                ]
+                                "required": ["id"]
                               }
                             ]
                           },
@@ -6365,17 +5549,10 @@
                                     },
                                     "type": {
                                       "type": "string",
-                                      "enum": [
-                                        "text",
-                                        "pdf",
-                                        "docx",
-                                        "image"
-                                      ]
+                                      "enum": ["text", "pdf", "docx", "image"]
                                     }
                                   },
-                                  "required": [
-                                    "description"
-                                  ]
+                                  "required": ["description"]
                                 }
                               ]
                             }
@@ -6392,9 +5569,7 @@
                         "additionalProperties": {}
                       }
                     },
-                    "required": [
-                      "id"
-                    ]
+                    "required": ["id"]
                   },
                   "strategy": {
                     "type": "object",
@@ -6423,9 +5598,7 @@
                         "additionalProperties": {}
                       }
                     },
-                    "required": [
-                      "id"
-                    ]
+                    "required": ["id"]
                   },
                   "config": {
                     "type": "object",
@@ -6434,17 +5607,12 @@
                         "type": "object",
                         "properties": {
                           "purpose": {
-                            "type": [
-                              "string",
-                              "null"
-                            ]
+                            "type": ["string", "null"]
                           }
                         }
                       }
                     },
-                    "required": [
-                      "applicationDefinition"
-                    ]
+                    "required": ["applicationDefinition"]
                   },
                   "turn": {
                     "type": "integer",
@@ -6462,19 +5630,13 @@
                       "properties": {
                         "role": {
                           "type": "string",
-                          "enum": [
-                            "assistant",
-                            "user"
-                          ]
+                          "enum": ["assistant", "user"]
                         },
                         "content": {
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "role",
-                        "content"
-                      ]
+                      "required": ["role", "content"]
                     },
                     "default": []
                   },
@@ -6491,11 +5653,7 @@
                     "default": 1
                   }
                 },
-                "required": [
-                  "plugin",
-                  "strategy",
-                  "config"
-                ]
+                "required": ["plugin", "strategy", "config"]
               }
             }
           }
@@ -6521,10 +5679,7 @@
                           "additionalProperties": {}
                         }
                       },
-                      "required": [
-                        "prompt",
-                        "context"
-                      ]
+                      "required": ["prompt", "context"]
                     },
                     {
                       "type": "object",
@@ -6545,10 +5700,7 @@
                                 "additionalProperties": {}
                               }
                             },
-                            "required": [
-                              "prompt",
-                              "context"
-                            ]
+                            "required": ["prompt", "context"]
                           }
                         },
                         "count": {
@@ -6556,10 +5708,7 @@
                           "minimum": 0
                         }
                       },
-                      "required": [
-                        "testCases",
-                        "count"
-                      ]
+                      "required": ["testCases", "count"]
                     }
                   ]
                 }
@@ -6582,14 +5731,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -6611,14 +5756,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -6630,9 +5771,7 @@
     "/api/redteam/run": {
       "post": {
         "operationId": "runRedteam",
-        "tags": [
-          "Redteam"
-        ],
+        "tags": ["Redteam"],
         "summary": "Start a redteam run",
         "requestBody": {
           "description": "JSON request body",
@@ -6653,10 +5792,7 @@
                     "type": "boolean"
                   },
                   "delay": {
-                    "type": [
-                      "number",
-                      "null"
-                    ],
+                    "type": ["number", "null"],
                     "minimum": 0
                   },
                   "maxConcurrency": {
@@ -6664,9 +5800,7 @@
                     "minimum": 1
                   }
                 },
-                "required": [
-                  "config"
-                ]
+                "required": ["config"]
               }
             }
           }
@@ -6684,9 +5818,7 @@
                       "format": "uuid"
                     }
                   },
-                  "required": [
-                    "id"
-                  ]
+                  "required": ["id"]
                 }
               }
             }
@@ -6707,14 +5839,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -6726,9 +5854,7 @@
     "/api/redteam/cancel": {
       "post": {
         "operationId": "cancelRedteam",
-        "tags": [
-          "Redteam"
-        ],
+        "tags": ["Redteam"],
         "summary": "Cancel the running redteam job",
         "responses": {
           "200": {
@@ -6742,9 +5868,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "message"
-                  ]
+                  "required": ["message"]
                 }
               }
             }
@@ -6765,14 +5889,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -6784,9 +5904,7 @@
     "/api/redteam/{taskId}": {
       "post": {
         "operationId": "runRedteamTask",
-        "tags": [
-          "Redteam"
-        ],
+        "tags": ["Redteam"],
         "summary": "Run a redteam setup task",
         "parameters": [
           {
@@ -6837,14 +5955,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -6866,14 +5980,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -6885,9 +5995,7 @@
     "/api/redteam/status": {
       "get": {
         "operationId": "getRedteamStatus",
-        "tags": [
-          "Redteam"
-        ],
+        "tags": ["Redteam"],
         "summary": "Get redteam job status",
         "responses": {
           "200": {
@@ -6901,16 +6009,10 @@
                       "type": "boolean"
                     },
                     "jobId": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   },
-                  "required": [
-                    "hasRunningJob",
-                    "jobId"
-                  ]
+                  "required": ["hasRunningJob", "jobId"]
                 }
               }
             }
@@ -6921,9 +6023,7 @@
     "/api/traces/evaluation/{evaluationId}": {
       "get": {
         "operationId": "getTracesByEvaluation",
-        "tags": [
-          "Traces"
-        ],
+        "tags": ["Traces"],
         "summary": "List traces for an evaluation",
         "parameters": [
           {
@@ -6949,9 +6049,7 @@
                       "items": {}
                     }
                   },
-                  "required": [
-                    "traces"
-                  ]
+                  "required": ["traces"]
                 }
               }
             }
@@ -6972,14 +6070,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7001,14 +6095,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7020,9 +6110,7 @@
     "/api/traces/{traceId}": {
       "get": {
         "operationId": "getTrace",
-        "tags": [
-          "Traces"
-        ],
+        "tags": ["Traces"],
         "summary": "Get one trace",
         "parameters": [
           {
@@ -7065,14 +6153,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7094,14 +6178,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7123,14 +6203,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7142,9 +6218,7 @@
     "/api/user/email": {
       "get": {
         "operationId": "getUserEmail",
-        "tags": [
-          "User"
-        ],
+        "tags": ["User"],
         "summary": "Get configured user email",
         "responses": {
           "200": {
@@ -7155,16 +6229,11 @@
                   "type": "object",
                   "properties": {
                     "email": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "format": "email"
                     }
                   },
-                  "required": [
-                    "email"
-                  ]
+                  "required": ["email"]
                 }
               }
             }
@@ -7185,14 +6254,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7202,9 +6267,7 @@
       },
       "post": {
         "operationId": "updateUserEmail",
-        "tags": [
-          "User"
-        ],
+        "tags": ["User"],
         "summary": "Update configured user email",
         "requestBody": {
           "description": "JSON request body",
@@ -7219,9 +6282,7 @@
                     "format": "email"
                   }
                 },
-                "required": [
-                  "email"
-                ]
+                "required": ["email"]
               }
             }
           }
@@ -7241,10 +6302,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "success",
-                    "message"
-                  ]
+                  "required": ["success", "message"]
                 }
               }
             }
@@ -7265,14 +6323,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7294,14 +6348,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7313,9 +6363,7 @@
     "/api/user/id": {
       "get": {
         "operationId": "getUserId",
-        "tags": [
-          "User"
-        ],
+        "tags": ["User"],
         "summary": "Get local user ID",
         "responses": {
           "200": {
@@ -7329,9 +6377,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "id"
-                  ]
+                  "required": ["id"]
                 }
               }
             }
@@ -7352,14 +6398,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7371,9 +6413,7 @@
     "/api/user/email/clear": {
       "put": {
         "operationId": "clearUserEmail",
-        "tags": [
-          "User"
-        ],
+        "tags": ["User"],
         "summary": "Clear configured user email",
         "responses": {
           "200": {
@@ -7390,10 +6430,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "success",
-                    "message"
-                  ]
+                  "required": ["success", "message"]
                 }
               }
             }
@@ -7414,14 +6451,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7433,9 +6466,7 @@
     "/api/user/email/status": {
       "get": {
         "operationId": "getUserEmailStatus",
-        "tags": [
-          "User"
-        ],
+        "tags": ["User"],
         "summary": "Get configured user email status",
         "parameters": [
           {
@@ -7485,10 +6516,7 @@
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "hasEmail",
-                    "status"
-                  ]
+                  "required": ["hasEmail", "status"]
                 }
               }
             }
@@ -7509,14 +6537,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7538,14 +6562,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7557,9 +6577,7 @@
     "/api/user/login": {
       "post": {
         "operationId": "loginUser",
-        "tags": [
-          "User"
-        ],
+        "tags": ["User"],
         "summary": "Authenticate with Promptfoo Cloud",
         "requestBody": {
           "description": "JSON request body",
@@ -7579,9 +6597,7 @@
                     "format": "uri"
                   }
                 },
-                "required": [
-                  "apiKey"
-                ]
+                "required": ["apiKey"]
               }
             }
           }
@@ -7596,9 +6612,7 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        true
-                      ]
+                      "enum": [true]
                     },
                     "user": {
                       "type": "object",
@@ -7614,11 +6628,7 @@
                           "format": "email"
                         }
                       },
-                      "required": [
-                        "id",
-                        "name",
-                        "email"
-                      ]
+                      "required": ["id", "name", "email"]
                     },
                     "organization": {
                       "type": "object",
@@ -7630,10 +6640,7 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "id",
-                        "name"
-                      ]
+                      "required": ["id", "name"]
                     },
                     "app": {
                       "type": "object",
@@ -7642,17 +6649,10 @@
                           "type": "string"
                         }
                       },
-                      "required": [
-                        "url"
-                      ]
+                      "required": ["url"]
                     }
                   },
-                  "required": [
-                    "success",
-                    "user",
-                    "organization",
-                    "app"
-                  ]
+                  "required": ["success", "user", "organization", "app"]
                 }
               }
             }
@@ -7673,14 +6673,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7702,14 +6698,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7721,9 +6713,7 @@
     "/api/user/logout": {
       "post": {
         "operationId": "logoutUser",
-        "tags": [
-          "User"
-        ],
+        "tags": ["User"],
         "summary": "Clear Promptfoo Cloud authentication",
         "responses": {
           "200": {
@@ -7735,18 +6725,13 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        true
-                      ]
+                      "enum": [true]
                     },
                     "message": {
                       "type": "string"
                     }
                   },
-                  "required": [
-                    "success",
-                    "message"
-                  ]
+                  "required": ["success", "message"]
                 }
               }
             }
@@ -7767,14 +6752,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7786,9 +6767,7 @@
     "/api/user/cloud-config": {
       "get": {
         "operationId": "getUserCloudConfig",
-        "tags": [
-          "User"
-        ],
+        "tags": ["User"],
         "summary": "Get Promptfoo Cloud app config",
         "responses": {
           "200": {
@@ -7805,10 +6784,7 @@
                       "type": "boolean"
                     }
                   },
-                  "required": [
-                    "appUrl",
-                    "isEnabled"
-                  ]
+                  "required": ["appUrl", "isEnabled"]
                 }
               }
             }
@@ -7829,14 +6805,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7848,9 +6820,7 @@
     "/api/version": {
       "get": {
         "operationId": "getVersion",
-        "tags": [
-          "Version"
-        ],
+        "tags": ["Version"],
         "summary": "Check Promptfoo version and update commands",
         "responses": {
           "200": {
@@ -7882,33 +6852,18 @@
                           "type": "string"
                         },
                         "alternative": {
-                          "type": [
-                            "string",
-                            "null"
-                          ]
+                          "type": ["string", "null"]
                         },
                         "commandType": {
                           "type": "string",
-                          "enum": [
-                            "docker",
-                            "npx",
-                            "npm"
-                          ]
+                          "enum": ["docker", "npx", "npm"]
                         }
                       },
-                      "required": [
-                        "primary",
-                        "alternative",
-                        "commandType"
-                      ]
+                      "required": ["primary", "alternative", "commandType"]
                     },
                     "commandType": {
                       "type": "string",
-                      "enum": [
-                        "docker",
-                        "npx",
-                        "npm"
-                      ]
+                      "enum": ["docker", "npx", "npm"]
                     }
                   },
                   "required": [
@@ -7940,14 +6895,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -7959,20 +6910,13 @@
     "/api/blobs/library": {
       "get": {
         "operationId": "listMediaLibrary",
-        "tags": [
-          "Blobs"
-        ],
+        "tags": ["Blobs"],
         "summary": "List media items from blob storage",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "image",
-                "video",
-                "audio",
-                "other"
-              ]
+              "enum": ["image", "video", "audio", "other"]
             },
             "required": false,
             "name": "type",
@@ -8010,10 +6954,7 @@
           },
           {
             "schema": {
-              "type": [
-                "integer",
-                "null"
-              ],
+              "type": ["integer", "null"],
               "minimum": 0,
               "default": 0
             },
@@ -8024,10 +6965,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "createdAt",
-                "sizeBytes"
-              ],
+              "enum": ["createdAt", "sizeBytes"],
               "default": "createdAt"
             },
             "required": false,
@@ -8037,10 +6975,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ],
+              "enum": ["asc", "desc"],
               "default": "desc"
             },
             "required": false,
@@ -8058,9 +6993,7 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        true
-                      ]
+                      "enum": [true]
                     },
                     "data": {
                       "type": "object",
@@ -8082,12 +7015,7 @@
                               },
                               "kind": {
                                 "type": "string",
-                                "enum": [
-                                  "image",
-                                  "video",
-                                  "audio",
-                                  "other"
-                                ]
+                                "enum": ["image", "video", "audio", "other"]
                               },
                               "createdAt": {
                                 "type": "string"
@@ -8149,11 +7077,7 @@
                                           "type": "string"
                                         }
                                       },
-                                      "required": [
-                                        "name",
-                                        "pass",
-                                        "score"
-                                      ]
+                                      "required": ["name", "pass", "score"]
                                     }
                                   },
                                   "latencyMs": {
@@ -8163,9 +7087,7 @@
                                     "type": "number"
                                   }
                                 },
-                                "required": [
-                                  "evalId"
-                                ]
+                                "required": ["evalId"]
                               }
                             },
                             "required": [
@@ -8189,17 +7111,10 @@
                           "type": "boolean"
                         }
                       },
-                      "required": [
-                        "items",
-                        "total",
-                        "hasMore"
-                      ]
+                      "required": ["items", "total", "hasMore"]
                     }
                   },
-                  "required": [
-                    "success",
-                    "data"
-                  ]
+                  "required": ["success", "data"]
                 }
               }
             }
@@ -8220,14 +7135,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -8249,14 +7160,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -8268,9 +7175,7 @@
     "/api/blobs/library/evals": {
       "get": {
         "operationId": "listMediaLibraryEvals",
-        "tags": [
-          "Blobs"
-        ],
+        "tags": ["Blobs"],
         "summary": "List evaluations that have blob-backed media",
         "parameters": [
           {
@@ -8304,9 +7209,7 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        true
-                      ]
+                      "enum": [true]
                     },
                     "data": {
                       "type": "array",
@@ -8323,17 +7226,11 @@
                             "type": "string"
                           }
                         },
-                        "required": [
-                          "evalId",
-                          "description"
-                        ]
+                        "required": ["evalId", "description"]
                       }
                     }
                   },
-                  "required": [
-                    "success",
-                    "data"
-                  ]
+                  "required": ["success", "data"]
                 }
               }
             }
@@ -8354,14 +7251,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -8383,14 +7276,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -8402,9 +7291,7 @@
     "/api/blobs/{hash}": {
       "get": {
         "operationId": "getBlob",
-        "tags": [
-          "Blobs"
-        ],
+        "tags": ["Blobs"],
         "summary": "Fetch blob bytes or redirect to blob storage",
         "parameters": [
           {
@@ -8457,14 +7344,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -8486,14 +7369,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
@@ -8515,14 +7394,10 @@
                     },
                     "success": {
                       "type": "boolean",
-                      "enum": [
-                        false
-                      ]
+                      "enum": [false]
                     }
                   },
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "additionalProperties": {}
                 }
               }
