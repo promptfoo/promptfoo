@@ -22,34 +22,34 @@ Here is the main structure of the promptfoo configuration file:
 
 ### Config
 
-| Property                        | Type                                                                                                                      | Required                       | Description                                                                                                                                                                                                                     |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| description                     | string                                                                                                                    | No                             | Optional description of what your LLM is trying to do                                                                                                                                                                           |
-| tags                            | Record\<string, string\>                                                                                                  | No                             | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                                       |
-| providers                       | [ProvidersConfig](#providersconfig)                                                                                       | Yes, unless `targets` is set   | One or more [LLM APIs](/docs/providers) to use. Exactly one of `providers` or `targets` must be set.                                                                                                                            |
-| targets                         | [ProvidersConfig](#providersconfig)                                                                                       | Yes, unless `providers` is set | Alias for `providers`, commonly used in [red team](/docs/red-team) configs. Exactly one of `targets` or `providers` must be set.                                                                                                |
-| prompts                         | string \| string[] \| Record\<string, string\> \| Prompt[]                                                                | Yes                            | One or more [prompts](/docs/configuration/prompts) to load                                                                                                                                                                      |
-| tests                           | string \| (string \| [Test Case](#test-case) \| [Test Generator Config](#test-generator-config))[] \| TestGeneratorConfig | No                             | Path to a [test file](/docs/configuration/test-cases), inline tests, or a generator. If omitted, promptfoo runs each prompt/provider pair once with empty vars.                                                                 |
-| scenarios                       | (string \| [Scenario](#scenario))[]                                                                                       | No                             | [Scenario](/docs/configuration/scenarios) files or inline scenario definitions                                                                                                                                                  |
-| defaultTest                     | `file://` string \| Partial [Test Case](#test-case)                                                                       | No                             | Sets the [default properties](/docs/configuration/guide#default-test-cases) for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                      |
-| outputPath                      | string \| string[]                                                                                                        | No                             | Where to write output. Writes to console/web viewer if not set. See [output formats](/docs/configuration/outputs).                                                                                                              |
-| sharing                         | boolean \| object                                                                                                         | No                             | Enables or configures [result sharing](/docs/usage/sharing) with optional `apiBaseUrl` and `appBaseUrl` fields                                                                                                                  |
-| nunjucksFilters                 | Record\<string, string\>                                                                                                  | No                             | Map of [Nunjucks](https://mozilla.github.io/nunjucks/) filter names to file paths                                                                                                                                               |
-| env                             | Record\<string, string \| number \| boolean\>                                                                             | No                             | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                                       |
-| derivedMetrics                  | [DerivedMetric](#derivedmetric)[]                                                                                         | No                             | Metrics calculated after the eval from named assertion scores                                                                                                                                                                   |
-| extensions                      | string[] \| null                                                                                                          | No                             | List of [extension files](#extension-hooks) to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
-| metadata                        | Record\<string, any\>                                                                                                     | No                             | Arbitrary metadata stored with the eval config                                                                                                                                                                                  |
-| redteam                         | RedteamConfig                                                                                                             | No                             | [Red team](/docs/red-team/configuration) configuration                                                                                                                                                                          |
-| writeLatestResults              | boolean                                                                                                                   | No                             | Write latest results to promptfoo storage so they can be viewed in the web UI                                                                                                                                                   |
-| tracing                         | TracingConfig                                                                                                             | No                             | [OpenTelemetry tracing](/docs/tracing) configuration                                                                                                                                                                            |
-| evaluateOptions.maxConcurrency  | number                                                                                                                    | No                             | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                                            |
-| evaluateOptions.repeat          | number                                                                                                                    | No                             | Number of times to run each test case. Defaults to 1                                                                                                                                                                            |
-| evaluateOptions.delay           | number                                                                                                                    | No                             | Force the test runner to wait after each API call (milliseconds). Defaults to 0                                                                                                                                                 |
-| evaluateOptions.showProgressBar | boolean                                                                                                                   | No                             | Whether to display the progress bar                                                                                                                                                                                             |
-| evaluateOptions.cache           | boolean                                                                                                                   | No                             | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                                                                                                                            |
-| evaluateOptions.timeoutMs       | number                                                                                                                    | No                             | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                                     |
-| evaluateOptions.maxEvalTimeMs   | number                                                                                                                    | No                             | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                                               |
-| commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                                                 | No                             | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
+| Property                        | Type                                                                                                                                                  | Required                       | Description                                                                                                                                                                                                                     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| description                     | string                                                                                                                                                | No                             | Optional description of what your LLM is trying to do                                                                                                                                                                           |
+| tags                            | Record\<string, string\>                                                                                                                              | No                             | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                                       |
+| providers                       | [ProvidersConfig](#providersconfig)                                                                                                                   | Yes, unless `targets` is set   | One or more [LLM APIs](/docs/providers) to use. Exactly one of `providers` or `targets` must be set.                                                                                                                            |
+| targets                         | [ProvidersConfig](#providersconfig)                                                                                                                   | Yes, unless `providers` is set | Alias for `providers`, commonly used in [red team](/docs/red-team) configs. Exactly one of `targets` or `providers` must be set.                                                                                                |
+| prompts                         | string \| string[] \| Record\<string, string\> \| Prompt[]                                                                                            | Yes                            | One or more [prompts](/docs/configuration/prompts) to load                                                                                                                                                                      |
+| tests                           | string \| (string \| [Test Case](#test-case) \| [Test Generator Config](#test-generator-config))[] \| [Test Generator Config](#test-generator-config) | No                             | Path to a [test file](/docs/configuration/test-cases), inline tests, or a generator. If omitted, promptfoo runs each prompt/provider pair once with empty vars.                                                                 |
+| scenarios                       | (string \| [Scenario](#scenario))[]                                                                                                                   | No                             | [Scenario](/docs/configuration/scenarios) files or inline scenario definitions                                                                                                                                                  |
+| defaultTest                     | `file://${string}` \| Partial [Test Case](#test-case)                                                                                                 | No                             | Sets the [default properties](/docs/configuration/guide#default-test-cases) for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                      |
+| outputPath                      | string \| string[]                                                                                                                                    | No                             | Where to write output. Writes to console/web viewer if not set. See [output formats](/docs/configuration/outputs).                                                                                                              |
+| sharing                         | boolean \| object                                                                                                                                     | No                             | Enables or configures [result sharing](/docs/usage/sharing) with optional `apiBaseUrl` and `appBaseUrl` fields                                                                                                                  |
+| nunjucksFilters                 | Record\<string, string\>                                                                                                                              | No                             | Map of [Nunjucks](https://mozilla.github.io/nunjucks/) filter names to file paths                                                                                                                                               |
+| env                             | Record\<string, string \| number \| boolean\>                                                                                                         | No                             | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                                       |
+| derivedMetrics                  | [DerivedMetric](#derivedmetric)[]                                                                                                                     | No                             | Metrics calculated after the eval from named assertion scores                                                                                                                                                                   |
+| extensions                      | string[] \| null                                                                                                                                      | No                             | List of [extension files](#extension-hooks) to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
+| metadata                        | Record\<string, any\>                                                                                                                                 | No                             | Arbitrary metadata stored with the eval config                                                                                                                                                                                  |
+| redteam                         | RedteamConfig                                                                                                                                         | No                             | [Red team](/docs/red-team/configuration) configuration                                                                                                                                                                          |
+| writeLatestResults              | boolean                                                                                                                                               | No                             | Write latest results to promptfoo storage so they can be viewed in the web UI                                                                                                                                                   |
+| tracing                         | TracingConfig                                                                                                                                         | No                             | [OpenTelemetry tracing](/docs/tracing) configuration                                                                                                                                                                            |
+| evaluateOptions.maxConcurrency  | number                                                                                                                                                | No                             | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                                            |
+| evaluateOptions.repeat          | number                                                                                                                                                | No                             | Number of times to run each test case. Defaults to 1                                                                                                                                                                            |
+| evaluateOptions.delay           | number                                                                                                                                                | No                             | Force the test runner to wait after each API call (milliseconds). Defaults to 0                                                                                                                                                 |
+| evaluateOptions.showProgressBar | boolean                                                                                                                                               | No                             | Whether to display the progress bar                                                                                                                                                                                             |
+| evaluateOptions.cache           | boolean                                                                                                                                               | No                             | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                                                                                                                            |
+| evaluateOptions.timeoutMs       | number                                                                                                                                                | No                             | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                                     |
+| evaluateOptions.maxEvalTimeMs   | number                                                                                                                                                | No                             | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                                               |
+| commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                                                                             | No                             | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
 
 ### Test Case
 
@@ -58,7 +58,7 @@ A test case represents a single example input that is fed into all prompts and p
 | Property                       | Type                                                              | Required | Description                                                                                                                                                                                                                     |
 | ------------------------------ | ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | description                    | string                                                            | No       | Description of what you're testing                                                                                                                                                                                              |
-| vars                           | Record\<string, VarValue\> \| string \| string[]                  | No       | Key-value pairs to substitute in the prompt. If `vars` is a string or string array, promptfoo loads test vars from those file paths. See [Test Case Configuration](/docs/configuration/test-cases) for loading vars from files. |
+| vars                           | Record\<string, [VarValue](#varvalue)\> \| string \| string[]     | No       | Key-value pairs to substitute in the prompt. If `vars` is a string or string array, promptfoo loads test vars from those file paths. See [Test Case Configuration](/docs/configuration/test-cases) for loading vars from files. |
 | provider                       | string \| ProviderOptions \| ApiProvider                          | No       | Override the default [provider](/docs/providers) for this specific test case                                                                                                                                                    |
 | providers                      | string[]                                                          | No       | Filter which providers this test runs against. Supports labels, IDs, and wildcards (e.g., `openai:*`). See [filtering tests by provider](/docs/configuration/test-cases#filtering-tests-by-provider).                           |
 | prompts                        | string[]                                                          | No       | Filter this test to run only with specific prompts (by label or ID). Supports wildcards like `Math:*`. See [Filtering Tests by Prompt](/docs/configuration/test-cases#filtering-tests-by-prompt).                               |
@@ -299,6 +299,39 @@ interface AssertionValueFunctionContext {
 
   // OpenTelemetry trace data when tracing is enabled and the assertion uses trace context
   trace?: TraceData;
+}
+```
+
+### VarValue
+
+`VarValue` is the value type accepted in test `vars`, assertion contexts, and provider call contexts.
+
+```typescript
+type VarValue = string | number | boolean | object | unknown[];
+```
+
+### TraceData
+
+`TraceData` is available to trace-aware assertions when tracing is enabled.
+
+```typescript
+interface TraceSpan {
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  startTime: number;
+  endTime?: number;
+  attributes?: Record<string, any>;
+  statusCode?: number;
+  statusMessage?: string;
+}
+
+interface TraceData {
+  traceId: string;
+  evaluationId: string;
+  testCaseId: string;
+  metadata?: Record<string, any>;
+  spans: TraceSpan[];
 }
 ```
 
@@ -546,7 +579,7 @@ All merges are **shallow**: returned properties replace existing values at the t
 | Property                          | Type                       | Description                                                                       |
 | --------------------------------- | -------------------------- | --------------------------------------------------------------------------------- |
 | `context.suite.prompts`           | [`Prompt[]`](#prompt)      | The prompts to be evaluated.                                                      |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to [prompts](#prompt).                                      |
+| `context.suite.providerPromptMap` | `Record<string, string[]>` | A map of provider IDs to prompt labels.                                           |
 | `context.suite.tests`             | [`TestCase[]`](#test-case) | The test cases to be evaluated.                                                   |
 | `context.suite.scenarios`         | [`Scenario[]`](#scenario)  | The [scenarios](/docs/configuration/scenarios) to be evaluated.                   |
 | `context.suite.defaultTest`       | [`TestCase`](#test-case)   | The default test case to be evaluated.                                            |
@@ -576,7 +609,7 @@ The `afterAll` hook is intended for side effects (sending to monitoring, cleanup
 
 | Property          | Type                                    | Description                             |
 | ----------------- | --------------------------------------- | --------------------------------------- |
-| `context.suite`   | [`TestSuite`](#testsuiteconfiguration)  | The completed test suite                |
+| `context.suite`   | [`TestSuite`](#testsuite)               | The completed test suite                |
 | `context.results` | [`EvaluateResult`](#evaluateresult)[]   | All evaluation results as plain objects |
 | `context.prompts` | [`CompletedPrompt`](#completedprompt)[] | Completed prompts with metrics          |
 | `context.evalId`  | string                                  | Unique identifier for this eval run     |
@@ -683,7 +716,8 @@ tests:
 type ProvidersConfig =
   | string
   | ProviderFunction
-  | (string | ProviderFunction | Record<string, ProviderOptions> | ProviderOptions)[];
+  | ApiProvider
+  | (string | ProviderFunction | ApiProvider | Record<string, ProviderOptions> | ProviderOptions)[];
 ```
 
 ### ProviderFunction
@@ -696,6 +730,35 @@ type ProviderFunction = (
   context?: CallApiContextParams,
   options?: { includeLogProbs?: boolean; abortSignal?: AbortSignal },
 ) => Promise<ProviderResponse>;
+```
+
+### CallApiContextParams
+
+`CallApiContextParams` is the context passed to provider `callApi` implementations and model-graded assertion providers.
+
+```typescript
+interface CallApiContextParams {
+  filters?: Record<string, (...args: any[]) => string>;
+  getCache?: any;
+  logger?: any;
+  originalProvider?: ApiProvider;
+  prompt: Prompt;
+  vars: Record<string, VarValue>;
+  debug?: boolean;
+  test?: AtomicTestCase;
+  bustCache?: boolean;
+
+  // W3C Trace Context headers
+  traceparent?: string;
+  tracestate?: string;
+
+  // Evaluation metadata
+  evaluationId?: string;
+  testCaseId?: string;
+  testIdx?: number;
+  promptIdx?: number;
+  repeatIndex?: number;
+}
 ```
 
 ### ProviderOptions
@@ -740,8 +803,8 @@ interface ProviderResponse {
   cached?: boolean;
   cost?: number; // required for cost assertion (see /docs/configuration/expected-outputs/deterministic#cost)
   error?: string;
-  output?: string | any;
-  raw?: string | any;
+  output?: any;
+  raw?: any;
   prompt?: string | ChatMessage[]; // actual prompt sent, if different from rendered prompt
   metadata?: {
     redteamFinalPrompt?: string;
@@ -757,7 +820,7 @@ interface ProviderResponse {
   materializationHandled?: boolean;
   materializedVars?: Record<string, string>;
   inputMaterialization?: Record<string, unknown>;
-  providerTransformedOutput?: string | any;
+  providerTransformedOutput?: any;
   logProbs?: number[]; // required for perplexity assertion (see /docs/configuration/expected-outputs/deterministic#perplexity)
   latencyMs?: number;
   isRefusal?: boolean; // the provider has explicitly refused to generate a response (see /docs/configuration/expected-outputs/deterministic#is-refusal)
@@ -802,7 +865,32 @@ interface ProviderEmbeddingResponse {
 
 ## Evaluation inputs
 
+### TestSuite
+
+`TestSuite` is the resolved runtime suite passed to extension hooks after providers, prompts, tests, filters, and other config have been loaded.
+
+```typescript
+interface TestSuite {
+  tags?: Record<string, string>;
+  description?: string;
+  providers: ApiProvider[];
+  prompts: Prompt[];
+  providerPromptMap?: Record<string, string[]>;
+  tests?: TestCase[];
+  scenarios?: Scenario[];
+  defaultTest?: `file://${string}` | Omit<TestCase, 'description'>;
+  nunjucksFilters?: Record<string, (...args: any[]) => string>;
+  env?: EnvOverrides;
+  derivedMetrics?: DerivedMetric[];
+  extensions?: string[] | null;
+  redteam?: RedteamConfig;
+  tracing?: TracingConfig;
+}
+```
+
 ### TestSuiteConfiguration
+
+The source type name for this pre-parse configuration shape is `TestSuiteConfig`.
 
 ```typescript
 interface TestSuiteConfig {
@@ -904,17 +992,54 @@ interface DerivedMetric {
 }
 ```
 
+### RunEvalOptions
+
+`RunEvalOptions` is the per-row execution context passed into derived metric callbacks.
+
+```typescript
+interface RunEvalOptions {
+  provider: ApiProvider;
+  prompt: Prompt;
+  delay: number;
+  test: AtomicTestCase;
+  testSuite?: TestSuite;
+  nunjucksFilters?: Record<string, (...args: any[]) => string>;
+  evaluateOptions?: EvaluateOptions;
+  testIdx: number;
+  promptIdx: number;
+  repeatIndex: number;
+  conversations?: Record<
+    string,
+    { prompt: string | object; input: string; output: string | object; metadata?: object }[]
+  >;
+  registers?: Record<string, VarValue>;
+  isRedteam: boolean;
+  concurrency?: number;
+  evalId?: string;
+  abortSignal?: AbortSignal;
+}
+```
+
 ### Prompt
 
 A `Prompt` is what it sounds like. When specifying a prompt object in a static config, it should look like this:
 
 ```typescript
-interface Prompt {
-  id?: string; // Path, usually prefixed with file://
-  raw?: string; // Inline prompt text
-  label?: string; // How to display it in outputs and web UI
-  config?: any; // Provider config merged for this prompt
-}
+type PromptConfigObject =
+  | {
+      id: string; // Path, usually prefixed with file://
+      label?: string; // How to display it in outputs and web UI
+      raw?: string; // Optional inline prompt text
+    }
+  | {
+      raw: string; // Inline prompt text
+      label: string; // How to display it in outputs and web UI
+      id?: string;
+      template?: string;
+      display?: string; // Deprecated: use label
+      function?: PromptFunction;
+      config?: any; // Provider config merged for this prompt
+    };
 ```
 
 When passing a `Prompt` object directly to the Javascript library:
@@ -930,6 +1055,55 @@ interface Prompt {
     vars: Record<string, VarValue>;
     provider?: ApiProvider;
   }) => Promise<PromptContent | PromptFunctionResult>;
+}
+```
+
+### TokenUsage
+
+```typescript
+interface TokenUsage {
+  prompt?: number;
+  completion?: number;
+  cached?: number;
+  total?: number;
+  numRequests?: number;
+  completionDetails?: CompletionTokenDetails;
+  assertions?: TokenUsage;
+}
+
+interface CompletionTokenDetails {
+  reasoning?: number;
+  acceptedPrediction?: number;
+  rejectedPrediction?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+}
+```
+
+### PromptMetrics
+
+`PromptMetrics` is passed to `EvaluateOptions.progressCallback` and stored on completed prompts.
+
+```typescript
+interface PromptMetrics {
+  score: number;
+  testPassCount: number;
+  testFailCount: number;
+  testErrorCount: number;
+  assertPassCount: number;
+  assertFailCount: number;
+  totalLatencyMs: number;
+  tokenUsage: TokenUsage;
+  namedScores: Record<string, number>;
+  namedScoresCount: Record<string, number>;
+  namedScoreWeights?: Record<string, number>;
+  redteam?: {
+    pluginPassCount: Record<string, number>;
+    pluginFailCount: Record<string, number>;
+    strategyPassCount: Record<string, number>;
+    strategyFailCount: Record<string, number>;
+  };
+  cost: number;
 }
 ```
 
