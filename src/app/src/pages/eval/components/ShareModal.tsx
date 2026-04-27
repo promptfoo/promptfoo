@@ -60,6 +60,7 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
             return;
           }
 
+          // Sharing is allowed, so generate the share URL.
           setIsLoading(true);
           try {
             const url = await onShare(evalId);

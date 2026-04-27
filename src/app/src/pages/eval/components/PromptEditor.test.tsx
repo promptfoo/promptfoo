@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PromptEditor } from './PromptEditor';
@@ -134,7 +134,8 @@ describe('PromptEditor', () => {
     expect(onPromptChangeMock).toHaveBeenCalledWith('This is the original prompt.');
   });
 
-  it('should call onPromptChange with the new value when the TextField value changes in edit mode', () => {
+  it('should call onPromptChange with the new value when the TextField value changes in edit mode', async () => {
+    const user = userEvent.setup();
     const onPromptChange = vi.fn();
     defaultProps = {
       ...defaultProps,
@@ -146,7 +147,9 @@ describe('PromptEditor', () => {
     const textField = screen.getByRole('textbox');
     const newValue = 'This is the new prompt value.';
 
-    fireEvent.change(textField, { target: { value: newValue } });
+    await user.click(textField);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(newValue);
 
     expect(onPromptChange).toHaveBeenCalledWith(newValue);
   });
@@ -199,7 +202,8 @@ describe('PromptEditor', () => {
     expect(replayButton).toBeDisabled();
   });
 
-  it('should handle and validate prompts with template variables when edited', () => {
+  it('should handle and validate prompts with template variables when edited', async () => {
+    const user = userEvent.setup();
     const onPromptChange = vi.fn();
     defaultProps = {
       ...defaultProps,
@@ -215,7 +219,9 @@ describe('PromptEditor', () => {
 
     const newPromptValue =
       'This is the edited prompt with a modified {{variable}} and a new {{another_variable}}.';
-    fireEvent.change(textField, { target: { value: newPromptValue } });
+    await user.click(textField);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(newPromptValue);
 
     expect(onPromptChange).toHaveBeenCalledWith(newPromptValue);
   });

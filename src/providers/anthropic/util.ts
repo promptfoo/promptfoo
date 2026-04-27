@@ -22,7 +22,18 @@ export const ANTHROPIC_MODELS = [
       output: 125 / 1e6, // $125 / MTok
     },
   })),
-  // Claude 4.6 models - Latest generation
+  // Claude 4.7 models
+  // NOTE: Anthropic publishes a single alias-less ID for Opus 4.7 — the Models API
+  // returns 404 for `claude-opus-4-7-latest`, so we intentionally only register the
+  // canonical ID here.
+  ...['claude-opus-4-7'].map((model) => ({
+    id: model,
+    cost: {
+      input: 5 / 1e6, // $5 / MTok
+      output: 25 / 1e6, // $25 / MTok
+    },
+  })),
+  // Claude 4.6 models
   ...['claude-sonnet-4-6', 'claude-sonnet-4-6-latest'].map((model) => ({
     id: model,
     cost: {
@@ -129,6 +140,16 @@ export const ANTHROPIC_MODELS = [
     },
   })),
 ];
+
+/**
+ * Matches Claude Opus 4.7 model IDs across Anthropic, Bedrock (including the
+ * `us.`/`eu.`/`jp.`/`global.` inference-profile prefixes), Vertex, and Azure
+ * deployment names. Returns `false` for hypothetical suffix variants like
+ * `claude-opus-4-70` or `claude-opus-4-7N` so detection stays forward-compatible.
+ */
+export function isClaudeOpus47Model(modelId: string): boolean {
+  return /(^|[^a-z0-9])claude-opus-4-7(?![0-9])/i.test(modelId);
+}
 
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
@@ -295,7 +316,7 @@ export function calculateAnthropicCost(
   cacheReadTokens?: number,
   cacheCreationTokens?: number,
 ): number | undefined {
-  if (config.cost != null) {
+  if (config.cost != null && config.inputCost == null && config.outputCost == null) {
     return calculateCostBase(modelName, config, promptTokens, completionTokens, ANTHROPIC_MODELS);
   }
 
@@ -325,8 +346,8 @@ export function calculateAnthropicCost(
 
   if (hasTieredPricing) {
     const isLongContext = effectiveInputTokens > 200_000;
-    const baseInputRate = isLongContext ? 6 / 1e6 : 3 / 1e6;
-    const outputRate = isLongContext ? 22.5 / 1e6 : 15 / 1e6;
+    const baseInputRate = config.inputCost ?? config.cost ?? (isLongContext ? 6 / 1e6 : 3 / 1e6);
+    const outputRate = config.outputCost ?? config.cost ?? (isLongContext ? 22.5 / 1e6 : 15 / 1e6);
 
     return (
       calculateCacheInputCost(baseInputRate, promptTokens, cacheRead, cacheCreation) +
@@ -338,9 +359,11 @@ export function calculateAnthropicCost(
   if (cacheRead || cacheCreation) {
     const modelInfo = ANTHROPIC_MODELS.find((m) => m.id === modelName);
     if (modelInfo) {
+      const inputCost = config.inputCost ?? config.cost ?? modelInfo.cost.input;
+      const outputCost = config.outputCost ?? config.cost ?? modelInfo.cost.output;
       return (
-        calculateCacheInputCost(modelInfo.cost.input, promptTokens, cacheRead, cacheCreation) +
-        completionTokens * modelInfo.cost.output
+        calculateCacheInputCost(inputCost, promptTokens, cacheRead, cacheCreation) +
+        completionTokens * outputCost
       );
     }
   }
@@ -410,6 +433,7 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
     | Anthropic.Messages.WebFetchTool20250910
     | Anthropic.Messages.WebFetchTool20260209
     | Anthropic.Messages.WebFetchTool20260309
+    | Anthropic.Messages.MemoryTool20250818
     | Anthropic.Messages.WebSearchTool20250305
     | Anthropic.Messages.WebSearchTool20260209
   )[];
@@ -420,6 +444,7 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
     | Anthropic.Messages.WebFetchTool20250910
     | Anthropic.Messages.WebFetchTool20260209
     | Anthropic.Messages.WebFetchTool20260309
+    | Anthropic.Messages.MemoryTool20250818
     | Anthropic.Messages.WebSearchTool20250305
     | Anthropic.Messages.WebSearchTool20260209
   )[] = [];
@@ -447,6 +472,8 @@ export function processAnthropicTools(tools: (Anthropic.Tool | AnthropicToolConf
       } else if (tool.type === 'web_search_20260209') {
         processedTools.push(transformWebSearchTool20260209(tool as WebSearchToolConfig20260209));
         // Web search doesn't need beta header in latest SDK
+      } else if (tool.type === 'memory_20250818') {
+        processedTools.push(tool as Anthropic.Messages.MemoryTool20250818);
       } else {
         // Pass through other tool types (standard Anthropic tools)
         processedTools.push(tool as Anthropic.Tool);

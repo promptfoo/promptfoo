@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { callProviderWithContext } from '../../src/matchers';
+import { callProviderWithContext } from '../../src/matchers/providers';
 import { withProviderCallExecutionContext } from '../../src/scheduler/providerCallExecutionContext';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { createMockProvider } from '../factories/provider';
 
 import type { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import type {
@@ -13,10 +14,7 @@ import type {
 } from '../../src/types/index';
 
 function createProvider(response: ProviderResponse = { output: 'ok' }): ApiProvider {
-  return {
-    id: () => 'test-grader',
-    callApi: vi.fn().mockResolvedValue(response),
-  };
+  return createMockProvider({ id: 'test-grader', response });
 }
 
 function createRegistry(): RateLimitRegistryRef & {

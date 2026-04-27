@@ -1,5 +1,5 @@
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DefaultTestVariables from './DefaultTestVariables';
 
@@ -56,6 +56,23 @@ describe('DefaultTestVariables Component', () => {
     });
   }
 
+  function clickElement(element: Element) {
+    act(() => {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+  }
+
+  function replaceInputValue(element: Element, value: string) {
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        element,
+        value,
+      );
+      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
   describe('Initial Rendering', () => {
     it('renders Test Variables section with empty state', () => {
       render(<DefaultTestVariables />);
@@ -101,7 +118,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
+      clickElement(addButton);
 
       await flushDebouncedUpdate();
 
@@ -122,7 +139,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
+      clickElement(addButton);
 
       await flushDebouncedUpdate();
 
@@ -144,7 +161,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
-      fireEvent.change(nameField, { target: { value: 'newApiKey' } });
+      replaceInputValue(nameField, 'newApiKey');
 
       await flushDebouncedUpdate();
 
@@ -161,7 +178,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const valueField = screen.getByDisplayValue('test-key');
-      fireEvent.change(valueField, { target: { value: 'new-test-key' } });
+      replaceInputValue(valueField, 'new-test-key');
 
       await flushDebouncedUpdate();
 
@@ -181,7 +198,7 @@ describe('DefaultTestVariables Component', () => {
       const deleteButtons = screen.getAllByRole('button', { name: /delete variable/i });
       expect(deleteButtons).toHaveLength(3);
 
-      fireEvent.click(deleteButtons[0]);
+      clickElement(deleteButtons[0]);
 
       await flushDebouncedUpdate();
 
@@ -197,7 +214,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
-      fireEvent.change(nameField, { target: { value: 'language' } });
+      replaceInputValue(nameField, 'language');
 
       // Should show validation error for duplicate names
       const errors = screen.getAllByText('Duplicate variable name');
@@ -307,7 +324,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
+      clickElement(addButton);
 
       await flushDebouncedUpdate();
 
@@ -341,7 +358,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
-      fireEvent.change(nameField, { target: { value: 'invalid@#$ name' } });
+      replaceInputValue(nameField, 'invalid@#$ name');
 
       await flushDebouncedUpdate();
 
@@ -363,7 +380,7 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const nameField = screen.getByDisplayValue('apiKey');
-      fireEvent.change(nameField, { target: { value: '' } });
+      replaceInputValue(nameField, '');
 
       // Variables with empty names should be filtered out from global state
       await flushDebouncedUpdate();
@@ -394,8 +411,8 @@ describe('DefaultTestVariables Component', () => {
       expect(nameField).toBeInTheDocument();
       expect(valueField).toBeInTheDocument();
 
-      fireEvent.change(nameField, { target: { value: longString } });
-      fireEvent.change(valueField, { target: { value: longString } });
+      replaceInputValue(nameField, String(longString));
+      replaceInputValue(valueField, String(longString));
 
       await flushDebouncedUpdate();
 
@@ -420,7 +437,7 @@ describe('DefaultTestVariables Component', () => {
 
       const apiKeyField = screen.getByDisplayValue('test-key');
 
-      fireEvent.change(apiKeyField, { target: { value: 'edited-key' } });
+      replaceInputValue(apiKeyField, 'edited-key');
 
       const newConfig = {
         ...configWithVariables,
@@ -445,17 +462,16 @@ describe('DefaultTestVariables Component', () => {
     render(<DefaultTestVariables />);
 
     const addButton = screen.getByText('Add Variable');
-    fireEvent.click(addButton);
+    clickElement(addButton);
 
     let variableInputs = screen.getAllByPlaceholderText('Variable name');
     expect(variableInputs.length).toBe(1);
-    fireEvent.change(variableInputs[0], { target: { value: ' var' } });
-
-    fireEvent.click(addButton);
+    replaceInputValue(variableInputs[0], ' var');
+    clickElement(addButton);
 
     variableInputs = screen.getAllByPlaceholderText('Variable name');
     expect(variableInputs.length).toBe(2);
-    fireEvent.change(variableInputs[1], { target: { value: 'var ' } });
+    replaceInputValue(variableInputs[1], 'var ');
 
     expect(screen.getAllByText('Duplicate variable name')).toHaveLength(2);
   });
@@ -476,9 +492,9 @@ describe('DefaultTestVariables Component', () => {
       render(<DefaultTestVariables />);
 
       const addButton = screen.getByText('Add Variable');
-      fireEvent.click(addButton);
-      fireEvent.click(addButton);
-      fireEvent.click(addButton);
+      clickElement(addButton);
+      clickElement(addButton);
+      clickElement(addButton);
 
       await flushDebouncedUpdate();
 
@@ -510,7 +526,7 @@ describe('DefaultTestVariables Component', () => {
 
     const valueField = screen.getByDisplayValue('initial value');
 
-    fireEvent.change(valueField, { target: { value: '123' } });
+    replaceInputValue(valueField, '123');
 
     await flushDebouncedUpdate();
 
@@ -520,7 +536,7 @@ describe('DefaultTestVariables Component', () => {
       },
     });
 
-    fireEvent.change(valueField, { target: { value: 'true' } });
+    replaceInputValue(valueField, 'true');
 
     await flushDebouncedUpdate();
 

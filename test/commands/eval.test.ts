@@ -11,6 +11,7 @@ import {
 import { evaluate } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
+  getAuthor,
   promptForEmailUnverified,
 } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
@@ -19,6 +20,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
+import { generateTable } from '../../src/table';
 import {
   ConfigPermissionError,
   checkCloudPermissions,
@@ -103,6 +105,7 @@ describe('evalCommand', () => {
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
+    vi.mocked(generateTable).mockReset();
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: defaultConfig,
       testSuite: {
@@ -111,6 +114,7 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
+    vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
   });
@@ -135,6 +139,30 @@ describe('evalCommand', () => {
     expect(helpText).toContain(
       'Path to configuration file or cloud config UUID. Automatically loads promptfooconfig.yaml',
     );
+  });
+
+  it('should apply resolved author when --no-write is used', async () => {
+    const cmdObj = { table: false, write: false };
+    const config = {} as UnifiedConfig;
+    let capturedEvalRecord: Eval | undefined;
+
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(getAuthor).mockReturnValue('ci-author@example.com');
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => {
+      capturedEvalRecord = evalRecord as Eval;
+      return evalRecord as Eval;
+    });
+
+    await doEval(cmdObj, config, defaultConfigPath, {});
+
+    expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
   });
 
   it('should load cloud eval config when config is a single UUID', async () => {
@@ -443,6 +471,39 @@ describe('evalCommand', () => {
       expect.anything(),
       expect.objectContaining({ maxConcurrency: 5 }),
     );
+  });
+
+  it('should pass tableCellMaxLength to the table renderer', async () => {
+    const config = {
+      commandLineOptions: {
+        tableCellMaxLength: 37,
+      },
+    } as UnifiedConfig;
+
+    vi.spyOn(Eval.prototype, 'getTable').mockResolvedValue({
+      head: { prompts: [], vars: [] },
+      body: [],
+    } as any);
+    vi.mocked(generateTable).mockReturnValue({ toString: () => 'rendered table' } as any);
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config,
+      testSuite: {
+        prompts: [],
+        providers: [],
+      },
+      basePath: path.resolve('/'),
+      commandLineOptions: config.commandLineOptions,
+    });
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await doEval({ table: true, write: false }, config, undefined, {});
+
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 37);
+
+    vi.mocked(generateTable).mockClear();
+    await doEval({ table: true, tableCellMaxLength: 42, write: false }, config, undefined, {});
+
+    expect(generateTable).toHaveBeenCalledWith(expect.anything(), 42);
   });
 
   it('should fallback to evaluateOptions.maxConcurrency when cmdObj.maxConcurrency is undefined', async () => {

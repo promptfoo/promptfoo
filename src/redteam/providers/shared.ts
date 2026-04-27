@@ -27,14 +27,59 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { type TransformContext, TransformInputType, transform } from '../../util/transform';
+import { TransformInputType, transform } from '../../util/transform';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
+import type { ProviderOptions } from '../../types/providers';
+import type { TransformContext, TransformFunction } from '../../types/transform';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
+
+/**
+ * The subset of `loadApiProviders` inputs the redteam code actually supplies
+ * to it. This is a deliberate **narrowing** of loadApiProviders's full input
+ * surface (which also accepts ApiProvider instances, ProviderFunction
+ * closures, arrays, records, etc.) so the injection seam below cannot be
+ * misused to bypass provider loading. Widen only after confirming every
+ * redteam call site.
+ */
+export type LoadableRedteamProvider = string | ProviderOptions;
+export type RedteamProviderLoader = (
+  providers: LoadableRedteamProvider[],
+) => Promise<ApiProvider[]>;
+
+const defaultRedteamProviderLoader: RedteamProviderLoader = async (providers) => {
+  const { loadApiProviders } = await import('../../providers');
+  return loadApiProviders(providers);
+};
+
+let redteamProviderLoader = defaultRedteamProviderLoader;
+
+/**
+ * Install a custom loader for redteam provider resolution. Returns a
+ * disposer that restores the previous loader; callers (typically tests) are
+ * strongly encouraged to pair the install with the returned disposer so
+ * random-order tests cannot leak a mutated loader across files.
+ *
+ * ```ts
+ * const restore = setRedteamProviderLoader(mockLoader);
+ * try { ... } finally { restore(); }
+ * ```
+ */
+export function setRedteamProviderLoader(loader: RedteamProviderLoader): () => void {
+  const previous = redteamProviderLoader;
+  redteamProviderLoader = loader;
+  return () => {
+    redteamProviderLoader = previous;
+  };
+}
+
+export function resetRedteamProviderLoader(): void {
+  redteamProviderLoader = defaultRedteamProviderLoader;
+}
 
 async function loadRedteamProvider({
   provider,
@@ -54,9 +99,7 @@ async function loadRedteamProvider({
     ret = redteamProvider;
   } else if (typeof redteamProvider === 'string' || isProviderOptions(redteamProvider)) {
     logger.debug(`Loading ${purpose} provider`, { provider: redteamProvider });
-    const loadApiProvidersModule = await import('../../providers');
-    // Async import to avoid circular dependency
-    ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
+    ret = (await redteamProviderLoader([redteamProvider]))[0];
   } else {
     const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
     logger.debug(`Using default ${purpose} provider: ${defaultModel}`);
@@ -473,7 +516,7 @@ export async function createIterationContext({
   loggerTag = '[Redteam]',
 }: {
   originalVars: Record<string, VarValue>;
-  transformVarsConfig?: string;
+  transformVarsConfig?: string | TransformFunction;
   context?: CallApiContextParams;
   iterationNumber: number;
   loggerTag?: string;
@@ -505,7 +548,14 @@ export async function createIterationContext({
       });
     } catch (error) {
       logger.error(`${loggerTag} Error transforming vars`, { error });
-      // Continue with original vars if transform fails
+      // A user-supplied TransformFunction that throws is a programming error we
+      // must surface — continuing with the original vars would run the iteration
+      // against un-transformed inputs without any visible failure. Inline string
+      // transforms retain the legacy best-effort behavior to avoid breaking
+      // existing redteam configs that tolerated intermittent transform errors.
+      if (typeof transformVarsConfig === 'function') {
+        throw error;
+      }
     }
   }
 
@@ -668,6 +718,10 @@ export async function tryUnblocking({
   }
 }
 
+function isSingleAssertion(assertToUse: AssertionOrSet | undefined): assertToUse is Assertion {
+  return Boolean(assertToUse && assertToUse.type !== 'assert-set');
+}
+
 /**
  * Builds the assertion object for storedGraderResult with the rubric value.
  * This ensures the grading template is preserved for display in the UI.
@@ -680,8 +734,18 @@ export function buildGraderResultAssertion(
   if (gradeAssertion) {
     return { ...gradeAssertion, value: rubric };
   }
-  if (assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set') {
+  if (isSingleAssertion(assertToUse)) {
     return { ...assertToUse, value: rubric };
   }
   return undefined;
+}
+
+export function getGraderAssertionValue(
+  assertToUse: AssertionOrSet | undefined,
+): Assertion['value'] | undefined {
+  if (!isSingleAssertion(assertToUse)) {
+    return undefined;
+  }
+
+  return assertToUse.value;
 }

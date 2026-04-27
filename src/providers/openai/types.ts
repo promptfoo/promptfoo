@@ -33,7 +33,18 @@ export interface OpenAiSharedOptions {
   apiHost?: string;
   apiBaseUrl?: string;
   organization?: string;
+  /** Custom per-token cost override for both input and output tokens. */
   cost?: number;
+  /** Custom per-token input cost override. Takes precedence over cost. */
+  inputCost?: number;
+  /** Custom per-token output cost override. Takes precedence over cost. */
+  outputCost?: number;
+  /** Custom per-token audio cost override for both audio input and output tokens. */
+  audioCost?: number;
+  /** Custom per-token audio input cost override. Takes precedence over audioCost. */
+  audioInputCost?: number;
+  /** Custom per-token audio output cost override. Takes precedence over audioCost. */
+  audioOutputCost?: number;
   headers?: { [key: string]: string };
   /** defaults to 4; set to 0 to disable retries; negative values are clamped to 0. */
   maxRetries?: number;
@@ -146,7 +157,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stop?: string[];
   seed?: number;
   passthrough?: object;
-  reasoning_effort?: ReasoningEffort;
+  reasoning_effort?: GPT5ReasoningEffort;
   reasoning?: Reasoning | GPT5Reasoning;
   service_tier?: ('auto' | 'default' | 'premium') | null;
   modalities?: string[];

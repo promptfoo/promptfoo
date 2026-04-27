@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
-import * as matchers from '../../src/matchers';
+import * as llmGradingMatchers from '../../src/matchers/llmGrading';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 
 import type { ProviderResponse } from '../../src/types/index';
@@ -45,13 +45,20 @@ vi.mock('../../src/ruby/rubyUtils.js', () => ({
   runRuby: vi.fn(),
 }));
 
-vi.mock('../../src/matchers', async () => {
-  const actual = await vi.importActual('../../src/matchers');
+vi.mock('../../src/matchers/llmGrading', async () => {
+  const actual = await vi.importActual('../../src/matchers/llmGrading');
   return {
     ...actual,
     matchesLlmRubric: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
     matchesFactuality: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
     matchesClosedQa: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
+  };
+});
+
+vi.mock('../../src/matchers/similarity', async () => {
+  const actual = await vi.importActual('../../src/matchers/similarity');
+  return {
+    ...actual,
     matchesSimilarity: vi.fn().mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' }),
   };
 });
@@ -76,6 +83,7 @@ describe('Script value resolution', () => {
 
   afterEach(() => {
     cliState.basePath = originalBasePath;
+    vi.resetAllMocks();
   });
 
   const baseProviderResponse: ProviderResponse = {
@@ -85,7 +93,7 @@ describe('Script value resolution', () => {
 
   describe('llm-rubric with file:// script', () => {
     it('should pass script output to matchesLlmRubric', async () => {
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
@@ -109,7 +117,7 @@ describe('Script value resolution', () => {
     });
 
     it('should pass direct value to matchesLlmRubric when no script', async () => {
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({
@@ -133,7 +141,7 @@ describe('Script value resolution', () => {
     });
 
     it('should pass object returned by script to matchesLlmRubric', async () => {
-      const mockMatchesLlmRubric = vi.mocked(matchers.matchesLlmRubric);
+      const mockMatchesLlmRubric = vi.mocked(llmGradingMatchers.matchesLlmRubric);
       mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'Mocked' });
 
       await runAssertion({

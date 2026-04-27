@@ -260,5 +260,42 @@ redteam:
         expect(config.plugins).toEqual(['shell-injection']);
       });
     });
+
+    it('should preserve legacy GPT-5 target IDs when loading a YAML config', async () => {
+      const user = userEvent.setup();
+
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+
+      const loadButton = screen.getByRole('button', { name: /Load Config/i });
+      await user.click(loadButton);
+
+      const yamlContent = `
+description: Legacy GPT-5 target config
+targets:
+  - openai:gpt-5-mini
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Test purpose
+  plugins:
+    - shell-injection
+`;
+      const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      expect(fileInput).toBeTruthy();
+      await user.upload(fileInput, file);
+
+      await waitFor(() => {
+        const { config, providerType } = useRedTeamConfig.getState();
+        expect(config.target.id).toBe('openai:gpt-5-mini');
+        expect(config.target.label).toBe('openai:gpt-5-mini');
+        expect(providerType).toBe('openai');
+      });
+    });
   });
 });

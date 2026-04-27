@@ -15,7 +15,13 @@ import { safeJsonStringify } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  assertRemoteMaterializationHandled,
+  buildRemoteMaterializedInputVariables,
+  isRemoteMaterializationUpgradeError,
+} from '../remoteMaterialization';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
@@ -27,7 +33,12 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
-import { buildGraderResultAssertion, getLastMessageContent, tryUnblocking } from './shared';
+import {
+  buildGraderResultAssertion,
+  getGraderAssertionValue,
+  getLastMessageContent,
+  tryUnblocking,
+} from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
@@ -36,6 +47,7 @@ import type {
   AssertionSet,
   AtomicTestCase,
   GradingResult,
+  Inputs,
   VarValue,
 } from '../../types/index';
 import type {
@@ -93,9 +105,10 @@ interface GoatConfig {
   _perTurnLayers?: LayerConfig[];
   /**
    * Multi-input schema for generating multiple vars at each turn.
-   * Keys are variable names, values are descriptions.
+   * Keys are variable names, values are Inputs definitions: plain descriptions
+   * or structured typed configs with fields like description, type, and config.
    */
-  inputs?: Record<string, string>;
+  inputs?: Inputs;
   [key: string]: unknown;
 }
 
@@ -129,7 +142,7 @@ export default class GoatProvider implements ApiProvider {
       continueAfterSuccess?: boolean;
       tracing?: RawTracingConfig;
       _perTurnLayers?: LayerConfig[];
-      inputs?: Record<string, string>;
+      inputs?: Inputs;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -405,7 +418,21 @@ export default class GoatProvider implements ApiProvider {
         }
 
         // Extract input vars from the attack message for multi-input mode
+        if (this.config.inputs) {
+          assertRemoteMaterializationHandled(data, 'GOAT multi-input generation');
+        }
         const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+        let materializedInputVars:
+          | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
+          | undefined;
+        if (currentInputVars && this.config.inputs) {
+          materializedInputVars = buildRemoteMaterializedInputVariables(
+            data,
+            currentInputVars,
+            this.config.inputs,
+          );
+        }
+        const currentRenderInputVars = materializedInputVars?.vars ?? currentInputVars;
 
         // For multi-input mode, extract the 'prompt' field from JSON for the inject var
         // Cloud returns JSON like: {"prompt": "attack text", "message": "val1", "email": "val2"}
@@ -420,11 +447,13 @@ export default class GoatProvider implements ApiProvider {
           }
         }
 
-        // Build target vars - handle multi-input mode
+        const attackerVars = {
+          [this.config.injectVar]: processedMessage,
+          ...(currentRenderInputVars || {}),
+        };
         const targetVars: Record<string, VarValue> = {
           ...context.vars,
-          [this.config.injectVar]: processedMessage,
-          ...(currentInputVars || {}),
+          ...attackerVars,
         };
 
         const renderedAttackerPrompt = await renderPrompt(
@@ -432,7 +461,7 @@ export default class GoatProvider implements ApiProvider {
           targetVars,
           context.filters,
           targetProvider,
-          [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+          Object.keys(attackerVars),
         );
 
         messages.push({
@@ -535,9 +564,18 @@ export default class GoatProvider implements ApiProvider {
 
         const iterationStart = Date.now();
         throwIfTargetPromptExceedsMaxChars(targetPrompt, maxCharsPerMessage);
+        const targetContext = context
+          ? {
+              ...context,
+              vars: {
+                ...targetVars,
+                [this.config.injectVar]: targetPrompt,
+              },
+            }
+          : context;
         const targetResponse = (await targetProvider.callApi(
           targetPrompt,
-          context,
+          targetContext,
           options,
         )) as GoatProviderResponse;
 
@@ -606,7 +644,7 @@ export default class GoatProvider implements ApiProvider {
                 targetResponse.audio?.data && targetResponse.audio?.format
                   ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                   : undefined,
-              inputVars: currentInputVars,
+              inputVars: currentRenderInputVars,
             });
           }
 
@@ -653,7 +691,7 @@ export default class GoatProvider implements ApiProvider {
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet
           // Include input vars for multi-input mode (extracted from current prompt)
-          inputVars: currentInputVars,
+          inputVars: currentRenderInputVars,
         });
 
         // Store the attack response for potential unblocking in next turn
@@ -738,7 +776,7 @@ export default class GoatProvider implements ApiProvider {
             finalOutput,
             test,
             targetProvider,
-            'value' in assertToUse ? assertToUse.value : undefined,
+            getGraderAssertionValue(assertToUse),
             additionalRubric,
             undefined,
             gradingContext,
@@ -771,6 +809,9 @@ export default class GoatProvider implements ApiProvider {
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[GOAT] Operation aborted');
+          throw error;
+        }
+        if (isRemoteMaterializationUpgradeError(error)) {
           throw error;
         }
         logger.error(

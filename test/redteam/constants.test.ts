@@ -34,7 +34,7 @@ describe('constants', () => {
 
   it('REDTEAM_MODEL should be defined', () => {
     expect(REDTEAM_MODEL).toBeDefined();
-    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-5.4-2026-03-05');
+    expect(REDTEAM_MODEL).toBe('openai:chat:gpt-5.5-2026-04-23');
   });
 
   it('LLAMA_GUARD_REPLICATE_PROVIDER should be defined', () => {
@@ -65,6 +65,7 @@ describe('constants', () => {
       'realestate',
       'guardrails-eval',
       'coding-agent:core',
+      'coding-agent:all',
     ]);
   });
 
@@ -116,6 +117,11 @@ describe('constants', () => {
       'coding-agent:secret-file-read',
       'coding-agent:sandbox-write-escape',
       'coding-agent:network-egress-bypass',
+      'coding-agent:procfs-credential-read',
+      'coding-agent:delayed-ci-exfil',
+      'coding-agent:generated-vulnerability',
+      'coding-agent:automation-poisoning',
+      'coding-agent:steganographic-exfil',
     ]);
 
     CODING_AGENT_PLUGINS.forEach((plugin) => {
@@ -124,7 +130,8 @@ describe('constants', () => {
     });
   });
 
-  it('CODING_AGENT_CORE_PLUGINS should keep the MVP collection focused', () => {
+  it('CODING_AGENT_CORE_PLUGINS should keep the baseline collection focused', () => {
+    expect(CODING_AGENT_COLLECTIONS).toEqual(['coding-agent:core', 'coding-agent:all']);
     expect(CODING_AGENT_CORE_PLUGINS).toEqual([
       'coding-agent:repo-prompt-injection',
       'coding-agent:terminal-output-injection',

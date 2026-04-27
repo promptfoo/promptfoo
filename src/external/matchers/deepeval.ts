@@ -1,11 +1,8 @@
 // These metrics are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import {
-  callProviderWithContext,
-  fail,
-  getAndCheckProvider,
-  loadRubricPrompt,
-} from '../../matchers';
+import { callProviderWithContext, getAndCheckProvider } from '../../matchers/providers';
+import { loadRubricPrompt } from '../../matchers/rubric';
+import { fail } from '../../matchers/shared';
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';

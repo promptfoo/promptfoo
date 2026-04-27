@@ -14,12 +14,31 @@ import {
   UserEmailStatus,
 } from '../types/email';
 import { fetchWithTimeout } from '../util/fetch/index';
-import { CloudConfig } from './cloud';
 import { readGlobalConfig, writeGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
 
 import type { GlobalConfig } from '../configTypes';
 
 const CI_PLACEHOLDER_EMAIL = 'ci-placeholder@promptfoo.dev';
+
+export type AuthMethod = 'api-key' | 'email' | 'none';
+
+export interface UserAuthInfo {
+  email: string | null;
+  isLoggedIntoCloud: boolean;
+  authMethod: AuthMethod;
+}
+
+export function getUserAuthInfo(): UserAuthInfo {
+  const globalConfig = readGlobalConfig();
+  const email = globalConfig?.account?.email || null;
+  const isLoggedIntoCloud = !!(globalConfig?.cloud?.apiKey || process.env.PROMPTFOO_API_KEY);
+
+  return {
+    email,
+    isLoggedIntoCloud,
+    authMethod: isLoggedIntoCloud ? 'api-key' : email ? 'email' : 'none',
+  };
+}
 
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
@@ -80,16 +99,24 @@ export function setUserEmailValidated(validated: boolean) {
   writeGlobalConfigPartial(config);
 }
 
-export function getAuthor(): string | null {
-  return getEnvString('PROMPTFOO_AUTHOR') || getUserEmail() || null;
+export function getAuthor(override?: string | null): string | null {
+  const userEmail = getUserEmail();
+  const envAuthor = getEnvString('PROMPTFOO_AUTHOR');
+  if (isLoggedIntoCloud() && userEmail) {
+    if (override && override !== userEmail) {
+      // Don't log the full emails — the rest of the codebase treats them as PII.
+      logger.debug('[Author] Ignoring author override because cloud identity takes precedence');
+    }
+    return userEmail;
+  }
+  return override || userEmail || envAuthor || null;
 }
 
 export function isLoggedIntoCloud(): boolean {
   // Check if user has authenticated with Promptfoo Cloud
   // This supports both interactive (email-based) and non-interactive (API key) authentication
   // CI environments can authenticate via API keys, so we no longer exclude CI
-  const cloudConfig = new CloudConfig();
-  return cloudConfig.isEnabled();
+  return getUserAuthInfo().isLoggedIntoCloud;
 }
 
 /**
@@ -97,23 +124,7 @@ export function isLoggedIntoCloud(): boolean {
  * @returns 'api-key' | 'email' | 'none'
  */
 export function getAuthMethod(): 'api-key' | 'email' | 'none' {
-  const cloudConfig = new CloudConfig();
-  const hasApiKey = cloudConfig.isEnabled();
-  const hasEmail = !!getUserEmail();
-
-  if (hasApiKey && hasEmail) {
-    // Both present - API key is the actual auth mechanism
-    return 'api-key';
-  }
-  if (hasApiKey) {
-    return 'api-key';
-  }
-  if (hasEmail) {
-    // Email without API key - not fully authenticated
-    // (this shouldn't happen in normal flow but handle it)
-    return 'email';
-  }
-  return 'none';
+  return getUserAuthInfo().authMethod;
 }
 
 interface EmailStatusResult {

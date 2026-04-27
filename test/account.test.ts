@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAuthor, getUserEmail, setUserEmail } from '../src/globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../src/globalConfig/globalConfig';
 
@@ -10,9 +10,16 @@ vi.mock('../src/globalConfig/globalConfig', () => ({
 
 describe('accounts module', () => {
   beforeEach(() => {
-    delete process.env.PROMPTFOO_AUTHOR;
+    vi.stubEnv('PROMPTFOO_API_KEY', undefined);
+    vi.stubEnv('PROMPTFOO_AUTHOR', undefined);
     vi.resetModules();
     vi.clearAllMocks();
+    vi.mocked(readGlobalConfig).mockReset();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   describe('getUserEmail', () => {
@@ -41,9 +48,19 @@ describe('accounts module', () => {
   });
 
   describe('getAuthor', () => {
-    it('should return the author from environment variable', () => {
-      process.env.PROMPTFOO_AUTHOR = 'envAuthor';
+    it('should fall back to PROMPTFOO_AUTHOR env var when no email is set', () => {
+      vi.stubEnv('PROMPTFOO_AUTHOR', 'envAuthor');
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
       expect(getAuthor()).toBe('envAuthor');
+    });
+
+    it('should prefer email over PROMPTFOO_AUTHOR env var', () => {
+      vi.stubEnv('PROMPTFOO_AUTHOR', 'envAuthor');
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+        account: { email: 'test@example.com' },
+      });
+      expect(getAuthor()).toBe('test@example.com');
     });
 
     it('should return the email if environment variable is not set', () => {
@@ -55,9 +72,7 @@ describe('accounts module', () => {
     });
 
     it('should return null if neither environment variable nor email is set', () => {
-      vi.mocked(readGlobalConfig).mockReturnValue({
-        id: 'test-id',
-      });
+      vi.mocked(readGlobalConfig).mockReturnValue({ id: 'test-id' });
       expect(getAuthor()).toBeNull();
     });
   });

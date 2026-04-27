@@ -2,7 +2,7 @@ import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -272,6 +272,83 @@ describe('Plugins', () => {
     const nextButton = screen.getByRole('button', { name: /Next/i });
     await waitFor(() => {
       expect(nextButton).toBeEnabled();
+    });
+  });
+
+  it('enables next button when only named custom policies are configured', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: {
+                id: '0f4e92ab19c7',
+                name: 'Refund Policy',
+                text: 'Do not issue refunds outside the published return window.',
+              },
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeEnabled();
+    });
+  });
+
+  it('does not enable next button for non-text custom policy config values', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: true,
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
+    });
+  });
+
+  it('does not enable next button for named custom policies with blank text', async () => {
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        plugins: [
+          {
+            id: 'policy',
+            config: {
+              policy: {
+                id: '0f4e92ab19c7',
+                name: 'Refund Policy',
+                text: '   ',
+              },
+            },
+          },
+        ],
+      },
+      updatePlugins: mockUpdatePlugins,
+    });
+
+    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    await waitFor(() => {
+      expect(nextButton).toBeDisabled();
     });
   });
 
@@ -954,7 +1031,9 @@ describe('Plugins', () => {
 
       // Simulate keyboard navigation (ArrowRight to move to next tab)
       await act(async () => {
-        fireEvent.keyDown(pluginsTab, { key: 'ArrowRight' });
+        const user = userEvent.setup();
+        pluginsTab.focus();
+        await user.keyboard('{ArrowRight}');
       });
 
       // Radix Tabs handles keyboard navigation

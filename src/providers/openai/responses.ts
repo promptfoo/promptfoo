@@ -8,7 +8,7 @@ import {
 } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { LONG_RUNNING_MODEL_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from '../shared';
+import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
 
@@ -79,6 +79,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
     'gpt-5.3-codex-spark',
+    // GPT-5.5 models
+    'gpt-5.5',
+    'gpt-5.5-2026-04-23',
+    'gpt-5.5-pro',
+    'gpt-5.5-pro-2026-04-23',
     // GPT-5.4 models
     'gpt-5.4',
     'gpt-5.4-2026-03-05',
@@ -91,7 +96,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
+    'gpt-audio-1.5',
     'gpt-audio-mini',
+    'gpt-audio-mini-2025-12-15',
     'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',
@@ -408,7 +415,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     // Calculate timeout for long-running models (deep research and GPT-5-pro variants)
-    let timeout = REQUEST_TIMEOUT_MS;
+    let timeout = getRequestTimeoutMs();
     const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.modelName);
     const isLongRunningModel = isDeepResearchModel || isGpt5ProModel;
     if (isLongRunningModel) {

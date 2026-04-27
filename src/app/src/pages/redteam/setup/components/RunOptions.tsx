@@ -314,9 +314,9 @@ export const RunOptionsContent = ({
   language,
 }: RunOptionsProps) => {
   // These two settings are mutually exclusive
-  const canSetDelay = Boolean(!runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1);
+  const canSetDelay = !runOptions?.maxConcurrency || runOptions?.maxConcurrency === 1;
 
-  const canSetMaxConcurrency = Boolean(!runOptions?.delay || runOptions?.delay === 0);
+  const canSetMaxConcurrency = !runOptions?.delay || runOptions?.delay === 0;
 
   const [numTestsInput, setNumTestsInput] = useState<string>(
     numTests === undefined ? '0' : String(numTests),

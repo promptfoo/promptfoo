@@ -3,7 +3,11 @@ import fs from 'fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import logger from '../../src/logger';
-import { FS_READONLY_TOOLS, OpenCodeSDKProvider } from '../../src/providers/opencode-sdk';
+import {
+  convertPermissionConfigToRuleset,
+  FS_READONLY_TOOLS,
+  OpenCodeSDKProvider,
+} from '../../src/providers/opencode-sdk';
 import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -63,7 +67,18 @@ const createMockSessionResponse = (id = 'test-session-123') => ({
 // SDK session.prompt() returns: { info: AssistantMessage, parts: Part[] }
 const createMockPromptResponse = (
   parts: Array<{ type: string; text?: string }>,
-  tokens?: { input?: number; output?: number; reasoning?: number; cache?: number },
+  tokens?: {
+    total?: number;
+    input?: number;
+    output?: number;
+    reasoning?: number;
+    cache?:
+      | number
+      | {
+          read?: number;
+          write?: number;
+        };
+  },
   cost?: number,
   structured?: unknown,
 ) => ({
@@ -81,8 +96,9 @@ const createMockPromptResponse = (
         ? {
             input: tokens.input ?? 0,
             output: tokens.output ?? 0,
-            reasoning: tokens.reasoning ?? 0,
-            cache: tokens.cache ?? 0,
+            ...(tokens.total === undefined ? {} : { total: tokens.total }),
+            ...(tokens.reasoning === undefined ? {} : { reasoning: tokens.reasoning }),
+            ...(tokens.cache === undefined ? {} : { cache: tokens.cache }),
           }
         : undefined,
       cost: cost ?? 0,
@@ -292,6 +308,39 @@ describe('OpenCodeSDKProvider', () => {
             parts: [{ type: 'text', text: 'Test prompt' }],
           }),
         );
+      });
+
+      it('should preserve reasoning and cache token details', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse(
+            [{ type: 'text', text: 'Test response' }],
+            {
+              input: 10,
+              output: 20,
+              total: 42,
+              reasoning: 7,
+              cache: { read: 3, write: 2 },
+            },
+            0.001,
+          ),
+        );
+
+        const provider = new OpenCodeSDKProvider({
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.tokenUsage).toEqual({
+          prompt: 10,
+          completion: 20,
+          total: 42,
+          cached: 3,
+          completionDetails: {
+            reasoning: 7,
+            cacheReadInputTokens: 3,
+            cacheCreationInputTokens: 2,
+          },
+        });
       });
 
       it('should fall back to the v1 nested request shape when v2 is unavailable', async () => {
@@ -997,6 +1046,57 @@ describe('OpenCodeSDKProvider', () => {
     });
   });
 
+  describe('convertPermissionConfigToRuleset', () => {
+    it('returns undefined for undefined input', () => {
+      expect(convertPermissionConfigToRuleset(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined for an empty config', () => {
+      expect(convertPermissionConfigToRuleset({})).toBeUndefined();
+    });
+
+    it('skips keys whose value is undefined', () => {
+      expect(convertPermissionConfigToRuleset({ bash: undefined, edit: 'allow' })).toEqual([
+        { permission: 'edit', pattern: '*', action: 'allow' },
+      ]);
+    });
+
+    it('expands simple string values into a wildcard rule', () => {
+      expect(
+        convertPermissionConfigToRuleset({
+          bash: 'allow',
+          webfetch: 'deny',
+        }),
+      ).toEqual([
+        { permission: 'bash', pattern: '*', action: 'allow' },
+        { permission: 'webfetch', pattern: '*', action: 'deny' },
+      ]);
+    });
+
+    it('expands pattern objects into one rule per pattern', () => {
+      expect(
+        convertPermissionConfigToRuleset({
+          bash: { 'git *': 'allow', '*': 'ask' },
+        }),
+      ).toEqual([
+        { permission: 'bash', pattern: 'git *', action: 'allow' },
+        { permission: 'bash', pattern: '*', action: 'ask' },
+      ]);
+    });
+
+    it('handles a mix of simple and pattern-based entries', () => {
+      const ruleset = convertPermissionConfigToRuleset({
+        bash: 'ask',
+        edit: { '*.md': 'allow', 'src/**': 'deny' },
+      });
+      expect(ruleset).toEqual([
+        { permission: 'bash', pattern: '*', action: 'ask' },
+        { permission: 'edit', pattern: '*.md', action: 'allow' },
+        { permission: 'edit', pattern: 'src/**', action: 'deny' },
+      ]);
+    });
+  });
+
   describe('new tools configuration', () => {
     it('should include question, skill, lsp tools in disabled mode by default', async () => {
       const provider = new OpenCodeSDKProvider({
@@ -1047,7 +1147,7 @@ describe('OpenCodeSDKProvider', () => {
   });
 
   describe('new permission types', () => {
-    it('should support doom_loop and external_directory permissions', async () => {
+    it('should convert simple permissions into a v2 rule array on session.create', async () => {
       const provider = new OpenCodeSDKProvider({
         config: {
           working_dir: '/test/dir',
@@ -1064,16 +1164,18 @@ describe('OpenCodeSDKProvider', () => {
 
       expect(mockSessionCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          permission: {
-            bash: 'allow',
-            doom_loop: 'deny',
-            external_directory: 'deny',
-          },
+          permission: expect.arrayContaining([
+            { permission: 'bash', pattern: '*', action: 'allow' },
+            { permission: 'doom_loop', pattern: '*', action: 'deny' },
+            { permission: 'external_directory', pattern: '*', action: 'deny' },
+          ]),
         }),
       );
+      const createCall = mockSessionCreate.mock.calls[0][0];
+      expect(createCall.permission).toHaveLength(3);
     });
 
-    it('should support pattern-based permissions', async () => {
+    it('should expand pattern-based permissions into one rule per pattern', async () => {
       const provider = new OpenCodeSDKProvider({
         config: {
           working_dir: '/test/dir',
@@ -1096,19 +1198,32 @@ describe('OpenCodeSDKProvider', () => {
 
       expect(mockSessionCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          permission: {
-            bash: {
-              'git *': 'allow',
-              'rm *': 'deny',
-              '*': 'ask',
-            },
-            edit: {
-              '*.md': 'allow',
-              'src/**': 'ask',
-            },
-          },
+          permission: expect.arrayContaining([
+            { permission: 'bash', pattern: 'git *', action: 'allow' },
+            { permission: 'bash', pattern: 'rm *', action: 'deny' },
+            { permission: 'bash', pattern: '*', action: 'ask' },
+            { permission: 'edit', pattern: '*.md', action: 'allow' },
+            { permission: 'edit', pattern: 'src/**', action: 'ask' },
+          ]),
         }),
       );
+      const createCall = mockSessionCreate.mock.calls[0][0];
+      expect(createCall.permission).toHaveLength(5);
+    });
+
+    it('should omit permission from session.create when no rules are provided', async () => {
+      const provider = new OpenCodeSDKProvider({
+        config: {
+          working_dir: '/test/dir',
+          permission: {},
+        },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+
+      await provider.callApi('Test prompt');
+
+      const createCall = mockSessionCreate.mock.calls[0][0];
+      expect(createCall).not.toHaveProperty('permission');
     });
   });
 

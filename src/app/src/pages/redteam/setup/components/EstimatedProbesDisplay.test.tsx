@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EstimatedProbesDisplay from './EstimatedProbesDisplay';
 
@@ -56,7 +56,7 @@ describe('EstimatedProbesDisplay', () => {
     const infoIcon = document.querySelector('svg.lucide-info');
     expect(infoIcon).toBeInTheDocument();
 
-    fireEvent.pointerMove(infoIcon!, { pointerType: 'mouse' });
+    infoIcon!.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }));
     act(() => {
       timers.advanceBy(700);
     });

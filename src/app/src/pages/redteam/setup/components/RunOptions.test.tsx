@@ -1,6 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Config } from '../types';
 import {
@@ -168,73 +169,89 @@ describe('RunOptionsContent', () => {
   });
 
   describe('Functionality', () => {
-    it('should call updateConfig with the correct arguments when the number of test cases field is changed to a valid number', () => {
+    it('should call updateConfig with the correct arguments when the number of test cases field is changed to a valid number', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
       const numTestsInput = screen.getByLabelText('Number of test cases');
 
-      fireEvent.change(numTestsInput, { target: { value: '25' } });
-      fireEvent.blur(numTestsInput);
+      await user.click(numTestsInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('25');
+      await user.tab();
 
       expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
       expect(mockUpdateConfig).toHaveBeenCalledWith('numTests', 25);
     });
 
-    it('should initialize with default numTests when numTests prop is undefined and update config on blur', () => {
+    it('should initialize with default numTests when numTests prop is undefined and update config on blur', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} numTests={undefined} />);
       const numTestsInput = screen.getByLabelText('Number of test cases');
-      fireEvent.blur(numTestsInput);
+      await user.click(numTestsInput);
+      await user.tab();
       expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
       expect(mockUpdateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
     });
 
-    it('should call updateConfig with maxCharsPerMessage when that field is set to a valid value', () => {
+    it('should call updateConfig with maxCharsPerMessage when that field is set to a valid value', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(
         <RunOptionsContent {...defaultProps} maxCharsPerMessage={undefined} />,
       );
       const maxCharsPerMessageInput = screen.getByLabelText('Max chars per message');
 
-      fireEvent.change(maxCharsPerMessageInput, { target: { value: '120' } });
-      fireEvent.blur(maxCharsPerMessageInput);
+      await user.click(maxCharsPerMessageInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('120');
+      await user.tab();
 
       expect(mockUpdateConfig).toHaveBeenCalledWith('maxCharsPerMessage', 120);
     });
 
-    it('should clear maxCharsPerMessage when the field is emptied', () => {
+    it('should clear maxCharsPerMessage when the field is emptied', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
       const maxCharsPerMessageInput = screen.getByLabelText('Max chars per message');
 
-      fireEvent.change(maxCharsPerMessageInput, { target: { value: '' } });
-      fireEvent.blur(maxCharsPerMessageInput);
+      await user.clear(maxCharsPerMessageInput);
+      await user.tab();
 
       expect(mockUpdateConfig).toHaveBeenCalledWith('maxCharsPerMessage', undefined);
     });
   });
 
   describe('Interactions', () => {
-    it('should call updateRunOption("verbose", checked) when the debug mode switch is toggled', () => {
+    it('should call updateRunOption("verbose", checked) when the debug mode switch is toggled', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
       const debugSwitch = screen.getByRole('switch', { name: /Debug mode/i });
-      fireEvent.click(debugSwitch);
+      await user.click(debugSwitch);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('verbose', true);
     });
 
-    it("should call updateRunOption('delay', value) and updateRunOption('maxConcurrency', 1) when the delay field is changed to a valid value and maxConcurrency is 1", () => {
+    it("should call updateRunOption('delay', value) and updateRunOption('maxConcurrency', 1) when the delay field is changed to a valid value and maxConcurrency is 1", async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
 
       const delayInput = screen.getByLabelText('Delay between API calls');
-      fireEvent.change(delayInput, { target: { value: '500' } });
-      fireEvent.blur(delayInput);
+      await user.click(delayInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('500');
+      await user.tab();
 
       expect(mockUpdateRunOption).toHaveBeenCalledWith('delay', 500);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     });
 
-    it("should call updateRunOption('maxConcurrency', value) and updateRunOption('delay', 0) when the maxConcurrency field is changed to a valid value and delay is 0", () => {
+    it("should call updateRunOption('maxConcurrency', value) and updateRunOption('delay', 0) when the maxConcurrency field is changed to a valid value and delay is 0", async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
 
       const maxConcurrencyInput = screen.getByLabelText('Max concurrent requests');
-      fireEvent.change(maxConcurrencyInput, { target: { value: '5' } });
-      fireEvent.blur(maxConcurrencyInput);
+      await user.click(maxConcurrencyInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('5');
+      await user.tab();
 
       expect(mockUpdateRunOption).toHaveBeenCalledTimes(2);
       expect(mockUpdateRunOption).toHaveBeenCalledWith('maxConcurrency', 5);
@@ -243,18 +260,23 @@ describe('RunOptionsContent', () => {
   });
 
   describe('Input Validation', () => {
-    it('should reset maxConcurrency to 1 when invalid input is entered', () => {
+    it('should reset maxConcurrency to 1 when invalid input is entered', async () => {
+      const user = userEvent.setup();
       renderWithTooltipProvider(<RunOptionsContent {...defaultProps} />);
       const maxConcurrencyInput = screen.getByLabelText('Max concurrent requests');
 
-      fireEvent.change(maxConcurrencyInput, { target: { value: '-1' } });
-      fireEvent.blur(maxConcurrencyInput);
+      await user.click(maxConcurrencyInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('-1');
+      await user.tab();
       expect(mockUpdateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
 
       mockUpdateRunOption.mockClear();
 
-      fireEvent.change(maxConcurrencyInput, { target: { value: 'abc' } });
-      fireEvent.blur(maxConcurrencyInput);
+      await user.click(maxConcurrencyInput);
+      await user.keyboard('{Control>}a{/Control}');
+      await user.paste('abc');
+      await user.tab();
       expect(mockUpdateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     });
   });
@@ -278,27 +300,34 @@ describe('DelayBetweenAPICallsInput', () => {
     vi.clearAllMocks();
   });
 
-  it('calls setValue on change with the stringified number', () => {
+  it('calls setValue on change with the stringified number', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} />);
     const input = screen.getByLabelText('Delay between API calls');
-    fireEvent.change(input, { target: { value: '250' } });
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('250');
     expect(setValue).toHaveBeenCalledWith('250');
   });
 
-  it('persists value on blur and enforces maxConcurrency=1 with setMaxConcurrencyValue("1")', () => {
+  it('persists value on blur and enforces maxConcurrency=1 with setMaxConcurrencyValue("1")', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="250" />);
     const input = screen.getByLabelText('Delay between API calls');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
     expect(updateRunOption).toHaveBeenCalledWith('delay', 250);
     expect(setValue).toHaveBeenCalledWith('250');
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     expect(setMaxConcurrencyValue).toHaveBeenCalledWith('1');
   });
 
-  it('clamps negative values to 0 on blur and enforces maxConcurrency=1', () => {
+  it('clamps negative values to 0 on blur and enforces maxConcurrency=1', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="-5" />);
     const input = screen.getByLabelText('Delay between API calls');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
     expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
     expect(setValue).toHaveBeenCalledWith('0');
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
@@ -319,10 +348,12 @@ describe('DelayBetweenAPICallsInput', () => {
     expect(screen.getByText(RUNOPTIONS_TEXT.delayBetweenApiCalls.helper)).toBeInTheDocument();
   });
 
-  it('when readOnly, blurring the field does not trigger updateRunOption or setMaxConcurrencyValue calls', () => {
+  it('when readOnly, blurring the field does not trigger updateRunOption or setMaxConcurrencyValue calls', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} readOnly={true} />);
     const input = screen.getByLabelText('Delay between API calls');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
     expect(updateRunOption).not.toHaveBeenCalled();
     expect(setMaxConcurrencyValue).not.toHaveBeenCalled();
   });
@@ -346,23 +377,27 @@ describe('DelayBetweenAPICallsInput', () => {
     expect(wrapperWithTooltip).toBeInTheDocument();
   });
 
-  it('handles whitespace-only input by treating it as 0 on blur', () => {
+  it('handles whitespace-only input by treating it as 0 on blur', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<DelayBetweenAPICallsInput {...baseProps} value="   " />);
     const input = screen.getByLabelText('Delay between API calls');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
     expect(updateRunOption).toHaveBeenCalledWith('delay', 0);
     expect(setValue).toHaveBeenCalledWith('0');
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     expect(setMaxConcurrencyValue).toHaveBeenCalledWith('1');
   });
 
-  it('handles Number.MAX_SAFE_INTEGER by clamping or handling appropriately on blur', () => {
+  it('handles Number.MAX_SAFE_INTEGER by clamping or handling appropriately on blur', async () => {
+    const user = userEvent.setup();
     const maxSafeIntegerString = Number.MAX_SAFE_INTEGER.toString();
     renderWithTooltipProvider(
       <DelayBetweenAPICallsInput {...baseProps} value={maxSafeIntegerString} />,
     );
     const input = screen.getByLabelText('Delay between API calls');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
 
     expect(updateRunOption).toHaveBeenCalled();
     const updateRunOptionValue = (updateRunOption.mock.calls[0] as any)[1];
@@ -392,21 +427,27 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
     vi.clearAllMocks();
   });
 
-  it('calls setValue on change with the stringified number and does not call setDelayValue', () => {
+  it('calls setValue on change with the stringified number and does not call setDelayValue', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} />);
     const input = screen.getByLabelText('Max concurrent requests');
 
-    fireEvent.change(input, { target: { value: '7' } });
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('7');
 
     expect(setValue).toHaveBeenCalledWith('7');
     expect(setDelayValue).not.toHaveBeenCalled();
   });
 
-  it('persists value on blur and enforces delay=0 with setDelayValue("0")', () => {
+  it('persists value on blur and enforces delay=0 with setDelayValue("0")', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="5" />);
     const input = screen.getByLabelText('Max concurrent requests');
 
-    fireEvent.blur(input);
+    await user.click(input);
+
+    await user.tab();
 
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 5);
     expect(setValue).toHaveBeenCalledWith('5');
@@ -414,11 +455,14 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
     expect(setDelayValue).toHaveBeenCalledWith('0');
   });
 
-  it('clamps values below 1 to 1 on blur and enforces delay=0', () => {
+  it('clamps values below 1 to 1 on blur and enforces delay=0', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="0" />);
     const input = screen.getByLabelText('Max concurrent requests');
 
-    fireEvent.blur(input);
+    await user.click(input);
+
+    await user.tab();
 
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     expect(setValue).toHaveBeenCalledWith('1');
@@ -441,25 +485,31 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
     expect(screen.getByText(RUNOPTIONS_TEXT.maxConcurrentRequests.helper)).toBeInTheDocument();
   });
 
-  it('does not call onChange or onBlur handlers when readOnly is true', () => {
+  it('does not call onChange or onBlur handlers when readOnly is true', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <MaxNumberOfConcurrentRequestsInput {...baseProps} readOnly={true} />,
     );
     const input = screen.getByLabelText('Max concurrent requests');
 
-    fireEvent.change(input, { target: { value: '7' } });
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('7');
+    await user.tab();
 
     expect(setValue).not.toHaveBeenCalled();
     expect(updateRunOption).not.toHaveBeenCalled();
     expect(setDelayValue).not.toHaveBeenCalled();
   });
 
-  it('defaults to 1 on blur when the input is an empty string and enforces delay=0', () => {
+  it('defaults to 1 on blur when the input is an empty string and enforces delay=0', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="" />);
     const input = screen.getByLabelText('Max concurrent requests');
 
-    fireEvent.blur(input);
+    await user.click(input);
+
+    await user.tab();
 
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     expect(setValue).toHaveBeenCalledWith('1');
@@ -467,11 +517,14 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
     expect(setDelayValue).toHaveBeenCalledWith('0');
   });
 
-  it('should default to 1, update state, and enforce delay=0 when receiving a non-numeric string onBlur', () => {
+  it('should default to 1, update state, and enforce delay=0 when receiving a non-numeric string onBlur', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} value="abc" />);
     const input = screen.getByLabelText('Max concurrent requests');
 
-    fireEvent.blur(input);
+    await user.click(input);
+
+    await user.tab();
 
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     expect(setValue).toHaveBeenCalledWith('1');
@@ -479,13 +532,15 @@ describe('MaxNumberOfConcurrentRequestsInput', () => {
     expect(setDelayValue).toHaveBeenCalledWith('0');
   });
 
-  it('should handle form submission with an invalid value by clamping to the minimum value', () => {
+  it('should handle form submission with an invalid value by clamping to the minimum value', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(<MaxNumberOfConcurrentRequestsInput {...baseProps} />);
     const input = screen.getByLabelText('Max concurrent requests');
 
-    fireEvent.change(input, { target: { value: '0' } });
-
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('0');
+    await user.tab();
 
     expect(updateRunOption).toHaveBeenCalledWith('maxConcurrency', 1);
     expect(setValue).toHaveBeenCalledWith('1');
@@ -502,20 +557,23 @@ describe('NumberOfTestCasesInput', () => {
     vi.clearAllMocks();
   });
 
-  it('should allow typing a new number and persist it on blur', () => {
+  it('should allow typing a new number and persist it on blur', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <NumberOfTestCasesInput value="23" setValue={setValue} updateConfig={updateConfig} />,
     );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
-    // Trigger blur event directly
-    fireEvent.blur(numTestsInput);
+    await user.click(numTestsInput);
+
+    await user.tab();
 
     expect(updateConfig).toHaveBeenCalledWith('numTests', 23);
   });
 
-  it('should fallback to default when cleared then blurred', () => {
+  it('should fallback to default when cleared then blurred', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <NumberOfTestCasesInput value="" setValue={setValue} updateConfig={updateConfig} />,
     );
@@ -525,13 +583,14 @@ describe('NumberOfTestCasesInput', () => {
     // Clear previous calls from the initial render
     updateConfig.mockClear();
 
-    // Trigger blur event directly
-    fireEvent.blur(numTestsInput);
+    await user.click(numTestsInput);
+    await user.tab();
 
     expect(updateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
   });
 
-  it('should use custom default when cleared then blurred', () => {
+  it('should use custom default when cleared then blurred', async () => {
+    const user = userEvent.setup();
     const customDefault = 50;
     renderWithTooltipProvider(
       <NumberOfTestCasesInput
@@ -546,24 +605,29 @@ describe('NumberOfTestCasesInput', () => {
 
     updateConfig.mockClear();
 
-    fireEvent.blur(numTestsInput);
+    await user.click(numTestsInput);
+    await user.tab();
 
     expect(updateConfig).toHaveBeenCalledWith('numTests', customDefault);
   });
 
-  it('should fallback to default when a non-numeric string is entered and blurred', () => {
+  it('should fallback to default when a non-numeric string is entered and blurred', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <NumberOfTestCasesInput value="abc" setValue={setValue} updateConfig={updateConfig} />,
     );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
-    fireEvent.blur(numTestsInput);
+    await user.click(numTestsInput);
+
+    await user.tab();
 
     expect(updateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
   });
 
-  it('should not call updateConfig when readOnly is true and the input is blurred', () => {
+  it('should not call updateConfig when readOnly is true and the input is blurred', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <NumberOfTestCasesInput
         value="23"
@@ -574,20 +638,25 @@ describe('NumberOfTestCasesInput', () => {
     );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
-    fireEvent.change(numTestsInput, { target: { value: '25' } });
-    fireEvent.blur(numTestsInput);
+    await user.click(numTestsInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('25');
+    await user.tab();
 
     expect(updateConfig).not.toHaveBeenCalled();
   });
 
-  it('should clamp negative number to default value on blur', () => {
+  it('should clamp negative number to default value on blur', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <NumberOfTestCasesInput value="-5" setValue={setValue} updateConfig={updateConfig} />,
     );
 
     const numTestsInput = screen.getByLabelText('Number of test cases');
 
-    fireEvent.blur(numTestsInput);
+    await user.click(numTestsInput);
+
+    await user.tab();
 
     expect(updateConfig).toHaveBeenCalledWith('numTests', REDTEAM_DEFAULTS.NUM_TESTS);
     expect(setValue).toHaveBeenCalledWith(String(REDTEAM_DEFAULTS.NUM_TESTS));
@@ -641,37 +710,43 @@ describe('MaxCharsPerMessageInput', () => {
     vi.clearAllMocks();
   });
 
-  it('should persist a valid positive integer on blur', () => {
+  it('should persist a valid positive integer on blur', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <MaxCharsPerMessageInput value="42" setValue={setValue} updateConfig={updateConfig} />,
     );
 
     const input = screen.getByLabelText('Max chars per message');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
 
     expect(updateConfig).toHaveBeenCalledWith('maxCharsPerMessage', 42);
     expect(setValue).toHaveBeenCalledWith('42');
   });
 
-  it('should clear the config value when the field is blank', () => {
+  it('should clear the config value when the field is blank', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <MaxCharsPerMessageInput value="" setValue={setValue} updateConfig={updateConfig} />,
     );
 
     const input = screen.getByLabelText('Max chars per message');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
 
     expect(updateConfig).toHaveBeenCalledWith('maxCharsPerMessage', undefined);
     expect(setValue).toHaveBeenCalledWith('');
   });
 
-  it('should clear invalid values on blur', () => {
+  it('should clear invalid values on blur', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <MaxCharsPerMessageInput value="0" setValue={setValue} updateConfig={updateConfig} />,
     );
 
     const input = screen.getByLabelText('Max chars per message');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
 
     expect(updateConfig).toHaveBeenCalledWith('maxCharsPerMessage', undefined);
     expect(setValue).toHaveBeenCalledWith('');
@@ -687,7 +762,8 @@ describe('MaxCharsPerMessageInput', () => {
     expect(screen.getByText(RUNOPTIONS_TEXT.maxCharsPerMessage.error)).toBeInTheDocument();
   });
 
-  it('should not persist changes when readOnly is true', () => {
+  it('should not persist changes when readOnly is true', async () => {
+    const user = userEvent.setup();
     renderWithTooltipProvider(
       <MaxCharsPerMessageInput
         value="100"
@@ -698,7 +774,8 @@ describe('MaxCharsPerMessageInput', () => {
     );
 
     const input = screen.getByLabelText('Max chars per message');
-    fireEvent.blur(input);
+    await user.click(input);
+    await user.tab();
 
     expect(updateConfig).not.toHaveBeenCalled();
   });

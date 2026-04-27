@@ -1,8 +1,8 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useStore } from '@app/stores/evalConfig';
-import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptsSection from './PromptsSection';
 
 vi.mock('@app/stores/evalConfig');
@@ -14,11 +14,6 @@ describe('PromptsSection', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useTestTimers();
-  });
-
-  afterEach(() => {
-    restoreTestTimers({ runPending: true });
   });
 
   const setupStore = (prompts: string[]) => {
@@ -40,24 +35,28 @@ describe('PromptsSection', () => {
     );
   };
 
-  const openPromptDialog = () => {
+  type UserEvent = ReturnType<typeof userEvent.setup>;
+
+  const openPromptDialog = async (user: UserEvent) => {
     const addPromptButton = screen.getByRole('button', { name: /add prompt/i });
-    fireEvent.click(addPromptButton);
+    await user.click(addPromptButton);
   };
 
-  const fillPromptText = (text: string) => {
+  const fillPromptText = async (user: UserEvent, text: string) => {
     const promptTextarea = screen.getByRole('textbox');
-    fireEvent.change(promptTextarea, { target: { value: text } });
+    await user.click(promptTextarea);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste(text);
   };
 
-  const submitPromptDialog = () => {
+  const submitPromptDialog = async (user: UserEvent) => {
     const addButtonInDialog = screen.getByRole('button', { name: 'Add' });
-    fireEvent.click(addButtonInDialog);
+    await user.click(addButtonInDialog);
   };
 
-  const savePromptDialog = () => {
+  const savePromptDialog = async (user: UserEvent) => {
     const saveButton = screen.getByRole('button', { name: 'Save' });
-    fireEvent.click(saveButton);
+    await user.click(saveButton);
   };
 
   const createFileReaderMock = (fileContent: string) => {
@@ -84,9 +83,7 @@ describe('PromptsSection', () => {
 
         // Automatically trigger onload after readAsText
         readAsTextMock.mockImplementation(() => {
-          setTimeout(() => {
-            onloadCallback?.({ target: { result: fileContent } } as ProgressEvent<FileReader>);
-          }, 0);
+          onloadCallback?.({ target: { result: fileContent } } as ProgressEvent<FileReader>);
         });
       }
     } as unknown as typeof FileReader;
@@ -107,6 +104,7 @@ describe('PromptsSection', () => {
   });
 
   it("should add a new prompt to the list when the 'Add Prompt' button is clicked, the PromptDialog is filled, and the prompt is submitted", async () => {
+    const user = userEvent.setup();
     setupStore([]);
 
     const { rerender } = render(
@@ -117,15 +115,15 @@ describe('PromptsSection', () => {
 
     expect(screen.getByText('No prompts added yet.')).toBeInTheDocument();
 
-    openPromptDialog();
+    await openPromptDialog(user);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Add Prompt' })).toBeInTheDocument();
 
     const newPromptText = 'Write a story about a robot who discovers music.';
-    fillPromptText(newPromptText);
+    await fillPromptText(user, newPromptText);
 
-    submitPromptDialog();
+    await submitPromptDialog(user);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -139,6 +137,7 @@ describe('PromptsSection', () => {
   });
 
   it('should update an existing prompt when a prompt row is clicked, the PromptDialog is edited, and the changes are submitted', async () => {
+    const user = userEvent.setup();
     const initialPrompt = 'Write a short story about a cat.';
     setupStore([initialPrompt]);
 
@@ -151,7 +150,7 @@ describe('PromptsSection', () => {
     expect(screen.getByText(/Write a short story about a cat./)).toBeInTheDocument();
 
     const promptRow = screen.getByText(/Write a short story about a cat./);
-    fireEvent.click(promptRow);
+    await user.click(promptRow);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Edit Prompt 1')).toBeInTheDocument();
@@ -159,9 +158,9 @@ describe('PromptsSection', () => {
     expect(promptTextarea.value).toBe(initialPrompt);
 
     const updatedPromptText = 'Write a short story about a dog.';
-    fillPromptText(updatedPromptText);
+    await fillPromptText(user, updatedPromptText);
 
-    savePromptDialog();
+    await savePromptDialog(user);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -174,7 +173,8 @@ describe('PromptsSection', () => {
     expect(screen.queryByText(/Write a short story about a cat./)).toBeNull();
   });
 
-  it('should duplicate a prompt and append it to the list when the duplicate icon is clicked for a prompt row', () => {
+  it('should duplicate a prompt and append it to the list when the duplicate icon is clicked for a prompt row', async () => {
+    const user = userEvent.setup();
     const initialPrompt = 'Translate the following sentence to French: {{sentence}}';
     setupStore([initialPrompt]);
 
@@ -187,7 +187,7 @@ describe('PromptsSection', () => {
     expect(screen.getByText(/Translate the following sentence to French/)).toBeInTheDocument();
 
     const duplicateButton = screen.getByRole('button', { name: /duplicate prompt 1/i });
-    fireEvent.click(duplicateButton);
+    await user.click(duplicateButton);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -200,6 +200,7 @@ describe('PromptsSection', () => {
   });
 
   it('should remove a prompt from the list when the delete icon is clicked for a prompt row and the deletion is confirmed in the dialog', async () => {
+    const user = userEvent.setup();
     const initialPrompts = ['Prompt 1', 'Prompt 2', 'Prompt 3'];
     setupStore(initialPrompts);
 
@@ -214,12 +215,12 @@ describe('PromptsSection', () => {
     expect(screen.getByText(/Prompt 3/)).toBeInTheDocument();
 
     const deleteButton = screen.getByRole('button', { name: /delete prompt 2/i });
-    fireEvent.click(deleteButton);
+    await user.click(deleteButton);
 
     expect(screen.getByRole('dialog', { name: /delete prompt/i })).toBeInTheDocument();
 
     const confirmDeleteButton = screen.getByRole('button', { name: /delete/i });
-    fireEvent.click(confirmDeleteButton);
+    await user.click(confirmDeleteButton);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -233,7 +234,8 @@ describe('PromptsSection', () => {
     expect(screen.getByText(/Prompt 3/)).toBeInTheDocument();
   });
 
-  it("should add an example prompt to the list when the 'Add Example' button is clicked and the prompts list is empty", () => {
+  it("should add an example prompt to the list when the 'Add Example' button is clicked and the prompts list is empty", async () => {
+    const user = userEvent.setup();
     setupStore([]);
 
     render(
@@ -243,7 +245,7 @@ describe('PromptsSection', () => {
     );
 
     const addExampleButton = screen.getByRole('button', { name: /add example/i });
-    fireEvent.click(addExampleButton);
+    await user.click(addExampleButton);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -254,6 +256,7 @@ describe('PromptsSection', () => {
   });
 
   it('should handle a file with a very long line of text', async () => {
+    const user = userEvent.setup();
     const longLineText = 'This is a very long line of text without any line breaks. '.repeat(1000);
 
     createFileReaderMock(longLineText);
@@ -268,17 +271,13 @@ describe('PromptsSection', () => {
 
     const file = new File([longLineText], 'long_line.txt', { type: 'text/plain' });
     // Find the hidden file input
-    const fileInput = document.querySelector('input[type="file"]');
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
 
     if (!fileInput) {
       throw new Error('File input element not found');
     }
 
-    fireEvent.change(fileInput, { target: { files: [file] } });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10);
-    });
+    await user.upload(fileInput, file);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({

@@ -1,5 +1,6 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { fireEvent, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import InfoModal from './InfoModal';
 
@@ -44,12 +45,13 @@ describe('InfoModal', () => {
     });
   });
 
-  it('calls onClose when Close button is clicked', () => {
+  it('calls onClose when Close button is clicked', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<InfoModal open={true} onClose={mockOnClose} />);
     // Find the Close button in the footer (not the dialog X button)
     const closeButtons = screen.getAllByRole('button', { name: 'Close' });
     const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
-    fireEvent.click(footerCloseButton!);
+    await user.click(footerCloseButton!);
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 

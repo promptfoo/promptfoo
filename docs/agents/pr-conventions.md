@@ -179,15 +179,28 @@ site: update guides                 # Should be docs(site):
 feat(webui): minor styling update   # Minor = chore, not feat
 ```
 
-## Draft Mode Required
+## Draft vs Ready
 
-**Always open PRs in draft mode.** Use the `--draft` flag:
+Open PRs **ready for review** by default:
 
 ```bash
-gh pr create --draft --title "feat(scope): description"
+gh pr create --title "feat(scope): description" --body "..."
 ```
 
-This allows maintainers to review and provide feedback before the PR is marked ready for merge.
+Use `--draft` only when:
+
+- The user explicitly asks for a draft
+- The work is an intentional WIP parked for a hand-off
+- The PR blocks on an external dependency that must land first
+- The PR addresses an unpublished security advisory (see root `AGENTS.md`
+  "Security-Sensitive PRs")
+
+## Commit & PR Attribution
+
+- **Never attribute commits or PR bodies to Claude / Claude Code.** Do not add
+  `Co-Authored-By: Claude…` trailers, "Generated with Claude Code" footers, or
+  similar markers. Use your configured git identity only.
+- Do not add marketing-style suffixes to commit subjects.
 
 ## GitHub Interaction Rules
 
@@ -202,4 +215,5 @@ This allows maintainers to review and provide feedback before the PR is marked r
 3. Choose correct scope using priority order
 4. Breaking change? Add `!` after scope
 5. Run `npm run l && npm run f`
-6. **Open the PR in draft mode** (`--draft`)
+6. Open ready-for-review (omit `--draft`) unless one of the exceptions above applies
+7. Do **not** add Claude attribution trailers or footers

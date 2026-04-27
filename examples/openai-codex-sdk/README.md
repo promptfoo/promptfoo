@@ -101,6 +101,8 @@ This example compares two versions of the same local Codex skill against identic
 
 If you run this config from the repo root, set `CODEX_SKILL_COMPARE_V1_DIR` and `CODEX_SKILL_COMPARE_V2_DIR` to the absolute fixture paths first.
 
+If your network requires proxy or custom certificate environment variables such as `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, or `NODE_EXTRA_CA_CERTS`, pass them through `config.cli_env` or set `inherit_process_env: true` in the provider config. Promptfoo intentionally does not forward the full process environment to Codex by default.
+
 ### Thread Persistence
 
 This example demonstrates `persist_threads: true` with one prompt template and multiple tests. It checks that Codex can remember a marker from the first test when answering the second test.

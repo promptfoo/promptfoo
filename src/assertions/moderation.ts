@@ -1,4 +1,4 @@
-import { matchesModeration } from '../matchers';
+import { matchesModeration } from '../matchers/moderation';
 import { parseChatPrompt } from '../providers/shared';
 import invariant from '../util/invariant';
 import { getActualPromptWithFallback } from '../util/providerResponse';

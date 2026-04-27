@@ -120,6 +120,56 @@ assertion?: Assertion;
 
 For more info on different assertion types, see [assertions & metrics](/docs/configuration/expected-outputs/).
 
+### Transform functions
+
+When using the node package, you can pass JavaScript functions directly as `transform`, `transformVars`, or `contextTransform` values — instead of string expressions or `file://` references.
+
+This enables better IDE support, type checking, and debugging:
+
+```ts
+import promptfoo from 'promptfoo';
+
+const results = await promptfoo.evaluate({
+  prompts: ['What tools did you use to answer: {{question}}'],
+  providers: ['openai:gpt-5-mini'],
+  tests: [
+    {
+      vars: { question: 'What is 2+2?' },
+      options: {
+        // Transform the output before assertions
+        transform: (output, context) => {
+          return output.toUpperCase();
+        },
+      },
+      assert: [
+        {
+          type: 'contains',
+          value: 'calculator',
+          // Transform just for this assertion
+          transform: (output, context) => {
+            const tools = context.metadata?.toolCalls ?? [];
+            return tools.map((t) => t.name).join(', ');
+          },
+        },
+      ],
+    },
+  ],
+});
+```
+
+Transform functions receive:
+
+- `output`: the LLM output (string or object)
+- `context`: an object containing `vars`, `prompt`, and optionally `metadata` from the provider response
+
+:::note
+
+Function transforms are not serializable. If you use `writeLatestResults: true`, function transforms will not be persisted in the stored config. Use string expressions or `file://` references if you need results to be fully reproducible from the stored eval.
+
+:::
+
+For more on transforms, see [Transforming Outputs](/docs/configuration/guide#transforming-outputs).
+
 ## Example
 
 `promptfoo` exports an `evaluate` function that you can use to run prompt evaluations.

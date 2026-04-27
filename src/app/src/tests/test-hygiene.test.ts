@@ -111,6 +111,16 @@ const directTimerMockPatterns = [
     message: 'mock time with vi.setSystemTime() or @app/tests/timers helpers',
   },
 ];
+const fireEventInteractionPatterns = [
+  {
+    pattern: /\bfireEvent\s*\./,
+    message: 'use @testing-library/user-event for user interactions',
+  },
+  {
+    pattern: /\bimport\s*\{[^}]*\bfireEvent\b[^}]*\}\s*from\s*['"]@testing-library\/react['"]/,
+    message: 'import userEvent instead of fireEvent for user interactions',
+  },
+];
 const legacyDirectCallApiMockFiles = new Set([
   'hooks/useEvalOperations.test.ts',
   'pages/eval/components/Eval.test.tsx',
@@ -334,6 +344,49 @@ describe('test hygiene', () => {
     expect(matches).toEqual([]);
   });
 
+  it.each([
+    'fireEvent.click(button)',
+    'fireEvent.change(input, { target: { value: "x" } })',
+    'import { fireEvent, render, screen } from "@testing-library/react"',
+  ])('detects fireEvent interaction source in %s', (source) => {
+    const matches = fireEventInteractionPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toHaveLength(1);
+  });
+
+  it.each([
+    ['split member access', ['fireEvent', '  .click(button)'].join('\n')],
+    [
+      'multiline import',
+      [
+        'import {',
+        '  render,',
+        '  fireEvent as testingFireEvent,',
+        '  screen,',
+        '} from "@testing-library/react";',
+      ].join('\n'),
+    ],
+  ])('detects multiline fireEvent interaction source in %s', (_name, source) => {
+    const violations = findPatternViolationsInSource(
+      source,
+      'components/example.test.tsx',
+      fireEventInteractionPatterns,
+    );
+
+    expect(violations).toHaveLength(1);
+  });
+
+  it.each([
+    'const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTimeAsync })',
+    'await user.click(button)',
+    'await user.paste("value")',
+    'input.dispatchEvent(new WheelEvent("wheel", { bubbles: true }))',
+  ])('ignores non-fireEvent interaction source in %s', (source) => {
+    const matches = fireEventInteractionPatterns.filter(({ pattern }) => pattern.test(source));
+
+    expect(matches).toEqual([]);
+  });
+
   it('detects multiline direct callApi mock violations in source files', () => {
     const violations = findPatternViolationsInSource(
       [
@@ -381,6 +434,18 @@ describe('test hygiene', () => {
       }
 
       return findLinePatternViolations(file, directTimerMockPatterns);
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('uses userEvent instead of fireEvent in frontend tests', () => {
+    const violations = findTestFiles(srcDir).flatMap((file) => {
+      if (file === thisFile) {
+        return [];
+      }
+
+      return findPatternViolations(file, fireEventInteractionPatterns);
     });
 
     expect(violations).toEqual([]);
