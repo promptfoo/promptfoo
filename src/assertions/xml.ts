@@ -3,12 +3,32 @@ import { XMLParser } from 'fast-xml-parser';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 type XmlTag =
-  | { kind: 'opening'; end: number }
-  | { kind: 'closing'; end: number }
-  | { kind: 'declaration'; end: number };
+  | { kind: 'opening'; start: number; end: number; name: string; selfClosing: boolean }
+  | { kind: 'closing'; start: number; end: number; name: string }
+  | { kind: 'declaration'; start: number; end: number };
+
+type OpenXmlTag = { name: string; start: number };
+type XmlCandidate = { start: number; end: number; parentStart?: number };
 
 function isXmlNameStartChar(char: string | undefined): boolean {
   return char !== undefined && /[A-Za-z_:]/.test(char);
+}
+
+function isXmlNameChar(char: string | undefined): boolean {
+  return char !== undefined && /[A-Za-z0-9_.:-]/.test(char);
+}
+
+function readXmlName(input: string, start: number): { name: string; end: number } | undefined {
+  if (!isXmlNameStartChar(input[start])) {
+    return undefined;
+  }
+
+  let end = start + 1;
+  while (isXmlNameChar(input[end])) {
+    end++;
+  }
+
+  return { name: input.slice(start, end), end };
 }
 
 function findTagEnd(input: string, start: number): number {
@@ -36,18 +56,12 @@ function findTagEnd(input: string, start: number): number {
   return -1;
 }
 
-function findDeclarationEnd(input: string, start: number): number {
-  if (input.startsWith('<!--', start)) {
-    const end = input.indexOf('-->', start + 4);
-    return end === -1 ? -1 : end + 2;
+function isSelfClosingTag(input: string, start: number, end: number): boolean {
+  let lastNonWhitespace = end - 1;
+  while (lastNonWhitespace > start && /\s/.test(input[lastNonWhitespace])) {
+    lastNonWhitespace--;
   }
-
-  if (input.startsWith('<![CDATA[', start)) {
-    const end = input.indexOf(']]>', start + 9);
-    return end === -1 ? -1 : end + 2;
-  }
-
-  return findTagEnd(input, start);
+  return input[lastNonWhitespace] === '/';
 }
 
 function readXmlTag(input: string, start: number): XmlTag | undefined {
@@ -58,25 +72,27 @@ function readXmlTag(input: string, start: number): XmlTag | undefined {
   }
 
   if (nextChar === '!') {
-    const end = findDeclarationEnd(input, start);
-    return end === -1 ? undefined : { kind: 'declaration', end };
+    const end = findTagEnd(input, start);
+    return end === -1 ? undefined : { kind: 'declaration', start, end };
   }
 
   if (nextChar === '?') {
     const end = findTagEnd(input, start);
-    return end === -1 ? undefined : { kind: 'declaration', end };
+    return end === -1 ? undefined : { kind: 'declaration', start, end };
   }
 
   if (nextChar === '/') {
-    if (!isXmlNameStartChar(input[start + 2])) {
+    const name = readXmlName(input, start + 2);
+    if (!name) {
       return undefined;
     }
 
     const end = findTagEnd(input, start);
-    return end === -1 ? undefined : { kind: 'closing', end };
+    return end === -1 ? undefined : { kind: 'closing', start, end, name: name.name };
   }
 
-  if (!isXmlNameStartChar(nextChar)) {
+  const name = readXmlName(input, start + 1);
+  if (!name) {
     return undefined;
   }
 
@@ -85,12 +101,55 @@ function readXmlTag(input: string, start: number): XmlTag | undefined {
     return undefined;
   }
 
-  return { kind: 'opening', end };
+  return {
+    kind: 'opening',
+    start,
+    end,
+    name: name.name,
+    selfClosing: isSelfClosingTag(input, start, end),
+  };
 }
 
-function extractXmlCandidate(outputString: string): string | undefined {
-  let candidateStart: number | undefined;
-  let candidateEnd: number | undefined;
+function orderXmlCandidates(candidates: XmlCandidate[]): XmlCandidate[] {
+  const ordered: XmlCandidate[] = [];
+  const seen = new Set<string>();
+  const byParent = new Map<number | undefined, XmlCandidate[]>();
+
+  const addCandidate = (candidate: XmlCandidate) => {
+    const key = `${candidate.start}:${candidate.end}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      ordered.push(candidate);
+    }
+  };
+
+  for (const candidate of candidates) {
+    const siblings = byParent.get(candidate.parentStart);
+    if (siblings) {
+      siblings.push(candidate);
+    } else {
+      byParent.set(candidate.parentStart, [candidate]);
+    }
+  }
+
+  for (const siblings of byParent.values()) {
+    siblings.sort((a, b) => a.start - b.start || a.end - b.end);
+    addCandidate({
+      start: siblings[0].start,
+      end: siblings[siblings.length - 1].end,
+    });
+  }
+
+  for (const candidate of candidates) {
+    addCandidate(candidate);
+  }
+
+  return ordered;
+}
+
+function extractXmlCandidates(outputString: string): string[] {
+  const stack: OpenXmlTag[] = [];
+  const candidates: XmlCandidate[] = [];
 
   for (let i = 0; i < outputString.length; i++) {
     if (outputString[i] !== '<') {
@@ -103,19 +162,35 @@ function extractXmlCandidate(outputString: string): string | undefined {
     }
 
     if (tag.kind === 'opening') {
-      candidateStart ??= i;
-    } else if (tag.kind === 'closing' && candidateStart !== undefined) {
-      candidateEnd = tag.end + 1;
+      if (tag.selfClosing) {
+        candidates.push({
+          start: tag.start,
+          end: tag.end + 1,
+          parentStart: stack.at(-1)?.start,
+        });
+      } else {
+        stack.push({ name: tag.name, start: tag.start });
+      }
+    } else if (tag.kind === 'closing') {
+      const openTag = stack.at(-1);
+      if (openTag?.name === tag.name) {
+        stack.pop();
+        candidates.push({
+          start: openTag.start,
+          end: tag.end + 1,
+          parentStart: stack.at(-1)?.start,
+        });
+      } else {
+        stack.length = 0;
+      }
     }
 
     i = tag.end;
   }
 
-  if (candidateStart === undefined || candidateEnd === undefined) {
-    return undefined;
-  }
-
-  return outputString.slice(candidateStart, candidateEnd);
+  return orderXmlCandidates(candidates).map((candidate) =>
+    outputString.slice(candidate.start, candidate.end),
+  );
 }
 
 export function validateXml(
@@ -165,15 +240,17 @@ export function containsXml(
   outputString: string,
   requiredElements?: string[],
 ): { isValid: boolean; reason: string } {
-  const xmlCandidate = extractXmlCandidate(outputString);
+  const xmlCandidates = extractXmlCandidates(outputString);
 
-  if (!xmlCandidate) {
+  if (xmlCandidates.length === 0) {
     return { isValid: false, reason: 'No XML content found in the output' };
   }
 
-  const { isValid, reason } = validateXml(xmlCandidate, requiredElements);
-  if (isValid) {
-    return { isValid: true, reason };
+  for (const xmlCandidate of xmlCandidates) {
+    const { isValid, reason } = validateXml(xmlCandidate, requiredElements);
+    if (isValid) {
+      return { isValid: true, reason };
+    }
   }
 
   return { isValid: false, reason: 'No valid XML content found matching the requirements' };

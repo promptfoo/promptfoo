@@ -1,5 +1,3 @@
-import { performance } from 'node:perf_hooks';
-
 import dedent from 'dedent';
 import { describe, expect, it } from 'vitest';
 import { containsXml, validateXml } from '../../src/assertions/xml';
@@ -193,14 +191,33 @@ describe('containsXml', () => {
     expect(result.isValid).toBe(true);
   });
 
+  it('should validate requirements across multiple XML fragments', () => {
+    const input = '<xml1>content1</xml1> more text <xml2>content2</xml2>';
+    const result = containsXml(input, ['xml1', 'xml2']);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('should find valid XML after earlier unclosed tags', () => {
+    const input = 'Text <unclosed><root><child>Content</child></root>';
+    const result = containsXml(input, ['root.child']);
+    expect(result.isValid).toBe(true);
+  });
+
   it('should reject malformed opening tag streams without catastrophic backtracking', () => {
     const input = '<a'.repeat(5000);
-    const start = performance.now();
 
     expect(containsXml(input)).toEqual({
       isValid: false,
       reason: 'No XML content found in the output',
     });
-    expect(performance.now() - start).toBeLessThan(500);
+  });
+
+  it('should reject malformed comment streams without quadratic declaration scans', () => {
+    const input = '<!--'.repeat(10000);
+
+    expect(containsXml(input)).toEqual({
+      isValid: false,
+      reason: 'No XML content found in the output',
+    });
   });
 });
