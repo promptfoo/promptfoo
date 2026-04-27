@@ -252,29 +252,27 @@ export function createApp() {
       return;
     }
     const { id } = bodyResult.data;
-    logger.debug(`[${req.method} ${req.path}] Share request for eval ID: ${id || 'undefined'}`);
+    logger.debug('Share request for eval ID', { id, method: req.method, path: req.path });
 
     const result = await readResult(id);
     if (!result) {
-      logger.warn(`Result not found for id: ${id}`);
+      logger.warn('Result not found for share request', { id });
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
     const eval_ = await Eval.findById(id);
     if (!eval_) {
-      logger.warn(`Eval not found for id: ${id}`);
+      logger.warn('Eval not found for share request', { id });
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
 
     try {
       const url = await createShareableUrl(eval_, { showAuth: true });
-      logger.debug(`Generated share URL for eval ${id}: ${stripAuthFromUrl(url || '')}`);
+      logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url || '') });
       res.json(ServerSchemas.Share.Response.parse({ url }));
     } catch (error) {
-      logger.error(
-        `Failed to generate share URL for eval ${id}: ${error instanceof Error ? error.message : error}`,
-      );
+      logger.error('Failed to generate share URL for eval', { error, id });
       res.status(500).json({ error: 'Failed to generate share URL' });
     }
   });
@@ -312,15 +310,16 @@ export function createApp() {
   app.use('/api/version', versionRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
-    try {
-      const result = ServerSchemas.Telemetry.Request.safeParse(req.body);
+    const result = ServerSchemas.Telemetry.Request.safeParse(req.body);
 
-      if (!result.success) {
-        res
-          .status(400)
-          .json({ error: 'Invalid request body', details: z.prettifyError(result.error) });
-        return;
-      }
+    if (!result.success) {
+      res
+        .status(400)
+        .json({ error: 'Invalid request body', details: z.prettifyError(result.error) });
+      return;
+    }
+
+    try {
       const { event, properties } = result.data;
       await telemetry.record(event, properties);
       res.status(200).json(ServerSchemas.Telemetry.Response.parse({ success: true }));
