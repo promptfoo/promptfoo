@@ -31,8 +31,63 @@ describe('integration-inspect-osworld example provider', () => {
     return process.env.PROMPTFOO_PYTHON || process.env.PYTHON || process.env.PYTHON3 || 'python3';
   }
 
-  it('generates the pinned osworld_small sample suite', () => {
+  it('generates the Inspect osworld_small sample suite', () => {
     const tempDir = makeTempDir();
+    const fakeInspectRoot = path.join(tempDir, 'fake-inspect');
+    const fakeOsworldDir = path.join(fakeInspectRoot, 'inspect_evals', 'osworld');
+    fs.mkdirSync(fakeOsworldDir, { recursive: true });
+    fs.writeFileSync(path.join(fakeInspectRoot, 'inspect_evals', '__init__.py'), '');
+    fs.writeFileSync(
+      path.join(fakeOsworldDir, '__init__.py'),
+      `
+from types import SimpleNamespace
+
+APP_DIRS = [
+    "gimp",
+    "gimp",
+    "libreoffice_calc",
+    "libreoffice_calc",
+    "libreoffice_calc",
+    "libreoffice_impress",
+    "libreoffice_impress",
+    "libreoffice_writer",
+    "libreoffice_writer",
+    "multi_apps",
+    "multi_apps",
+    "multi_apps",
+    "multi_apps",
+    "multi_apps",
+    "multi_apps",
+    "os",
+    "os",
+    "vlc",
+    "vs_code",
+    "vs_code",
+    "vs_code",
+]
+
+class FakeSample:
+    def __init__(self, index, app_dir):
+        sample_id = f"{index:08d}-0000-4000-8000-000000000000"
+        self.id = sample_id
+        self.input = f"Instruction {index} for {app_dir}"
+        self.files = {
+            "/tmp/osworld/desktop_env/example.json": (
+                f"/cache/osworld/repo/evaluation_examples/examples/{app_dir}/{sample_id}.json"
+            )
+        }
+
+def _samples():
+    return [FakeSample(index, app_dir) for index, app_dir in enumerate(APP_DIRS, start=1)]
+
+def osworld_small(include_connected=False):
+    return SimpleNamespace(dataset=_samples())
+
+def osworld(corpus="all", include_connected=False):
+    return SimpleNamespace(dataset=_samples())
+`,
+    );
+
     const testsPath = path.join(
       process.cwd(),
       'examples',
@@ -55,21 +110,27 @@ spec.loader.exec_module(module)
 
 tests = module.generate_tests()
 calc_tests = module.generate_tests({"include_apps": ["libreoffice_calc"]})
+vscode_tests = module.generate_tests({"include_apps": "vs_code"})
+single_sample_tests = module.generate_tests({"sample_ids": "00000012-0000-4000-8000-000000000000"})
+limited_tests = module.generate_tests({"limit": 2})
 print(json.dumps({
     "count": len(tests),
     "apps": sorted({test["vars"]["app"] for test in tests}),
     "calc_count": len(calc_tests),
+    "vscode_count": len(vscode_tests),
+    "single_sample": single_sample_tests[0],
+    "limited_count": len(limited_tests),
     "first": tests[0],
-    "has_rerun_sample": any(
-        test["vars"]["sample_id"] == "eb303e01-261e-4972-8c07-c9b4e7a4922a"
-        for test in tests
-    ),
 }))
 `,
     );
 
     const result = spawnSync(pythonExecutable(), [checkPath, testsPath], {
       encoding: 'utf8',
+      env: {
+        ...process.env,
+        PYTHONPATH: [fakeInspectRoot, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
+      },
     });
 
     expect(result.status).toBe(0);
@@ -86,17 +147,26 @@ print(json.dumps({
       'vscode',
     ]);
     expect(parsed.calc_count).toBe(3);
-    expect(parsed.has_rerun_sample).toBe(true);
+    expect(parsed.vscode_count).toBe(3);
+    expect(parsed.limited_count).toBe(2);
     expect(parsed.first).toMatchObject({
-      description: 'gimp - lower image brightness',
+      description: 'gimp - Instruction 1 for gimp',
       vars: {
         app: 'gimp',
-        sample_id: '7a4deb26-d57d-4ea9-9a73-630f66a7b568',
+        prompt: 'Instruction 1 for gimp',
+        sample_id: '00000001-0000-4000-8000-000000000000',
       },
       metadata: {
         app: 'gimp',
-        sample_id: '7a4deb26-d57d-4ea9-9a73-630f66a7b568',
-        testCaseId: 'osworld-gimp-7a4deb26',
+        sample_id: '00000001-0000-4000-8000-000000000000',
+        testCaseId: 'osworld-gimp-00000001',
+      },
+    });
+    expect(parsed.single_sample).toMatchObject({
+      description: 'multi_apps - Instruction 12 for multi_apps',
+      vars: {
+        app: 'multi_apps',
+        sample_id: '00000012-0000-4000-8000-000000000000',
       },
     });
   });

@@ -14,7 +14,7 @@ The `integration-inspect-osworld` example runs an OSWorld eval through [Inspect]
 
 ## What runs
 
-The example uses Inspect's `inspect_evals/osworld_small` task, a smaller OSWorld corpus packaged for Inspect. A Python test loader generates one Promptfoo test case for each of the 21 pinned OSWorld sample ids.
+The example uses Inspect's `inspect_evals/osworld_small` task, a smaller OSWorld corpus packaged for Inspect. A Python test loader asks Inspect for that dataset and generates one Promptfoo test case for each supported OSWorld sample.
 
 In the sample shown above, OSWorld opens `NetIncome.xlsx` in LibreOffice Calc and asks the agent to compute totals for the `Revenue` and `Total Expenses` columns on a new sheet. That is one generated row in the full suite. Inspect provides the Ubuntu desktop sandbox, screenshots, computer tool, model loop, and scorer.
 
@@ -51,7 +51,7 @@ inspect log dump /absolute/path/to/inspect_logs/<run>/<file>.eval
 The example has five moving parts:
 
 - `promptfooconfig.yaml` is the Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and loads OSWorld rows from `osworld_tests.py`.
-- `osworld_tests.py` returns one Promptfoo test case for each pinned `osworld_small` sample id, with app and sample metadata for filtering.
+- `osworld_tests.py` calls Inspect's OSWorld task loader and returns one Promptfoo test case per supported `osworld_small` sample, with app and sample metadata for filtering.
 - `provider.py` is a file provider with `call_api(prompt, options, context)`. It resolves paths to absolute locations, runs Inspect, dumps the `.eval` file to JSON, and returns Promptfoo output plus metadata.
 - `assertion.py` reads `context.providerResponse.metadata.score` and turns the OSWorld scorer result into a normal Promptfoo pass or fail.
 - `inspect_logs/` is gitignored run state. Inspect stores screenshots, model messages, tool calls, files, scorer output, and token usage there.
@@ -149,27 +149,40 @@ defaultTest:
 tests: file://osworld_tests.py:generate_tests
 ```
 
-`osworld_tests.py` keeps the dataset list compact and returns normal Promptfoo
-test cases:
+`osworld_tests.py` keeps Inspect as the dataset source of truth. It loads
+Inspect's supported OSWorld samples, derives app metadata from each sample's
+`example.json` path, and returns normal Promptfoo test cases:
 
 ```python title="osworld_tests.py"
+from pathlib import Path
+from inspect_evals.osworld import osworld_small
+
+EXAMPLE_PATH = "/tmp/osworld/desktop_env/example.json"
+
+
 def generate_tests(config=None):
-    return [
-        {
-            "description": f"{sample['app']} - {sample['task']}",
-            "vars": {
-                "prompt": f"Run OSWorld sample {sample['sample_id']}",
-                "app": sample["app"],
-                "sample_id": sample["sample_id"],
-            },
-            "metadata": {
-                "app": sample["app"],
-                "sample_id": sample["sample_id"],
-                "testCaseId": f"osworld-{sample['app'].replace('_', '-')}-{sample['sample_id'][:8]}",
-            },
-        }
-        for sample in OSWORLD_SMALL_SAMPLES
-    ]
+    dataset = osworld_small().dataset
+    return [_test_case(dataset[index]) for index in range(len(dataset))]
+
+
+def _test_case(sample):
+    sample_id = str(sample.id)
+    instruction = str(sample.input)
+    app = _app_from_path(sample.files[EXAMPLE_PATH])
+    return {
+        "description": f"{app} - {' '.join(instruction.split())[:80]}",
+        "vars": {"prompt": instruction, "app": app, "sample_id": sample_id},
+        "metadata": {
+            "app": app,
+            "sample_id": sample_id,
+            "testCaseId": f"osworld-{app.replace('_', '-')}-{sample_id.split('-', 1)[0]}",
+        },
+    }
+
+
+def _app_from_path(path):
+    app = Path(path).parent.name.replace("vs_code", "vscode")
+    return app
 ```
 
 Those generated `vars` arrive in `provider.py` as `context["vars"]["app"]` and

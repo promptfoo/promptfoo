@@ -1,131 +1,26 @@
-"""Generate Promptfoo test cases for Inspect's osworld_small dataset."""
+"""Generate Promptfoo test cases from Inspect's OSWorld dataset."""
 
 from __future__ import annotations
 
+import inspect as python_inspect
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-Sample = Dict[str, str]
+CONTAINER_EXAMPLE_PATH = "/tmp/osworld/desktop_env/example.json"
+
+LoadedSample = Dict[str, str]
 TestCase = Dict[str, Any]
 
 
-OSWORLD_SMALL_SAMPLES: List[Sample] = [
-    {
-        "app": "gimp",
-        "sample_id": "7a4deb26-d57d-4ea9-9a73-630f66a7b568",
-        "task": "lower image brightness",
-    },
-    {
-        "app": "gimp",
-        "sample_id": "554785e9-4523-4e7a-b8e1-8016f565f56a",
-        "task": "enhance color vibrancy",
-    },
-    {
-        "app": "libreoffice_calc",
-        "sample_id": "357ef137-7eeb-4c80-a3bb-0951f26a8aff",
-        "task": "calculate earned amount",
-    },
-    {
-        "app": "libreoffice_calc",
-        "sample_id": "42e0a640-4f19-4b28-973d-729602b5a4a7",
-        "task": "revenue and expenses sums",
-    },
-    {
-        "app": "libreoffice_calc",
-        "sample_id": "abed40dc-063f-4598-8ba5-9fe749c0615d",
-        "task": "unique duplicate names",
-    },
-    {
-        "app": "libreoffice_impress",
-        "sample_id": "5d901039-a89c-4bfb-967b-bf66f4df075e",
-        "task": "cover slide crop",
-    },
-    {
-        "app": "libreoffice_impress",
-        "sample_id": "550ce7e7-747b-495f-b122-acdc4d0b8e54",
-        "task": "soccer club checklist",
-    },
-    {
-        "app": "libreoffice_writer",
-        "sample_id": "0810415c-bde4-4443-9047-d5f70165a697",
-        "task": "double line spacing",
-    },
-    {
-        "app": "libreoffice_writer",
-        "sample_id": "0a0faba3-5580-44df-965d-f562a99b291c",
-        "task": "align first three words",
-    },
-    {
-        "app": "multi_apps",
-        "sample_id": "510f64c8-9bcc-4be1-8d30-638705850618",
-        "task": "start VS Code from terminal",
-    },
-    {
-        "app": "multi_apps",
-        "sample_id": "b5062e3e-641c-4e3a-907b-ac864d2e7652",
-        "task": "extract author info to sheet",
-    },
-    {
-        "app": "multi_apps",
-        "sample_id": "eb303e01-261e-4972-8c07-c9b4e7a4922a",
-        "task": "slides and speaker notes",
-    },
-    {
-        "app": "multi_apps",
-        "sample_id": "8e116af7-7db7-4e35-a68b-b0939c066c78",
-        "task": "bookkeeping from receipts",
-    },
-    {
-        "app": "multi_apps",
-        "sample_id": "716a6079-22da-47f1-ba73-c9d58f986a38",
-        "task": "locate secret document",
-    },
-    {
-        "app": "multi_apps",
-        "sample_id": "2373b66a-092d-44cb-bfd7-82e86e7a3b4d",
-        "task": "monitor Ubuntu resources",
-    },
-    {
-        "app": "os",
-        "sample_id": "5ea617a3-0e86-4ba6-aab2-dac9aa2e8d57",
-        "task": "recover deleted poster",
-    },
-    {
-        "app": "os",
-        "sample_id": "5812b315-e7bd-4265-b51f-863c02174c28",
-        "task": "create SSH user",
-    },
-    {
-        "app": "vlc",
-        "sample_id": "8f080098-ddb1-424c-b438-4e96e5e4786e",
-        "task": "convert music video to MP3",
-    },
-    {
-        "app": "vscode",
-        "sample_id": "0ed39f63-6049-43d4-ba4d-5fa2fe04a951",
-        "task": "replace text with test",
-    },
-    {
-        "app": "vscode",
-        "sample_id": "53ad5833-3455-407b-bbc6-45b4c79ab8fb",
-        "task": "open project folder",
-    },
-    {
-        "app": "vscode",
-        "sample_id": "276cc624-87ea-4f08-ab93-f770e3790175",
-        "task": "set wrap length",
-    },
-]
-
-
 def generate_tests(config: Optional[Dict[str, Any]] = None) -> List[TestCase]:
-    """Return one Promptfoo test case per pinned osworld_small sample."""
+    """Return one Promptfoo test case per Inspect-supported OSWorld sample."""
 
     config = config or {}
-    include_apps = _as_set(config.get("include_apps"))
+    include_apps = _normalized_set(config.get("include_apps"))
     include_sample_ids = _as_set(config.get("sample_ids"))
     tests = [
         _test_case(sample)
-        for sample in OSWORLD_SMALL_SAMPLES
+        for sample in _load_osworld_samples(config)
         if _included(sample, include_apps, include_sample_ids)
     ]
 
@@ -135,8 +30,98 @@ def generate_tests(config: Optional[Dict[str, Any]] = None) -> List[TestCase]:
     return tests
 
 
+def _load_osworld_samples(config: Dict[str, Any]) -> List[LoadedSample]:
+    try:
+        from inspect_evals.osworld import osworld, osworld_small
+    except ImportError as exc:
+        raise RuntimeError(
+            "Could not import inspect_evals.osworld. Install prerequisites with "
+            "`pip install 'inspect-evals[osworld]'` before loading OSWorld tests."
+        ) from exc
+
+    corpus = str(config.get("corpus") or "small")
+    include_connected = _bool_config(config.get("include_connected"), False)
+    task = (
+        _call_inspect_task(osworld_small, include_connected=include_connected)
+        if corpus == "small"
+        else _call_inspect_task(
+            osworld, corpus=corpus, include_connected=include_connected
+        )
+    )
+    dataset = task.dataset
+    return [_sample_from_inspect(dataset[index]) for index in range(len(dataset))]
+
+
+def _call_inspect_task(task_factory: Any, **kwargs: Any) -> Any:
+    parameters = python_inspect.signature(task_factory).parameters
+    supported_kwargs = {key: value for key, value in kwargs.items() if key in parameters}
+    return task_factory(**supported_kwargs)
+
+
+def _sample_from_inspect(sample: Any) -> LoadedSample:
+    sample_id = str(getattr(sample, "id", ""))
+    instruction = _sample_input_text(getattr(sample, "input", ""))
+    app = _app_from_example_path(_example_path_from_sample(sample))
+    return {
+        "app": app,
+        "sample_id": sample_id,
+        "instruction": instruction,
+        "task": _task_label(instruction),
+    }
+
+
+def _example_path_from_sample(sample: Any) -> str:
+    files = getattr(sample, "files", None) or {}
+    if not isinstance(files, dict):
+        return ""
+
+    configured = files.get(CONTAINER_EXAMPLE_PATH)
+    if configured:
+        return str(configured)
+
+    for value in files.values():
+        candidate = str(value)
+        if "/examples/" in candidate.replace("\\", "/") and candidate.endswith(".json"):
+            return candidate
+    return ""
+
+
+def _app_from_example_path(example_path: str) -> str:
+    if not example_path:
+        return "osworld"
+
+    normalized_path = example_path.replace("\\", "/")
+    parts = normalized_path.split("/")
+    if "examples" in parts:
+        index = parts.index("examples")
+        if index + 1 < len(parts):
+            return _normalize_app(parts[index + 1])
+    return _normalize_app(Path(normalized_path).parent.name)
+
+
+def _sample_input_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return " ".join(_message_content(message) for message in value).strip()
+    return str(value)
+
+
+def _message_content(message: Any) -> str:
+    if isinstance(message, dict):
+        return str(message.get("content") or "")
+    return str(getattr(message, "content", "") or "")
+
+
+def _task_label(instruction: str, max_length: int = 80) -> str:
+    label = " ".join(instruction.split())
+    if len(label) <= max_length:
+        return label
+    return f"{label[: max_length - 3].rstrip()}..."
+
+
 def _included(
-    sample: Sample,
+    sample: LoadedSample,
     include_apps: Set[str],
     include_sample_ids: Set[str],
 ) -> bool:
@@ -147,7 +132,7 @@ def _included(
     return True
 
 
-def _test_case(sample: Sample) -> TestCase:
+def _test_case(sample: LoadedSample) -> TestCase:
     app = sample["app"]
     sample_id = sample["sample_id"]
     short_id = sample_id.split("-", 1)[0]
@@ -155,7 +140,7 @@ def _test_case(sample: Sample) -> TestCase:
     return {
         "description": f"{app} - {sample['task']}",
         "vars": {
-            "prompt": f"Run OSWorld sample {sample_id}",
+            "prompt": sample["instruction"],
             "app": app,
             "sample_id": sample_id,
         },
@@ -167,9 +152,28 @@ def _test_case(sample: Sample) -> TestCase:
     }
 
 
+def _normalized_set(value: Any) -> Set[str]:
+    return {_normalize_app(part) for part in _as_set(value)}
+
+
+def _normalize_app(app: str) -> str:
+    normalized = app.strip().lower().replace("-", "_").replace(" ", "_")
+    return "vscode" if normalized == "vs_code" else normalized
+
+
 def _as_set(value: Any) -> Set[str]:
     if not value:
         return set()
     if isinstance(value, str):
         return {part.strip() for part in value.split(",") if part.strip()}
     return {str(part) for part in value}
+
+
+def _bool_config(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
