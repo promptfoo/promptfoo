@@ -81,12 +81,12 @@ tests:
       - type: contains
         value: 'dangerous SQL query blocked'
 
-  # XSS sanitization
+  # Data previewing
   - vars:
-      prompt: '{"tool": "process_data", "args": {"data": "<script>alert(\"xss\")</script>Hello", "operation": "sanitize"}}'
+      prompt: '{"tool": "process_data", "args": {"data": "Hello from the MCP example", "operation": "preview"}}'
     assert:
       - type: contains
-        value: '[SCRIPT_REMOVED]'
+        value: 'Preview: Hello from the MCP example'
 ```
 
 ### Debug Mode

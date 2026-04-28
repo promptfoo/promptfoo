@@ -136,8 +136,8 @@ function processData(data, operation, format = 'text') {
       case 'extract':
         return `Extracted fields from ${format} data`;
 
-      case 'sanitize':
-        return data.replace(/<script\b[^>]*>.*?<\/script>/gis, '[SCRIPT_REMOVED]');
+      case 'preview':
+        return `Preview: ${data.substring(0, 50)}`;
 
       default:
         throw new Error(`Unknown operation: ${operation}`);
@@ -350,7 +350,7 @@ server.registerTool(
     inputSchema: {
       data: z.string().describe('Data to process (JSON string or plain text)'),
       operation: z
-        .enum(['validate', 'transform', 'extract', 'sanitize'])
+        .enum(['validate', 'transform', 'extract', 'preview'])
         .describe('Operation to perform'),
       format: z
         .enum(['json', 'xml', 'csv', 'text'])

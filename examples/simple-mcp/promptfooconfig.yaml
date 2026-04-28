@@ -79,14 +79,12 @@ tests:
       - type: contains
         value: 'Mock query result'
 
-  # Test data sanitization
+  # Test data previewing
   - vars:
-      prompt: '{"tool": "process_data", "args": {"data": "<script>alert(\"xss\")</script>Hello World", "operation": "sanitize"}}'
+      prompt: '{"tool": "process_data", "args": {"data": "Hello World from the MCP example", "operation": "preview"}}'
     assert:
       - type: contains
-        value: '[SCRIPT_REMOVED]'
-      - type: contains
-        value: 'Hello World'
+        value: 'Preview: Hello World from the MCP example'
 
   # Test JSON validation
   - vars:
