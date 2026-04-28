@@ -406,13 +406,15 @@ export async function doEval(
       typeof resumeRuntimeOptions?.filterRange === 'string'
         ? resumeRuntimeOptions.filterRange
         : undefined;
-    if (resumeEval && cmdObj.filterRange && cmdObj.filterRange !== persistedFilterRange) {
+    const resumeConfigFilterRange = commandLineOptions?.filterRange ?? evaluateOptions.filterRange;
+    const resumeFilterRange = persistedFilterRange ?? resumeConfigFilterRange;
+    if (resumeEval && cmdObj.filterRange && cmdObj.filterRange !== resumeFilterRange) {
       logger.warn(
-        `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with persisted range ${persistedFilterRange ?? '(none)'} to preserve test indices.`,
+        `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with stored range ${resumeFilterRange ?? '(none)'} to preserve test indices.`,
       );
     }
     const filterRange = resumeEval
-      ? (persistedFilterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange)
+      ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const shouldApplyRangeToImplicitDefaultTest =
       filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
