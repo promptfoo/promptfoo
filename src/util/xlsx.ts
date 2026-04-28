@@ -40,7 +40,10 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     // Check if file exists before attempting to read it
     try {
       await fs.access(actualFilePath);
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
       throw new Error(`File not found: ${actualFilePath}`);
     }
 

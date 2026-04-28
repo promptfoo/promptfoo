@@ -312,10 +312,15 @@ function isBase64(str: string): boolean {
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
-  return fs
-    .access(filePath)
-    .then(() => true)
-    .catch(() => false);
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw err;
+  }
 }
 
 /**

@@ -113,10 +113,15 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   const generationDurationMs = Date.now() - generationStartTime;
 
   // Check if redteam.yaml exists before running evaluation
-  const redteamPathExists = await fs
-    .access(redteamPath)
-    .then(() => true)
-    .catch(() => false);
+  let redteamPathExists = false;
+  try {
+    await fs.access(redteamPath);
+    redteamPathExists = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  }
   if (!redteamConfig || !redteamPathExists) {
     logger.info('No test cases generated. Skipping scan.');
     if (verboseToggleCleanup) {

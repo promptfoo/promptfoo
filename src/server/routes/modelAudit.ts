@@ -223,11 +223,12 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         ? expandedPath
         : path.resolve(process.cwd(), expandedPath);
 
-      const pathExists = await fs
-        .access(absolutePath)
-        .then(() => true)
-        .catch(() => false);
-      if (!pathExists) {
+      try {
+        await fs.access(absolutePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw error;
+        }
         res
           .status(400)
           .json({ error: `Path does not exist: ${inputPath} (resolved to: ${absolutePath})` });

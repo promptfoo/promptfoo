@@ -21,6 +21,7 @@ import type { ProviderResponse } from '../types/index';
  * Prevents hanging on extremely large directories
  */
 const FINGERPRINT_TIMEOUT_MS = 2000;
+const STAT_BATCH_SIZE = 32;
 
 /**
  * Get a fingerprint for a working directory to use as a cache key.
@@ -61,15 +62,23 @@ export async function getWorkingDirFingerprint(workingDir: string): Promise<stri
   const allFiles = await getAllFiles(workingDir);
 
   // Create fingerprint from directory mtime + all file mtimes
-  const fileMtimes = (
-    await Promise.all(
-      allFiles.map(async (file: string) => {
+  const fileMtimes: string[] = [];
+  for (let i = 0; i < allFiles.length; i += STAT_BATCH_SIZE) {
+    if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
+      throw new Error('Working directory fingerprint timed out');
+    }
+
+    const batch = allFiles.slice(i, i + STAT_BATCH_SIZE);
+    const batchMtimes = await Promise.all(
+      batch.map(async (file: string) => {
         const stat = await fs.stat(file);
         const relativePath = path.relative(workingDir, file);
         return `${relativePath}:${stat.mtimeMs}`;
       }),
-    )
-  ).sort(); // Sort for consistent ordering
+    );
+    fileMtimes.push(...batchMtimes);
+  }
+  fileMtimes.sort(); // Sort for consistent ordering
 
   const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
   const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
