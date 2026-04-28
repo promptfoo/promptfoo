@@ -12,6 +12,7 @@ import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { getDefaultPort, VERSION } from '../constants';
 import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
+import { getEnvString } from '../envars';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -83,6 +84,16 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
     logger.error(`Failed to start server: ${error instanceof Error ? error.message : error}`);
   }
   process.exit(1);
+}
+
+function getUrlHost(host: string): string {
+  if (host === '0.0.0.0' || host === '::') {
+    return 'localhost';
+  }
+  if (host.includes(':') && !host.startsWith('[')) {
+    return `[${host}]`;
+  }
+  return host;
 }
 
 /**
@@ -351,6 +362,7 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
+  host = getEnvString('PROMPTFOO_SERVER_HOST', '127.0.0.1'),
 ) {
   const app = createApp();
 
@@ -391,9 +403,14 @@ export async function startServer(
   // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
   return new Promise<void>((resolve) => {
     httpServer
-      .listen(port, () => {
-        const url = `http://localhost:${port}`;
+      .listen(port, host, () => {
+        const url = `http://${getUrlHost(host)}:${port}`;
         logger.info(`Server running at ${url} and monitoring for new evals.`);
+        if (host === '0.0.0.0' || host === '::') {
+          logger.warn(
+            'Server is listening on all network interfaces. Use only on trusted networks.',
+          );
+        }
         openBrowser(browserBehavior, port).catch((error) => {
           logger.error(
             `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,

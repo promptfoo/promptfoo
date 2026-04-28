@@ -195,6 +195,7 @@ Start a browser UI for visualization of results.
 | ------------------------------ | ----------------------------------------- |
 | `[directory]`                  | Promptfoo output/config directory to view |
 | `-p, --port <number>`          | Port number for the local server          |
+| `--host <host>`                | Host address to bind (default: 127.0.0.1) |
 | `-y, --yes`                    | Skip confirmation and auto-open the URL   |
 | `-n, --no`                     | Skip confirmation and do not open the URL |
 | `--filter-description <regex>` | Deprecated; accepted but ignored          |
@@ -321,10 +322,11 @@ For complete setup and JSON output details, see the [code scanning CLI docs](/do
 
 Start a Model Context Protocol (MCP) server to expose promptfoo's eval and testing capabilities as tools that AI agents and development environments can use.
 
-| Option                | Description                       | Default |
-| --------------------- | --------------------------------- | ------- |
-| `-p, --port <number>` | Port number for HTTP transport    | 3100    |
-| `--transport <type>`  | Transport type: "http" or "stdio" | http    |
+| Option                | Description                       | Default   |
+| --------------------- | --------------------------------- | --------- |
+| `-p, --port <number>` | Port number for HTTP transport    | 3100      |
+| `--host <host>`       | Host address for HTTP transport   | 127.0.0.1 |
+| `--transport <type>`  | Transport type: "http" or "stdio" | http      |
 
 ### Transport Types
 
@@ -342,6 +344,9 @@ npx promptfoo@latest mcp --transport http
 
 # Start MCP server with HTTP transport on custom port
 npx promptfoo@latest mcp --transport http --port 8080
+
+# Expose HTTP transport outside localhost
+npx promptfoo@latest mcp --transport http --host 0.0.0.0
 ```
 
 ### Available Tools
@@ -806,11 +811,12 @@ For more detail, see [red team configuration](/docs/red-team/configuration/).
 
 Start browser UI and open to red team setup.
 
-| Option                           | Description                              | Default |
-| -------------------------------- | ---------------------------------------- | ------- |
-| `[configDirectory]`              | Directory containing configuration files |         |
-| `-p, --port <number>`            | Port number for the local server         | 15500   |
-| `--filter-description <pattern>` | Deprecated; accepted but ignored         |         |
+| Option                           | Description                              | Default   |
+| -------------------------------- | ---------------------------------------- | --------- |
+| `[configDirectory]`              | Directory containing configuration files |           |
+| `-p, --port <number>`            | Port number for the local server         | 15500     |
+| `--host <host>`                  | Host address to bind the local server    | 127.0.0.1 |
+| `--filter-description <pattern>` | Deprecated; accepted but ignored         |           |
 
 ## `promptfoo redteam run`
 
@@ -916,11 +922,12 @@ Works the same as [`promptfoo eval`](#promptfoo-eval), but defaults to loading `
 
 Start a browser UI and open the red teaming report.
 
-| Option                           | Description                                 | Default |
-| -------------------------------- | ------------------------------------------- | ------- |
-| `[directory]`                    | Directory containing the red teaming config | .       |
-| `-p, --port <number>`            | Port number for the server                  | 15500   |
-| `--filter-description <pattern>` | Deprecated; accepted but ignored            |         |
+| Option                           | Description                                 | Default   |
+| -------------------------------- | ------------------------------------------- | --------- |
+| `[directory]`                    | Directory containing the red teaming config | .         |
+| `-p, --port <number>`            | Port number for the server                  | 15500     |
+| `--host <host>`                  | Host address to bind the local server       | 127.0.0.1 |
+| `--filter-description <pattern>` | Deprecated; accepted but ignored            |           |
 
 Example:
 

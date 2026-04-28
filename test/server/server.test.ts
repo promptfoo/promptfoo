@@ -113,11 +113,13 @@ describe('server', () => {
         listen: vi.fn().mockImplementation(function (
           this: MockHttpServer,
           _port: number,
-          callback: () => void,
+          hostOrCallback: string | (() => void),
+          maybeCallback?: () => void,
         ) {
+          const callback = typeof hostOrCallback === 'function' ? hostOrCallback : maybeCallback;
           // Simulate async listen - server is now listening
           this.listening = true;
-          setImmediate(() => callback());
+          setImmediate(() => callback?.());
           return this;
         }),
         close: vi.fn().mockImplementation(function (
@@ -159,6 +161,28 @@ describe('server', () => {
       expect(signalHandlers.has('SIGTERM')).toBe(true);
 
       // Trigger shutdown to complete the promise
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should bind to loopback by default', async () => {
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockHttpServer.listen).toHaveBeenCalledWith(0, '127.0.0.1', expect.any(Function));
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should bind to an explicit host when provided', async () => {
+      const serverPromise = startServer(0, undefined, '0.0.0.0');
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockHttpServer.listen).toHaveBeenCalledWith(0, '0.0.0.0', expect.any(Function));
+
       triggerSignal('SIGINT');
       await serverPromise;
     });

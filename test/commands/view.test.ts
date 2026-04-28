@@ -46,6 +46,15 @@ describe('viewCommand', () => {
     expect(startServer).toHaveBeenCalledWith(3001, BrowserBehavior.ASK);
   });
 
+  it('should pass an explicit host to startServer', async () => {
+    viewCommand(program);
+    const viewCmd = program.commands[0];
+
+    await viewCmd.parseAsync(['node', 'test', '--port', '3001', '--host', '0.0.0.0']);
+
+    expect(startServer).toHaveBeenCalledWith(3001, BrowserBehavior.ASK, '0.0.0.0');
+  });
+
   it('should handle directory parameter and set config directory', async () => {
     viewCommand(program);
     const viewCmd = program.commands[0];

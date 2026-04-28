@@ -16,6 +16,7 @@ export function viewCommand(program: Command) {
       (val) => Number.parseInt(val, 10),
       getDefaultPort(),
     )
+    .option('--host <host>', 'Host address to bind the local server')
     .option('-y, --yes', 'Skip confirmation and auto-open the URL')
     .option('-n, --no', 'Skip confirmation and do not open the URL')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
@@ -27,6 +28,7 @@ export function viewCommand(program: Command) {
           port: number;
           yes: boolean;
           no: boolean;
+          host?: string;
           apiBaseUrl?: string;
           envPath?: string;
           filterDescription?: string;
@@ -50,7 +52,11 @@ export function viewCommand(program: Command) {
             ? BrowserBehavior.SKIP
             : BrowserBehavior.ASK;
 
-        await startServer(cmdObj.port, browserBehavior);
+        if (cmdObj.host) {
+          await startServer(cmdObj.port, browserBehavior, cmdObj.host);
+        } else {
+          await startServer(cmdObj.port, browserBehavior);
+        }
       },
     );
 }

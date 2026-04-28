@@ -12,6 +12,7 @@ export function redteamReportCommand(program: Command) {
     .command('report [directory]')
     .description('Start browser UI and open to report')
     .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
+    .option('--host <host>', 'Host address to bind the local server')
     .option('--filter-description <pattern>', 'Filter evals by description using a regex pattern')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(
@@ -19,6 +20,7 @@ export function redteamReportCommand(program: Command) {
         directory: string | undefined,
         cmdObj: {
           port: number;
+          host?: string;
           apiBaseUrl?: string;
           envPath?: string;
           filterDescription?: string;
@@ -40,7 +42,11 @@ export function redteamReportCommand(program: Command) {
         if (isRunning) {
           await openBrowser(BrowserBehavior.OPEN_TO_REPORT);
         } else {
-          await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT);
+          if (cmdObj.host) {
+            await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT, cmdObj.host);
+          } else {
+            await startServer(cmdObj.port, BrowserBehavior.OPEN_TO_REPORT);
+          }
         }
       },
     );

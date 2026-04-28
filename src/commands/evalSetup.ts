@@ -11,12 +11,14 @@ export function evalSetupCommand(program: Command) {
     .command('setup [configDirectory]')
     .description('Start browser UI and open to eval setup')
     .option('-p, --port <number>', 'Port number', getDefaultPort().toString())
+    .option('--host <host>', 'Host address to bind the local server')
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(
       async (
         directory: string | undefined,
         cmdObj: {
           port: number;
+          host?: string;
           apiBaseUrl?: string;
           envPath?: string;
         } & Command,
@@ -34,7 +36,11 @@ export function evalSetupCommand(program: Command) {
         if (isRunning) {
           await openBrowser(browserBehavior);
         } else {
-          await startServer(cmdObj.port, browserBehavior);
+          if (cmdObj.host) {
+            await startServer(cmdObj.port, browserBehavior, cmdObj.host);
+          } else {
+            await startServer(cmdObj.port, browserBehavior);
+          }
         }
       },
     );

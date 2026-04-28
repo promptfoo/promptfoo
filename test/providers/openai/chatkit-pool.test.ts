@@ -1,3 +1,5 @@
+import * as http from 'http';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatKitBrowserPool } from '../../../src/providers/openai/chatkit-pool';
 
@@ -31,7 +33,7 @@ vi.mock('playwright', () => ({
 // Mock http server
 vi.mock('http', () => ({
   createServer: vi.fn().mockReturnValue({
-    listen: vi.fn((_port: number, callback: () => void) => callback()),
+    listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
     address: vi.fn().mockReturnValue({ port: 3000 }),
     close: vi.fn(),
     once: vi.fn(), // Error handler registration
@@ -170,6 +172,8 @@ describe('ChatKitBrowserPool', () => {
       expect((instance as any).initialized).toBe(true);
       expect((instance as any).browser).toBe(mockBrowser);
       expect((instance as any).server).not.toBeNull();
+      const server = vi.mocked(http.createServer).mock.results[0].value;
+      expect(server.listen).toHaveBeenCalledWith(0, '127.0.0.1', expect.any(Function));
     });
 
     it('should not reinitialize if already initialized', async () => {

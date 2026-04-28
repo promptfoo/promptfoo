@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express from 'express';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { registerResources } from './resources';
@@ -21,6 +22,16 @@ import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooCo
 
 function setMcpTransport(transport: 'http' | 'stdio'): void {
   Object.assign(process.env, { MCP_TRANSPORT: transport });
+}
+
+function getUrlHost(host: string): string {
+  if (host === '0.0.0.0' || host === '::') {
+    return 'localhost';
+  }
+  if (host.includes(':') && !host.startsWith('[')) {
+    return `[${host}]`;
+  }
+  return host;
 }
 
 /**
@@ -74,7 +85,10 @@ export async function createMcpServer() {
  * Starts an MCP server with HTTP transport
  * Returns a Promise that only resolves when the server shuts down
  */
-export async function startHttpMcpServer(port: number): Promise<void> {
+export async function startHttpMcpServer(
+  port: number,
+  host = getEnvString('PROMPTFOO_MCP_HOST', '127.0.0.1'),
+): Promise<void> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid port number: ${port}. Port must be an integer between 1 and 65535.`);
   }
@@ -112,16 +126,23 @@ export async function startHttpMcpServer(port: number): Promise<void> {
   // Return a Promise that only resolves when the server shuts down
   // This keeps long-running commands running until SIGINT/SIGTERM
   return new Promise<void>((resolve) => {
-    const httpServer = app.listen(port, () => {
-      logger.info(`Promptfoo MCP server running at http://localhost:${port}`);
-      logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
-      logger.info(`SSE endpoint: http://localhost:${port}/mcp/sse`);
+    const url = `http://${getUrlHost(host)}:${port}`;
+    const httpServer = app.listen(port, host, () => {
+      logger.info(`Promptfoo MCP server running at ${url}`);
+      logger.info(`MCP endpoint: ${url}/mcp`);
+      logger.info(`SSE endpoint: ${url}/mcp/sse`);
+      if (host === '0.0.0.0' || host === '::') {
+        logger.warn(
+          'MCP server is listening on all network interfaces. Use only on trusted networks.',
+        );
+      }
 
       // Track server start
       telemetry.record('feature_used', {
         feature: 'mcp_server_started',
         transport: 'http',
         port,
+        host,
       });
       // Don't resolve - server runs until shutdown signal
     });
