@@ -47,6 +47,8 @@
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
     "db:studio": "npx drizzle-kit studio",
+    "openapi:generate": "tsx scripts/generateOpenApi.ts",
+    "openapi:check": "tsx scripts/generateOpenApi.ts --check",
     "dev:app": "npm run dev --prefix src/app",
     "storybook": "npm run storybook --prefix src/app",
     "dev:server": "tsx --watch src/server/index.ts",
@@ -156,6 +158,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.120",
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1036.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1036.0",
     "@aws-sdk/client-s3": "^3.1003.0",
