@@ -10,11 +10,9 @@ export const GetBlobParamsSchema = z.object({
 });
 
 export const BlobBinaryResponseSchema = z.instanceof(Uint8Array);
-export const BlobRedirectResponseSchema = z.string().min(1);
 
 export type GetBlobParams = z.infer<typeof GetBlobParamsSchema>;
 export type BlobBinaryResponse = z.infer<typeof BlobBinaryResponseSchema>;
-export type BlobRedirectResponse = z.infer<typeof BlobRedirectResponseSchema>;
 
 // GET /api/blobs/library
 
@@ -102,7 +100,6 @@ export const BlobsSchemas = {
   Get: {
     Params: GetBlobParamsSchema,
     BinaryResponse: BlobBinaryResponseSchema,
-    RedirectResponse: BlobRedirectResponseSchema,
   },
   Library: {
     Query: MediaLibraryQuerySchema,

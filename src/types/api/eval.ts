@@ -118,13 +118,11 @@ export const EvalTableResponseSchema = z
     filteredMetrics: z.array(z.unknown()).nullable(),
     config: z.record(z.string(), z.unknown()),
     author: z.string().nullable(),
-    version: z.union([z.string(), z.number()]),
+    version: z.number(),
     id: z.string(),
     stats: z.unknown(),
   })
   .passthrough();
-
-export const EvalTableJsonExportResponseSchema = z.unknown();
 
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
@@ -260,7 +258,7 @@ export const SubmitRatingRequestSchema = z
   })
   .passthrough();
 
-export const SubmitRatingResponseSchema = z.object({}).passthrough();
+export const SubmitRatingResponseSchema = MessageResponseSchema;
 
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
@@ -350,7 +348,6 @@ export const EvalSchemas = {
     Params: EvalIdParamSchema,
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
-    JsonExportResponse: EvalTableJsonExportResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,
