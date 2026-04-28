@@ -203,10 +203,11 @@ describe('Telemetry', () => {
     const _telemetry = new Telemetry();
     _telemetry.record('feature_used', { test: 'value' });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await vi.waitFor(() => {
+      expect(fetchWithProxySpy.mock.calls.length).toBeGreaterThan(0);
+    });
 
     const fetchCalls = fetchWithProxySpy.mock.calls;
-    expect(fetchCalls.length).toBeGreaterThan(0);
 
     let foundExpectedProperties = false;
 

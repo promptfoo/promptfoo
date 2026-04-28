@@ -451,8 +451,9 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
         typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
       if (urlString === tokenUrl) {
         tokenRefreshCallCount++;
-        // Simulate network delay
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        // Yield so the other concurrent callers register on the in-flight
+        // refresh promise before this one resolves.
+        await Promise.resolve();
         return tokenResponse;
       }
       return apiResponse;
@@ -511,7 +512,8 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
       const urlString =
         typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
       if (urlString === tokenUrl) {
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        // Yield so concurrent callers register on the in-flight refresh.
+        await Promise.resolve();
         return tokenResponse;
       }
       return apiResponse;
@@ -761,8 +763,11 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
 
     // Start first call (will trigger token refresh)
     const promise1 = provider.callApi('test 1');
-    // Wait a bit to ensure token refresh has started
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Wait until the token refresh has actually been issued before starting
+    // the second call, so it observes the in-flight refresh.
+    await vi.waitFor(() => {
+      expect(vi.mocked(fetchWithCache).mock.calls.some((call) => call[0] === tokenUrl)).toBe(true);
+    });
     // Start second call (should wait for first refresh)
     const promise2 = provider.callApi('test 2');
 
@@ -979,7 +984,8 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
         typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
       if (urlString === tokenUrl) {
         refreshCallCount++;
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        // Yield so concurrent callers register on the in-flight refresh.
+        await Promise.resolve();
         return tokenResponse;
       }
       return apiResponse;
@@ -1344,7 +1350,8 @@ describe('HttpProvider - File Auth', () => {
 
   it('should deduplicate concurrent file auth refreshes', async () => {
     const authFn = vi.fn(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Yield so concurrent callers register on the in-flight refresh.
+      await Promise.resolve();
       return {
         token: 'shared-file-token',
         expiration: Date.now() + TOKEN_REFRESH_BUFFER_MS + 60_000,
