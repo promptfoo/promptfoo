@@ -23,6 +23,17 @@ Once merged, the scanner will automatically run on future pull requests. Authent
 
 **[Read the full documentation →](https://promptfoo.dev/docs/code-scanning/github-action)** for configuration options, manual installation, and more.
 
+## Fork Pull Requests
+
+Fork pull request scanning is disabled by default for `pull_request` workflows. A maintainer can trigger a fork PR scan through the Promptfoo Scanner comment flow, or you can opt in to scanning fork PRs automatically:
+
+```yaml
+- name: Run Promptfoo Code Scan
+  uses: promptfoo/code-scan-action@v1
+  with:
+    enable-fork-prs: true
+```
+
 ## Contributing
 
 Please note that this a release-only repository. To contribute, refer to the [associated directory](https://github.com/promptfoo/promptfoo/tree/main/promptfoo/code-scan-action) in the main promptfoo repository.

@@ -41,8 +41,16 @@ export const evalRouter = Router();
 export const evalJobs = new Map<string, Job>();
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
+  let parsedPayload: EvalTableDTO;
   try {
-    res.json(responsePayload);
+    parsedPayload = EvalSchemas.Table.Response.parse(responsePayload) as unknown as EvalTableDTO;
+  } catch (error) {
+    sendError(res, 500, 'Failed to render eval table', error);
+    return;
+  }
+
+  try {
+    res.json(parsedPayload);
   } catch (error) {
     if (!(error instanceof RangeError)) {
       throw error;
@@ -52,7 +60,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
       evalId,
     });
 
-    const promptLocations = getEvalTableOutputPromptLocationsBySize(responsePayload);
+    const promptLocations = getEvalTableOutputPromptLocationsBySize(parsedPayload);
     if (promptLocations.length === 0) {
       logger.error('[GET /:id/table] Response too large and has no prompts to strip', {
         evalId,
@@ -63,7 +71,7 @@ function sendEvalTableResponse(res: Response, evalId: string, responsePayload: E
 
     const tryStringifyWithStrippedPrompts = (promptCountToStrip: number): string | null => {
       const responseWithoutPrompts = getEvalTablePromptStrippedPayload(
-        responsePayload,
+        parsedPayload,
         promptLocations,
         promptCountToStrip,
       );
@@ -773,7 +781,7 @@ evalRouter.post(
       await eval_.save();
       await result.save();
 
-      res.json(result);
+      res.json(EvalSchemas.SubmitRating.Response.parse({ message: 'Rating submitted' }));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }

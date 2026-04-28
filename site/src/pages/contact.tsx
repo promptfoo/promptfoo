@@ -1,6 +1,7 @@
 import React from 'react';
 
 import Head from '@docusaurus/Head';
+import Link from '@docusaurus/Link';
 import { useColorMode } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -10,7 +11,7 @@ import Chip from '@mui/material/Chip';
 import Container from '@mui/material/Container';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
-import Link from '@mui/material/Link';
+import MuiLink from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Select from '@mui/material/Select';
@@ -186,13 +187,13 @@ function Contact(): React.ReactElement {
                   </Button>
                   <Typography variant="body2" color="text.secondary">
                     Or email{' '}
-                    <Link
+                    <MuiLink
                       href="mailto:inquiries@promptfoo.dev"
                       underline="hover"
                       className={styles.emailLink}
                     >
                       inquiries@promptfoo.dev
-                    </Link>
+                    </MuiLink>
                   </Typography>
                 </Box>
               </form>
@@ -269,7 +270,7 @@ function Contact(): React.ReactElement {
                       <Typography variant="body2" className={styles.testimonialQuote}>
                         "{testimonial.quote}"
                       </Typography>
-                      <Link
+                      <MuiLink
                         href={testimonial.href}
                         target="_blank"
                         rel="noreferrer"
@@ -278,7 +279,7 @@ function Contact(): React.ReactElement {
                       >
                         {testimonial.cta}
                         <ArrowForwardIcon className={styles.testimonialLinkIcon} />
-                      </Link>
+                      </MuiLink>
                     </Box>
                   ))}
                 </Box>
@@ -289,7 +290,7 @@ function Contact(): React.ReactElement {
                   Resources
                 </Typography>
                 <Box className={styles.resourceLinks}>
-                  <Link
+                  <MuiLink
                     href="https://github.com/promptfoo/promptfoo"
                     target="_blank"
                     rel="noreferrer"
@@ -298,8 +299,8 @@ function Contact(): React.ReactElement {
                   >
                     GitHub
                     <ArrowForwardIcon className={styles.resourceLinkIcon} />
-                  </Link>
-                  <Link
+                  </MuiLink>
+                  <MuiLink
                     href="https://discord.gg/promptfoo"
                     target="_blank"
                     rel="noreferrer"
@@ -308,8 +309,8 @@ function Contact(): React.ReactElement {
                   >
                     Discord community
                     <ArrowForwardIcon className={styles.resourceLinkIcon} />
-                  </Link>
-                  <Link href="/docs/enterprise/" className={styles.resourceLink} underline="none">
+                  </MuiLink>
+                  <Link to="/docs/enterprise/" className={styles.resourceLink}>
                     Enterprise documentation
                     <ArrowForwardIcon className={styles.resourceLinkIcon} />
                   </Link>

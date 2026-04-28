@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import checkbox, { Separator } from '@inquirer/checkbox';
@@ -210,8 +210,8 @@ export async function redteamInit(directory: string | undefined) {
   recordOnboardingStep('start');
 
   const projectDir = directory || '.';
-  if (projectDir !== '.' && !fs.existsSync(projectDir)) {
-    fs.mkdirSync(projectDir, { recursive: true });
+  if (projectDir !== '.') {
+    await fs.mkdir(projectDir, { recursive: true });
   }
 
   const configPath = path.join(projectDir, 'promptfooconfig.yaml');
@@ -618,10 +618,10 @@ export async function redteamInit(directory: string | undefined) {
     providers,
     descriptions: subCategoryDescriptions,
   });
-  fs.writeFileSync(configPath, redteamConfig, 'utf8');
+  await fs.writeFile(configPath, redteamConfig, 'utf8');
 
   if (writeChatPy) {
-    fs.writeFileSync(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
+    await fs.writeFile(path.join(projectDir, 'chat.py'), CUSTOM_PROVIDER_TEMPLATE, 'utf8');
   }
 
   console.clear();

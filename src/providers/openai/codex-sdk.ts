@@ -2190,6 +2190,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
+      ...(typeof turnUsage.reasoning_output_tokens === 'number'
+        ? { completionDetails: { reasoning: turnUsage.reasoning_output_tokens } }
+        : {}),
     };
   }
 

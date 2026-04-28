@@ -8,7 +8,7 @@ import cliState from '../../cliState';
 import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getEnvBool, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
@@ -74,7 +74,7 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Agent {
     return existing;
   }
   const agent = new Agent({
-    headersTimeout: REQUEST_TIMEOUT_MS,
+    headersTimeout: getRequestTimeoutMs(),
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,
@@ -99,7 +99,7 @@ function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions):
     uri: proxyUrl,
     proxyTls: tlsOptions,
     requestTls: tlsOptions,
-    headersTimeout: REQUEST_TIMEOUT_MS,
+    headersTimeout: getRequestTimeoutMs(),
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
     connections: concurrency,

@@ -569,8 +569,9 @@ describe('OpenAiModerationProvider', () => {
       const first = provider.callModerationApi('user', 'same sensitive text');
       const second = provider.callModerationApi('user', 'same sensitive text');
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      });
 
       resolveFetch!({
         data: mockResponse,
@@ -617,8 +618,9 @@ describe('OpenAiModerationProvider', () => {
       const first = provider.callModerationApi('user', 'same sensitive text');
       const second = provider.callModerationApi('user', 'same sensitive text');
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      await vi.waitFor(() => {
+        expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      });
 
       for (const resolveFetch of resolvers) {
         resolveFetch({

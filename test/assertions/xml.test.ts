@@ -1,6 +1,11 @@
 import dedent from 'dedent';
-import { describe, expect, it } from 'vitest';
+import { XMLParser } from 'fast-xml-parser';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { containsXml, validateXml } from '../../src/assertions/xml';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('validateXml', () => {
   it('should validate a simple valid XML string', () => {
@@ -189,5 +194,82 @@ describe('containsXml', () => {
     const input = '<root1>Content</root1> text <root2><child>More</child></root2>';
     const result = containsXml(input, ['root2.child']);
     expect(result.isValid).toBe(true);
+  });
+
+  it('should validate requirements across multiple XML fragments', () => {
+    const input = '<xml1>content1</xml1> more text <xml2>content2</xml2>';
+    const result = containsXml(input, ['xml1', 'xml2']);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('should find valid XML after earlier unclosed tags', () => {
+    const input = 'Text <unclosed><root><child>Content</child></root>';
+    const result = containsXml(input, ['root.child']);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('should find valid XML with non-ASCII element names', () => {
+    const input = 'Text <élément>Content</élément> more';
+
+    expect(containsXml(input, ['élément'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should ignore pseudo-closing tags inside comments when extracting candidates', () => {
+    const input = '<root><!-- </root> --><child>Content</child></root>';
+
+    expect(containsXml(input, ['root.child'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should ignore pseudo-closing tags inside CDATA when extracting candidates', () => {
+    const input = '<root><![CDATA[</root>]]><child>Content</child></root>';
+
+    expect(containsXml(input, ['root.child'])).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
+  it('should keep required elements root-relative within a valid candidate', () => {
+    const input = 'Text <wrapper><root><child>Content</child></root></wrapper>';
+
+    expect(containsXml(input, ['root.child'])).toEqual({
+      isValid: false,
+      reason: 'No valid XML content found matching the requirements',
+    });
+  });
+
+  it('should not parse every nested candidate when required elements are missing', () => {
+    const parseSpy = vi.spyOn(XMLParser.prototype, 'parse');
+    const input = `${'<a>'.repeat(1000)}${'</a>'.repeat(1000)}`;
+
+    expect(containsXml(input, ['a.missing'])).toEqual({
+      isValid: false,
+      reason: 'No valid XML content found matching the requirements',
+    });
+    expect(parseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('should reject malformed opening tag streams without catastrophic backtracking', () => {
+    const input = '<a'.repeat(5000);
+
+    expect(containsXml(input)).toEqual({
+      isValid: false,
+      reason: 'No XML content found in the output',
+    });
+  });
+
+  it('should reject malformed comment streams without quadratic declaration scans', () => {
+    const input = '<!--'.repeat(10000);
+
+    expect(containsXml(input)).toEqual({
+      isValid: false,
+      reason: 'No XML content found in the output',
+    });
   });
 });
