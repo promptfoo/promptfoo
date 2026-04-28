@@ -388,7 +388,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       const storage = getMediaStorage();
 
       // Read the cache mapping from filesystem to get thumbnail/spritesheet keys
-      const mapping = readCacheMapping(cacheKey);
+      const mapping = await readCacheMapping(cacheKey);
       const thumbnailKey = mapping?.thumbnailKey;
       const spritesheetKey = mapping?.spritesheetKey;
 
@@ -508,7 +508,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const cost = calculateVideoCost(model, seconds, false);
 
     // Store cache mapping for future lookups
-    storeCacheMapping(
+    await storeCacheMapping(
       cacheKey,
       videoRef.key,
       thumbnailRef?.key,

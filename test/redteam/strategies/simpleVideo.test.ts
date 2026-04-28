@@ -43,19 +43,7 @@ vi.mock('../../../src/cliState', () => ({
   },
 }));
 
-const mockWriteFileSync = vi.hoisted(() => vi.fn());
 const mockWriteFile = vi.hoisted(() => vi.fn());
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      writeFileSync: mockWriteFileSync,
-    },
-    writeFileSync: mockWriteFileSync,
-  };
-});
 vi.mock('fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs/promises')>();
   return {
@@ -134,7 +122,6 @@ describe('escapeDrawtextString', () => {
 describe('simpleVideo strategy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockWriteFileSync.mockReset();
     mockWriteFile.mockReset();
     mockVideoGenerator.mockClear();
   });
