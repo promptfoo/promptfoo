@@ -65,6 +65,10 @@ export function isAllowedBrowserOrigin(origin: string, host: string): boolean {
   return isSameHostname(origin, host) || isAllowedCrossSite(origin, host);
 }
 
+export function isAllowedCorsOrigin(origin: string, host: string): boolean {
+  return isAllowedCrossSite(origin, host);
+}
+
 export const corsOptionsDelegate: CorsOptionsDelegate<Request> = (req, callback): void => {
   const origin = req.headers.origin;
   if (!origin) {
@@ -73,7 +77,7 @@ export const corsOptionsDelegate: CorsOptionsDelegate<Request> = (req, callback)
   }
 
   callback(null, {
-    origin: isAllowedBrowserOrigin(origin, req.headers.host || '') ? origin : false,
+    origin: isAllowedCorsOrigin(origin, req.headers.host || '') ? origin : false,
   });
 };
 

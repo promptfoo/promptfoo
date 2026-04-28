@@ -3,6 +3,7 @@ import {
   corsOptionsDelegate,
   csrfProtection,
   isAllowedBrowserOrigin,
+  isAllowedCorsOrigin,
   isAllowedSocketIoCorsOrigin,
 } from '../../../src/server/middleware/csrfProtection';
 import type { NextFunction, Request, Response } from 'express';
@@ -250,6 +251,15 @@ describe('csrfProtection', () => {
       });
 
       expect(isAllowedBrowserOrigin('https://trusted.example', 'localhost:15500')).toBe(true);
+    });
+
+    it('does not treat same-host cross-origin reads as CORS trusted by default', () => {
+      expect(isAllowedBrowserOrigin('https://app.example.com:8443', 'app.example.com:15500')).toBe(
+        true,
+      );
+      expect(isAllowedCorsOrigin('https://app.example.com:8443', 'app.example.com:15500')).toBe(
+        false,
+      );
     });
 
     it('does not emit CORS headers for untrusted cross-origin browser reads', () => {
