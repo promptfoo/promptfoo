@@ -134,15 +134,11 @@ const legacyHoistedPersistentMockFiles = new Set<string>();
 const legacyDirectProcessEnvMutationFiles = new Set<string>();
 
 const legacySleepPromiseFiles = new Set<string>([
-  'commands/mcp/lib/performance.test.ts',
+  // Real wall-clock waits are intentional here:
+  //  - database.test.ts: gives the OS time to release Windows file locks
+  //    between cleanup attempts.
+  //  - smoke/resume.test.ts: paces SIGINTs to a spawned CLI subprocess.
   'database.test.ts',
-  'evaluator/execution.test.ts',
-  'evaluator/gradingConcurrency.test.ts',
-  'evaluator/runEval.test.ts',
-  'providers/bedrock/nova-reel.test.ts',
-  'providers/http/auth.test.ts',
-  'providers/xai/video.test.ts',
-  'redteam/strategies/gcg.test.ts',
   'smoke/resume.test.ts',
 ]);
 

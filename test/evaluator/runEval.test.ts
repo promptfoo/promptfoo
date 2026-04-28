@@ -949,7 +949,9 @@ describe('runEval', () => {
       const providerWithoutLatency: ApiProvider = {
         id: vi.fn().mockReturnValue('no-latency-provider'),
         callApi: vi.fn().mockImplementation(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          // Advance the fake clock so runEval's latency measurement
+          // records ~50ms without relying on a real timer.
+          vi.advanceTimersByTime(50);
           return {
             output: 'Test output',
             tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
@@ -958,7 +960,7 @@ describe('runEval', () => {
       };
 
       try {
-        const resultPromise = runEval({
+        const results = await runEval({
           ...defaultOptions,
           provider: providerWithoutLatency,
           prompt: { raw: 'Test prompt', label: 'test-label' },
@@ -966,8 +968,6 @@ describe('runEval', () => {
           conversations: {},
           registers: {},
         });
-        await vi.runAllTimersAsync();
-        const results = await resultPromise;
 
         // Should have measured latency (>= 45ms accounting for timer precision)
         expect(results[0].latencyMs).toBeGreaterThanOrEqual(45);
