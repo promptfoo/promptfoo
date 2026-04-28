@@ -3188,11 +3188,10 @@ describe('redteam generate command with target option', () => {
       'test-output.yaml',
     ]);
 
-    // Allow async operations to complete
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
     // Verify getConfigFromCloud was called with both config and target
-    expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
+    await vi.waitFor(() => {
+      expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
+    });
   });
 
   it('should handle backwards compatibility with empty targets', async () => {
