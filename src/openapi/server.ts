@@ -518,6 +518,7 @@ export function createServerOpenApiRegistry() {
       200: evalTableResponse(),
       400: validationError(),
       404: notFound('Evaluation not found'),
+      500: serverError(),
       413: errorResponse('Evaluation table is too large'),
     },
   });
@@ -607,6 +608,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('SubmitRatingResponse', EvalSchemas.SubmitRating.Response),
       400: validationError(),
       404: notFound('Result or evaluation not found'),
+      500: serverError(),
     },
   });
 
@@ -743,6 +745,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('ListScannersResponse', ModelAuditSchemas.ListScanners.Response),
       400: validationError(),
+      500: serverError(),
     },
   });
 
@@ -758,6 +761,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('CheckPathResponse', ModelAuditSchemas.CheckPath.Response),
       400: validationError(),
+      500: serverError(),
     },
   });
 
@@ -789,6 +793,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('ListScansResponse', ModelAuditSchemas.ListScans.Response),
       400: validationError(),
+      500: serverError(),
     },
   });
 
@@ -801,6 +806,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('GetLatestScanResponse', ModelAuditSchemas.GetLatestScan.Response),
       404: notFound('No scans found'),
+      500: serverError(),
     },
   });
 
@@ -817,6 +823,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('GetScanResponse', ModelAuditSchemas.GetScan.Response),
       400: validationError(),
       404: notFound('Model scan not found'),
+      500: serverError(),
     },
   });
 
@@ -833,6 +840,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse('DeleteScanResponse', ModelAuditSchemas.DeleteScan.Response),
       400: validationError(),
       404: notFound('Model scan not found'),
+      500: serverError(),
     },
   });
 
@@ -860,6 +868,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse('TestProviderResponse', ProviderSchemas.Test.Response),
       400: validationError(),
+      500: serverError(),
     },
   });
 
@@ -1218,6 +1227,7 @@ export function createServerOpenApiRegistry() {
       400: validationError(),
       403: errorResponse('Not authorized to access this blob'),
       404: notFound('Blob not found'),
+      500: serverError(),
     },
   });
 
