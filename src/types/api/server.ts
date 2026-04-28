@@ -101,7 +101,7 @@ const DatasetGenerateResponseSchema = z.object({
   results: z.unknown(),
 });
 
-const TelemetryEventSchema = z.object({
+export const TelemetryEventSchema = z.object({
   event: z.enum(TELEMETRY_EVENTS),
   packageVersion: z.string().optional().prefault(VERSION),
   properties: z.record(

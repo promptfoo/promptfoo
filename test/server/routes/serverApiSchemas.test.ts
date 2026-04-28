@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { Server } from 'node:http';
 
 import request from 'supertest';
@@ -448,5 +452,30 @@ describe('inline server API DTO validation', () => {
       }),
       {},
     );
+  });
+
+  it('imports server DTO schemas without mutating the user config directory', () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-server-dto-import-'));
+    const importProbe = `
+      await import('./src/types/api/server.ts');
+      await import('./src/telemetryEvents.ts');
+    `;
+
+    try {
+      const result = spawnSync(process.execPath, ['--import', 'tsx', '-e', importProbe], {
+        cwd: path.resolve(__dirname, '../../..'),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_DISABLE_TELEMETRY: 'true',
+        },
+      });
+
+      expect(result.status, result.stderr || result.stdout).toBe(0);
+      expect(fs.readdirSync(configDir)).toEqual([]);
+    } finally {
+      fs.rmSync(configDir, { recursive: true, force: true });
+    }
   });
 });
