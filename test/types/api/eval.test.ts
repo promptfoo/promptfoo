@@ -28,4 +28,39 @@ describe('Eval API schemas', () => {
     expect(parsed.table.head).toBe(head);
     expect(parsed.table.body).toBe(body);
   });
+
+  it('rejects table responses where version is not a number', () => {
+    const result = EvalSchemas.Table.Response.safeParse({
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      totalCount: 0,
+      filteredCount: 0,
+      filteredMetrics: null,
+      config: {},
+      author: null,
+      version: '4',
+      id: 'eval-1',
+      stats: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects table responses where body is not an array', () => {
+    const result = EvalSchemas.Table.Response.safeParse({
+      table: { head: { prompts: [], vars: [] }, body: 'not-an-array' },
+      totalCount: 0,
+      filteredCount: 0,
+      filteredMetrics: null,
+      config: {},
+      author: null,
+      version: 4,
+      id: 'eval-1',
+      stats: {},
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('SubmitRating response schema returns a message envelope', () => {
+    const parsed = EvalSchemas.SubmitRating.Response.parse({ message: 'ok' });
+    expect(parsed).toEqual({ message: 'ok' });
+  });
 });
