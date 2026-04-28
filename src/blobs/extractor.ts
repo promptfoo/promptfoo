@@ -172,7 +172,7 @@ type StoreOnce = (
 ) => Promise<BlobRef | null>;
 
 function createStoreOnce(blobContext: BlobContext): StoreOnce {
-  const cache = new Map<string, BlobRef>();
+  const cache = new Map<string, Promise<BlobRef | null>>();
   return async (base64OrDataUrl, defaultMimeType, location, kind) => {
     // Canonicalize the cache key on the parsed bytes (not the raw input string)
     // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
@@ -188,11 +188,19 @@ function createStoreOnce(blobContext: BlobContext): StoreOnce {
       return existing;
     }
 
-    const stored = await maybeStore(base64OrDataUrl, defaultMimeType, blobContext, location, kind);
-    if (stored) {
-      cache.set(cacheKey, stored);
+    const pendingStore = maybeStore(base64OrDataUrl, defaultMimeType, blobContext, location, kind);
+    cache.set(cacheKey, pendingStore);
+
+    try {
+      const stored = await pendingStore;
+      if (!stored) {
+        cache.delete(cacheKey);
+      }
+      return stored;
+    } catch (error) {
+      cache.delete(cacheKey);
+      throw error;
     }
-    return stored;
   };
 }
 

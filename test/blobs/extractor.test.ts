@@ -359,6 +359,27 @@ describe('Cloud blob upload', () => {
     );
   });
 
+  it('should reuse the same image blob for concurrent identical images[] siblings', async () => {
+    mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
+
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const dataUri = `data:image/png;base64,${largeBase64}`;
+    const response: ProviderResponse = {
+      output: 'text output',
+      images: [
+        { data: dataUri, mimeType: 'image/png' },
+        { data: dataUri, mimeType: 'image/png' },
+      ],
+    };
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.images?.[0].data).toBeUndefined();
+    expect(result?.images?.[1].data).toBeUndefined();
+    expect(result?.images?.[0].blobRef).toEqual(result?.images?.[1].blobRef);
+    expect(mockStoreBlob).toHaveBeenCalledTimes(1);
+  });
+
   it('should pass through images without data URIs unchanged', async () => {
     mockShouldAttemptRemoteBlobUpload.mockReturnValue(false);
 
