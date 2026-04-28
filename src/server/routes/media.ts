@@ -5,10 +5,10 @@
  */
 
 import express from 'express';
-import { z } from 'zod';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 import { MediaSchemas } from '../../types/api/media';
+import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
@@ -46,7 +46,7 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = MediaSchemas.Info.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
 
@@ -89,7 +89,7 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = MediaSchemas.Get.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
 
