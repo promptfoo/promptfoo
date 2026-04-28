@@ -4,6 +4,11 @@ description: Compare Claude skill versions
 prompts:
   - '{{request}}'
 
+# YAML anchor for the review-output schema. `output_format` is the Claude
+# Agent SDK's structured-output knob — without it the model commonly wraps
+# short JSON answers in Markdown fences and the JS assertion's JSON.parse
+# throws. Both providers must enforce the same shape so the assertion can
+# compare issue ids without per-provider parsing branches.
 x-review-schema: &reviewSchema
   type: json_schema
   schema:
@@ -74,6 +79,7 @@ tests:
   - description: Finds password handling issues
     vars:
       request: Review src/auth.ts for password handling security issues.
+      # comma-separated string, not a YAML list — see the JS assertion above.
       expectedIssues: weak-password-hash,timing-unsafe-compare
 
   - description: Finds the most important issue

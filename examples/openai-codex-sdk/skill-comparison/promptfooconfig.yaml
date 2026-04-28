@@ -107,6 +107,7 @@ tests:
   - description: Finds both auth issues
     vars:
       request: Review src/auth.ts for password handling and token comparison issues.
+      # comma-separated string, not a YAML list — see the JS assertion above.
       expectedIssues: weak-password-hash,timing-unsafe-compare
 
   - description: Focuses on token comparison
