@@ -98,7 +98,7 @@ ${vars.prompt}
 In this example, we're using Typescript (.ts) - but you can use regular Javascript (.js) too
 :::
 
-In Promptfoo tests, load the prompt. Promptfoo passes test variables to prompt functions through the `vars` object. The example above destructures `vars` from the prompt function context and accesses the test value as `vars.prompt`.
+In Promptfoo tests, load the prompt. Promptfoo passes test variables to prompt functions through the `vars` object. The example above destructures `vars` from the prompt function context and accesses the test value as `vars.prompt`. See [JavaScript prompt functions](/docs/configuration/prompts/#javascript-functions) for the full context shape.
 
 ```yaml
 prompts:
@@ -131,13 +131,12 @@ An example of formatting issues between Nunjucks and LangChain PromptTemplate:
 Finally, change how variables are passed to the prompt in application code.
 
 ```tsx
-// Format prompt to match the context Promptfoo passes to prompt functions
-function formatPrompt(prompt: string): { vars: { prompt: string } } {
-  return { vars: { prompt } };
-}
-
 export async function evaluatePrompt(prompt: string): Promise<EvaluationResult> {
-  const instruction = toneEvaluationInstructions(formatPrompt(prompt));
+  // Pass the prompt in the same `{ vars }` shape Promptfoo uses, so the same
+  // function works from both tests and application code. The result is a fully
+  // rendered string, so `attemptCompletion` takes a single argument here — no
+  // LangChain `PromptTemplate` is needed.
+  const instruction = toneEvaluationInstructions({ vars: { prompt } });
 
   const validationResult = await attemptCompletion(instruction);
 
