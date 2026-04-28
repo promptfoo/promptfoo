@@ -148,6 +148,21 @@ describe('Eval Routes - Zod Validation', () => {
     });
   });
 
+  describe('GET /api/eval/:id/table', () => {
+    it.each([
+      ['format', { format: 'xml' }],
+      ['limit', { limit: '1.5' }],
+      ['offset', { offset: '1.5' }],
+    ])('should return 400 when %s query param is invalid', async (field, query) => {
+      const response = await api.get('/api/eval/test-id/table').query(query);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBeDefined();
+      expect(response.body.error).toContain(field);
+      expect(mockFindById).not.toHaveBeenCalled();
+    });
+  });
+
   describe('POST /api/eval/:id/copy', () => {
     it('should return 404 when id param is whitespace (route does not match)', async () => {
       const response = await api.post('/api/eval/ /copy').send({});
