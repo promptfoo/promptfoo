@@ -101,9 +101,18 @@ export const EvalTableQuerySchema = z.object({
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
+const ShallowEvaluateTableSchema = z
+  .object({
+    head: z
+      .unknown()
+      .refine((value) => value !== null && typeof value === 'object', 'Expected table head object'),
+    body: z.unknown().refine(Array.isArray, 'Expected table body array'),
+  })
+  .passthrough();
+
 export const EvalTableResponseSchema = z
   .object({
-    table: z.lazy(() => EvaluateTableSchema),
+    table: ShallowEvaluateTableSchema,
     totalCount: z.number(),
     filteredCount: z.number(),
     filteredMetrics: z.array(z.unknown()).nullable(),
