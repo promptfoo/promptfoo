@@ -386,9 +386,7 @@ export function discoverCommand(
             throw new Error(`Config not found at ${args.config}`);
           }
           const message = error instanceof Error ? error.message : String(error);
-          throw new Error(`Unable to access config at ${args.config}: ${message}`, {
-            cause: error,
-          });
+          throw new Error(`Unable to access config at ${args.config}: ${message}`);
         }
 
         config = await readConfig(args.config);
