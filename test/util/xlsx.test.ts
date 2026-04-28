@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseXlsxFile } from '../../src/util/xlsx';
 
 // Mock read-excel-file/node module
@@ -12,42 +12,10 @@ vi.mock('read-excel-file/node', () => ({
 type SheetData = unknown[][];
 
 const createMockSheet = (sheet: string, data: SheetData = []) => ({ sheet, data });
-const mockExistsSync = vi.hoisted(() => vi.fn((_filePath?: any) => true));
-
-vi.mock('fs', () => ({
-  existsSync: mockExistsSync,
-}));
-
-vi.mock('fs/promises', () => {
-  const access = vi.fn((filePath: any) => {
-    if (mockExistsSync(filePath)) {
-      return undefined;
-    }
-    throw Object.assign(new Error(`ENOENT: no such file or directory, access '${filePath}'`), {
-      code: 'ENOENT',
-    });
-  });
-  return {
-    default: {
-      access,
-    },
-    access,
-  };
-});
 
 describe('parseXlsxFile', () => {
-  let fs: any;
-
-  beforeEach(async () => {
-    fs = await import('fs');
+  beforeEach(() => {
     vi.resetAllMocks();
-
-    // Mock fs.existsSync to return true by default
-    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   it('should parse xlsx file successfully', async () => {
