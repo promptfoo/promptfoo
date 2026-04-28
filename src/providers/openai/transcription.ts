@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import { fetchWithCache } from '../../cache';
@@ -78,15 +78,9 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     // The prompt should be a file path to an audio file
     const audioFilePath = prompt.trim();
 
-    if (!fs.existsSync(audioFilePath)) {
-      return {
-        error: `Audio file not found: ${audioFilePath}`,
-      };
-    }
-
     try {
       // Read the audio file and create a File object for native FormData
-      const fileBuffer = fs.readFileSync(audioFilePath);
+      const fileBuffer = await fs.readFile(audioFilePath);
       const fileName = path.basename(audioFilePath);
       const file = new File([fileBuffer], fileName);
 
@@ -247,6 +241,11 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return {
+          error: `Audio file not found: ${audioFilePath}`,
+        };
+      }
       logger.error('Transcription error', { error: err });
       return {
         error: `Transcription error: ${String(err)}`,
