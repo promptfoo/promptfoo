@@ -5,7 +5,6 @@
  * and storage operations used across different video generation providers.
  */
 import crypto from 'crypto';
-import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
 
@@ -40,12 +39,7 @@ export const DEFAULT_MAX_POLL_TIME_MS = 600000;
  */
 export function getCacheMappingPath(cacheKey: string): string {
   const basePath = path.join(getConfigDirectoryPath(true), MEDIA_DIR);
-  const cacheDir = path.join(basePath, CACHE_DIR);
-  // Ensure directory exists
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
-  }
-  return path.join(cacheDir, `${cacheKey}.json`);
+  return path.join(basePath, CACHE_DIR, `${cacheKey}.json`);
 }
 
 /**
@@ -126,15 +120,11 @@ export async function checkVideoCache(
  * @param cacheKey - The cache key to look up
  * @returns The cache mapping if it exists, null otherwise
  */
-export function readCacheMapping(cacheKey: string): VideoCacheMapping | null {
+export async function readCacheMapping(cacheKey: string): Promise<VideoCacheMapping | null> {
   const mappingPath = getCacheMappingPath(cacheKey);
 
-  if (!fs.existsSync(mappingPath)) {
-    return null;
-  }
-
   try {
-    const mappingData = fs.readFileSync(mappingPath, 'utf8');
+    const mappingData = await fsPromises.readFile(mappingPath, 'utf8');
     return JSON.parse(mappingData) as VideoCacheMapping;
   } catch {
     return null;
@@ -151,13 +141,13 @@ export function readCacheMapping(cacheKey: string): VideoCacheMapping | null {
  * @param spritesheetKey - Optional spritesheet storage key
  * @param providerName - Provider name for logging
  */
-export function storeCacheMapping(
+export async function storeCacheMapping(
   cacheKey: string,
   videoKey: string,
   thumbnailKey?: string,
   spritesheetKey?: string,
   providerName: string = 'Video',
-): void {
+): Promise<void> {
   const mapping: VideoCacheMapping = {
     videoKey,
     thumbnailKey,
@@ -166,7 +156,8 @@ export function storeCacheMapping(
   };
 
   const mappingPath = getCacheMappingPath(cacheKey);
-  fs.writeFileSync(mappingPath, JSON.stringify(mapping, null, 2), 'utf8');
+  await fsPromises.mkdir(path.dirname(mappingPath), { recursive: true });
+  await fsPromises.writeFile(mappingPath, JSON.stringify(mapping, null, 2), 'utf8');
   logger.debug(`[${providerName}] Stored cache mapping at ${mappingPath}`);
 }
 

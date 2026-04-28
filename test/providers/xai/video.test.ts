@@ -54,7 +54,7 @@ describe('XAI Video Provider', () => {
     vi.mocked(videoUtils.formatVideoOutput).mockReturnValue(
       `[Video: ${mockPrompt}](storageRef:${mockStorageKey})`,
     );
-    vi.mocked(videoUtils.storeCacheMapping).mockReturnValue(undefined);
+    vi.mocked(videoUtils.storeCacheMapping).mockResolvedValue(undefined);
     vi.mocked(videoUtils.storeVideoContent).mockResolvedValue({
       storageRef: {
         provider: 'filesystem',
