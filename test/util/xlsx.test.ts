@@ -155,8 +155,10 @@ describe('parseXlsxFile', () => {
   });
 
   it('should throw specific error when file does not exist', async () => {
-    // Override the default mock for this test
-    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
+    // read-excel-file surfaces ENOENT for missing files; parseXlsxFile rewraps it.
+    mockReadXlsxFile.mockRejectedValue(
+      Object.assign(new Error('ENOENT: no such file or directory'), { code: 'ENOENT' }),
+    );
 
     await expect(parseXlsxFile('nonexistent.xlsx')).rejects.toThrow(
       'File not found: nonexistent.xlsx',
