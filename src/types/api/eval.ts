@@ -124,6 +124,7 @@ export const EvalTableResponseSchema = z
   })
   .passthrough();
 
+export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
 // POST /api/eval/job
@@ -348,6 +349,7 @@ export const EvalSchemas = {
     Params: EvalIdParamSchema,
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
+    JsonExportResponse: EvalTableJsonExportResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,
