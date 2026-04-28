@@ -187,4 +187,26 @@ describe('server OpenAPI generation', () => {
       }),
     );
   });
+
+  it('documents explicit server-error response paths', () => {
+    const paths = createServerOpenApiDocument().paths ?? {};
+    const explicitServerErrorOperations = [
+      paths['/api/eval/{id}/table']?.get,
+      paths['/api/eval/{evalId}/results/{id}/rating']?.post,
+      paths['/api/model-audit/scanners']?.get,
+      paths['/api/model-audit/check-path']?.post,
+      paths['/api/model-audit/scans']?.get,
+      paths['/api/model-audit/scans/latest']?.get,
+      paths['/api/model-audit/scans/{id}']?.get,
+      paths['/api/model-audit/scans/{id}']?.delete,
+      paths['/api/providers/test']?.post,
+      paths['/api/blobs/{hash}']?.get,
+    ];
+
+    for (const operation of explicitServerErrorOperations) {
+      expect(operation?.responses?.['500']).toEqual(
+        expect.objectContaining({ description: 'Server error' }),
+      );
+    }
+  });
 });

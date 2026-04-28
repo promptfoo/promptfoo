@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -1451,7 +1452,7 @@ export class OpenCodeSDKProvider implements ApiProvider {
 
       // Clean up temp directory
       if (isTempDir && workingDir) {
-        fs.rmSync(workingDir, { recursive: true, force: true });
+        await fsPromises.rm(workingDir, { recursive: true, force: true });
       }
     }
   }

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
@@ -112,7 +113,7 @@ const createMockPromptResponse = (
 describe('OpenCodeSDKProvider', () => {
   let tempDirSpy: MockInstance;
   let statSyncSpy: MockInstance;
-  let rmSyncSpy: MockInstance;
+  let rmSpy: MockInstance;
   let _readdirSyncSpy: MockInstance;
 
   beforeEach(async () => {
@@ -167,7 +168,7 @@ describe('OpenCodeSDKProvider', () => {
       isDirectory: () => true,
       mtimeMs: 1234567890,
     } as fs.Stats);
-    rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {});
+    rmSpy = vi.spyOn(fsPromises, 'rm').mockResolvedValue(undefined);
     _readdirSyncSpy = vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
     // Mock readFileSync to return package.json for SDK resolution
     vi.spyOn(fs, 'readFileSync').mockImplementation((filePath: fs.PathOrFileDescriptor) => {
@@ -525,7 +526,7 @@ describe('OpenCodeSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         expect(tempDirSpy).toHaveBeenCalledWith(expect.stringContaining('promptfoo-opencode-sdk-'));
-        expect(rmSyncSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
+        expect(rmSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
           recursive: true,
           force: true,
         });
@@ -961,7 +962,7 @@ describe('OpenCodeSDKProvider', () => {
 
       // Temp dir should be created and cleaned up
       expect(tempDirSpy).toHaveBeenCalled();
-      expect(rmSyncSpy).toHaveBeenCalled();
+      expect(rmSpy).toHaveBeenCalled();
     });
 
     it('should enable read-only tools with working_dir', async () => {
