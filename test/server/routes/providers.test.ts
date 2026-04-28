@@ -13,12 +13,14 @@ vi.mock('../../../src/validators/testProvider');
 vi.mock('../../../src/server/config/serverConfig');
 vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
+vi.mock('../../../src/util/fetch/index');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 import {
   testProviderConnectivity,
   testProviderSession,
@@ -30,6 +32,7 @@ const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
 const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
+const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
 describe('Providers Routes', () => {
   let api: ReturnType<typeof request.agent>;
@@ -436,6 +439,51 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/http-generator validation', () => {
+    it('should return generated HTTP configuration objects from the cloud API', async () => {
+      const generatedConfig = {
+        url: 'https://api.example.com/v1/chat',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      };
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(generatedConfig),
+      } as any);
+
+      const response = await api
+        .post('/api/providers/http-generator')
+        .send({ requestExample: 'curl https://api.example.com/v1/chat' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(generatedConfig);
+      expect(mockedFetchWithProxy).toHaveBeenCalledWith(
+        'https://api.promptfoo.app/api/v1/http-provider-generator',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            requestExample: 'curl https://api.example.com/v1/chat',
+            responseExample: undefined,
+          }),
+        }),
+      );
+    });
+
+    it('should return 500 when the cloud API returns a non-object generator response', async () => {
+      mockedFetchWithProxy.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(['not', 'a', 'config']),
+      } as any);
+
+      const response = await api
+        .post('/api/providers/http-generator')
+        .send({ requestExample: 'curl https://api.example.com/v1/chat' });
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to generate HTTP configuration' });
+    });
+
     it('should return 400 for empty body', async () => {
       const response = await api.post('/api/providers/http-generator').send({});
 
