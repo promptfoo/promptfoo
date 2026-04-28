@@ -19,7 +19,9 @@ vi.mock('fs', () => ({
 }));
 
 vi.mock('fs/promises', () => {
-  const access = vi.fn((filePath: any) => {
+  // Async wrapper so fs/promises.access returns a real Promise (resolves) or
+  // rejects, matching the actual API contract.
+  const access = vi.fn(async (filePath: any) => {
     if (mockExistsSync(filePath)) {
       return undefined;
     }
