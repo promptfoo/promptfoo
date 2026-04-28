@@ -159,13 +159,12 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
       ? expandedPath
       : path.resolve(process.cwd(), expandedPath);
 
+    // Treat any access failure (ENOENT, EACCES, EPERM, ELOOP, ...) as not-exists,
+    // matching the historical fs.existsSync behavior the UI depends on.
     let stats;
     try {
       stats = await fs.stat(absolutePath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
-      }
+    } catch {
       res.json(ModelAuditSchemas.CheckPath.Response.parse({ exists: false, type: null }));
       return;
     }
@@ -226,12 +225,12 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       try {
         await fs.access(absolutePath);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-          throw error;
-        }
-        res
-          .status(400)
-          .json({ error: `Path does not exist: ${inputPath} (resolved to: ${absolutePath})` });
+        const code = (error as NodeJS.ErrnoException).code;
+        const message =
+          code === 'ENOENT'
+            ? `Path does not exist: ${inputPath} (resolved to: ${absolutePath})`
+            : `Cannot access path: ${inputPath} (resolved to: ${absolutePath}, ${code ?? 'unknown error'})`;
+        res.status(400).json({ error: message });
         return;
       }
 

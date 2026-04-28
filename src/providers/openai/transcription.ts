@@ -78,9 +78,19 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     // The prompt should be a file path to an audio file
     const audioFilePath = prompt.trim();
 
+    let fileBuffer: Awaited<ReturnType<typeof fs.readFile>>;
     try {
-      // Read the audio file and create a File object for native FormData
-      const fileBuffer = await fs.readFile(audioFilePath);
+      fileBuffer = await fs.readFile(audioFilePath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { error: `Audio file not found: ${audioFilePath}` };
+      }
+      logger.error('Failed to read audio file', { error: err, audioFilePath });
+      return { error: `Failed to read audio file ${audioFilePath}: ${String(err)}` };
+    }
+
+    try {
+      // Create a File object for native FormData from the loaded buffer
       const fileName = path.basename(audioFilePath);
       const file = new File([fileBuffer], fileName);
 
@@ -241,11 +251,6 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        return {
-          error: `Audio file not found: ${audioFilePath}`,
-        };
-      }
       logger.error('Transcription error', { error: err });
       return {
         error: `Transcription error: ${String(err)}`,
