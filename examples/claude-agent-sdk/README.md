@@ -148,7 +148,7 @@ This example demonstrates handling the `AskUserQuestion` tool in automated evalu
 This example demonstrates testing [Agent Skills](https://platform.claude.com/docs/en/agent-sdk/skills) with the Claude Agent SDK. Skills are reusable capabilities defined as `SKILL.md` files that Claude automatically invokes when relevant.
 
 - **Skill discovery**: Uses `setting_sources: ['project']` to load skills from `.claude/skills/`
-- **Skill tool**: Enables the `Skill` tool via `append_allowed_tools`
+- **Skill filtering**: Uses `skills: ['code-review']` (SDK 0.2.120+) to scope the test to a single skill and auto-allow the `Skill` tool
 - **Skill assertions**: Verifies normalized `metadata.skillCalls` with the `skill-used` assertion
 - **Sample skill**: A code review skill that identifies bugs and security issues
 
