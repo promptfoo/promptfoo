@@ -16,7 +16,7 @@ import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
-import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
+import type { ProviderOptions } from '../../types/providers';
 
 export const providersRouter = Router();
 
@@ -85,7 +85,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
         },
         providerResponse: result.providerResponse,
         transformedRequest: result.transformedRequest,
-      } as ProviderTestResponse),
+      }),
     );
   } catch (error) {
     sendError(res, 500, 'Failed to test provider', error);
@@ -118,7 +118,7 @@ providersRouter.post(
       const result = await doTargetPurposeDiscovery(loadedProvider, undefined, false);
 
       if (result) {
-        res.json(ProviderSchemas.Discover.Response.parse(result) as TargetPurposeDiscoveryResult);
+        res.json(ProviderSchemas.Discover.Response.parse(result));
       } else {
         res.status(500).json({ error: "Discovery failed to discover the target's purpose." });
       }

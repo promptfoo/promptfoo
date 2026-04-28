@@ -6,7 +6,7 @@
  * Always exits 0 — build never fails due to stats fetching.
  */
 
-import { writeFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -103,7 +103,7 @@ async function main() {
     }
   });
 
-  writeFileSync(OUTPUT_PATH, JSON.stringify(stats, null, 2) + '\n');
+  await writeFile(OUTPUT_PATH, JSON.stringify(stats, null, 2) + '\n');
 
   const keys = Object.keys(stats);
   if (keys.length > 0) {
