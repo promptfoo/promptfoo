@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from '../assertions/utils';
@@ -63,10 +63,14 @@ export async function loadRubricPrompt(
       // to allow Nunjucks templating before JSON/YAML parsing.
       // This fixes the issue where .json files with Nunjucks templates
       // would fail to parse before rendering.
-      if (!fs.existsSync(resolvedPath)) {
-        throw new Error(`File does not exist: ${resolvedPath}`);
+      try {
+        rubricPrompt = await fs.readFile(resolvedPath, 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw new Error(`File does not exist: ${resolvedPath}`);
+        }
+        throw error;
       }
-      rubricPrompt = fs.readFileSync(resolvedPath, 'utf8');
     }
   } else {
     // Load from external file if needed (for non file:// references)

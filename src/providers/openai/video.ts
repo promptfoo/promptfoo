@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
@@ -182,10 +182,13 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       let imageData = config.input_reference;
       if (config.input_reference.startsWith('file://')) {
         const filePath = config.input_reference.slice(7);
-        if (fs.existsSync(filePath)) {
-          const buffer = fs.readFileSync(filePath);
+        try {
+          const buffer = await fs.readFile(filePath);
           imageData = buffer.toString('base64');
-        } else {
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw error;
+          }
           return {
             job: {} as OpenAiVideoJob,
             error: `Input reference file not found: ${filePath}`,

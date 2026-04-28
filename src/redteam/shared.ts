@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
@@ -66,8 +66,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     const filename = `redteam-${Date.now()}.yaml`;
     const tmpDir = options.loadedFromCloud ? '' : os.tmpdir();
     const tmpFile = path.join(tmpDir, filename);
-    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
-    fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
+    await fs.mkdir(path.dirname(tmpFile), { recursive: true });
+    await fs.writeFile(tmpFile, yaml.dump(options.liveRedteamConfig));
     redteamPath = tmpFile;
     // Do not use default config.
     configPath = tmpFile;
@@ -113,7 +113,16 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   const generationDurationMs = Date.now() - generationStartTime;
 
   // Check if redteam.yaml exists before running evaluation
-  if (!redteamConfig || !fs.existsSync(redteamPath)) {
+  let redteamPathExists = false;
+  try {
+    await fs.access(redteamPath);
+    redteamPathExists = true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  }
+  if (!redteamConfig || !redteamPathExists) {
     logger.info('No test cases generated. Skipping scan.');
     if (verboseToggleCleanup) {
       verboseToggleCleanup();

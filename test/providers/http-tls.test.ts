@@ -41,6 +41,13 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: mockReadFileSync,
+  },
+  readFile: mockReadFileSync,
+}));
+
 describe('HttpProvider with TLS Configuration', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
 
