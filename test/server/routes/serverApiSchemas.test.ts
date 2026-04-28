@@ -18,6 +18,16 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
   },
 }));
 
+vi.mock('../../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+
 vi.mock('../../../src/models/eval', () => ({
   default: {
     findById: vi.fn(),
@@ -95,12 +105,19 @@ describe('inline server API DTO validation', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
 
-  beforeAll(() => {
-    server = createApp().listen(0);
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
     api = request.agent(server);
   });
 
   afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });

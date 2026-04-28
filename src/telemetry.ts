@@ -8,8 +8,7 @@ import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
 
 import type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
-export { TELEMETRY_EVENTS } from './telemetryEvents';
-export { TelemetryEventSchema } from './types/api/server';
+export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 

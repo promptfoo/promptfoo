@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { VERSION } from '../../constants';
-import { TELEMETRY_EVENTS } from '../../telemetryEvents';
+import { TelemetryEventSchema } from '../../telemetryEvents';
 import { BooleanQueryParamSchema, JsonObjectSchema } from './common';
 
 const UnknownArraySchema = z.array(z.unknown());
@@ -101,18 +100,11 @@ const DatasetGenerateResponseSchema = z.object({
   results: z.unknown(),
 });
 
-export const TelemetryEventSchema = z.object({
-  event: z.enum(TELEMETRY_EVENTS),
-  packageVersion: z.string().optional().prefault(VERSION),
-  properties: z.record(
-    z.string(),
-    z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]),
-  ),
-});
-
 const TelemetryResponseSchema = z.object({
   success: z.literal(true),
 });
+
+export { TelemetryEventSchema } from '../../telemetryEvents';
 
 export const ServerSchemas = {
   Health: {
@@ -159,4 +151,4 @@ export const ServerSchemas = {
     Request: TelemetryEventSchema,
     Response: TelemetryResponseSchema,
   },
-};
+} as const;

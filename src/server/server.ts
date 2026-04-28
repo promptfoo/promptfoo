@@ -264,7 +264,7 @@ export function createApp() {
 
     const result = await readResult(id);
     if (!result) {
-      logger.warn('Result not found for share request', { id });
+      logger.warn('Eval not found for share request', { id, source: 'result' });
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
