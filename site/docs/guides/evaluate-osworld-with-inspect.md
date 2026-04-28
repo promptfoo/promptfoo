@@ -1,6 +1,6 @@
 ---
 title: Evaluate OSWorld with Inspect
-description: Run OSWorld computer-use benchmark tasks in Promptfoo with Inspect, Docker desktop sandboxes, screenshots, scorer output, eval logs, and tracing limitations.
+description: Run OSWorld computer-use benchmark tasks in Promptfoo with Inspect, Docker desktop sandboxes, screenshots, scorer output, eval logs, and tracing.
 sidebar_position: 66
 ---
 
@@ -46,13 +46,13 @@ You need Docker because OSWorld runs a desktop environment:
 
 - Docker Engine 24.0.6 or newer
 - Docker Compose V2 available as `docker compose`
-- Python with Inspect OSWorld dependencies
+- Python with Inspect OSWorld and OpenTelemetry dependencies
 - The SDK and API key for the model provider you choose
 
 Install the Python dependencies:
 
 ```bash
-pip install 'inspect-evals[osworld]' openai anthropic
+pip install 'inspect-evals[osworld]' openai anthropic opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
 ```
 
 For the default config, export `OPENAI_API_KEY`. To use Anthropic instead, export `ANTHROPIC_API_KEY` and override the model in the test vars or provider config.
@@ -68,29 +68,25 @@ npx promptfoo@latest init --example integration-inspect-osworld
 cd integration-inspect-osworld
 ```
 
-Run the active LibreOffice Calc sample:
+Run the traced LibreOffice Calc sample:
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml --no-cache
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.yaml --no-cache
 ```
 
 To run it from the promptfoo repository source tree:
 
 ```bash
-npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
-```
-
-To run the same GPT-5.5 sample with Promptfoo tracing enabled:
-
-```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.tracing.yaml --no-cache
+  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
 ```
 
 To make the GPT-5.5 model selection explicit for one run:
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml --no-cache --var model=openai/gpt-5.5
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.yaml --no-cache --var model=openai/gpt-5.5
 ```
 
 ## Configuration
@@ -115,6 +111,9 @@ tests:
     vars:
       app: libreoffice_calc
       sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
+    metadata:
+      testCaseId: osworld-libreoffice-calc-gpt55
+      tracingEnabled: true
     assert:
       - type: python
         value: file://assertion.py
@@ -141,7 +140,7 @@ vars:
 
 The provider maps `task_index: 2` to Inspect `--limit 3-3`.
 
-For Promptfoo tracing, use the companion config:
+The example enables Promptfoo tracing directly:
 
 ```yaml
 tracing:
@@ -156,8 +155,8 @@ tracing:
         - protobuf
 ```
 
-The traced config also sets `metadata.tracingEnabled: true` and a stable
-`testCaseId` on the active test so the trace can be correlated with the result.
+The active test also sets `metadata.tracingEnabled: true` and a stable
+`testCaseId` so the trace can be correlated with the result.
 
 ## Read the results
 
@@ -251,15 +250,10 @@ The viewer shows screenshots, intermediate model messages, tool calls, files, sc
 
 ## Tracing
 
-The default config does not enable Promptfoo OpenTelemetry tracing. Use
-`promptfooconfig.tracing.yaml` when you want a Promptfoo trace record for the
-wrapper run.
-
-The traced config starts Promptfoo's local OTLP receiver and passes a W3C
+The example config starts Promptfoo's local OTLP receiver and passes a W3C
 `traceparent` into the Python provider. Set `PROMPTFOO_ENABLE_OTEL=true` so the
-Python provider wrapper initializes OpenTelemetry. When Python OpenTelemetry
-packages are installed, the wrapper records a child span with the prompt,
-response, token usage, status, eval id, and test case id.
+Python provider wrapper records a child span with the prompt, response, token
+usage, status, eval id, and test case id.
 
 Trace-level visibility into OSWorld itself still lives in Inspect: every run
 writes a `.eval` log, and `inspect view` displays the desktop trajectory.

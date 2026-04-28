@@ -12,11 +12,12 @@ You need:
 - Docker Compose V2 available as `docker compose`. Inspect validates this with
   `docker compose version --format json`; a standalone `docker-compose` binary
   is not enough unless your `docker` command exposes it as `docker compose`.
-- Python with Inspect's OSWorld dependencies and the SDK for whichever model
-  provider you choose. This installs both SDKs used below:
+- Python with Inspect's OSWorld dependencies, Promptfoo's Python OpenTelemetry
+  dependencies, and the SDK for whichever model provider you choose. This
+  installs both SDKs used below:
 
   ```bash
-  pip install 'inspect-evals[osworld]' openai anthropic
+  pip install 'inspect-evals[osworld]' openai anthropic opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
   ```
 
 - A computer-use-capable model and API key. For the default config, export
@@ -33,27 +34,15 @@ This proof of concept uses `inspect_evals/osworld_small`, the smaller OSWorld co
 From the repository root:
 
 ```bash
-npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
-```
-
-To run the same GPT-5.5 sample with Promptfoo tracing enabled:
-
-```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.tracing.yaml --no-cache
+  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
 ```
 
 Or, after copying the example with `npx promptfoo@latest init --example integration-inspect-osworld`, run:
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml --no-cache
-```
-
-Or with tracing enabled:
-
-```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  promptfoo eval -c promptfooconfig.tracing.yaml --no-cache
+  promptfoo eval -c promptfooconfig.yaml --no-cache
 ```
 
 The active test runs a pinned `libreoffice_calc` sample with GPT-5.5. To make the model explicit for one test, add `model` under `vars`:
@@ -139,12 +128,12 @@ viewer:
 inspect view --log-dir examples/integration-inspect-osworld/inspect_logs
 ```
 
-The optional `promptfooconfig.tracing.yaml` also enables Promptfoo
-OpenTelemetry tracing. Set `PROMPTFOO_ENABLE_OTEL=true` for Python provider
-spans. This records the wrapper-level Python provider call and links it to the
-eval result, but it does not translate Inspect's internal screenshots, mouse
-moves, keyboard actions, or scorer events into Promptfoo trajectory spans.
-Inspect's `.eval` log remains the source of truth for those steps.
+The example config enables Promptfoo OpenTelemetry tracing. Set
+`PROMPTFOO_ENABLE_OTEL=true` for Python provider spans. This records the
+wrapper-level Python provider call and links it to the eval result, but it does
+not translate Inspect's internal screenshots, mouse moves, keyboard actions, or
+scorer events into Promptfoo trajectory spans. Inspect's `.eval` log remains the
+source of truth for those steps.
 
 ## Smoke test without model spend
 

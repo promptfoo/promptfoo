@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OSWorld via Inspect wrapper
+description: OSWorld via Inspect wrapper with tracing
 prompts:
   - 'Run OSWorld sample on app {{app}}'
 providers:
@@ -12,10 +12,13 @@ providers:
       # Inspect subprocess timeout, in seconds.
       timeoutSeconds: 1800
 tests:
-  - description: libreoffice_calc — first supported sample
+  - description: libreoffice_calc — first supported sample with tracing
     vars:
       app: libreoffice_calc
       sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
+    metadata:
+      testCaseId: osworld-libreoffice-calc-gpt55
+      tracingEnabled: true
     assert:
       - type: python
         value: file://assertion.py
@@ -30,3 +33,13 @@ tests:
   #   assert:
   #     - type: python
   #       value: file://assertion.py
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: 127.0.0.1
+      acceptFormats:
+        - json
+        - protobuf
