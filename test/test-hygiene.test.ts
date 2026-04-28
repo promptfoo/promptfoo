@@ -139,21 +139,11 @@ const legacySleepPromiseFiles = new Set<string>([
   'evaluator/execution.test.ts',
   'evaluator/gradingConcurrency.test.ts',
   'evaluator/runEval.test.ts',
-  'fetch.test.ts',
   'providers/bedrock/nova-reel.test.ts',
-  'providers/google/base.test.ts',
   'providers/http/auth.test.ts',
-  'providers/httpTransforms.test.ts',
-  'providers/openai/moderation.test.ts',
   'providers/xai/video.test.ts',
-  'python/pythonUtils.test.ts',
-  'python/wrapper.test.ts',
-  'redteam/commands/generate.test.ts',
   'redteam/strategies/gcg.test.ts',
   'smoke/resume.test.ts',
-  'telemetry.test.ts',
-  'tracing/providerInstrumentation.test.ts',
-  'util/agent/agentClient.test.ts',
 ]);
 
 const legacyModuleScopePersistentMockFiles = new Set<string>([

@@ -407,8 +407,9 @@ describe('Python Utils', () => {
     describe('concurrent validation', () => {
       it('should share validation promise between concurrent calls', async () => {
         mockExecFileAsync.mockImplementation(async () => {
-          // Add delay to simulate slow execution
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          // Yield control so concurrent callers can register on the shared
+          // validation promise before resolution.
+          await Promise.resolve();
           return { stdout: 'Python 3.8.10\n', stderr: '' };
         });
 
@@ -433,8 +434,9 @@ describe('Python Utils', () => {
         pythonUtils.state.cachedPythonPath = null;
 
         mockExecFileAsync.mockImplementation(async () => {
-          // Delay to simulate slow execution
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          // Yield control so concurrent callers can race onto the shared
+          // validation promise before resolution.
+          await Promise.resolve();
           return { stdout: 'Python 3.8.10\n', stderr: '' };
         });
 
