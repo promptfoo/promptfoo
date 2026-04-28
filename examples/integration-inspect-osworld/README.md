@@ -45,27 +45,47 @@ PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
   promptfoo eval -c promptfooconfig.yaml --no-cache
 ```
 
-The active test runs a pinned `libreoffice_calc` sample with GPT-5.5. To make the model explicit for one test, add `model` under `vars`:
+The test list lives in CSV. `promptfooconfig.yaml` keeps the shared assertion
+and tracing metadata in `defaultTest`, then loads one row per OSWorld run:
 
 ```yaml
-vars:
-  prompt: Run the pinned LibreOffice Calc OSWorld sample
-  app: libreoffice_calc
-  sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
-  model: openai/gpt-5.5
+defaultTest:
+  metadata:
+    tracingEnabled: true
+  assert:
+    - type: python
+      value: file://assertion.py
+
+tests: file://osworld-tests.csv
 ```
 
-To run an exact OSWorld sample, set `sample_id` under `vars`. This is the most
-reliable selector for larger comparisons because it maps directly to Inspect's
-`--sample-id` flag:
-
-```yaml
-vars:
-  prompt: Run the pinned LibreOffice Calc OSWorld sample
-  sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
+```csv
+__description,prompt,app,sample_id,__metadata:testCaseId
+libreoffice_calc - first supported sample with tracing,Run the pinned LibreOffice Calc OSWorld sample,libreoffice_calc,42e0a640-4f19-4b28-973d-729602b5a4a7,osworld-libreoffice-calc-gpt55
 ```
 
-To run the Nth task within an app subset, add zero-based `task_index`. The provider maps `task_index: 2` to Inspect `--limit 3-3`.
+To add another expensive OSWorld sample, append a row to `osworld-tests.csv`.
+Promptfoo maps normal CSV columns into `vars`, so `app`, `sample_id`,
+`task_index`, and optional per-row `model` values are available to
+`provider.py`. `__description` and `__metadata:testCaseId` set Promptfoo result
+fields.
+
+To run an exact OSWorld sample, set `sample_id` in the CSV row. This is the
+most reliable selector for larger comparisons because it maps directly to
+Inspect's `--sample-id` flag:
+
+```csv
+prompt,app,sample_id
+Run the pinned LibreOffice Calc OSWorld sample,libreoffice_calc,42e0a640-4f19-4b28-973d-729602b5a4a7
+```
+
+To run the Nth task within an app subset, add zero-based `task_index` instead
+of `sample_id`. The provider maps `task_index: 2` to Inspect `--limit 3-3`.
+
+```csv
+prompt,app,task_index
+Run the third LibreOffice Calc OSWorld sample,libreoffice_calc,2
+```
 
 Inspect filters by OSWorld app ids, and multi-app tasks use `multi_apps`.
 For example, VS Code is `vscode`, not `vs_code`.

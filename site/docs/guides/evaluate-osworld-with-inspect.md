@@ -50,7 +50,7 @@ inspect log dump /absolute/path/to/inspect_logs/<run>/<file>.eval
 
 The example has four moving parts:
 
-- `promptfooconfig.yaml` is the Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and defines one OSWorld row.
+- `promptfooconfig.yaml` is the Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and loads OSWorld rows from `osworld-tests.csv`.
 - `provider.py` is a file provider with `call_api(prompt, options, context)`. It resolves paths to absolute locations, runs Inspect, dumps the `.eval` file to JSON, and returns Promptfoo output plus metadata.
 - `assertion.py` reads `context.providerResponse.metadata.score` and turns the OSWorld scorer result into a normal Promptfoo pass or fail.
 - `inspect_logs/` is gitignored run state. Inspect stores screenshots, model messages, tool calls, files, scorer output, and token usage there.
@@ -125,41 +125,55 @@ providers:
       timeoutSeconds: 1800 # Inspect subprocess timeout, in seconds
 ```
 
-Tests select OSWorld app subsets with `vars.app`:
+Keep the `tests` block to one line. Put the shared assertion and trace metadata
+in `defaultTest`, then load one CSV row per OSWorld run. This is the standard
+[`defaultTest` plus CSV](/docs/configuration/test-cases#csv-with-defaulttest)
+pattern:
 
 ```yaml
-tests:
-  - description: libreoffice_calc - first supported sample
-    vars:
-      prompt: Run the pinned LibreOffice Calc OSWorld sample
-      app: libreoffice_calc
-      sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
-    metadata:
-      testCaseId: osworld-libreoffice-calc-gpt55
-      tracingEnabled: true
-    assert:
-      - type: python
-        value: file://assertion.py
+defaultTest:
+  metadata:
+    tracingEnabled: true
+  assert:
+    - type: python
+      value: file://assertion.py
+
+tests: file://osworld-tests.csv
+```
+
+```csv title="osworld-tests.csv"
+__description,prompt,app,sample_id,__metadata:testCaseId
+libreoffice_calc - first supported sample with tracing,Run the pinned LibreOffice Calc OSWorld sample,libreoffice_calc,42e0a640-4f19-4b28-973d-729602b5a4a7,osworld-libreoffice-calc-gpt55
+```
+
+Promptfoo maps normal CSV columns into `vars`, so `app`, `sample_id`,
+`task_index`, and optional per-row `model` values arrive in `provider.py` under
+`context["vars"]`. The `__description` and `__metadata:*` columns set Promptfoo
+test case fields without repeating YAML.
+
+To add another OSWorld sample, append one row under the same header:
+
+```csv
+vscode - first supported sample with tracing,Run the pinned VS Code OSWorld sample,vscode,0ed39f63-6049-43d4-ba4d-5fa2fe04a951,osworld-vscode-gpt55
 ```
 
 Inspect filters by OSWorld app ids. For example, VS Code samples use `vscode`,
 not `vs_code`, and multi-app tasks use `multi_apps`.
 
 For exact runs, prefer `sample_id`. The provider passes it to Inspect's
-`--sample-id` flag and skips app/index filtering:
+`--sample-id` flag and skips app/index filtering. Keep `app` when you want the
+result grouped by OSWorld application:
 
-```yaml
-vars:
-  prompt: Run the pinned LibreOffice Calc OSWorld sample
-  sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
+```csv
+prompt,app,sample_id
+Run the pinned LibreOffice Calc OSWorld sample,libreoffice_calc,42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
 
 To run a later sample from the selected app subset, add zero-based `task_index`:
 
-```yaml
-vars:
-  app: libreoffice_calc
-  task_index: 2
+```csv
+prompt,app,task_index
+Run the third LibreOffice Calc OSWorld sample,libreoffice_calc,2
 ```
 
 The provider maps `task_index: 2` to Inspect `--limit 3-3`.
@@ -179,8 +193,9 @@ tracing:
         - protobuf
 ```
 
-The active test also sets `metadata.tracingEnabled: true` and a stable
-`testCaseId` so the trace can be correlated with the result.
+`defaultTest.metadata.tracingEnabled: true` enables tracing for every loaded row.
+The CSV's `__metadata:testCaseId` column gives each row a stable id so the trace
+can be correlated with the result.
 
 ## Read the results
 
@@ -249,9 +264,8 @@ than an infrastructure error.
 This is not a stable leaderboard number; it is a concrete example of the shape,
 cost, and follow-up workflow for a real run on one local machine.
 
-For a comparable run, generate a config with one test case per OSWorld
-`sample_id`, keep the same provider and assertion blocks, and export the
-results:
+For a comparable run, put one row per OSWorld `sample_id` in a CSV, keep the
+same provider and `defaultTest` assertion block, and export the results:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
@@ -337,13 +351,14 @@ steps.
 To reimplement the wrapper in another repo:
 
 1. Create a Promptfoo file provider with `call_api(prompt, options, context)`.
-2. Read `vars.sample_id` for exact runs, or `vars.app` plus optional zero-based `vars.task_index` for app subsets.
-3. Resolve `basePath`, `logRoot`, and `--log-dir` to absolute paths before invoking Inspect.
-4. Run `inspect eval inspect_evals/osworld_small --model <model> --sample-id <id> --log-dir <dir>` for exact samples.
-5. Run `inspect log dump <file.eval>` and parse `samples[0].scores[*].value`, falling back to `results.scores[*].metrics.accuracy.value`.
-6. Return Promptfoo `output`, `metadata.score`, `metadata.status`, `metadata.sample_id`, `metadata.inspect_log_path`, and `tokenUsage`.
-7. Make assertion pass/fail depend on the OSWorld score, not the provider's final text.
-8. Keep Inspect `.eval` logs out of git and inspect them when scores or provider errors look surprising.
+2. Put shared assertions and trace metadata in `defaultTest`, then load sample rows with `tests: file://osworld-tests.csv`.
+3. Read `vars.sample_id` for exact runs, or `vars.app` plus optional zero-based `vars.task_index` for app subsets.
+4. Resolve `basePath`, `logRoot`, and `--log-dir` to absolute paths before invoking Inspect.
+5. Run `inspect eval inspect_evals/osworld_small --model <model> --sample-id <id> --log-dir <dir>` for exact samples.
+6. Run `inspect log dump <file.eval>` and parse `samples[0].scores[*].value`, falling back to `results.scores[*].metrics.accuracy.value`.
+7. Return Promptfoo `output`, `metadata.score`, `metadata.status`, `metadata.sample_id`, `metadata.inspect_log_path`, and `tokenUsage`.
+8. Make assertion pass/fail depend on the OSWorld score, not the provider's final text.
+9. Keep Inspect `.eval` logs out of git and inspect them when scores or provider errors look surprising.
 
 ## When to use this pattern
 
