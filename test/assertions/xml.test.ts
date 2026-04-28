@@ -105,6 +105,18 @@ describe('validateXml', () => {
     });
   });
 
+  it('should validate indexed required elements within repeated siblings', () => {
+    expect(
+      validateXml('<root><item><name>First</name></item><item><name>Second</name></item></root>', [
+        'root.item.0.name',
+        'root.item.1.name',
+      ]),
+    ).toEqual({
+      isValid: true,
+      reason: 'XML is valid and contains all required elements',
+    });
+  });
+
   it('should handle XML with CDATA sections', () => {
     expect(
       validateXml('<root><child><![CDATA[<p>This is CDATA content</p>]]></child></root>', [
@@ -179,6 +191,13 @@ describe('containsXml', () => {
   it('should validate required elements', () => {
     const input = 'Text <root><child>Content</child></root> more';
     const result = containsXml(input, ['root.child']);
+    expect(result.isValid).toBe(true);
+  });
+
+  it('should validate indexed required elements within extracted XML', () => {
+    const input =
+      'Text <root><item><name>First</name></item><item><name>Second</name></item></root> more';
+    const result = containsXml(input, ['root.item.1.name']);
     expect(result.isValid).toBe(true);
   });
 
