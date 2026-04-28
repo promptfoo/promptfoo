@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
-import { z } from 'zod';
 import { getBlobByHash, getBlobUrl } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { getDb } from '../../database';
@@ -12,7 +11,7 @@ import {
 } from '../../database/tables';
 import logger from '../../logger';
 import { BlobsSchemas } from '../../types/api/blobs';
-import { sendError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
@@ -426,7 +425,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
 
   const paramsResult = BlobsSchemas.Get.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
   const { hash } = paramsResult.data;

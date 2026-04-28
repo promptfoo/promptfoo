@@ -48,15 +48,12 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     }
 
     // Get all sheet names to validate and determine which sheet to use
-    let sheets;
-    try {
-      sheets = await readXlsxFile(actualFilePath);
-    } catch (error) {
+    const sheets = await readXlsxFile(actualFilePath).catch((error) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         throw new Error(`File not found: ${actualFilePath}`);
       }
       throw error;
-    }
+    });
     const sheetNames = sheets.map((sheet) => sheet.sheet);
 
     // Validate that the workbook has at least one sheet
