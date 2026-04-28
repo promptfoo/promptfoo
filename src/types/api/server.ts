@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { VERSION } from '../../constants';
-import { TELEMETRY_EVENTS } from '../../telemetry';
+import { TELEMETRY_EVENTS } from '../../telemetryEvents';
 import { BooleanQueryParamSchema, JsonObjectSchema } from './common';
 
 const UnknownArraySchema = z.array(z.unknown());

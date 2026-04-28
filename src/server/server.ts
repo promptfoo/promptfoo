@@ -249,10 +249,10 @@ export function createApp() {
     res.json(ServerSchemas.ShareCheckDomain.Response.parse({ domain, isCloudEnabled }));
   });
 
-  // Share URL creation is intentionally unthrottled. The local server is bound to a single
-  // operator's loopback interface, so a per-IP limiter just blocks legitimate use; see
-  // src/server/AGENTS.md for the codified policy. CodeQL js/missing-rate-limiting is an
-  // accepted exception here.
+  // Share URL creation is intentionally unthrottled for local-server workflows. UI and CLI
+  // actions can legitimately burst through this route, and a per-IP limiter would block the
+  // operator without changing the local trust boundary. See src/server/AGENTS.md for the
+  // codified policy; CodeQL js/missing-rate-limiting is an accepted exception here.
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ServerSchemas.Share.Request.safeParse(req.body);
     if (!bodyResult.success) {
