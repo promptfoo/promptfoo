@@ -47,7 +47,9 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 vi.mock('fs/promises', () => {
-  const readFile = vi.fn((filePath: any, encoding?: any) => {
+  // Async wrapper around the sync mock so the returned value is a real Promise,
+  // matching the actual fs/promises.readFile API.
+  const readFile = vi.fn(async (filePath: any, encoding?: any) => {
     if (!fsMocks.existsSync(filePath)) {
       throw Object.assign(new Error(`ENOENT: no such file or directory, open '${filePath}'`), {
         code: 'ENOENT',

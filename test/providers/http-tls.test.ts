@@ -41,12 +41,13 @@ vi.mock('fs', async (importOriginal) => {
   };
 });
 
-vi.mock('fs/promises', () => ({
-  default: {
-    readFile: mockReadFileSync,
-  },
-  readFile: mockReadFileSync,
-}));
+// Wrap the sync mock so fs/promises.readFile returns a real Promise, matching
+// the actual API contract. (await still unwraps non-Promise values, but tests
+// for Promise-aware callers like Promise.all need the real shape.)
+vi.mock('fs/promises', () => {
+  const readFile = vi.fn(async (...args: any[]) => mockReadFileSync(...args));
+  return { default: { readFile }, readFile };
+});
 
 describe('HttpProvider with TLS Configuration', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
