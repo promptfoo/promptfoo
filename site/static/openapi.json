@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Promptfoo Local Server API",
-    "version": "0.121.8",
+    "version": "0.121.9",
     "description": "OpenAPI document generated from the shared Zod DTO schemas used by the Promptfoo local server and web UI."
   },
   "servers": [
@@ -779,7 +779,7 @@
                   },
                   "packageVersion": {
                     "type": "string",
-                    "default": "0.121.8"
+                    "default": "0.121.9"
                   },
                   "properties": {
                     "type": "object",
@@ -2115,32 +2115,8 @@
                         "table": {
                           "type": "object",
                           "properties": {
-                            "head": {
-                              "type": "object",
-                              "properties": {
-                                "prompts": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "additionalProperties": {}
-                                  }
-                                },
-                                "vars": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                }
-                              },
-                              "required": ["prompts", "vars"]
-                            },
-                            "body": {
-                              "type": "array",
-                              "items": {
-                                "type": "object",
-                                "additionalProperties": {}
-                              }
-                            }
+                            "head": {},
+                            "body": {}
                           },
                           "required": ["head", "body"],
                           "additionalProperties": {}
@@ -2163,14 +2139,7 @@
                           "type": ["string", "null"]
                         },
                         "version": {
-                          "oneOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "number"
-                            }
-                          ]
+                          "type": "number"
                         },
                         "id": {
                           "type": "string"
@@ -2888,8 +2857,12 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {},
-                  "additionalProperties": {}
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["message"]
                 }
               }
             }
@@ -4532,15 +4505,20 @@
                     {
                       "type": "object",
                       "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "details": {},
+                        "suggestion": {
+                          "type": "string"
+                        },
                         "success": {
                           "type": "boolean",
                           "enum": [false]
-                        },
-                        "error": {
-                          "type": "string"
                         }
                       },
-                      "required": ["success", "error"]
+                      "required": ["error"],
+                      "additionalProperties": {}
                     }
                   ]
                 }
@@ -4712,7 +4690,51 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "additionalProperties": {}
+                  "properties": {
+                    "purpose": {
+                      "type": ["string", "null"]
+                    },
+                    "limitations": {
+                      "type": ["string", "null"]
+                    },
+                    "user": {
+                      "type": ["string", "null"]
+                    },
+                    "tools": {
+                      "type": "array",
+                      "items": {
+                        "type": ["object", "null"],
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "arguments": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "description": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["name", "description", "type"]
+                            }
+                          }
+                        },
+                        "required": ["name", "description", "arguments"]
+                      }
+                    }
+                  },
+                  "required": ["purpose", "limitations", "user", "tools"]
                 }
               }
             }
@@ -6542,16 +6564,7 @@
         "summary": "Get configured user email status",
         "parameters": [
           {
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "string"
-                }
-              ]
-            },
+            "schema": {},
             "required": false,
             "name": "validate",
             "in": "query"
