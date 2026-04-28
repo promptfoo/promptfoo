@@ -41,9 +41,14 @@ export const evalRouter = Router();
 export const evalJobs = new Map<string, Job>();
 
 function sendEvalTableResponse(res: Response, evalId: string, responsePayload: EvalTableDTO): void {
-  const parsedPayload = EvalSchemas.Table.Response.parse(
-    responsePayload,
-  ) as unknown as EvalTableDTO;
+  let parsedPayload: EvalTableDTO;
+  try {
+    parsedPayload = EvalSchemas.Table.Response.parse(responsePayload) as unknown as EvalTableDTO;
+  } catch (error) {
+    sendError(res, 500, 'Failed to render eval table', error);
+    return;
+  }
+
   try {
     res.json(parsedPayload);
   } catch (error) {
@@ -413,7 +418,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     const jsonData = evalTableToJson(returnTable);
 
     setDownloadHeaders(res, `${id}.json`, 'application/json');
-    res.json(EvalSchemas.Table.JsonExportResponse.parse(jsonData));
+    res.json(jsonData);
     return;
   }
 
@@ -776,7 +781,7 @@ evalRouter.post(
       await eval_.save();
       await result.save();
 
-      res.json(EvalSchemas.SubmitRating.Response.parse(result));
+      res.json(EvalSchemas.SubmitRating.Response.parse({ message: 'Rating submitted' }));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }

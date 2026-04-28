@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { Server } from 'node:http';
 
 import request from 'supertest';
@@ -11,6 +15,16 @@ vi.mock('../../../src/globalConfig/cloud', () => ({
     getAppUrl: vi.fn(),
     validateAndSetApiToken: vi.fn(),
     delete: vi.fn(),
+  },
+}));
+
+vi.mock('../../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   },
 }));
 
@@ -31,11 +45,15 @@ vi.mock('../../../src/share', () => ({
   stripAuthFromUrl: vi.fn((url: string) => url),
 }));
 
-vi.mock('../../../src/telemetry', () => ({
-  default: {
-    record: vi.fn(),
-  },
-}));
+vi.mock('../../../src/telemetry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/telemetry')>();
+  return {
+    ...actual,
+    default: {
+      record: vi.fn(),
+    },
+  };
+});
 
 vi.mock('../../../src/testCase/synthesis', () => ({
   synthesizeFromTestSuite: vi.fn(),
@@ -87,12 +105,19 @@ describe('inline server API DTO validation', () => {
   let api: ReturnType<typeof request.agent>;
   let server: Server;
 
-  beforeAll(() => {
-    server = createApp().listen(0);
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
     api = request.agent(server);
   });
 
   afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
     await new Promise<void>((resolve, reject) => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
@@ -322,9 +347,152 @@ describe('inline server API DTO validation', () => {
       .send({ event: 'webui_api', properties: { route: '/api/results' } });
 
     expect(invalid.status).toBe(400);
-    expect(invalid.body.error).toBe('Invalid request body');
+    expect(invalid.body.error).toContain('event');
     expect(valid.status).toBe(200);
     expect(valid.body).toEqual({ success: true });
     expect(mockedTelemetry.record).toHaveBeenCalledWith('webui_api', { route: '/api/results' });
+  });
+
+  it('accepts the full telemetry property value matrix and rejects nested objects', async () => {
+    mockedTelemetry.record.mockReturnValue(undefined);
+
+    const matrix = await api.post('/api/telemetry').send({
+      event: 'webui_action',
+      properties: {
+        text: 'hi',
+        count: 3,
+        flag: true,
+        tags: ['a', 'b'],
+      },
+    });
+    const nested = await api
+      .post('/api/telemetry')
+      .send({ event: 'webui_action', properties: { nested: { k: 'v' } } });
+
+    expect(matrix.status).toBe(200);
+    expect(matrix.body).toEqual({ success: true });
+    expect(mockedTelemetry.record).toHaveBeenCalledWith('webui_action', {
+      text: 'hi',
+      count: 3,
+      flag: true,
+      tags: ['a', 'b'],
+    });
+
+    expect(nested.status).toBe(400);
+    expect(nested.body.error).toContain('properties');
+  });
+
+  it('returns a 500 DTO when telemetry recording throws', async () => {
+    mockedTelemetry.record.mockImplementation(() => {
+      throw new Error('posthog down');
+    });
+
+    const response = await api
+      .post('/api/telemetry')
+      .send({ event: 'webui_api', properties: { route: '/api/results' } });
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ error: 'Failed to process telemetry request' });
+  });
+
+  it('returns the static health DTO without schema-parsing the response', async () => {
+    const response = await api.get('/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('status', 'OK');
+    expect(typeof response.body.version).toBe('string');
+    expect(response.body.version.length).toBeGreaterThan(0);
+  });
+
+  it('coerces includeProviders only for "true"/true; everything else resolves to false', async () => {
+    mockedGetEvalSummaries.mockResolvedValue([]);
+
+    const cases: { query: string; expected: boolean }[] = [
+      { query: '?includeProviders=true', expected: true },
+      { query: '?includeProviders=false', expected: false },
+      { query: '?includeProviders=1', expected: false },
+      { query: '?includeProviders=yes', expected: false },
+      { query: '', expected: false },
+    ];
+
+    for (const { query, expected } of cases) {
+      mockedGetEvalSummaries.mockClear();
+      const response = await api.get(`/api/results${query}`);
+      expect(response.status).toBe(200);
+      expect(mockedGetEvalSummaries).toHaveBeenCalledWith(undefined, undefined, expected);
+    }
+  });
+
+  it('rejects the literal string "undefined" on share check-domain', async () => {
+    const response = await api.get('/api/results/share/check-domain?id=undefined');
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toContain('id');
+    expect(mockedEval.findById).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 from share check-domain when the eval is missing', async () => {
+    mockedEval.findById.mockResolvedValue(null as never);
+
+    const response = await api.get('/api/results/share/check-domain?id=eval-1');
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ error: 'Eval not found' });
+    expect(mockedDetermineShareDomain).not.toHaveBeenCalled();
+  });
+
+  it('normalizes object-form prompts in dataset generation', async () => {
+    mockedSynthesizeFromTestSuite.mockResolvedValue([{ vars: { q: 'generated' } }] as never);
+
+    const labelMissing = await api.post('/api/dataset/generate').send({
+      prompts: [{ raw: 'P1' }],
+      tests: [],
+    });
+    const labelPresent = await api.post('/api/dataset/generate').send({
+      prompts: [{ raw: 'P2', label: 'custom-label', extra: 'kept' }],
+      tests: [],
+    });
+
+    expect(labelMissing.status).toBe(200);
+    expect(labelPresent.status).toBe(200);
+    expect(mockedSynthesizeFromTestSuite).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        prompts: [{ raw: 'P1', label: 'P1' }],
+      }),
+      {},
+    );
+    expect(mockedSynthesizeFromTestSuite).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        prompts: [{ raw: 'P2', label: 'custom-label', extra: 'kept' }],
+      }),
+      {},
+    );
+  });
+
+  it('imports server DTO schemas without mutating the user config directory', () => {
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-server-dto-import-'));
+    const importProbe = `
+      await import('./src/types/api/server.ts');
+      await import('./src/telemetryEvents.ts');
+    `;
+
+    try {
+      const result = spawnSync(process.execPath, ['--import', 'tsx', '-e', importProbe], {
+        cwd: path.resolve(__dirname, '../../..'),
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_DISABLE_TELEMETRY: 'true',
+        },
+      });
+
+      expect(result.status, result.stderr || result.stdout).toBe(0);
+      expect(fs.readdirSync(configDir)).toEqual([]);
+    } finally {
+      fs.rmSync(configDir, { recursive: true, force: true });
+    }
   });
 });

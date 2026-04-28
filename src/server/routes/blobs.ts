@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
-import { z } from 'zod';
 import { getBlobByHash, getBlobUrl } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { getDb } from '../../database';
@@ -12,7 +11,7 @@ import {
 } from '../../database/tables';
 import logger from '../../logger';
 import { BlobsSchemas } from '../../types/api/blobs';
-import { sendError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
@@ -426,7 +425,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
 
   const paramsResult = BlobsSchemas.Get.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
   const { hash } = paramsResult.data;
@@ -466,30 +465,36 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
+  let blob: Awaited<ReturnType<typeof getBlobByHash>>;
   try {
     const presigned = await getBlobUrl(hash);
     if (presigned) {
-      res.redirect(302, BlobsSchemas.Get.RedirectResponse.parse(presigned));
+      res.redirect(302, presigned);
       return;
     }
-
-    const blob = await getBlobByHash(hash);
-    const data = BlobsSchemas.Get.BinaryResponse.parse(blob.data);
-
-    // Validate MIME type before setting header to prevent injection attacks
-    const mimeType = blob.metadata.mimeType || asset.mimeType;
-    if (SAFE_MIME_TYPE_REGEX.test(mimeType)) {
-      res.setHeader('Content-Type', mimeType);
-    } else {
-      logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
-      res.setHeader('Content-Type', 'application/octet-stream');
-    }
-    res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    res.setHeader('Accept-Ranges', 'none');
-    res.send(data);
+    blob = await getBlobByHash(hash);
   } catch (error) {
-    logger.error('[BlobRoute] Failed to serve blob', { error, hash });
+    logger.error('[BlobRoute] Failed to load blob', { error, hash });
     res.status(404).json({ error: 'Blob not found' });
+    return;
   }
+
+  const dataResult = BlobsSchemas.Get.BinaryResponse.safeParse(blob.data);
+  if (!dataResult.success) {
+    sendError(res, 500, 'Failed to serve blob', dataResult.error);
+    return;
+  }
+
+  // Validate MIME type before setting header to prevent injection attacks
+  const mimeType = blob.metadata.mimeType || asset.mimeType;
+  if (SAFE_MIME_TYPE_REGEX.test(mimeType)) {
+    res.setHeader('Content-Type', mimeType);
+  } else {
+    logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
+    res.setHeader('Content-Type', 'application/octet-stream');
+  }
+  res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('Accept-Ranges', 'none');
+  res.send(dataResult.data);
 });

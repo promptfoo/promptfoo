@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import fs from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -159,14 +159,16 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
       ? expandedPath
       : path.resolve(process.cwd(), expandedPath);
 
-    // Check if path exists
-    if (!fs.existsSync(absolutePath)) {
+    // Treat any access failure (ENOENT, EACCES, EPERM, ELOOP, ...) as not-exists,
+    // matching the historical fs.existsSync behavior the UI depends on.
+    let stats;
+    try {
+      stats = await fs.stat(absolutePath);
+    } catch {
       res.json(ModelAuditSchemas.CheckPath.Response.parse({ exists: false, type: null }));
       return;
     }
 
-    // Get path stats
-    const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
     res.json(
@@ -220,11 +222,15 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         ? expandedPath
         : path.resolve(process.cwd(), expandedPath);
 
-      // Check if path exists
-      if (!fs.existsSync(absolutePath)) {
-        res
-          .status(400)
-          .json({ error: `Path does not exist: ${inputPath} (resolved to: ${absolutePath})` });
+      try {
+        await fs.access(absolutePath);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const message =
+          code === 'ENOENT'
+            ? `Path does not exist: ${inputPath} (resolved to: ${absolutePath})`
+            : `Cannot access path: ${inputPath} (resolved to: ${absolutePath}, ${code ?? 'unknown error'})`;
+        res.status(400).json({ error: message });
         return;
       }
 
