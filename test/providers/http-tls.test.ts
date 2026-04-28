@@ -1,4 +1,5 @@
 import fs from 'fs';
+import * as fsp from 'fs/promises';
 
 import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
@@ -55,6 +56,11 @@ describe('HttpProvider with TLS Configuration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockReadFileSync.mockReset();
+    vi.mocked(fsp.readFile)
+      .mockReset()
+      .mockImplementation(async (...args: any[]) => {
+        return mockReadFileSync(...args);
+      });
 
     // Setup default mock response
     mockFetchWithCache.mockResolvedValue({
@@ -109,6 +115,46 @@ describe('HttpProvider with TLS Configuration', () => {
 
       // Verify files were read
       expect(mockReadFileSync).toHaveBeenCalledTimes(3);
+    });
+
+    it('should start independent TLS file reads in parallel', async () => {
+      const pendingReads = new Map<string, (value: string) => void>();
+      vi.mocked(fsp.readFile).mockImplementation(
+        (filePath: any) =>
+          new Promise((resolve) => {
+            pendingReads.set(String(filePath), resolve as (value: string) => void);
+          }) as ReturnType<typeof fsp.readFile>,
+      );
+
+      const provider = new HttpProvider('https://api.example.com', {
+        config: {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: { prompt: '{{prompt}}' },
+          tls: {
+            caPath: '/path/to/ca.pem',
+            certPath: '/path/to/cert.pem',
+            keyPath: '/path/to/key.pem',
+          },
+        },
+      });
+
+      const callPromise = provider.callApi('test prompt');
+
+      await vi.waitFor(() => {
+        expect(fsp.readFile).toHaveBeenCalledTimes(3);
+      });
+      expect([...pendingReads.keys()]).toEqual([
+        '/path/to/ca.pem',
+        '/path/to/cert.pem',
+        '/path/to/key.pem',
+      ]);
+
+      pendingReads.get('/path/to/ca.pem')?.('CA_CERT_CONTENT');
+      pendingReads.get('/path/to/cert.pem')?.('CLIENT_CERT_CONTENT');
+      pendingReads.get('/path/to/key.pem')?.('PRIVATE_KEY_CONTENT');
+
+      await callPromise;
     });
 
     it('should support inline certificates', async () => {
