@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import * as path from 'path';
 
 import chalk from 'chalk';
@@ -158,7 +158,8 @@ export async function doEval(
     if (cmdObj.config !== undefined) {
       const configPaths: string[] = Array.isArray(cmdObj.config) ? cmdObj.config : [cmdObj.config];
       for (const configPath of configPaths) {
-        if (fs.existsSync(configPath) && fs.statSync(configPath).isDirectory()) {
+        const configStats = await fs.stat(configPath).catch(() => undefined);
+        if (configStats?.isDirectory()) {
           const { defaultConfig: dirConfig, defaultConfigPath: newConfigPath } =
             await loadDefaultConfig(configPath);
           if (newConfigPath) {

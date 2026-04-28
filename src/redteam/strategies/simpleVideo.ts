@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -128,7 +129,7 @@ async function textToVideo(text: string): Promise<string> {
           outputPath,
         ]);
 
-        const videoData = fs.readFileSync(outputPath);
+        const videoData = await fsPromises.readFile(outputPath);
         const base64Video = videoData.toString('base64');
         cleanup();
         return base64Video;
@@ -258,7 +259,7 @@ export async function addVideoToBase64(
 export async function writeVideoFile(base64Video: string, outputFilePath: string): Promise<void> {
   try {
     const videoBuffer = Buffer.from(base64Video, 'base64');
-    fs.writeFileSync(outputFilePath, videoBuffer);
+    await fsPromises.writeFile(outputFilePath, videoBuffer);
     logger.info(`Video file written to: ${outputFilePath}`);
   } catch (error) {
     logger.error(`Failed to write video file: ${error}`);

@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 import * as os from 'os';
 
 import chalk from 'chalk';
@@ -47,7 +47,13 @@ async function doDebug(options: DebugOptions): Promise<void> {
 
   // Try to load config if available
   const configPath = options.config || options.defaultConfigPath;
-  if (configPath && fs.existsSync(configPath)) {
+  const configExists = configPath
+    ? await fs
+        .access(configPath)
+        .then(() => true)
+        .catch(() => false)
+    : false;
+  if (configPath && configExists) {
     debugInfo.configInfo.configExists = true;
     try {
       const resolved = await resolveConfigs(

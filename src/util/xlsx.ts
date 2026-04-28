@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs/promises';
 
 import type { CsvRow } from '../types/index';
 
@@ -38,7 +38,12 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     const [actualFilePath, sheetSpecifier] = filePath.split('#');
 
     // Check if file exists before attempting to read it
-    if (!fs.existsSync(actualFilePath)) {
+    try {
+      await fs.access(actualFilePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
       throw new Error(`File not found: ${actualFilePath}`);
     }
 

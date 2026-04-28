@@ -973,9 +973,7 @@ describe('fetchWithTimeout', () => {
   });
 
   it('should reject when request times out', async () => {
-    vi.mocked(global.fetch).mockImplementationOnce(
-      () => new Promise((resolve) => setTimeout(resolve, 6000)),
-    );
+    vi.mocked(global.fetch).mockImplementationOnce(() => new Promise(() => {}));
 
     const fetchPromise = fetchWithTimeout('https://example.com', {}, 5000);
     vi.advanceTimersByTime(5000);

@@ -29,8 +29,43 @@ const {
   mockGetConfigDirectoryPath: vi.fn(),
 }));
 
+const fsMocks = vi.hoisted(() => ({
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  readFileSync: vi.fn(),
+}));
+
 // Mock the dependencies
-vi.mock('fs');
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+vi.mock('fs/promises', () => {
+  const readFile = vi.fn((filePath: any, encoding?: any) => {
+    if (!fsMocks.existsSync(filePath)) {
+      throw Object.assign(new Error(`ENOENT: no such file or directory, open '${filePath}'`), {
+        code: 'ENOENT',
+      });
+    }
+    return encoding === undefined
+      ? fsMocks.readFileSync(filePath)
+      : fsMocks.readFileSync(filePath, encoding);
+  });
+  return {
+    default: {
+      readFile,
+    },
+    readFile,
+  };
+});
 vi.mock('../../../src/storage', () => ({
   storeMedia: mockStoreMedia,
   mediaExists: mockMediaExists,

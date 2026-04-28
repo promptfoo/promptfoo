@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -129,7 +129,7 @@ export class PythonWorker {
 
     try {
       // Write request
-      fs.writeFileSync(requestFile, safeJsonStringify(args) as string, 'utf-8');
+      await fs.writeFile(requestFile, safeJsonStringify(args) as string, 'utf-8');
 
       // Send CALL command with function name
       // Note: PythonShell.send() adds newline automatically in 'text' mode
@@ -151,7 +151,7 @@ export class PythonWorker {
       // Total max wait: ~18 seconds (handles severe filesystem delays)
       for (let attempt = 0, delay = 1; attempt < 16; attempt++, delay = Math.min(delay * 2, 5000)) {
         try {
-          responseData = fs.readFileSync(responseFile, 'utf-8');
+          responseData = await fs.readFile(responseFile, 'utf-8');
           if (attempt > 0) {
             logger.debug(`Response file read succeeded on attempt ${attempt + 1} after ${delay}ms`);
           }
@@ -172,7 +172,9 @@ export class PythonWorker {
       if (!responseData!) {
         const tempDir = path.dirname(responseFile);
         try {
-          const files = fs.readdirSync(tempDir).filter((f) => f.startsWith('promptfoo-worker-'));
+          const files = (await fs.readdir(tempDir)).filter((f) =>
+            f.startsWith('promptfoo-worker-'),
+          );
           logger.error(
             `Failed to read response file after 16 attempts (~18s). Expected: ${path.basename(responseFile)}, Found in ${tempDir}: ${files.join(', ')}`,
           );
@@ -191,15 +193,17 @@ export class PythonWorker {
       return response.data;
     } finally {
       // Cleanup temp files
-      [requestFile, responseFile].forEach((file) => {
-        try {
-          if (fs.existsSync(file)) {
-            fs.unlinkSync(file);
+      await Promise.all(
+        [requestFile, responseFile].map(async (file) => {
+          try {
+            await fs.unlink(file);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+              logger.error(`Error removing ${file}: ${error}`);
+            }
           }
-        } catch (error) {
-          logger.error(`Error removing ${file}: ${error}`);
-        }
-      });
+        }),
+      );
     }
   }
 

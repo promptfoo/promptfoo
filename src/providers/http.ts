@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 import http from 'http';
 import https from 'https';
 import path from 'path';
@@ -311,6 +311,18 @@ function isBase64(str: string): boolean {
   return str.length % 4 === 0 && base64Regex.test(str) && str.length > 100;
 }
 
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return false;
+    }
+    throw err;
+  }
+}
+
 /**
  * Generate signature using different certificate types
  */
@@ -340,7 +352,7 @@ export async function generateSignature(
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
-          privateKey = fs.readFileSync(resolvedPath, 'utf8');
+          privateKey = await fs.readFile(resolvedPath, 'utf8');
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
         } else if (signatureAuth.certificateContent) {
@@ -384,7 +396,7 @@ export async function generateSignature(
         } else if (signatureAuth.keystorePath) {
           // Use file path (existing behavior)
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
-          keystoreData = fs.readFileSync(resolvedPath);
+          keystoreData = await fs.readFile(resolvedPath);
         } else {
           throw new Error(
             'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
@@ -480,7 +492,7 @@ export async function generateSignature(
               const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
               try {
-                const stat = await fs.promises.stat(resolvedPath);
+                const stat = await fs.stat(resolvedPath);
                 logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
               } catch (e) {
                 logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
@@ -543,14 +555,14 @@ export async function generateSignature(
               );
 
               // Read the private key directly from the key file
-              if (!fs.existsSync(resolvedKeyPath)) {
+              if (!(await fileExists(resolvedKeyPath))) {
                 throw new Error(`Key file not found: ${resolvedKeyPath}`);
               }
-              if (!fs.existsSync(resolvedCertPath)) {
+              if (!(await fileExists(resolvedCertPath))) {
                 throw new Error(`Certificate file not found: ${resolvedCertPath}`);
               }
 
-              privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+              privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
               logger.debug(
                 `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
               );
@@ -1369,7 +1381,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     tlsOptions.ca = tlsConfig.ca;
   } else if (tlsConfig.caPath) {
     const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.caPath);
-    tlsOptions.ca = fs.readFileSync(resolvedPath, 'utf8');
+    tlsOptions.ca = await fs.readFile(resolvedPath, 'utf8');
     logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
   }
 
@@ -1403,7 +1415,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
         // Use file path
         const resolvedPath = safeResolve(cliState.basePath || '', (tlsConfig as any).jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
-        keystoreData = fs.readFileSync(resolvedPath);
+        keystoreData = await fs.readFile(resolvedPath);
       } else {
         throw new Error('JKS content or path is required');
       }
@@ -1452,7 +1464,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       tlsOptions.cert = tlsConfig.cert;
     } else if (tlsConfig.certPath) {
       const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
-      tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
+      tlsOptions.cert = await fs.readFile(resolvedPath, 'utf8');
       logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
     }
 
@@ -1461,7 +1473,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       tlsOptions.key = tlsConfig.key;
     } else if (tlsConfig.keyPath) {
       const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
-      tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
+      tlsOptions.key = await fs.readFile(resolvedPath, 'utf8');
       logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
     }
   }
@@ -1486,7 +1498,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     }
   } else if (tlsConfig.pfxPath) {
     const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
-    tlsOptions.pfx = fs.readFileSync(resolvedPath);
+    tlsOptions.pfx = await fs.readFile(resolvedPath);
     logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
   }
 

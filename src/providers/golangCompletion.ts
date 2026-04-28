@@ -1,5 +1,6 @@
 import { execFile } from 'child_process';
-import fs from 'fs';
+import * as fsSync from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import util from 'util';
@@ -55,7 +56,7 @@ export class GolangProvider implements ApiProvider {
   private findModuleRoot(startPath: string): string {
     let currentPath = startPath;
     while (currentPath !== path.dirname(currentPath)) {
-      if (fs.existsSync(path.join(currentPath, 'go.mod'))) {
+      if (fsSync.existsSync(path.join(currentPath, 'go.mod'))) {
         return currentPath;
       }
       currentPath = path.dirname(currentPath);
@@ -72,7 +73,7 @@ export class GolangProvider implements ApiProvider {
     const moduleRoot = this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
-    const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
+    const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
     const cacheKey = `golang:${this.scriptPath}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
     )}:${JSON.stringify(context?.vars)}`;
@@ -106,33 +107,33 @@ export class GolangProvider implements ApiProvider {
       let tempDir: string | undefined;
       try {
         // Create temp directory
-        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'golang-provider-'));
+        tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'golang-provider-'));
 
         // Helper function to copy directory recursively
-        const copyDir = (src: string, dest: string) => {
-          fs.mkdirSync(dest, { recursive: true });
-          const entries = fs.readdirSync(src, { withFileTypes: true });
+        const copyDir = async (src: string, dest: string): Promise<void> => {
+          await fs.mkdir(dest, { recursive: true });
+          const entries = await fs.readdir(src, { withFileTypes: true });
           for (const entry of entries) {
             const srcPath = path.join(src, entry.name);
             const destPath = path.join(dest, entry.name);
             if (entry.isDirectory()) {
-              copyDir(srcPath, destPath);
+              await copyDir(srcPath, destPath);
             } else {
-              fs.copyFileSync(srcPath, destPath);
+              await fs.copyFile(srcPath, destPath);
             }
           }
         };
 
         // Copy the entire module structure
-        copyDir(moduleRoot, tempDir);
+        await copyDir(moduleRoot, tempDir);
 
         const relativeScriptPath = path.relative(moduleRoot, absPath);
         const scriptDir = path.dirname(path.join(tempDir, relativeScriptPath));
 
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
-        fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(getWrapperDir('golang'), 'wrapper.go'), tempWrapperPath);
+        await fs.mkdir(scriptDir, { recursive: true });
+        await fs.copyFile(path.join(getWrapperDir('golang'), 'wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
@@ -172,7 +173,7 @@ export class GolangProvider implements ApiProvider {
       } finally {
         // Clean up temporary directory
         if (tempDir) {
-          fs.rmSync(tempDir, { recursive: true, force: true });
+          await fs.rm(tempDir, { recursive: true, force: true });
         }
       }
     }
