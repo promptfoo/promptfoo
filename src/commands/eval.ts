@@ -398,8 +398,29 @@ export async function doEval(
       cliState.maxConcurrency = explicitMaxConcurrency;
     }
 
+    const hasScenarios = Boolean(testSuite.scenarios?.length);
+    const explicitTestCountBeforeFiltering = testSuite.tests?.length;
+    const resumeRuntimeOptions = resumeEval?.runtimeOptions as EvaluateOptions | undefined;
+    const persistedFilterRange =
+      typeof resumeRuntimeOptions?.filterRange === 'string'
+        ? resumeRuntimeOptions.filterRange
+        : undefined;
+    if (resumeEval && cmdObj.filterRange && cmdObj.filterRange !== persistedFilterRange) {
+      logger.warn(
+        `Ignoring --filter-range ${cmdObj.filterRange}: resuming ${resumeEval.id} with persisted range ${persistedFilterRange ?? '(none)'} to preserve test indices.`,
+      );
+    }
+    const filterRange = resumeEval
+      ? (persistedFilterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange)
+      : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const shouldApplyRangeToImplicitDefaultTest =
+      filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;
+
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
+      if (shouldApplyRangeToImplicitDefaultTest) {
+        testSuite.tests = [{}];
+      }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
         failingOnly: cmdObj.filterFailingOnly,
@@ -407,9 +428,18 @@ export async function doEval(
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
         pattern: cmdObj.filterPattern,
+        range: hasScenarios ? undefined : filterRange,
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
+      if (
+        filterRange !== undefined &&
+        !hasScenarios &&
+        (explicitTestCountBeforeFiltering !== undefined || shouldApplyRangeToImplicitDefaultTest) &&
+        testSuite.tests.length === 0
+      ) {
+        testSuite.scenarios = [];
+      }
     }
 
     if (
@@ -466,6 +496,7 @@ export async function doEval(
             : cmdObj.progressBar !== false,
       repeat,
       delay: !Number.isNaN(delay) && delay > 0 ? delay : undefined,
+      filterRange,
       maxConcurrency,
       cache,
     };
@@ -598,6 +629,7 @@ export async function doEval(
     try {
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         eventSource: 'cli',
         abortSignal: evaluateOptions.abortSignal,
         isRedteam: Boolean(config.redteam),
@@ -1023,6 +1055,10 @@ export function evalCommand(
     .option(
       '--filter-pattern <pattern>',
       'Only run tests whose description matches the regular expression pattern',
+    )
+    .option(
+      '--filter-range <start:end>',
+      'Only run tests whose zero-based index is in the range. End is exclusive (e.g. 0:10, 10:20, 10:, :10)',
     )
     .option(
       '--filter-prompts <pattern>',
