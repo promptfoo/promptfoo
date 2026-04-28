@@ -379,16 +379,15 @@ export function discoverCommand(
       // If user provides a config, read the target from it:
       if (args.config) {
         // Validate that the config is a valid path:
+        let configExists: boolean;
         try {
-          if (!(await pathExists(args.config))) {
-            throw new Error(`Config not found at ${args.config}`);
-          }
+          configExists = await pathExists(args.config);
         } catch (error) {
-          if (error instanceof Error && error.message === `Config not found at ${args.config}`) {
-            throw error;
-          }
           const message = error instanceof Error ? error.message : String(error);
           throw new Error(`Unable to access config at ${args.config}: ${message}`);
+        }
+        if (!configExists) {
+          throw new Error(`Config not found at ${args.config}`);
         }
 
         config = await readConfig(args.config);

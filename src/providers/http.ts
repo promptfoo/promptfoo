@@ -315,18 +315,6 @@ function isBase64(str: string): boolean {
   return str.length % 4 === 0 && base64Regex.test(str) && str.length > 100;
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return false;
-    }
-    throw err;
-  }
-}
-
 /**
  * Generate signature using different certificate types
  */
