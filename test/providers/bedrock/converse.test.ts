@@ -33,6 +33,41 @@ interface MockConverseCommandOutput {
 }
 
 const mockSend = vi.hoisted(() => vi.fn<any>());
+const mcpMocks = vi.hoisted(() => {
+  const mockConstructor = vi.fn();
+  const mockInitialize = vi.fn().mockResolvedValue(undefined);
+  const mockCleanup = vi.fn().mockResolvedValue(undefined);
+  const mockGetAllTools = vi.fn().mockReturnValue([
+    {
+      name: 'list_resources',
+      description: 'List available resources',
+      inputSchema: { type: 'object', properties: { resourceType: { type: 'string' } } },
+    },
+  ]);
+  const mockCallTool = vi.fn().mockResolvedValue({
+    content: 'Available resources: [docs, tickets]',
+  });
+
+  class MockMCPClient {
+    constructor(config: unknown) {
+      mockConstructor(config);
+    }
+
+    initialize = mockInitialize;
+    cleanup = mockCleanup;
+    getAllTools = mockGetAllTools;
+    callTool = mockCallTool;
+  }
+
+  return {
+    MockMCPClient,
+    mockConstructor,
+    mockInitialize,
+    mockCleanup,
+    mockGetAllTools,
+    mockCallTool,
+  };
+});
 vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -63,6 +98,13 @@ vi.mock('@aws-sdk/client-bedrock-runtime', async (importOriginal) => {
         input,
       };
     }),
+  };
+});
+
+vi.mock('../../../src/providers/mcp/client', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    MCPClient: mcpMocks.MockMCPClient,
   };
 });
 
@@ -171,6 +213,19 @@ describe('AwsBedrockConverseProvider', () => {
     mockProcessEnv({ AWS_BEDROCK_STOP: undefined });
     mockProcessEnv({ HTTP_PROXY: undefined });
     mockProcessEnv({ HTTPS_PROXY: undefined });
+    mcpMocks.mockConstructor.mockReset();
+    mcpMocks.mockInitialize.mockReset().mockResolvedValue(undefined);
+    mcpMocks.mockCleanup.mockReset().mockResolvedValue(undefined);
+    mcpMocks.mockGetAllTools.mockReset().mockReturnValue([
+      {
+        name: 'list_resources',
+        description: 'List available resources',
+        inputSchema: { type: 'object', properties: { resourceType: { type: 'string' } } },
+      },
+    ]);
+    mcpMocks.mockCallTool.mockReset().mockResolvedValue({
+      content: 'Available resources: [docs, tickets]',
+    });
   });
 
   afterEach(() => {
@@ -418,6 +473,124 @@ describe('AwsBedrockConverseProvider', () => {
 
       // The callback should be executed and return the result
       expect(result.output).toBe('Result: 4');
+    });
+
+    it('should initialize and clean up MCP when configured', async () => {
+      const mcpConfig = {
+        enabled: true,
+        server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+      };
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: mcpConfig,
+        },
+      });
+
+      await (provider as any).initializationPromise;
+      await provider.cleanup();
+
+      expect(mcpMocks.mockConstructor).toHaveBeenCalledWith(mcpConfig);
+      expect(mcpMocks.mockInitialize).toHaveBeenCalled();
+      expect(mcpMocks.mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should include MCP tools in Converse toolConfig', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(createMockConverseResponse('Test'));
+
+      await provider.callApi('List resources');
+
+      const { ConverseCommand } = (await import(
+        '@aws-sdk/client-bedrock-runtime'
+      )) as unknown as MockBedrockModule;
+      expect(ConverseCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolConfig: expect.objectContaining({
+            tools: expect.arrayContaining([
+              expect.objectContaining({
+                toolSpec: expect.objectContaining({
+                  name: 'list_resources',
+                  description: 'List available resources',
+                }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('should execute MCP tools before functionToolCallbacks', async () => {
+      const functionCallback = vi.fn().mockResolvedValue('Function callback result');
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+          functionToolCallbacks: {
+            list_resources: functionCallback,
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: {
+            id: 'tool-123',
+            name: 'list_resources',
+            input: { resourceType: 'docs' },
+          },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('List resources');
+
+      expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {
+        resourceType: 'docs',
+      });
+      expect(functionCallback).not.toHaveBeenCalled();
+      expect(result.output).toBe(
+        'MCP Tool Result (list_resources): Available resources: [docs, tickets]',
+      );
+    });
+
+    it('should return MCP tool errors', async () => {
+      mcpMocks.mockCallTool.mockResolvedValueOnce({
+        content: '',
+        error: 'MCP server failed',
+      });
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('', {
+          toolUse: { id: 'tool-123', name: 'list_resources', input: {} },
+          stopReason: 'tool_use',
+        }),
+      );
+
+      const result = await provider.callApi('List resources');
+
+      expect(result.output).toBe('MCP Tool Error (list_resources): MCP server failed');
     });
 
     it('should fall back to tool_use output when callback is not defined for the function', async () => {
@@ -1966,6 +2139,124 @@ Third line`;
       expect(result.output).toContain('Seattle');
       expect(result.tokenUsage?.prompt).toBe(20);
       expect(result.tokenUsage?.completion).toBe(15);
+    });
+
+    it('should execute MCP tools from streaming tool use responses', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          streaming: true,
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      const streamEvents = [
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
+          },
+        },
+        {
+          contentBlockDelta: {
+            contentBlockIndex: 0,
+            delta: { toolUse: { input: '{"resourceType":"docs"}' } },
+          },
+        },
+        { messageStop: { stopReason: 'tool_use' } },
+        { metadata: { usage: { inputTokens: 20, outputTokens: 15 } } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('List resources');
+
+      expect(mcpMocks.mockCallTool).toHaveBeenCalledWith('list_resources', {
+        resourceType: 'docs',
+      });
+      expect(result.output).toBe(
+        'MCP Tool Result (list_resources): Available resources: [docs, tickets]',
+      );
+    });
+
+    it('should return MCP errors from streaming tool use responses', async () => {
+      mockSend.mockReset();
+      mcpMocks.mockCallTool.mockResolvedValueOnce({
+        content: '',
+        error: 'MCP server failed',
+      });
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          streaming: true,
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      const streamEvents = [
+        {
+          contentBlockStart: {
+            contentBlockIndex: 0,
+            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
+          },
+        },
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { toolUse: { input: '{}' } } } },
+        { messageStop: { stopReason: 'tool_use' } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('List resources');
+
+      expect(result.output).toBe('MCP Tool Error (list_resources): MCP server failed');
+    });
+
+    it('should combine streaming text with MCP tool results', async () => {
+      mockSend.mockReset();
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: {
+          region: 'us-east-1',
+          streaming: true,
+          mcp: {
+            enabled: true,
+            server: { command: 'npx', args: ['test-mcp'], name: 'test-server' },
+          },
+        },
+      });
+
+      const streamEvents = [
+        { contentBlockDelta: { contentBlockIndex: 0, delta: { text: 'Let me check.' } } },
+        {
+          contentBlockStart: {
+            contentBlockIndex: 1,
+            start: { toolUse: { toolUseId: 'tool-123', name: 'list_resources' } },
+          },
+        },
+        { contentBlockDelta: { contentBlockIndex: 1, delta: { toolUse: { input: '{}' } } } },
+        { messageStop: { stopReason: 'tool_use' } },
+      ];
+
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream(streamEvents),
+      });
+
+      const result = await provider.callApiStreaming('List resources');
+
+      expect(result.output).toContain('Let me check.');
+      expect(result.output).toContain(
+        'MCP Tool Result (list_resources): Available resources: [docs, tickets]',
+      );
     });
 
     it('should handle streaming with multiple tool uses', async () => {

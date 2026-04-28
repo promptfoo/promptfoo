@@ -27,6 +27,7 @@ import {
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { isClaudeOpus47Model } from '../anthropic/util';
+import { MCPClient } from '../mcp/client';
 import {
   isOpenAIToolArray,
   isOpenAIToolChoice,
@@ -55,6 +56,7 @@ import type { DocumentType } from '@smithy/types';
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
 import type { TokenUsage, VarValue } from '../../types/shared';
+import type { MCPConfig, MCPTool } from '../mcp/types';
 
 /**
  * Configuration options for the Bedrock Converse API provider
@@ -95,6 +97,7 @@ export interface BedrockConverseOptions extends BedrockOptions {
   // Tool configuration
   tools?: BedrockConverseToolConfig[];
   toolChoice?: 'auto' | 'any' | { tool: { name: string } };
+  mcp?: MCPConfig;
 
   // Function tool callbacks for executing tools locally
   // Keys are function names, values are file:// references or inline function strings
@@ -289,6 +292,66 @@ function convertToolsToConverseFormat(tools: BedrockConverseToolConfig[]): Tool[
 
     throw new Error(`Invalid tool configuration: ${JSON.stringify(tool)}`);
   });
+}
+
+function transformMCPToolsToBedrockConverse(tools: MCPTool[]): BedrockConverseToolConfig[] {
+  return tools.map((tool) => {
+    const { $schema: _$schema, ...cleanSchema } = tool.inputSchema || {};
+    return {
+      toolSpec: {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: {
+          json: {
+            type: 'object',
+            ...cleanSchema,
+          } as DocumentType,
+        },
+      },
+    };
+  });
+}
+
+function normalizeMCPToolContent(content: unknown): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && (part as { text?: unknown }).text != null) {
+            return String((part as { text?: unknown }).text);
+          }
+          if ('json' in part) {
+            return JSON.stringify((part as { json?: unknown }).json);
+          }
+          if ('data' in part) {
+            return JSON.stringify((part as { data?: unknown }).data);
+          }
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
+
+function parseToolInput(input: unknown): Record<string, unknown> {
+  if (typeof input === 'string') {
+    const parsed = input ? JSON.parse(input) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  }
+  return input && typeof input === 'object' && !Array.isArray(input)
+    ? (input as Record<string, unknown>)
+    : {};
 }
 
 /**
@@ -623,6 +686,8 @@ function extractTextFromContentBlocks(
  */
 export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implements ApiProvider {
   declare config: BedrockConverseOptions;
+  private mcpClient: MCPClient | null = null;
+  private initializationPromise: Promise<void> | null = null;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(
@@ -651,6 +716,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         provider: 'bedrock_converse',
       });
     }
+    if (this.config.mcp?.enabled) {
+      this.initializationPromise = this.initializeMCP();
+    }
   }
 
   id(): string {
@@ -659,6 +727,24 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
   toString(): string {
     return `[AWS Bedrock Converse Provider ${this.modelName}]`;
+  }
+
+  private async initializeMCP(): Promise<void> {
+    if (!this.config.mcp) {
+      return;
+    }
+    this.mcpClient = new MCPClient(this.config.mcp);
+    await this.mcpClient.initialize();
+  }
+
+  async cleanup(): Promise<void> {
+    if (this.mcpClient) {
+      if (this.initializationPromise != null) {
+        await this.initializationPromise;
+      }
+      await this.mcpClient.cleanup();
+      this.mcpClient = null;
+    }
   }
 
   /**
@@ -841,19 +927,23 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     vars?: Record<string, VarValue>,
     promptConfig?: Partial<BedrockConverseOptions>,
   ): Promise<ToolConfiguration | undefined> {
+    const mcpTools = this.mcpClient
+      ? transformMCPToolsToBedrockConverse(this.mcpClient.getAllTools())
+      : [];
+
     // Merge prompt.config.tools with this.config.tools (prompt.config takes precedence)
     const configTools = promptConfig?.tools ?? this.config.tools;
-    if (!configTools || configTools.length === 0) {
+    if (mcpTools.length === 0 && (!configTools || configTools.length === 0)) {
       return undefined;
     }
 
     // Load tools from external file with variable rendering if needed
-    const tools = await maybeLoadToolsFromExternalFile(configTools, vars);
-    if (!tools || tools.length === 0) {
+    const tools = configTools ? await maybeLoadToolsFromExternalFile(configTools, vars) : [];
+    if (mcpTools.length === 0 && (!tools || tools.length === 0)) {
       return undefined;
     }
 
-    const converseTools = convertToolsToConverseFormat(tools);
+    const converseTools = convertToolsToConverseFormat([...(mcpTools || []), ...(tools || [])]);
     // Merge toolChoice from prompt.config or fall back to this.config
     const configToolChoice = promptConfig?.toolChoice ?? this.config.toolChoice;
     const toolChoice = configToolChoice
@@ -930,6 +1020,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
    * Main API call using Converse API
    */
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    if (this.initializationPromise != null) {
+      await this.initializationPromise;
+    }
+
     const inferenceConfig = this.buildInferenceConfig();
 
     // Set up tracing context
@@ -1166,13 +1260,57 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       metadata.isModelError = true;
     }
 
+    const toolUseBlocks = content.filter(
+      (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
+        'toolUse' in block && block.toolUse !== undefined,
+    );
+
+    // Handle MCP tool callbacks before local function callbacks.
+    if (this.mcpClient && toolUseBlocks.length > 0) {
+      const results: string[] = [];
+      let hasSuccessfulCallback = false;
+
+      for (const block of toolUseBlocks) {
+        const functionName = block.toolUse.name;
+        const mcpTool = this.mcpClient.getAllTools().find((tool) => tool.name === functionName);
+        if (functionName && mcpTool) {
+          try {
+            const mcpResult = await this.mcpClient.callTool(
+              functionName,
+              parseToolInput(block.toolUse.input),
+            );
+            if (mcpResult?.error) {
+              results.push(`MCP Tool Error (${functionName}): ${mcpResult.error}`);
+            } else {
+              results.push(
+                `MCP Tool Result (${functionName}): ${normalizeMCPToolContent(mcpResult?.content)}`,
+              );
+            }
+            hasSuccessfulCallback = true;
+          } catch (error) {
+            logger.debug(
+              `[Bedrock Converse] MCP tool execution failed for ${functionName}: ${error}`,
+            );
+            results.push(`MCP Tool Error (${functionName}): ${error}`);
+            hasSuccessfulCallback = true;
+          }
+        }
+      }
+
+      if (hasSuccessfulCallback && results.length > 0) {
+        return {
+          output: results.join('\n'),
+          tokenUsage,
+          ...(cost === undefined ? {} : { cost }),
+          ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+          ...(guardrails ? { guardrails } : {}),
+          ...(malformedError ? { error: malformedError } : {}),
+        };
+      }
+    }
+
     // Handle function tool callbacks if configured
     if (this.config.functionToolCallbacks) {
-      const toolUseBlocks = content.filter(
-        (block): block is ContentBlock & { toolUse: NonNullable<ContentBlock['toolUse']> } =>
-          'toolUse' in block && block.toolUse !== undefined,
-      );
-
       if (toolUseBlocks.length > 0) {
         const results: string[] = [];
         let hasSuccessfulCallback = false;
@@ -1237,6 +1375,10 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     prompt: string,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse & { stream?: AsyncIterable<string> }> {
+    if (this.initializationPromise != null) {
+      await this.initializationPromise;
+    }
+
     // Parse the prompt into messages
     const { messages, system } = parseConverseMessages(prompt);
 
@@ -1342,14 +1484,40 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
           } catch {
             parsedInput = toolBlock.input;
           }
-          toolUseParts.push(
-            JSON.stringify({
-              type: 'tool_use',
-              id: toolBlock.toolUseId,
-              name: toolBlock.name,
-              input: parsedInput,
-            }),
-          );
+          const mcpTool = this.mcpClient
+            ?.getAllTools()
+            .find((tool) => tool.name === toolBlock.name);
+          if (this.mcpClient && mcpTool) {
+            try {
+              const mcpResult = await this.mcpClient.callTool(
+                toolBlock.name,
+                parseToolInput(parsedInput),
+              );
+              if (mcpResult?.error) {
+                toolUseParts.push(`MCP Tool Error (${toolBlock.name}): ${mcpResult.error}`);
+              } else {
+                toolUseParts.push(
+                  `MCP Tool Result (${toolBlock.name}): ${normalizeMCPToolContent(
+                    mcpResult?.content,
+                  )}`,
+                );
+              }
+            } catch (error) {
+              logger.debug(
+                `[Bedrock Converse] MCP tool execution failed for ${toolBlock.name}: ${error}`,
+              );
+              toolUseParts.push(`MCP Tool Error (${toolBlock.name}): ${error}`);
+            }
+          } else {
+            toolUseParts.push(
+              JSON.stringify({
+                type: 'tool_use',
+                id: toolBlock.toolUseId,
+                name: toolBlock.name,
+                input: parsedInput,
+              }),
+            );
+          }
         }
       }
 

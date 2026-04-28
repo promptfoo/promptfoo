@@ -379,4 +379,96 @@ describe('FoundationModelConfiguration', () => {
 
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', 'openai:gpt-4');
   });
+
+  it('should show the Bedrock API selector and use legacy InvokeModel ids by default', () => {
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    expect(screen.getByLabelText(/Bedrock API/i)).toHaveValue('invoke');
+    expect(screen.getByRole('textbox', { name: /Model ID/i })).toHaveValue(
+      'anthropic.claude-3-5-sonnet-20241022-v2:0',
+    );
+    expect(screen.queryByText('MCP Servers')).not.toBeInTheDocument();
+  });
+
+  it('should switch Bedrock to Converse ids and show MCP configuration', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText(/Bedrock API/i), 'converse');
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith(
+      'id',
+      'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+    );
+  });
+
+  it('should render Bedrock Converse MCP configuration and save servers under config.mcp', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    expect(screen.getByText('MCP Servers')).toBeInTheDocument();
+    await user.click(
+      screen.getByRole('button', {
+        name: /MCP Servers Configure Model Context Protocol servers/i,
+      }),
+    );
+    await user.click(screen.getByRole('button', { name: /Add MCP Server/i }));
+
+    expect(mockUpdateCustomTarget).toHaveBeenCalledWith('config', {
+      mcp: {
+        enabled: true,
+        servers: [{ name: 'server-1', command: '', args: [] }],
+      },
+    });
+  });
+
+  it('should update Bedrock Converse model input while preserving the Converse id prefix', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{
+          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {},
+        }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="bedrock"
+      />,
+    );
+
+    const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
+    await user.clear(modelIdInput);
+    await user.paste('amazon.nova-pro-v1:0');
+
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith(
+      'id',
+      'bedrock:converse:amazon.nova-pro-v1:0',
+    );
+  });
 });

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { DEFAULT_OPENAI_TARGET_ID, OPENAI_TARGET_PLACEHOLDER } from '../constants';
@@ -13,22 +14,104 @@ interface FoundationModelConfigurationProps {
   providerType: string;
 }
 
+type BedrockApiMode = 'invoke' | 'converse';
+
+interface MCPServerConfig {
+  name: string;
+  command?: string;
+  args?: string[];
+  path?: string;
+  url?: string;
+}
+
+const getBedrockApiModeFromId = (id?: string): BedrockApiMode =>
+  id?.startsWith('bedrock:converse:') ? 'converse' : 'invoke';
+
+const getBedrockModelFromId = (id?: string): string => {
+  if (!id) {
+    return '';
+  }
+  if (id.startsWith('bedrock:converse:')) {
+    return id.slice('bedrock:converse:'.length);
+  }
+  if (id.startsWith('bedrock:')) {
+    return id.slice('bedrock:'.length);
+  }
+  return id;
+};
+
+const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string =>
+  apiMode === 'converse' ? `bedrock:converse:${modelId}` : `bedrock:${modelId}`;
+
 const FoundationModelConfiguration = ({
   selectedTarget,
   updateCustomTarget,
   providerType,
 }: FoundationModelConfigurationProps) => {
-  const [modelId, setModelId] = useState(selectedTarget.id || '');
+  const isBedrock = providerType === 'bedrock';
+  const bedrockApiMode = getBedrockApiModeFromId(selectedTarget.id);
+  const [modelId, setModelId] = useState(
+    isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
+  );
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
 
   useEffect(() => {
-    setModelId(selectedTarget.id || '');
-  }, [selectedTarget.id]);
+    setModelId(isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '');
+  }, [isBedrock, selectedTarget.id]);
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
     setModelId(newId);
-    updateCustomTarget('id', newId);
+    updateCustomTarget('id', isBedrock ? buildBedrockProviderId(bedrockApiMode, newId) : newId);
+  };
+
+  const updateBedrockApiMode = (apiMode: BedrockApiMode) => {
+    updateCustomTarget('id', buildBedrockProviderId(apiMode, modelId));
+  };
+
+  const updateMCPServers = (servers: MCPServerConfig[]) => {
+    const { mcp: _mcp, ...configWithoutMcp } = selectedTarget.config || {};
+
+    updateCustomTarget(
+      'config',
+      servers.length > 0
+        ? {
+            ...selectedTarget.config,
+            mcp: {
+              ...selectedTarget.config?.mcp,
+              enabled: true,
+              servers,
+            },
+          }
+        : configWithoutMcp,
+    );
+  };
+
+  const addMCPServer = () => {
+    const servers = selectedTarget.config?.mcp?.servers || [];
+    updateMCPServers([...servers, { name: `server-${servers.length + 1}`, command: '', args: [] }]);
+    setIsMcpOpen(true);
+  };
+
+  const updateMCPServer = (
+    index: number,
+    field: keyof MCPServerConfig,
+    value: string | string[] | undefined,
+  ) => {
+    const servers: MCPServerConfig[] = [...(selectedTarget.config?.mcp?.servers || [])];
+    servers[index] = {
+      ...servers[index],
+      [field]: value,
+    };
+    updateMCPServers(servers);
+  };
+
+  const removeMCPServer = (index: number) => {
+    const servers = (selectedTarget.config?.mcp?.servers || []).filter(
+      (_server: MCPServerConfig, serverIndex: number) => serverIndex !== index,
+    );
+    updateMCPServers(servers);
   };
 
   const getProviderInfo = (type: string) => {
@@ -97,6 +180,13 @@ const FoundationModelConfiguration = ({
         docUrl: 'https://www.promptfoo.dev/docs/providers/azure',
         envVar: 'AZURE_OPENAI_API_KEY',
       },
+      bedrock: {
+        name: 'AWS Bedrock',
+        defaultModel: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0',
+        placeholder: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+        docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock',
+        envVar: 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
+      },
       openrouter: {
         name: 'OpenRouter',
         defaultModel: 'openrouter:openai/gpt-5.4',
@@ -125,6 +215,27 @@ const FoundationModelConfiguration = ({
 
       <div className="rounded-lg border border-border p-4">
         <div className="space-y-2">
+          {isBedrock && (
+            <div className="mb-4 space-y-2">
+              <Label htmlFor="bedrock-api-mode">
+                Bedrock API <span className="text-destructive">*</span>
+              </Label>
+              <select
+                id="bedrock-api-mode"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                value={bedrockApiMode}
+                onChange={(e) => updateBedrockApiMode(e.target.value as BedrockApiMode)}
+              >
+                <option value="invoke">InvokeModel</option>
+                <option value="converse">Converse</option>
+              </select>
+              <p className="text-sm text-muted-foreground">
+                Use Converse for Bedrock-native tool calling and MCP servers. InvokeModel keeps the
+                legacy direct model API.
+              </p>
+            </div>
+          )}
+
           <Label htmlFor="model-id">
             Model ID <span className="text-destructive">*</span>
           </Label>
@@ -135,7 +246,10 @@ const FoundationModelConfiguration = ({
             placeholder={providerInfo.placeholder}
           />
           <p className="text-sm text-muted-foreground">
-            Specify the model to use. See{' '}
+            {isBedrock
+              ? `Saved as ${buildBedrockProviderId(bedrockApiMode, modelId || '<model>')}. `
+              : 'Specify the model to use. '}
+            See{' '}
             <a
               href={providerInfo.docUrl}
               target="_blank"
@@ -147,6 +261,110 @@ const FoundationModelConfiguration = ({
             for available models.
           </p>
         </div>
+
+        {isBedrock && bedrockApiMode === 'converse' && (
+          <SetupSection
+            title="MCP Servers"
+            description="Configure Model Context Protocol servers for Bedrock Converse tool calling"
+            isExpanded={isMcpOpen}
+            onExpandedChange={setIsMcpOpen}
+            className="mt-4"
+          >
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Servers are saved under <code>config.mcp</code> and enabled when at least one server
+                is configured.
+              </p>
+              <Button type="button" variant="outline" onClick={addMCPServer}>
+                Add MCP Server
+              </Button>
+
+              {(selectedTarget.config?.mcp?.servers || []).map(
+                (server: MCPServerConfig, index: number) => (
+                  <div key={index} className="space-y-3 rounded-md border border-border p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="font-medium">Server {index + 1}</h4>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeMCPServer(index)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor={`mcp-server-${index}-name`}>Name</Label>
+                        <Input
+                          id={`mcp-server-${index}-name`}
+                          value={server.name || ''}
+                          onChange={(e) => updateMCPServer(index, 'name', e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor={`mcp-server-${index}-command`}>Command</Label>
+                        <Input
+                          id={`mcp-server-${index}-command`}
+                          value={server.command || ''}
+                          onChange={(e) =>
+                            updateMCPServer(index, 'command', e.target.value || undefined)
+                          }
+                          placeholder="npx"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor={`mcp-server-${index}-args`}>Args</Label>
+                        <Input
+                          id={`mcp-server-${index}-args`}
+                          value={(server.args || []).join(', ')}
+                          onChange={(e) =>
+                            updateMCPServer(
+                              index,
+                              'args',
+                              e.target.value
+                                .split(',')
+                                .map((arg) => arg.trim())
+                                .filter(Boolean),
+                            )
+                          }
+                          placeholder="-y, @modelcontextprotocol/server-filesystem"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor={`mcp-server-${index}-url`}>URL</Label>
+                        <Input
+                          id={`mcp-server-${index}-url`}
+                          value={server.url || ''}
+                          onChange={(e) =>
+                            updateMCPServer(index, 'url', e.target.value || undefined)
+                          }
+                          placeholder="https://example.com/mcp"
+                        />
+                      </div>
+
+                      <div className="space-y-2 md:col-span-2">
+                        <Label htmlFor={`mcp-server-${index}-path`}>Path</Label>
+                        <Input
+                          id={`mcp-server-${index}-path`}
+                          value={server.path || ''}
+                          onChange={(e) =>
+                            updateMCPServer(index, 'path', e.target.value || undefined)
+                          }
+                          placeholder="./mcp-server.js"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+          </SetupSection>
+        )}
 
         <SetupSection
           title="Advanced Configuration"

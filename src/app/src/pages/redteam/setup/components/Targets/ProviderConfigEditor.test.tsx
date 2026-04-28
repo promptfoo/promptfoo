@@ -20,7 +20,24 @@ vi.mock('./BrowserAutomationConfiguration', () => ({
   default: () => <div data-testid="browser-config" />,
 }));
 vi.mock('./FoundationModelConfiguration', () => ({
-  default: () => <div data-testid="fm-config" />,
+  default: ({
+    providerType,
+    updateCustomTarget,
+  }: {
+    providerType: string;
+    updateCustomTarget: (field: string, value: unknown) => void;
+  }) => (
+    <div data-testid="fm-config">
+      {providerType === 'bedrock' && (
+        <button
+          data-testid="switch-bedrock-invoke"
+          onClick={() => updateCustomTarget('id', 'bedrock:anthropic.claude-3-5-sonnet')}
+        >
+          Switch Bedrock InvokeModel
+        </button>
+      )}
+    </div>
+  ),
 }));
 vi.mock('./AgentFrameworkConfiguration', () => ({
   default: () => <div data-testid="agent-config" />,
@@ -446,6 +463,52 @@ describe('ProviderConfigEditor', () => {
     expect(isValid).toBe(true);
     expect(mockSetError).toHaveBeenCalledWith(null);
     expect(mockOnValidate).toHaveBeenCalledWith(true);
+  });
+
+  it('should render Bedrock with the foundation model configuration', () => {
+    const mockSetProvider = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{ id: 'bedrock:anthropic.claude-3-5-sonnet-20241022-v2:0', config: {} }}
+        setProvider={mockSetProvider}
+        providerType="bedrock"
+      />,
+    );
+
+    expect(screen.getByTestId('fm-config')).toBeInTheDocument();
+    expect(screen.queryByTestId('custom-config')).not.toBeInTheDocument();
+  });
+
+  it('should remove Bedrock MCP config when switching back to InvokeModel ids', () => {
+    const mockSetProvider = vi.fn();
+
+    renderWithProviders(
+      <ProviderConfigEditor
+        provider={{
+          id: 'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
+          config: {
+            mcp: {
+              enabled: true,
+              servers: [{ name: 'server-1', command: 'npx', args: ['mcp-server'] }],
+            },
+          },
+        }}
+        setProvider={mockSetProvider}
+        providerType="bedrock"
+      />,
+    );
+
+    act(() => {
+      screen.getByTestId('switch-bedrock-invoke').click();
+    });
+
+    expect(mockSetProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'bedrock:anthropic.claude-3-5-sonnet',
+        config: {},
+      }),
+    );
   });
 
   describe('updateCustomTarget inputs handling', () => {
