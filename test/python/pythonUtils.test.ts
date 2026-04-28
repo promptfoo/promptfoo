@@ -22,18 +22,30 @@ import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import * as pythonUtils from '../../src/python/pythonUtils';
 
+const fsMock = vi.hoisted(() => ({
+  writeFileSync: vi.fn(),
+  readFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+}));
+
 // Mock setup
 vi.mock('fs', () => {
-  const fsMock = {
-    writeFileSync: vi.fn(),
-    readFileSync: vi.fn(),
-    unlinkSync: vi.fn(),
-  };
   return {
     ...fsMock,
     default: fsMock,
   };
 });
+
+vi.mock('fs/promises', () => ({
+  default: {
+    writeFile: fsMock.writeFileSync,
+    readFile: fsMock.readFileSync,
+    unlink: fsMock.unlinkSync,
+  },
+  writeFile: fsMock.writeFileSync,
+  readFile: fsMock.readFileSync,
+  unlink: fsMock.unlinkSync,
+}));
 
 vi.mock('../../src/envars', () => ({
   getEnvString: vi.fn(),

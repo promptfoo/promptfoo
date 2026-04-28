@@ -2,7 +2,7 @@
 import './setup';
 
 import crypto from 'crypto';
-import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -15,23 +15,39 @@ import { runPython } from '../../../src/python/pythonUtils';
 import { TOKEN_REFRESH_BUFFER_MS } from '../../../src/util/oauth';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
+const fsPromisesMocks = vi.hoisted(() => ({
+  actualReadFile: undefined as typeof import('fs/promises').readFile | undefined,
+  readFile: vi.fn(),
+}));
+
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  fsPromisesMocks.actualReadFile = actual.readFile;
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      readFile: fsPromisesMocks.readFile,
+    },
+    readFile: fsPromisesMocks.readFile,
+  };
+});
+
 describe('RSA signature authentication', () => {
   let mockPrivateKey: string;
   let mockSign: MockInstance;
   let mockUpdate: MockInstance;
   let mockEnd: MockInstance;
-  let actualReadFileSync: typeof fs.readFileSync;
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
-    actualReadFileSync = fs.readFileSync;
-    vi.spyOn(fs, 'readFileSync').mockImplementation(((path, options) => {
-      if (path === '/path/to/key.pem') {
+    vi.mocked(fsPromises.readFile).mockImplementation((async (filePath, options) => {
+      if (filePath.toString() === '/path/to/key.pem') {
         return mockPrivateKey;
       }
 
-      return actualReadFileSync(path as any, options as any);
-    }) as typeof fs.readFileSync);
+      return fsPromisesMocks.actualReadFile!(filePath as any, options as any);
+    }) as typeof fsPromises.readFile);
 
     mockUpdate = vi.fn();
     mockEnd = vi.fn();
@@ -74,7 +90,7 @@ describe('RSA signature authentication', () => {
     await provider.callApi('test');
 
     // Verify signature generation with specific data
-    expect(fs.readFileSync).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
+    expect(fsPromises.readFile).toHaveBeenCalledWith('/path/to/key.pem', 'utf8');
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
     expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockEnd).toHaveBeenCalledTimes(1);
@@ -196,7 +212,7 @@ describe('RSA signature authentication', () => {
 
     // Verify signature generation using privateKey directly
     const privateKeyFileReads = vi
-      .mocked(fs.readFileSync)
+      .mocked(fsPromises.readFile)
       .mock.calls.filter(([filePath]) => filePath === '/path/to/key.pem');
     expect(privateKeyFileReads).toHaveLength(0);
     expect(crypto.createSign).toHaveBeenCalledWith('SHA256');
@@ -250,10 +266,8 @@ describe('RSA signature authentication', () => {
       },
     });
 
-    // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = vi
-      .spyOn(fs, 'readFileSync')
-      .mockReturnValue(Buffer.from('mock-keystore-data'));
+    // Mock fs/promises.readFile to return mock keystore data
+    vi.mocked(fsPromises.readFile).mockResolvedValue(Buffer.from('mock-keystore-data'));
 
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_JKS_PASSWORD: 'env-password',
@@ -287,9 +301,6 @@ describe('RSA signature authentication', () => {
       expect(jksMock.toPem).toHaveBeenCalledWith(expect.anything(), 'env-password');
     } finally {
       restoreEnv();
-
-      // Clean up
-      readFileSyncSpy.mockRestore();
     }
   });
 
@@ -302,10 +313,8 @@ describe('RSA signature authentication', () => {
       },
     });
 
-    // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = vi
-      .spyOn(fs, 'readFileSync')
-      .mockReturnValue(Buffer.from('mock-keystore-data'));
+    // Mock fs/promises.readFile to return mock keystore data
+    vi.mocked(fsPromises.readFile).mockResolvedValue(Buffer.from('mock-keystore-data'));
 
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_JKS_PASSWORD: 'env-password',
@@ -339,9 +348,6 @@ describe('RSA signature authentication', () => {
       expect(jksMock.toPem).toHaveBeenCalledWith(expect.any(Buffer), 'config-password');
     } finally {
       restoreEnv();
-
-      // Clean up
-      readFileSyncSpy.mockRestore();
     }
   });
 
@@ -352,10 +358,8 @@ describe('RSA signature authentication', () => {
       throw new Error('Should not be called');
     });
 
-    // Mock fs.readFileSync to return mock keystore data
-    const readFileSyncSpy = vi
-      .spyOn(fs, 'readFileSync')
-      .mockReturnValue(Buffer.from('mock-keystore-data'));
+    // Mock fs/promises.readFile to return mock keystore data
+    vi.mocked(fsPromises.readFile).mockResolvedValue(Buffer.from('mock-keystore-data'));
 
     const provider = new HttpProvider('http://example.com', {
       config: {
@@ -388,9 +392,6 @@ describe('RSA signature authentication', () => {
       );
     } finally {
       restoreEnv();
-
-      // Clean up
-      readFileSyncSpy.mockRestore();
     }
   });
 });

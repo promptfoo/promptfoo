@@ -12,10 +12,28 @@ vi.mock('read-excel-file/node', () => ({
 type SheetData = unknown[][];
 
 const createMockSheet = (sheet: string, data: SheetData = []) => ({ sheet, data });
+const mockExistsSync = vi.hoisted(() => vi.fn((_filePath?: any) => true));
 
 vi.mock('fs', () => ({
-  existsSync: vi.fn(() => true),
+  existsSync: mockExistsSync,
 }));
+
+vi.mock('fs/promises', () => {
+  const access = vi.fn((filePath: any) => {
+    if (mockExistsSync(filePath)) {
+      return undefined;
+    }
+    throw Object.assign(new Error(`ENOENT: no such file or directory, access '${filePath}'`), {
+      code: 'ENOENT',
+    });
+  });
+  return {
+    default: {
+      access,
+    },
+    access,
+  };
+});
 
 describe('parseXlsxFile', () => {
   let fs: any;

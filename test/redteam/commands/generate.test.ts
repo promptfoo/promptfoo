@@ -49,7 +49,48 @@ type SynthesizeMockResult = {
   failedPlugins: FailedPluginInfo[];
 };
 
-vi.mock('node:fs');
+const fsMocks = vi.hoisted(() => ({
+  readFileSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  mkdirSync: vi.fn(),
+}));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
+vi.mock('fs/promises', () => {
+  const access = vi.fn((filePath: any) => {
+    if (fsMocks.existsSync(filePath)) {
+      return Promise.resolve();
+    }
+    return Promise.reject(
+      Object.assign(new Error(`ENOENT: no such file or directory, access '${filePath}'`), {
+        code: 'ENOENT',
+      }),
+    );
+  });
+  return {
+    default: {
+      readFile: fsMocks.readFileSync,
+      writeFile: fsMocks.writeFileSync,
+      mkdir: fsMocks.mkdirSync,
+      access,
+    },
+    readFile: fsMocks.readFileSync,
+    writeFile: fsMocks.writeFileSync,
+    mkdir: fsMocks.mkdirSync,
+    access,
+  };
+});
 vi.mock('../../../src/redteam', () => ({
   MAX_MAX_CONCURRENCY: 20,
   synthesize: vi.fn().mockResolvedValue({

@@ -13,17 +13,29 @@ import { mockProcessEnv } from '../util/utils';
 
 vi.mock('../../src/esm');
 vi.mock('python-shell');
+const fsMock = vi.hoisted(() => ({
+  writeFileSync: vi.fn(),
+  readFileSync: vi.fn(),
+  unlinkSync: vi.fn(),
+}));
+
 vi.mock('fs', () => {
-  const fsMock = {
-    writeFileSync: vi.fn(),
-    readFileSync: vi.fn(),
-    unlinkSync: vi.fn(),
-  };
   return {
     ...fsMock,
     default: fsMock,
   };
 });
+
+vi.mock('fs/promises', () => ({
+  default: {
+    writeFile: fsMock.writeFileSync,
+    readFile: fsMock.readFileSync,
+    unlink: fsMock.unlinkSync,
+  },
+  writeFile: fsMock.writeFileSync,
+  readFile: fsMock.readFileSync,
+  unlink: fsMock.unlinkSync,
+}));
 vi.mock('../../src/python/pythonUtils', async () => {
   const originalModule = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
     '../../src/python/pythonUtils',
