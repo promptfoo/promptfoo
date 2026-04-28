@@ -76,8 +76,20 @@ export const corsOptionsDelegate: CorsOptionsDelegate<Request> = (req, callback)
     return;
   }
 
+  const host = req.headers.host || '';
+  const allowed = isAllowedCorsOrigin(origin, host);
+  if (!allowed) {
+    logger.warn('[CORS] Cross-origin browser access was not allowlisted', {
+      method: req.method,
+      path: req.path,
+      origin,
+      host,
+      help: 'Set PROMPTFOO_CSRF_ALLOWED_ORIGINS to the exact trusted browser origin if this cross-origin deployment is intentional.',
+    });
+  }
+
   callback(null, {
-    origin: isAllowedCorsOrigin(origin, req.headers.host || '') ? origin : false,
+    origin: allowed ? origin : false,
   });
 };
 
@@ -100,7 +112,14 @@ export function socketIoCorsOrigin(
   origin: string | undefined,
   callback: (err: Error | null, allow?: boolean) => void,
 ): void {
-  callback(null, isAllowedSocketIoCorsOrigin(origin));
+  const allowed = isAllowedSocketIoCorsOrigin(origin);
+  if (origin && !allowed) {
+    logger.warn('[CORS] Socket.IO browser origin was not allowlisted', {
+      origin,
+      help: 'Set PROMPTFOO_CSRF_ALLOWED_ORIGINS to the exact trusted browser origin if this cross-origin deployment is intentional.',
+    });
+  }
+  callback(null, allowed);
 }
 
 export function csrfProtection(req: Request, res: Response, next: NextFunction): void {

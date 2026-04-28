@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import {
   corsOptionsDelegate,
   csrfProtection,
   isAllowedBrowserOrigin,
   isAllowedCorsOrigin,
   isAllowedSocketIoCorsOrigin,
+  socketIoCorsOrigin,
 } from '../../../src/server/middleware/csrfProtection';
 import type { NextFunction, Request, Response } from 'express';
 
@@ -273,6 +275,14 @@ describe('csrfProtection', () => {
       );
 
       expect(callback).toHaveBeenCalledWith(null, { origin: false });
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[CORS] Cross-origin browser access was not allowlisted',
+        expect.objectContaining({
+          origin: 'https://evil.example',
+          host: 'localhost:15500',
+          help: expect.stringContaining('PROMPTFOO_CSRF_ALLOWED_ORIGINS'),
+        }),
+      );
     });
 
     it('emits CORS headers for trusted localhost aliases', () => {
@@ -302,6 +312,21 @@ describe('csrfProtection', () => {
       expect(isAllowedSocketIoCorsOrigin(undefined)).toBe(true);
       expect(isAllowedSocketIoCorsOrigin('http://localhost:5173')).toBe(true);
       expect(isAllowedSocketIoCorsOrigin('https://evil.example')).toBe(false);
+    });
+
+    it('logs guidance when Socket.IO receives an untrusted browser origin', () => {
+      const callback = vi.fn();
+
+      socketIoCorsOrigin('https://evil.example', callback);
+
+      expect(callback).toHaveBeenCalledWith(null, false);
+      expect(logger.warn).toHaveBeenCalledWith(
+        '[CORS] Socket.IO browser origin was not allowlisted',
+        expect.objectContaining({
+          origin: 'https://evil.example',
+          help: expect.stringContaining('PROMPTFOO_CSRF_ALLOWED_ORIGINS'),
+        }),
+      );
     });
   });
 });
