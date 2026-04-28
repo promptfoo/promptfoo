@@ -4,15 +4,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_COMMIT_BATCH_SIZE = 25;
 const MIN_RELEASE_PLEASE_MAJOR = 5;
+const RELEASE_PLEASE_ACTION = 'googleapis/release-please-action';
 
 type ReleasePleaseConfig = {
   'commit-batch-size'?: unknown;
   'last-release-sha'?: unknown;
+};
+
+type WorkflowStep = { uses?: unknown };
+type ReleasePleaseWorkflow = {
+  jobs?: { 'release-please'?: { steps?: WorkflowStep[] } };
 };
 
 function readRepoFile(relativePath: string) {
@@ -58,18 +65,33 @@ describe('release-please automation', () => {
     expect(batchSize).toBeLessThanOrEqual(MAX_COMMIT_BATCH_SIZE);
   });
 
-  it('pins release-please-action to a SHA on the v5+ family', () => {
-    const workflow = readRepoFile('.github/workflows/release-please.yml');
+  it('pins the release-please job action to a SHA on the v5+ family', () => {
+    const workflowYaml = readRepoFile('.github/workflows/release-please.yml');
+    const workflow = yaml.load(workflowYaml) as ReleasePleaseWorkflow;
 
-    // Match the SHA pin alongside the `# vN.x.x` version comment Renovate maintains.
-    // SHAs alone are opaque, so the comment is the only stable signal of the major.
-    const match = workflow.match(
-      /uses:\s*googleapis\/release-please-action@([0-9a-f]{40})\s*#\s*v(\d+)/,
+    // Scope to the actual step in the release-please job so the assertion can't
+    // be satisfied by a stray match elsewhere (other job, commented-out line).
+    const releaseStep = workflow.jobs?.['release-please']?.steps?.find(
+      (step) => typeof step.uses === 'string' && step.uses.startsWith(`${RELEASE_PLEASE_ACTION}@`),
     );
     assert(
-      match !== null,
-      'release-please-action must be SHA-pinned with a `# vN` version comment',
+      releaseStep && typeof releaseStep.uses === 'string',
+      `release-please job must include a ${RELEASE_PLEASE_ACTION} step`,
     );
-    expect(Number.parseInt(match[2], 10)).toBeGreaterThanOrEqual(MIN_RELEASE_PLEASE_MAJOR);
+
+    expect(releaseStep.uses).toMatch(new RegExp(`^${RELEASE_PLEASE_ACTION}@[0-9a-f]{40}$`));
+
+    // Major comes from the `# vN.x.x` comment Renovate maintains alongside the
+    // SHA pin — SHAs alone are opaque, so the comment is the only stable signal.
+    const usesLine = workflowYaml
+      .split('\n')
+      .find((line) => line.includes(`uses: ${releaseStep.uses}`));
+    assert(usesLine, 'release-please-action `uses:` line missing in raw YAML');
+    const versionMatch = usesLine.match(/#\s*v(\d+)/);
+    assert(
+      versionMatch !== null,
+      'release-please-action `uses:` must carry a `# vN` version comment',
+    );
+    expect(Number.parseInt(versionMatch[1], 10)).toBeGreaterThanOrEqual(MIN_RELEASE_PLEASE_MAJOR);
   });
 });
