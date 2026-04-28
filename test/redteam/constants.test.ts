@@ -68,6 +68,7 @@ describe('constants', () => {
       'realestate',
       'guardrails-eval',
       'coding-agent:core',
+      'coding-agent:all',
       'coding-agent:codex',
       'harness:preflight',
     ]);
@@ -121,21 +122,7 @@ describe('constants', () => {
   });
 
   it('ADDITIONAL_PLUGINS should contain supported coding-agent plugins', () => {
-    expect(CODING_AGENT_PLUGINS).toEqual([
-      'coding-agent:repo-prompt-injection',
-      'coding-agent:terminal-output-injection',
-      'coding-agent:secret-env-read',
-      'coding-agent:sandbox-read-escape',
-      'coding-agent:verifier-sabotage',
-      'coding-agent:secret-file-read',
-      'coding-agent:sandbox-write-escape',
-      'coding-agent:network-egress-bypass',
-      'coding-agent:procfs-credential-read',
-      'coding-agent:delayed-ci-exfil',
-      'coding-agent:generated-vulnerability',
-      'coding-agent:automation-poisoning',
-      'coding-agent:steganographic-exfil',
-    ]);
+    expect(CODING_AGENT_PLUGINS).toEqual(CODEX_AGENT_PLUGINS);
 
     CODING_AGENT_PLUGINS.forEach((plugin) => {
       expect(ADDITIONAL_PLUGINS).toContain(plugin);
@@ -144,13 +131,33 @@ describe('constants', () => {
   });
 
   it('CODING_AGENT_CORE_PLUGINS should keep the baseline collection focused', () => {
-    expect(CODING_AGENT_COLLECTIONS).toEqual(['coding-agent:core', 'coding-agent:all']);
+    expect(CODING_AGENT_COLLECTIONS).toEqual([
+      'coding-agent:core',
+      'coding-agent:all',
+      'coding-agent:codex',
+      'harness:preflight',
+    ]);
     expect(CODING_AGENT_CORE_PLUGINS).toEqual([
       'coding-agent:repo-prompt-injection',
       'coding-agent:terminal-output-injection',
+      'coding-agent:secret-file-read',
       'coding-agent:secret-env-read',
+      'coding-agent:terminal-network-exfil',
+      'coding-agent:markdown-url-exfil',
+      'coding-agent:trace-log-exfil',
       'coding-agent:sandbox-read-escape',
+      'coding-agent:sandbox-write-escape',
+      'coding-agent:network-egress-bypass',
+      'coding-agent:approval-bypass',
+      'coding-agent:approval-misrepresentation',
+      'coding-agent:least-privilege-drift',
       'coding-agent:verifier-sabotage',
+      'coding-agent:dependency-confusion',
+      'coding-agent:lifecycle-script-execution',
+      'coding-agent:claim-validation-mismatch',
+      'coding-agent:trace-completeness',
+      'coding-agent:trace-redaction',
+      'coding-agent:replay-bundle-completeness',
     ]);
   });
 
@@ -251,7 +258,7 @@ describe('constants', () => {
 
     it('should have coding agent risks', () => {
       expect(riskCategories['Coding Agent Security']).toBeDefined();
-      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_PLUGINS);
+      expect(riskCategories['Coding Agent Security']).toEqual(CODING_AGENT_REMOTE_ONLY_PLUGINS);
     });
   });
 });

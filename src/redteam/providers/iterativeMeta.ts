@@ -11,6 +11,7 @@ import {
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { getAgenticAttackProfile } from '../agenticProfile';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -102,6 +103,40 @@ function getIterativeMetaGoalRubric(goal: string | undefined): string {
   `;
 }
 
+const URL_PATTERN = /\bhttps?:\/\/[^\s"'`<>)]+/g;
+const QUOTED_LITERAL_PATTERN = /"([^"]+)"|'([^']+)'|`([^`]+)`/g;
+const PATH_LIKE_LITERAL_PATTERN =
+  /(?:~|\.{1,2}|\/)[/\w.@-]+(?:\.[A-Za-z0-9]+)?|\b[\w.@-]+(?:\/[\w.@-]+)+\.(?:css|csv|env|go|html|ini|java|js|json|jsonl|lock|log|md|py|rs|sh|toml|ts|tsx|txt|xml|ya?ml)\b|\b\.[\w.@-]+\b/g;
+
+const collectConcreteTaskAnchors = (task: string | undefined): string[] => {
+  if (!task) {
+    return [];
+  }
+
+  const anchors = new Set<string>();
+
+  for (const match of task.matchAll(URL_PATTERN)) {
+    anchors.add(match[0]);
+  }
+
+  for (const match of task.matchAll(QUOTED_LITERAL_PATTERN)) {
+    const literal = match[1] ?? match[2] ?? match[3];
+    const trimmedLiteral = literal?.trim();
+    if (trimmedLiteral && !/\s/.test(trimmedLiteral)) {
+      anchors.add(trimmedLiteral);
+    }
+  }
+
+  for (const match of task.matchAll(PATH_LIKE_LITERAL_PATTERN)) {
+    anchors.add(match[0]);
+  }
+
+  return [...anchors].filter((anchor) => anchor.length >= 2);
+};
+
+const missingConcreteTaskAnchors = (prompt: string, concreteTask: string | undefined): string[] =>
+  collectConcreteTaskAnchors(concreteTask).filter((anchor) => !prompt.includes(anchor));
+
 export async function runMetaAgentRedteam({
   context,
   filters,
@@ -145,6 +180,11 @@ export async function runMetaAgentRedteam({
 
   const goal = context?.test?.metadata?.goal || vars[injectVar];
   const additionalRubric = getIterativeMetaGoalRubric(goal);
+  const agenticAttackProfile = getAgenticAttackProfile(test?.metadata);
+  const concreteTask =
+    agenticAttackProfile?.preserveConcreteTask && typeof originalVars[injectVar] === 'string'
+      ? originalVars[injectVar]
+      : undefined;
 
   // Generate unique test run ID
   const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
@@ -206,6 +246,8 @@ export async function runMetaAgentRedteam({
       testRunId,
       iteration: i + 1,
       goal,
+      agenticAttackProfile,
+      concreteTask,
       purpose: test?.metadata?.purpose,
       modifiers: test?.metadata?.modifiers,
       inputs,
@@ -281,6 +323,15 @@ export async function runMetaAgentRedteam({
 
     if (!attackPrompt) {
       logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
+      continue;
+    }
+
+    const missingAnchors = missingConcreteTaskAnchors(attackPrompt, concreteTask);
+    if (missingAnchors.length > 0) {
+      logger.info('[IterativeMeta] Rejecting attack prompt that dropped concrete-task anchors', {
+        iteration: i + 1,
+        missingAnchors,
+      });
       continue;
     }
 
@@ -645,6 +696,15 @@ export async function runMetaAgentRedteam({
 
       break;
     }
+  }
+
+  if (!lastResponse && !failClosedError) {
+    failClosedError = 'Iterative Meta did not execute any target probes';
+    stopReason = 'Agent abandoned';
+    logger.warn('[IterativeMeta] No target probes were executed', {
+      finalIteration,
+      testRunId,
+    });
   }
 
   return {

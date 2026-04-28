@@ -22,6 +22,7 @@ import {
 } from '../util';
 import { getPromptOutputFormatter } from './multiInputFormat';
 
+import type { TraceContextData } from '../../tracing/traceContext';
 import type {
   ApiProvider,
   Assertion,

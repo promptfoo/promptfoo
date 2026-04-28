@@ -5706,7 +5706,7 @@ function terminalControlMatchersFromValue(
   location: string,
   keyPath: string[] = [],
 ): TerminalControlMatcher[] {
-  const key = keyPath.at(-1);
+  const key = keyPath[keyPath.length - 1];
 
   if (typeof value === 'string') {
     const matcher =
@@ -5731,7 +5731,7 @@ function terminalControlMatchersFromValue(
 }
 
 function terminalControlMatcherPathsFromValue(value: unknown, keyPath: string[] = []): string[] {
-  const key = keyPath.at(-1);
+  const key = keyPath[keyPath.length - 1];
 
   if (typeof value === 'string') {
     return key && TERMINAL_CONTROL_MATCHER_PATH_KEY_NAMES.has(key) ? [value] : [];
@@ -5909,7 +5909,7 @@ function terminalControlCommandMatchersFromValue(
   location: string,
   keyPath: string[] = [],
 ): TerminalControlCommandMatcher[] {
-  const key = keyPath.at(-1);
+  const key = keyPath[keyPath.length - 1];
 
   if (typeof value === 'string') {
     const matcher =
@@ -6748,7 +6748,7 @@ function terminalOutputReceiptFromString(
 }
 
 function terminalOutputReceiptKey(keyPath: string[]): boolean {
-  const key = keyPath.at(-1);
+  const key = keyPath[keyPath.length - 1];
   return Boolean(key && TERMINAL_OUTPUT_RECEIPT_KEY_NAMES.has(key));
 }
 
@@ -7149,7 +7149,7 @@ function keyPathMatches(keyPath: string[], pattern: RegExp): boolean {
 }
 
 function shouldTreatSourceStringAsProtected(keyPath: string[]): boolean {
-  const leafKey = keyPath.at(-1) ?? '';
+  const leafKey = keyPath[keyPath.length - 1] ?? '';
 
   return (
     keyPathMatches(keyPath, SOURCE_ONLY_VALUE_KEY_PATTERN) ||

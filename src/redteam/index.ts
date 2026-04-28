@@ -11,6 +11,7 @@ import logger, { getLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
+import { buildAgenticStrategyGoal } from './agenticProfile';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   BIAS_PLUGINS,
@@ -384,6 +385,7 @@ const categories = {
   foundation: FOUNDATION_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   'coding-agent:core': CODING_AGENT_CORE_PLUGINS,
+  'coding-agent:all': CODEX_AGENT_PLUGINS,
   'coding-agent:codex': CODEX_AGENT_PLUGINS,
   'harness:preflight': HARNESS_PREFLIGHT_PLUGINS,
   bias: BIAS_PLUGINS,
@@ -913,6 +915,7 @@ export async function synthesize({
   targetIds,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
+  targetManifest,
   testGenerationInstructions,
 }: SynthesizeOptions): Promise<{
   purpose: string;
@@ -1305,6 +1308,10 @@ export async function synthesize({
       const resultsPerLanguage: Record<string, { requested: number; generated: number }> = {};
 
       const languagePromises = languages.map(async (lang) => {
+        const resolvedPluginConfig = resolvePluginConfigWithMaxChars(
+          plugin.config,
+          maxCharsPerMessage,
+        );
         const pluginTests = await action({
           provider: redteamProvider,
           purpose,
@@ -1312,7 +1319,8 @@ export async function synthesize({
           n: plugin.numTests,
           delayMs: delay || 0,
           config: {
-            ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+            ...resolvedPluginConfig,
+            ...(targetManifest && !resolvedPluginConfig.targetManifest ? { targetManifest } : {}),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
             ...(hasMultipleInputs ? { inputs } : {}),
@@ -1405,7 +1413,12 @@ export async function synthesize({
             const policy = getPolicyText(testCase.metadata);
             const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-            (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = buildAgenticStrategyGoal(
+              prompt,
+              extractedGoal,
+              plugin.id,
+              testCase.metadata,
+            );
           }
         }
 
@@ -1531,7 +1544,12 @@ export async function synthesize({
             const policy = getPolicyText(testCase.metadata);
             const extractedGoal = await extractGoalFromPrompt(prompt, purpose, plugin.id, policy);
 
-            (testCase.metadata as any).goal = extractedGoal;
+            (testCase.metadata as any).goal = buildAgenticStrategyGoal(
+              prompt,
+              extractedGoal,
+              plugin.id,
+              testCase.metadata,
+            );
           }
         }
 

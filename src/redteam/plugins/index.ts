@@ -38,6 +38,10 @@ import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
+import {
+  CodingAgentGeneratedPlugin,
+  LOCAL_CODING_AGENT_PLUGIN_SPECS,
+} from './codingAgent/generator';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { CyberSecEvalPlugin } from './cyberseceval';
@@ -372,6 +376,7 @@ async function fetchRemoteTestCases(
     n,
     purpose,
     task: key,
+    targetManifest: (configForRemote as Record<string, unknown>).targetManifest,
     version: VERSION,
     email: getUserEmail(),
   });
@@ -417,7 +422,7 @@ function createPluginFactory<T extends PluginConfig>(
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
     action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
-      const configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      const configWithDefaults = applyDefaultRemotePluginConfig(key, config as T);
 
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
@@ -461,6 +466,21 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
+  ...LOCAL_CODING_AGENT_PLUGIN_SPECS.map((spec) =>
+    createPluginFactory(
+      class extends CodingAgentGeneratedPlugin {
+        constructor(
+          provider: ApiProvider,
+          purpose: string,
+          injectVar: string,
+          config: PluginConfig,
+        ) {
+          super(provider, purpose, injectVar, spec, config);
+        }
+      },
+      spec.id,
+    ),
+  ),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
       class extends AlignedHarmfulPlugin {
@@ -661,7 +681,10 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
-  (id) => id !== 'indirect-prompt-injection' && id !== 'rag-poisoning',
+  (id) =>
+    id !== 'indirect-prompt-injection' &&
+    id !== 'rag-poisoning' &&
+    !LOCAL_CODING_AGENT_PLUGIN_SPECS.some((spec) => spec.id === id),
 ).map((key) => createRemotePlugin(key));
 
 remotePlugins.push(

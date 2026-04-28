@@ -4,6 +4,7 @@ import {
   ALIASED_PLUGIN_MAPPINGS,
   ALIASED_PLUGINS,
   ALL_STRATEGIES,
+  CODEX_AGENT_PLUGINS,
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
@@ -12,6 +13,7 @@ import {
   FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  HARNESS_PREFLIGHT_PLUGINS,
   INSURANCE_PLUGINS,
   MEDICAL_PLUGINS,
   PHARMACY_PLUGINS,
@@ -59,6 +61,22 @@ const TracingConfigSchema: z.ZodType<TracingConfig> = z.lazy(() =>
       .optional(),
   }),
 );
+
+const RedteamTargetManifestSchema = z
+  .object({
+    name: z.string().optional(),
+    kind: z.string().optional(),
+    files: z.array(z.string()).optional(),
+    commands: z.array(z.string()).optional(),
+    tools: z.array(z.string()).optional(),
+    frameworks: z.array(z.string()).optional(),
+    allowedPaths: z.array(z.string()).optional(),
+    sensitivePaths: z.array(z.string()).optional(),
+    dataSources: z.array(z.string()).optional(),
+    dataSinks: z.array(z.string()).optional(),
+    notes: z.array(z.string()).optional(),
+  })
+  .describe('Compact manifest describing the redteam target surface for target-aware generation');
 
 /**
  * Schema for redteam contexts - allows testing multiple security contexts/states
@@ -240,6 +258,9 @@ export const RedteamGenerateOptionsSchema = z.object({
   provider: z.string().optional().describe('Provider to use'),
   purpose: z.string().optional().describe('Purpose of the redteam generation'),
   strategies: z.array(RedteamStrategySchema).optional().describe('Strategies to use'),
+  targetManifest: RedteamTargetManifestSchema.optional().describe(
+    'Files, commands, tools, paths, and data boundaries available to the target',
+  ),
   write: z.boolean().describe('Whether to write the output'),
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
   progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
@@ -325,6 +346,9 @@ export const RedteamConfigSchema = z
       .describe('Whether to exclude target output from the agentific attack generation process'),
     tracing: TracingConfigSchema.optional().describe(
       'Tracing defaults applied to all strategies unless overridden',
+    ),
+    targetManifest: RedteamTargetManifestSchema.optional().describe(
+      'Files, commands, tools, paths, and data boundaries available to the target',
     ),
     graderExamples: z
       .array(
@@ -443,6 +467,10 @@ export const RedteamConfigSchema = z
         expandCollection([...CODING_AGENT_CORE_PLUGINS], config, numTests, severity);
       } else if (id === 'coding-agent:all') {
         expandCollection([...CODING_AGENT_PLUGINS], config, numTests, severity);
+      } else if (id === 'coding-agent:codex') {
+        expandCollection([...CODEX_AGENT_PLUGINS], config, numTests, severity);
+      } else if (id === 'harness:preflight') {
+        expandCollection([...HARNESS_PREFLIGHT_PLUGINS], config, numTests, severity);
       }
     };
 
@@ -577,6 +605,7 @@ export const RedteamConfigSchema = z
           }
         : {}),
       ...(data.tracing ? { tracing: data.tracing } : {}),
+      ...(data.targetManifest ? { targetManifest: data.targetManifest } : {}),
       ...(data.graderExamples ? { graderExamples: data.graderExamples } : {}),
     };
   });

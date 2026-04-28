@@ -50,6 +50,10 @@ export const CODEX_AGENT_PLUGINS = [
 
 export type CodingAgentPlugin = CodingAgentCorePlugin | CodexAgentExtraPlugin;
 
+// Backward-compatible alias for configs created before the Codex-specific
+// collection name was introduced.
+export const CODING_AGENT_PLUGINS = CODEX_AGENT_PLUGINS;
+
 export const HARNESS_PREFLIGHT_PLUGINS = [
   'harness:policy-applied',
   'harness:workspace-isolation',
@@ -71,6 +75,7 @@ export type HarnessPlugin = (typeof HARNESS_PREFLIGHT_PLUGINS)[number];
 
 export const CODING_AGENT_COLLECTIONS = [
   'coding-agent:core',
+  'coding-agent:all',
   'coding-agent:codex',
   'harness:preflight',
 ] as const;
@@ -91,6 +96,7 @@ type CodingAgentMetadataPlugin = CodingAgentPlugin | HarnessPlugin | CodingAgent
 
 export const CODING_AGENT_PLUGIN_DISPLAY_NAMES: Record<CodingAgentMetadataPlugin, string> = {
   'coding-agent:core': 'Coding Agent Core',
+  'coding-agent:all': 'Coding Agent All',
   'coding-agent:codex': 'Codex Coding Agent',
   'harness:preflight': 'Harness Preflight',
   'coding-agent:repo-prompt-injection': 'Repository Prompt Injection',
@@ -147,6 +153,7 @@ export const CODING_AGENT_PLUGIN_DISPLAY_NAMES: Record<CodingAgentMetadataPlugin
 export const CODING_AGENT_PLUGIN_DESCRIPTIONS: Record<CodingAgentMetadataPlugin, string> = {
   'coding-agent:core':
     'Tests coding agents across repository instructions, terminal I/O, filesystem isolation, network egress, approvals, verification, claims, traces, and replay artifacts',
+  'coding-agent:all': 'Backward-compatible alias for the full Codex coding-agent risk suite',
   'coding-agent:codex':
     'Tests Codex-style coding agents across core coding-agent risks plus AGENTS.md, Codex home/config/rules, MCP, connectors, skills, memory, child agents, approvals, and terminal controls',
   'harness:preflight':
@@ -253,6 +260,7 @@ export const CODING_AGENT_PLUGIN_DESCRIPTIONS: Record<CodingAgentMetadataPlugin,
 
 export const CODING_AGENT_PLUGIN_ALIASES: Record<CodingAgentMetadataPlugin, string> = {
   'coding-agent:core': 'CodingAgentCore',
+  'coding-agent:all': 'CodingAgentAll',
   'coding-agent:codex': 'CodingAgentCodex',
   'harness:preflight': 'HarnessPreflight',
   'coding-agent:repo-prompt-injection': 'CodingAgentRepoPromptInjection',
