@@ -293,8 +293,22 @@ function hasElementPath(value: unknown, path: string[]): boolean {
   let current = value;
 
   for (const key of path) {
-    if (current === null || typeof current !== 'object' || Array.isArray(current)) {
+    if (current === null || typeof current !== 'object') {
       return false;
+    }
+
+    if (Array.isArray(current)) {
+      const index = Number(key);
+      if (!Number.isInteger(index) || index < 0 || String(index) !== key) {
+        return false;
+      }
+
+      if (current[index] === undefined) {
+        return false;
+      }
+
+      current = current[index];
+      continue;
     }
 
     const record = current as Record<string, unknown>;
