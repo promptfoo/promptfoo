@@ -40,7 +40,6 @@ describe('User Routes', () => {
   });
 
   beforeEach(() => {
-    app = createApp();
     vi.resetAllMocks();
 
     // Setup telemetry mock

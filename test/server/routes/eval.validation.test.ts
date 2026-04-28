@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/models/eval');
@@ -13,14 +15,32 @@ const mockedEval = vi.mocked(Eval);
 const mockedEvalQueries = vi.mocked(EvalQueries);
 
 describe('Eval Routes - Zod Validation', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
   let mockFindById: ReturnType<typeof vi.fn>;
   let mockSave: ReturnType<typeof vi.fn>;
   let mockGetMetadataKeysFromEval: ReturnType<typeof vi.fn>;
   let mockGetMetadataValuesFromEval: ReturnType<typeof vi.fn>;
 
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  });
+
   beforeEach(() => {
-    app = createApp();
     vi.resetAllMocks();
 
     // Setup mock methods
@@ -43,7 +63,7 @@ describe('Eval Routes - Zod Validation', () => {
 
   describe('PATCH /api/eval/:id/author', () => {
     it('should return 400 when body is empty', async () => {
-      const response = await request(app).patch('/api/eval/test-id/author').send({});
+      const response = await api.patch('/api/eval/test-id/author').send({});
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
@@ -51,7 +71,7 @@ describe('Eval Routes - Zod Validation', () => {
     });
 
     it('should return 400 when author is not a string', async () => {
-      const response = await request(app).patch('/api/eval/test-id/author').send({
+      const response = await api.patch('/api/eval/test-id/author').send({
         author: 123,
       });
 
@@ -70,7 +90,7 @@ describe('Eval Routes - Zod Validation', () => {
       mockFindById.mockResolvedValue(mockEval);
       mockSave.mockResolvedValue(undefined);
 
-      const response = await request(app).patch('/api/eval/test-id/author').send({
+      const response = await api.patch('/api/eval/test-id/author').send({
         author: 'new@example.com',
       });
 
@@ -82,7 +102,7 @@ describe('Eval Routes - Zod Validation', () => {
 
   describe('GET /api/eval/:id/metadata-values', () => {
     it('should return 400 when key query param is missing', async () => {
-      const response = await request(app).get('/api/eval/test-id/metadata-values');
+      const response = await api.get('/api/eval/test-id/metadata-values');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
@@ -97,7 +117,7 @@ describe('Eval Routes - Zod Validation', () => {
       mockFindById.mockResolvedValue(mockEval);
       mockGetMetadataValuesFromEval.mockReturnValue(['value1', 'value2']);
 
-      const response = await request(app).get('/api/eval/test-id/metadata-values?key=testKey');
+      const response = await api.get('/api/eval/test-id/metadata-values?key=testKey');
 
       expect(response.status).toBe(200);
       expect(response.body.values).toEqual(['value1', 'value2']);
@@ -106,7 +126,7 @@ describe('Eval Routes - Zod Validation', () => {
 
   describe('GET /api/eval/:id/metadata-keys', () => {
     it('should return 400 when id param is too short', async () => {
-      const response = await request(app).get('/api/eval/ab/metadata-keys');
+      const response = await api.get('/api/eval/ab/metadata-keys');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
@@ -121,7 +141,7 @@ describe('Eval Routes - Zod Validation', () => {
       mockFindById.mockResolvedValue(mockEval);
       mockGetMetadataKeysFromEval.mockResolvedValue(['key1', 'key2']);
 
-      const response = await request(app).get('/api/eval/test-id/metadata-keys');
+      const response = await api.get('/api/eval/test-id/metadata-keys');
 
       expect(response.status).toBe(200);
       expect(response.body.keys).toEqual(['key1', 'key2']);
@@ -130,7 +150,7 @@ describe('Eval Routes - Zod Validation', () => {
 
   describe('POST /api/eval/:id/copy', () => {
     it('should return 404 when id param is whitespace (route does not match)', async () => {
-      const response = await request(app).post('/api/eval/ /copy').send({});
+      const response = await api.post('/api/eval/ /copy').send({});
 
       expect(response.status).toBe(404);
     });
@@ -152,7 +172,7 @@ describe('Eval Routes - Zod Validation', () => {
       mockGetResultsCount.mockResolvedValue(10);
       mockCopy.mockResolvedValue(copiedEval);
 
-      const response = await request(app).post('/api/eval/test-id/copy').send({
+      const response = await api.post('/api/eval/test-id/copy').send({
         description: 'Test copy',
       });
 
@@ -162,7 +182,7 @@ describe('Eval Routes - Zod Validation', () => {
     });
 
     it('should return 400 when description is not a string', async () => {
-      const response = await request(app).post('/api/eval/test-id/copy').send({
+      const response = await api.post('/api/eval/test-id/copy').send({
         description: 123,
       });
 
@@ -188,7 +208,7 @@ describe('Eval Routes - Zod Validation', () => {
       mockGetResultsCount.mockResolvedValue(5);
       mockCopy.mockResolvedValue(copiedEval);
 
-      const response = await request(app).post('/api/eval/test-id/copy').send({});
+      const response = await api.post('/api/eval/test-id/copy').send({});
 
       expect(response.status).toBe(201);
       expect(response.body.id).toBe('copied-id');
@@ -199,7 +219,7 @@ describe('Eval Routes - Zod Validation', () => {
   describe('PATCH /api/eval/:id', () => {
     it('should accept empty body (both fields are optional)', async () => {
       // The schema allows empty body since both table and config are optional
-      const response = await request(app).patch('/api/eval/test-id').send({});
+      const response = await api.patch('/api/eval/test-id').send({});
 
       // This is a valid request - validation passes, but updateResult may fail
       // We're only testing validation behavior here
@@ -207,13 +227,11 @@ describe('Eval Routes - Zod Validation', () => {
     });
 
     it('should return 400 when table has invalid structure', async () => {
-      const response = await request(app)
-        .patch('/api/eval/test-id')
-        .send({
-          table: {
-            head: 'invalid', // Should be an object
-          },
-        });
+      const response = await api.patch('/api/eval/test-id').send({
+        table: {
+          head: 'invalid', // Should be an object
+        },
+      });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
@@ -222,7 +240,7 @@ describe('Eval Routes - Zod Validation', () => {
 
   describe('DELETE /api/eval', () => {
     it('should return 400 when ids array is empty', async () => {
-      const response = await request(app).delete('/api/eval').send({
+      const response = await api.delete('/api/eval').send({
         ids: [],
       });
 
@@ -232,7 +250,7 @@ describe('Eval Routes - Zod Validation', () => {
     });
 
     it('should return 400 when ids is missing', async () => {
-      const response = await request(app).delete('/api/eval').send({});
+      const response = await api.delete('/api/eval').send({});
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
@@ -240,11 +258,9 @@ describe('Eval Routes - Zod Validation', () => {
     });
 
     it('should return 400 when ids contains empty string', async () => {
-      const response = await request(app)
-        .delete('/api/eval')
-        .send({
-          ids: ['valid-id', ''],
-        });
+      const response = await api.delete('/api/eval').send({
+        ids: ['valid-id', ''],
+      });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
@@ -253,7 +269,7 @@ describe('Eval Routes - Zod Validation', () => {
 
   describe('POST /api/eval/replay', () => {
     it('should return 400 when evaluationId is missing', async () => {
-      const response = await request(app).post('/api/eval/replay').send({
+      const response = await api.post('/api/eval/replay').send({
         prompt: 'test prompt',
       });
 
@@ -263,7 +279,7 @@ describe('Eval Routes - Zod Validation', () => {
     });
 
     it('should return 400 when prompt is missing', async () => {
-      const response = await request(app).post('/api/eval/replay').send({
+      const response = await api.post('/api/eval/replay').send({
         evaluationId: 'test-id',
       });
 
@@ -273,7 +289,7 @@ describe('Eval Routes - Zod Validation', () => {
     });
 
     it('should return 400 when prompt is empty string', async () => {
-      const response = await request(app).post('/api/eval/replay').send({
+      const response = await api.post('/api/eval/replay').send({
         evaluationId: 'test-id',
         prompt: '',
       });
@@ -286,7 +302,7 @@ describe('Eval Routes - Zod Validation', () => {
 
   describe('POST /api/eval/:id/results', () => {
     it('should return 400 when results is not an array', async () => {
-      const response = await request(app).post('/api/eval/test-id/results').send({
+      const response = await api.post('/api/eval/test-id/results').send({
         results: 'not an array',
       });
 
@@ -295,30 +311,26 @@ describe('Eval Routes - Zod Validation', () => {
     });
 
     it('should return 400 when result is missing required fields', async () => {
-      const response = await request(app)
-        .post('/api/eval/test-id/results')
-        .send([
-          {
-            promptIdx: 0,
-            // Missing testIdx, success, score
-          },
-        ]);
+      const response = await api.post('/api/eval/test-id/results').send([
+        {
+          promptIdx: 0,
+          // Missing testIdx, success, score
+        },
+      ]);
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
     });
 
     it('should return 400 when promptIdx is negative', async () => {
-      const response = await request(app)
-        .post('/api/eval/test-id/results')
-        .send([
-          {
-            promptIdx: -1,
-            testIdx: 0,
-            success: true,
-            score: 1,
-          },
-        ]);
+      const response = await api.post('/api/eval/test-id/results').send([
+        {
+          promptIdx: -1,
+          testIdx: 0,
+          success: true,
+          score: 1,
+        },
+      ]);
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
@@ -328,7 +340,7 @@ describe('Eval Routes - Zod Validation', () => {
 
   describe('GET /api/eval/job/:id', () => {
     it('should return 400 when id is not a valid UUID', async () => {
-      const response = await request(app).get('/api/eval/job/not-a-uuid');
+      const response = await api.get('/api/eval/job/not-a-uuid');
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBeDefined();
