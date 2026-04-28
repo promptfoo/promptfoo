@@ -116,8 +116,17 @@ The Python assertion passes when `metadata.score >= 1.0` or `metadata.status == 
 
 A local traced run of all 21 `osworld_small` samples with exact `sample_id`
 selectors and `--max-concurrency 6` completed in 20m 9s. GPT-5.5 passed 13
-samples, failed 7 scored samples, and hit 1 Inspect computer-tool runtime error.
-Promptfoo recorded 21 trace records and 21 wrapper-level Python provider spans.
+samples and produced 7 scored failures. One concurrent run hit an Inspect
+computer-tool runtime error before scoring; rerunning that exact `sample_id`
+alone with `--max-concurrency 1` completed normally with score `0.0`. After that
+rerun, the report had 13 passes, 8 scored failures, 0 provider errors, and mean
+OSWorld score `0.665`. Promptfoo recorded 21 trace records and 21 wrapper-level
+Python provider spans for the concurrent run.
+
+For larger benchmark reports, rerun provider-error samples by exact `sample_id`
+before publishing a pass rate. Count reruns that produce an OSWorld score as
+normal passes or failures, and keep repeated provider errors separate from
+scored benchmark failures.
 
 ## Inspect logs and traces
 

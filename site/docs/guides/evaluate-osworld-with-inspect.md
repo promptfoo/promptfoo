@@ -177,35 +177,67 @@ The provider returns the OSWorld sample id, score, status, final assistant text,
 }
 ```
 
-A failed score is still a valid eval result when Inspect completed and the OSWorld scorer returned `0.0`. Treat provider errors differently: those indicate setup, Docker, model SDK, timeout, or log parsing failures before a scored sample was produced.
+A failed score is still a valid eval result when Inspect completed and the
+OSWorld scorer returned `0.0`. Treat provider errors differently: those
+indicate setup, Docker, model SDK, timeout, Inspect tool execution, or log
+parsing failures before a scored sample was produced.
+
+For benchmark reporting, rerun provider-error samples by exact `sample_id` with
+`--max-concurrency 1` before publishing a pass rate. If the rerun produces a
+score, count it as a normal pass or fail. If it errors again, inspect the
+`.eval` log and report it separately from scored OSWorld failures.
 
 ## Reference GPT-5.5 run
 
 As a larger smoke test, we ran all 21 `osworld_small` samples with exact
 `sample_id` selectors, GPT-5.5, Promptfoo tracing enabled, and
-`--max-concurrency 6`. This is not a stable leaderboard number; it is a concrete
-example of the shape and cost of a real run on one local machine.
+`--max-concurrency 6`. The concurrent run produced one unscored Inspect
+computer-tool runtime error. Rerunning that exact sample alone produced a normal
+score of `0.0`, so the final report below treats it as a scored failure rather
+than an infrastructure error.
+
+This is not a stable leaderboard number; it is a concrete example of the shape,
+cost, and follow-up workflow for a real run on one local machine.
 
 | Metric                          |                         Result |
 | ------------------------------- | -----------------------------: |
 | Eval id                         | `eval-7hQ-2026-04-28T02:52:18` |
+| Error rerun eval id             | `eval-3rI-2026-04-28T03:30:43` |
 | Samples                         |                             21 |
 | Concurrency                     |                              6 |
 | Wall time                       |                         20m 9s |
 | Passed                          |                        13 / 21 |
-| Scored failures                 |                         7 / 21 |
-| Provider errors                 |                         1 / 21 |
+| Scored failures after rerun     |                         8 / 21 |
+| Provider errors after rerun     |                         0 / 21 |
+| Mean OSWorld score              |                          0.665 |
 | Promptfoo trace records         |                             21 |
 | Promptfoo Python provider spans |                             21 |
-| Total token counter             |                      3,602,231 |
+| Total token counter after rerun |                      3,806,976 |
 
 The strongest app clusters in that run were `gimp` and `libreoffice_calc`
 at 100% pass rate. `vscode` passed 2 of 3. The hardest cases were mixed
 desktop workflows, one OS administration task, the VLC conversion task, and one
 near-miss LibreOffice Writer task that scored `0.9615` but did not meet the
-strict `score >= 1.0` assertion. The single provider error was an Inspect
-computer-tool runtime failure while executing a model-requested desktop command;
-the Inspect `.eval` log contains the full traceback and trajectory.
+strict `score >= 1.0` assertion.
+
+| App                   | Samples | Passed | Scored failures | Mean score |
+| --------------------- | ------: | -----: | --------------: | ---------: |
+| `gimp`                |       2 |      2 |               0 |      1.000 |
+| `libreoffice_calc`    |       3 |      3 |               0 |      1.000 |
+| `libreoffice_impress` |       2 |      1 |               1 |      0.500 |
+| `libreoffice_writer`  |       2 |      1 |               1 |      0.981 |
+| `multi_apps`          |       6 |      3 |               3 |      0.500 |
+| `os`                  |       2 |      1 |               1 |      0.500 |
+| `vlc`                 |       1 |      0 |               1 |      0.000 |
+| `vscode`              |       3 |      2 |               1 |      0.667 |
+
+The rerun target was `multi_apps` sample
+`eb303e01-261e-4972-8c07-c9b4e7a4922a`, a task that asks the agent to insert
+speaker notes into a PowerPoint file. The original concurrent attempt errored
+inside Inspect's `computer` tool while executing a model-requested desktop
+command. The isolated rerun completed in 7m 44s, used 288,447 total tokens,
+returned final answer `DONE`, and failed only because the OSWorld scorer
+reported `compare_pptx_files(...) returned 0`.
 
 ## Inspect logs
 
