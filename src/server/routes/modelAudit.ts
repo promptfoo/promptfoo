@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import fs from 'fs';
+import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 
@@ -159,14 +159,17 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
       ? expandedPath
       : path.resolve(process.cwd(), expandedPath);
 
-    // Check if path exists
-    if (!fs.existsSync(absolutePath)) {
+    let stats;
+    try {
+      stats = await fs.stat(absolutePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
       res.json(ModelAuditSchemas.CheckPath.Response.parse({ exists: false, type: null }));
       return;
     }
 
-    // Get path stats
-    const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
     res.json(
@@ -220,8 +223,11 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         ? expandedPath
         : path.resolve(process.cwd(), expandedPath);
 
-      // Check if path exists
-      if (!fs.existsSync(absolutePath)) {
+      const pathExists = await fs
+        .access(absolutePath)
+        .then(() => true)
+        .catch(() => false);
+      if (!pathExists) {
         res
           .status(400)
           .json({ error: `Path does not exist: ${inputPath} (resolved to: ${absolutePath})` });

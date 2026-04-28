@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import * as fs from 'fs';
+import fs from 'fs/promises';
 
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -379,7 +379,11 @@ export function discoverCommand(
       // If user provides a config, read the target from it:
       if (args.config) {
         // Validate that the config is a valid path:
-        if (!fs.existsSync(args.config)) {
+        const configExists = await fs
+          .access(args.config)
+          .then(() => true)
+          .catch(() => false);
+        if (!configExists) {
           throw new Error(`Config not found at ${args.config}`);
         }
 
