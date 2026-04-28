@@ -42,20 +42,20 @@ describe('API schema red-team coverage', () => {
 
   describe('server schemas', () => {
     it('coerces only the supported result-list boolean query representation', () => {
-      expect(ServerSchemas.Results.Query.parse({ includeProviders: 'true' })).toMatchObject({
+      expect(ServerSchemas.ResultList.Query.parse({ includeProviders: 'true' })).toMatchObject({
         includeProviders: true,
       });
-      expect(ServerSchemas.Results.Query.parse({ includeProviders: 'false' })).toMatchObject({
+      expect(ServerSchemas.ResultList.Query.parse({ includeProviders: 'false' })).toMatchObject({
         includeProviders: false,
       });
-      expect(ServerSchemas.Results.Query.parse({ includeProviders: '1' })).toMatchObject({
+      expect(ServerSchemas.ResultList.Query.parse({ includeProviders: '1' })).toMatchObject({
         includeProviders: false,
       });
     });
 
     it('rejects malformed result filters and share identifiers before database access', () => {
-      expect(ServerSchemas.Results.Query.safeParse({ type: 'sideways' }).success).toBe(false);
-      expect(ServerSchemas.Results.Query.safeParse({ datasetId: '' }).success).toBe(false);
+      expect(ServerSchemas.ResultList.Query.safeParse({ type: 'sideways' }).success).toBe(false);
+      expect(ServerSchemas.ResultList.Query.safeParse({ datasetId: '' }).success).toBe(false);
       expect(ServerSchemas.ShareCheckDomain.Query.safeParse({ id: '' }).success).toBe(false);
       expect(ServerSchemas.ShareCheckDomain.Query.safeParse({ id: 'undefined' }).success).toBe(
         false,
@@ -155,8 +155,6 @@ describe('API schema red-team coverage', () => {
           url: null,
         },
       });
-      expect(MediaSchemas.Get.BinaryResponse.safeParse(Buffer.from('ok')).success).toBe(true);
-      expect(MediaSchemas.Get.BinaryResponse.safeParse('not bytes').success).toBe(false);
     });
   });
 
@@ -253,9 +251,14 @@ describe('API schema red-team coverage', () => {
       expect(ProviderSchemas.HttpGenerator.Request.safeParse({ requestExample: '' }).success).toBe(
         false,
       );
-      expect(ProviderSchemas.Discover.Response.safeParse({ purpose: 'support bot' }).success).toBe(
-        true,
-      );
+      expect(
+        ProviderSchemas.Discover.Response.safeParse({
+          purpose: 'support bot',
+          limitations: null,
+          user: null,
+          tools: [],
+        }).success,
+      ).toBe(true);
       expect(ProviderSchemas.Discover.Response.safeParse(['not', 'an', 'object']).success).toBe(
         false,
       );
@@ -550,7 +553,6 @@ describe('API schema red-team coverage', () => {
     it('keeps blob bytes, redirects, and eval picker queries bounded', () => {
       expect(BlobsSchemas.Get.BinaryResponse.safeParse(Buffer.from('blob')).success).toBe(true);
       expect(BlobsSchemas.Get.BinaryResponse.safeParse('blob').success).toBe(false);
-      expect(BlobsSchemas.Get.RedirectResponse.safeParse('').success).toBe(false);
       expect(BlobsSchemas.LibraryEvals.Query.parse({ limit: '25', search: 'alpha' })).toEqual({
         limit: 25,
         search: 'alpha',

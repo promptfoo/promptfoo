@@ -233,10 +233,10 @@ export function createServerOpenApiRegistry() {
     tags: ['Results'],
     summary: 'List evaluation result summaries',
     request: {
-      query: query('ListResultsQuery', ServerSchemas.Results.Query),
+      query: query('ListResultsQuery', ServerSchemas.ResultList.Query),
     },
     responses: {
-      200: jsonResponse('ListResultsResponse', ServerSchemas.Results.Response),
+      200: jsonResponse('ListResultsResponse', ServerSchemas.ResultList.Response),
       400: validationError(),
     },
   });
