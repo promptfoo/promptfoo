@@ -1,4 +1,5 @@
 import fsPromises from 'fs/promises';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -35,6 +36,15 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 describe('video cache utilities', () => {
+  const expectedMappingPath = path.join(
+    '/tmp/test-config',
+    'media',
+    'video',
+    '_cache',
+    'cache-key.json',
+  );
+  const expectedCacheDir = path.dirname(expectedMappingPath);
+
   beforeEach(() => {
     vi.mocked(getConfigDirectoryPath).mockReset();
     vi.mocked(fsPromises.mkdir).mockReset();
@@ -64,10 +74,7 @@ describe('video cache utilities', () => {
       thumbnailKey: 'video/abc.webp',
       createdAt: '2026-04-28T00:00:00.000Z',
     });
-    expect(fsPromises.readFile).toHaveBeenCalledWith(
-      '/tmp/test-config/media/video/_cache/cache-key.json',
-      'utf8',
-    );
+    expect(fsPromises.readFile).toHaveBeenCalledWith(expectedMappingPath, 'utf8');
   });
 
   it('returns null when a cache mapping does not exist', async () => {
@@ -81,14 +88,12 @@ describe('video cache utilities', () => {
   it('creates the cache directory before writing mappings', async () => {
     await storeCacheMapping('cache-key', 'video/abc.mp4', 'video/abc.webp');
 
-    expect(getCacheMappingPath('cache-key')).toBe(
-      '/tmp/test-config/media/video/_cache/cache-key.json',
-    );
-    expect(fsPromises.mkdir).toHaveBeenCalledWith('/tmp/test-config/media/video/_cache', {
+    expect(getCacheMappingPath('cache-key')).toBe(expectedMappingPath);
+    expect(fsPromises.mkdir).toHaveBeenCalledWith(expectedCacheDir, {
       recursive: true,
     });
     expect(fsPromises.writeFile).toHaveBeenCalledWith(
-      '/tmp/test-config/media/video/_cache/cache-key.json',
+      expectedMappingPath,
       expect.stringContaining('"videoKey": "video/abc.mp4"'),
       'utf8',
     );
