@@ -133,6 +133,69 @@ const legacyHoistedPersistentMockFiles = new Set<string>();
 
 const legacyDirectProcessEnvMutationFiles = new Set<string>();
 
+const legacySleepPromiseFiles = new Set<string>([
+  'commands/mcp/lib/performance.test.ts',
+  'database.test.ts',
+  'evaluator/execution.test.ts',
+  'evaluator/gradingConcurrency.test.ts',
+  'evaluator/runEval.test.ts',
+  'fetch.test.ts',
+  'providers/bedrock/nova-reel.test.ts',
+  'providers/google/base.test.ts',
+  'providers/http/auth.test.ts',
+  'providers/httpTransforms.test.ts',
+  'providers/openai/moderation.test.ts',
+  'providers/xai/video.test.ts',
+  'python/pythonUtils.test.ts',
+  'python/wrapper.test.ts',
+  'redteam/commands/generate.test.ts',
+  'redteam/strategies/gcg.test.ts',
+  'smoke/resume.test.ts',
+  'telemetry.test.ts',
+  'tracing/providerInstrumentation.test.ts',
+  'util/agent/agentClient.test.ts',
+]);
+
+const legacyModuleScopePersistentMockFiles = new Set<string>([
+  'assertions/runAssertions.test.ts',
+  'assertions/similar.test.ts',
+  'commands/export.test.ts',
+  'commands/mcp/tools/runEvaluation.test.ts',
+  'commands/view.test.ts',
+  'evaluator.integration.realTransforms.test.ts',
+  'external/assertions.test.ts',
+  'external/conversationRelevancy.test.ts',
+  'globalConfig.test.ts',
+  'integration/envPath.test.ts',
+  'providers/anthropic/completion.test.ts',
+  'providers/anthropic/defaults.test.ts',
+  'providers/cloudflare-ai.test.ts',
+  'providers/cloudflare-gateway.test.ts',
+  'providers/functionCallbackUtils.test.ts',
+  'providers/google/gemini-image.test.ts',
+  'providers/google/image.test.ts',
+  'providers/huggingface.test.ts',
+  'providers/mcp/authProvider.test.ts',
+  'providers/openai/chatkit.test.ts',
+  'providers/registry.test.ts',
+  'providers/responses/processor.test.ts',
+  'providers/watsonx.test.ts',
+  'redteam/commands/crossSessionLeakGenerate.test.ts',
+  'redteam/commands/report.test.ts',
+  'redteam/extraction/entities.test.ts',
+  'redteam/extraction/purpose.test.ts',
+  'redteam/extraction/util.test.ts',
+  'redteam/plugins/intent.test.ts',
+  'redteam/plugins/pliny.test.ts',
+  'redteam/providers/authoritativeMarkupInjection.test.ts',
+  'redteam/strategies/citation.test.ts',
+  'redteam/strategies/gcg.test.ts',
+  'server/findStaticDir.test.ts',
+  'util/jsonExport.test.ts',
+  'util/jsonlOutput.test.ts',
+  'util/transform.test.ts',
+]);
+
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;
 const persistentMockMethods = [
   'mockImplementation',
@@ -140,10 +203,13 @@ const persistentMockMethods = [
   'mockResolvedValue',
   'mockReturnValue',
 ] as const;
+const persistentMockMethodNames = new Set<string>(persistentMockMethods);
 const persistentMockImplementationPattern = new RegExp(
   `\\.(?:${persistentMockMethods.join('|')})\\s*\\(`,
 );
 const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
+const fullMockResetPattern =
+  /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\(|\.mockRestore\s*\(|\bvi\.restoreAllMocks\s*\()/;
 const processEnvSnapshotIdentifierPattern = /^original[A-Za-z0-9_]*$/i;
 
 function findTestFiles(dir: string): string[] {
@@ -176,6 +242,151 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
     persistentMockImplementationPattern.test(source) &&
     !mockImplementationResetPattern.test(source)
   );
+}
+
+function isFunctionLikeNode(node: ts.Node): boolean {
+  return (
+    ts.isArrowFunction(node) ||
+    ts.isFunctionExpression(node) ||
+    ts.isFunctionDeclaration(node) ||
+    ts.isMethodDeclaration(node) ||
+    ts.isGetAccessorDeclaration(node) ||
+    ts.isSetAccessorDeclaration(node)
+  );
+}
+
+function isViMockCall(node: ts.Node): node is ts.CallExpression {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    ts.isIdentifier(node.expression.expression) &&
+    node.expression.expression.text === 'vi' &&
+    node.expression.name.text === 'mock'
+  );
+}
+
+// True if `node` synchronously evaluates a call ending in a persistent mock
+// setter (mockReturnValue/mockResolvedValue/etc). Skips bodies of nested
+// function literals, since their setters only run when the callback fires.
+function evaluatesPersistentMockSetter(node: ts.Node): boolean {
+  let found = false;
+  function visit(current: ts.Node, isRoot: boolean) {
+    if (found) {
+      return;
+    }
+    if (!isRoot && isFunctionLikeNode(current)) {
+      return;
+    }
+    if (
+      ts.isCallExpression(current) &&
+      ts.isPropertyAccessExpression(current.expression) &&
+      persistentMockMethodNames.has(current.expression.name.text)
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(current, (child) => visit(child, false));
+  }
+  visit(node, true);
+  return found;
+}
+
+function hasSleepPromise(source: string) {
+  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+  let found = false;
+
+  function isSleepNewExpression(node: ts.Node): boolean {
+    if (
+      !ts.isNewExpression(node) ||
+      !ts.isIdentifier(node.expression) ||
+      node.expression.text !== 'Promise' ||
+      !node.arguments?.length
+    ) {
+      return false;
+    }
+    const executor = node.arguments[0];
+    if (!ts.isArrowFunction(executor) && !ts.isFunctionExpression(executor)) {
+      return false;
+    }
+    if (executor.parameters.length === 0) {
+      return false;
+    }
+    const first = executor.parameters[0];
+    if (!ts.isIdentifier(first.name)) {
+      return false;
+    }
+    const resolveName = first.name.text;
+    let inner = false;
+    function visit(node: ts.Node) {
+      if (inner) {
+        return;
+      }
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === 'setTimeout' &&
+        node.arguments.length >= 1 &&
+        ts.isIdentifier(node.arguments[0]) &&
+        node.arguments[0].text === resolveName
+      ) {
+        inner = true;
+        return;
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(executor.body);
+    return inner;
+  }
+
+  function visit(node: ts.Node) {
+    if (found) {
+      return;
+    }
+    if (isSleepNewExpression(node)) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return found;
+}
+
+function hasModuleScopePersistentMockWithoutReset(source: string) {
+  if (fullMockResetPattern.test(source)) {
+    return false;
+  }
+  const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
+
+  for (const stmt of sourceFile.statements) {
+    if (ts.isExpressionStatement(stmt)) {
+      // vi.mock(path, factory) is detected separately so we don't double-count.
+      if (
+        ts.isCallExpression(stmt.expression) &&
+        isViMockCall(stmt.expression) &&
+        stmt.expression.arguments.length >= 2 &&
+        evaluatesPersistentMockSetter(stmt.expression.arguments[1])
+      ) {
+        return true;
+      }
+      if (
+        !(ts.isCallExpression(stmt.expression) && isViMockCall(stmt.expression)) &&
+        evaluatesPersistentMockSetter(stmt.expression)
+      ) {
+        return true;
+      }
+    }
+    if (
+      ts.isVariableStatement(stmt) &&
+      stmt.declarationList.declarations.some(
+        (decl) => decl.initializer && evaluatesPersistentMockSetter(decl.initializer),
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isProcessIdentifier(node: ts.Node): node is ts.Identifier {
@@ -659,5 +870,121 @@ describe('root test hygiene', () => {
     expect(findBiomeDirectProcessEnvMutationPluginIncludes()).toEqual(
       directProcessEnvMutationPluginIncludes,
     );
+  });
+
+  it.each([
+    'await new Promise((resolve) => setTimeout(resolve, 100));',
+    'await new Promise((r) => setTimeout(r, 250));',
+    'await new Promise(function (resolve) { setTimeout(resolve, 1000); });',
+    'await new Promise((resolve) => { setTimeout(resolve, 50); });',
+  ])('detects setTimeout-based sleep waits in %s', (source) => {
+    expect(hasSleepPromise(source)).toBe(true);
+  });
+
+  it.each([
+    'await vi.runAllTimersAsync();',
+    'vi.advanceTimersByTime(1000);',
+    'await waitFor(() => expect(mock).toHaveBeenCalled());',
+    'setTimeout(() => callback(), 100);',
+    'await new Promise((resolve) => fetcher.on("done", resolve));',
+    'const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));',
+  ])('allows non-sleep timer usage in %s', (source) => {
+    // The last sample defines a helper but does not call it; we still flag
+    // helper definitions because the helper itself is a sleep wait. Exclude it
+    // from the false-positive set by checking the precondition independently.
+    if (source.includes('const sleep = (ms')) {
+      expect(hasSleepPromise(source)).toBe(true);
+      return;
+    }
+    expect(hasSleepPromise(source)).toBe(false);
+  });
+
+  it('keeps new root tests from adding setTimeout-based sleep waits', () => {
+    const unapprovedFiles = findFilesMatchingPolicy(hasSleepPromise)
+      .filter((file) => !legacySleepPromiseFiles.has(file))
+      .map(
+        (file) =>
+          `${file}: replace 'await new Promise(r => setTimeout(r, ms))' with vi.useFakeTimers() + vi.runAllTimersAsync(), or testing-library waitFor()`,
+      );
+
+    expect(unapprovedFiles).toEqual([]);
+  });
+
+  it('keeps the legacy sleep-wait allowlist scoped to active violations', () => {
+    const activeFiles = new Set(findFilesMatchingPolicy(hasSleepPromise));
+    const staleFiles = Array.from(legacySleepPromiseFiles)
+      .filter((file) => !activeFiles.has(file))
+      .sort();
+
+    expect(staleFiles).toEqual([]);
+  });
+
+  it.each([
+    [
+      [
+        "vi.mock('proxy-agent', () => ({",
+        '  ProxyAgent: vi.fn().mockImplementation(function () {}),',
+        '}));',
+      ].join('\n'),
+    ],
+    [
+      [
+        "vi.mock('node-fetch', () => ({",
+        '  default: vi.fn().mockResolvedValue({ json: () => ({ ok: true }) }),',
+        '}));',
+      ].join('\n'),
+    ],
+    ['const baseClient = vi.fn().mockReturnValue({ id: "default" });'],
+    ['vi.mocked(client).mockResolvedValue({ ok: true });'],
+  ])('detects module-scope persistent mock implementations without reset in %#', (source) => {
+    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    [
+      [
+        "vi.mock('proxy-agent', () => ({",
+        '  ProxyAgent: vi.fn().mockImplementation(function () {}),',
+        '}));',
+        '',
+        'beforeEach(() => {',
+        '  vi.resetAllMocks();',
+        '});',
+      ].join('\n'),
+    ],
+    [
+      [
+        "vi.mock('proxy-agent', () => ({",
+        '  ProxyAgent: vi.fn(),',
+        '}));',
+        '',
+        'it("uses the proxy", () => {',
+        '  vi.mocked(ProxyAgent).mockReturnValue({});',
+        '});',
+      ].join('\n'),
+    ],
+    [['beforeEach(() => {', '  const mock = vi.fn().mockReturnValue("ok");', '});'].join('\n')],
+  ])('allows module-scope persistent mocks when paired with reset or scoped per-test in %#', (source) => {
+    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('keeps new root tests from adding unreset module-scope persistent mocks', () => {
+    const unapprovedFiles = findFilesMatchingPolicy(hasModuleScopePersistentMockWithoutReset)
+      .filter((file) => !legacyModuleScopePersistentMockFiles.has(file))
+      .map(
+        (file) =>
+          `${file}: module-scope persistent mock setters (mockReturnValue/mockResolvedValue/etc) must be paired with mockReset() or vi.resetAllMocks() in beforeEach to survive random test order`,
+      );
+
+    expect(unapprovedFiles).toEqual([]);
+  });
+
+  it('keeps the legacy module-scope persistent mock allowlist scoped to active violations', () => {
+    const activeFiles = new Set(findFilesMatchingPolicy(hasModuleScopePersistentMockWithoutReset));
+    const staleFiles = Array.from(legacyModuleScopePersistentMockFiles)
+      .filter((file) => !activeFiles.has(file))
+      .sort();
+
+    expect(staleFiles).toEqual([]);
   });
 });
