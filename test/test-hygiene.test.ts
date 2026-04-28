@@ -294,12 +294,11 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
   );
 }
 
+// Boundaries beyond which a synchronous module-load traversal must not pass.
+// Constructors and class static blocks are included because they only run when
+// the class is instantiated (constructors) or first referenced (static blocks),
+// not when the module is loaded — mocks declared inside them are deferred.
 function isFunctionLikeNode(node: ts.Node): boolean {
-  // Boundaries beyond which a synchronous module-load traversal must not pass.
-  // Includes constructors and class static blocks, which only execute when the
-  // class is instantiated or initialized (not at module load) — flagging
-  // mocks declared inside them would create false positives for class-based
-  // helpers in test files.
   return (
     ts.isArrowFunction(node) ||
     ts.isFunctionExpression(node) ||
@@ -336,10 +335,11 @@ function evaluatesPersistentMockSetter(
     if (found) {
       return;
     }
-    if (isFunctionLikeNode(current)) {
-      if (!isRoot || !opts.enterRootFunction) {
-        return;
-      }
+    // Stop at function literal boundaries — their bodies don't run at module
+    // load. Exception: when `enterRootFunction` is set, descend into the root
+    // node itself (used for vi.mock(..., factory) factories).
+    if (isFunctionLikeNode(current) && !(isRoot && opts.enterRootFunction)) {
+      return;
     }
     if (
       ts.isCallExpression(current) &&
