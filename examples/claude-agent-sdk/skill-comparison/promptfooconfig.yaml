@@ -1,0 +1,82 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare Claude skill versions
+
+prompts:
+  - '{{request}}'
+
+x-review-schema: &reviewSchema
+  type: json_schema
+  schema:
+    type: object
+    required: [summary, issues]
+    additionalProperties: false
+    properties:
+      summary:
+        type: string
+      issues:
+        type: array
+        items:
+          type: object
+          required: [id, severity]
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+            severity:
+              type: string
+              enum: [high, medium, low]
+
+providers:
+  - id: anthropic:claude-agent-sdk
+    label: review-standards-v1
+    config:
+      model: claude-sonnet-4-6
+      working_dir: ./fixtures/v1
+      setting_sources: ['project']
+      skills: ['review-standards']
+      append_allowed_tools: ['Read', 'Grep', 'Glob']
+      output_format: *reviewSchema
+
+  - id: anthropic:claude-agent-sdk
+    label: review-standards-v2
+    config:
+      model: claude-sonnet-4-6
+      working_dir: ./fixtures/v2
+      setting_sources: ['project']
+      skills: ['review-standards']
+      append_allowed_tools: ['Read', 'Grep', 'Glob']
+      output_format: *reviewSchema
+
+defaultTest:
+  assert:
+    - type: skill-used
+      value: review-standards
+
+    - type: javascript
+      threshold: 0.7
+      value: |
+        // expectedIssues is a comma-separated string rather than a YAML list
+        // because Promptfoo expands string-array vars into a matrix of test
+        // cases (src/evaluator.ts:generateVarCombinations).
+        const result = typeof output === 'string' ? JSON.parse(output) : output;
+        const expected = context.vars.expectedIssues.split(',');
+        const found = (result.issues || []).map((issue) => issue.id);
+        const hits = expected.filter((id) => found.includes(id));
+        const recall = hits.length / expected.length;
+
+        return {
+          pass: recall >= 0.75,
+          score: recall,
+          reason: `matched ${hits.length}/${expected.length} expected issues`,
+        };
+
+tests:
+  - description: Finds password handling issues
+    vars:
+      request: Review src/auth.ts for password handling security issues.
+      expectedIssues: weak-password-hash,timing-unsafe-compare
+
+  - description: Finds the most important issue
+    vars:
+      request: Review src/auth.ts and report only the highest-risk auth issue.
+      expectedIssues: weak-password-hash

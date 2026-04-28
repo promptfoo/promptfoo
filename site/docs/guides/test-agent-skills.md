@@ -39,14 +39,29 @@ We'll start with the [Claude Agent SDK provider](/docs/providers/claude-agent-sd
 description: Compare Claude skill versions
 
 prompts:
-  - |
-    {{request}}
+  - '{{request}}'
 
-    Return JSON with this shape:
-    {
-      "summary": "one sentence",
-      "issues": [{"id": "stable-id", "severity": "high|medium|low"}]
-    }
+# YAML anchor for the schema both providers enforce. The Claude Agent SDK's
+# `output_format` is the equivalent of Codex's `output_schema` — it returns
+# valid JSON without you having to ask for "JSON only" in the prompt or
+# strip Markdown fences from the model's reply.
+x-review-schema: &reviewSchema
+  type: json_schema
+  schema:
+    type: object
+    required: [summary, issues]
+    additionalProperties: false
+    properties:
+      summary: { type: string }
+      issues:
+        type: array
+        items:
+          type: object
+          required: [id, severity]
+          additionalProperties: false
+          properties:
+            id: { type: string }
+            severity: { type: string, enum: [high, medium, low] }
 
 providers:
   - id: anthropic:claude-agent-sdk
@@ -55,7 +70,9 @@ providers:
       model: claude-sonnet-4-6
       working_dir: ./fixtures/v1
       setting_sources: ['project']
-      append_allowed_tools: ['Skill', 'Read', 'Grep', 'Glob']
+      skills: ['review-standards']
+      append_allowed_tools: ['Read', 'Grep', 'Glob']
+      output_format: *reviewSchema
 
   - id: anthropic:claude-agent-sdk
     label: review-standards-v2
@@ -63,8 +80,14 @@ providers:
       model: claude-sonnet-4-6
       working_dir: ./fixtures/v2
       setting_sources: ['project']
-      append_allowed_tools: ['Skill', 'Read', 'Grep', 'Glob']
+      skills: ['review-standards']
+      append_allowed_tools: ['Read', 'Grep', 'Glob']
+      output_format: *reviewSchema
 ```
+
+`setting_sources: ['project']` discovers `SKILL.md` files under `.claude/skills/`. The `skills:` filter (added in `@anthropic-ai/claude-agent-sdk` 0.2.120) narrows the session to a single skill and auto-allows the `Skill` tool, so it no longer needs to appear in `append_allowed_tools`. Pass `skills: 'all'` if you want every discovered skill enabled. On older SDK versions, drop `skills:` and add `'Skill'` back to `append_allowed_tools`.
+
+Without `output_format`, Claude usually wraps short JSON answers in Markdown fences or a leading sentence, which makes downstream `JSON.parse()` brittle. Setting it on both providers — once via the `&reviewSchema` anchor — gives you reliable structured output without prompt gymnastics.
 
 Because everything else is held constant, any meaningful difference in the results should come from the skill text itself.
 
@@ -111,11 +134,11 @@ Then score whether the review found the expected issues:
 ```yaml
 defaultTest:
   assert:
-    - type: is-json
-
     - type: javascript
       threshold: 0.7
       value: |
+        // The provider returns the parsed object when `output_format` /
+        // `output_schema` is set, and a string otherwise; handle both.
         const result = typeof output === 'string' ? JSON.parse(output) : output;
         const expected = context.vars.expectedIssues.split(',');
         const found = (result.issues || []).map((issue) => issue.id);
@@ -129,7 +152,7 @@ defaultTest:
         };
 ```
 
-Here, `is-json` checks the output format and the JavaScript assertion gives each response a score based on issue recall. In your own eval, replace this with the signal that matters for the skill: tests passed, required edits were made, policy checks were followed, or a rubric was satisfied.
+The JavaScript assertion gives each response a score based on issue recall. In your own eval, replace this with the signal that matters for the skill: tests passed, required edits were made, policy checks were followed, or a rubric was satisfied. (No `is-json` is needed here — `output_format` already enforces the schema, and `JSON.parse` will surface any malformed output.)
 
 ### Add Secondary Signals
 
@@ -158,7 +181,6 @@ defaultTest:
         weights:
           javascript: 4
           skill-used: 2
-          is-json: 1
           cost: 0.5
           latency: 0.5
 ```
@@ -197,6 +219,8 @@ providers:
 Codex discovers project skills from `.agents/skills/` under each `working_dir`. Its `skill-used` signal is inferred from successful reads of the matching `SKILL.md`, so keep `enable_streaming: true` while developing the eval if you want Promptfoo to collect that evidence.
 
 If you'd rather enforce the JSON shape at the provider level instead of asserting on it, set [`output_schema`](/docs/providers/openai-codex-sdk#structured-output) on each Codex provider. The runnable [`skill-comparison` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skill-comparison) uses this approach (and a YAML anchor to share the schema between v1 and v2).
+
+There is a [matching Claude example](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk/skill-comparison) that uses `output_format` and the `skills:` filter so you can run the same comparison against either provider.
 
 ## Add Trace Evidence When Needed
 
