@@ -546,15 +546,20 @@ export async function generateSignature(
                 `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
               );
 
-              // Read the private key directly from the key file
-              if (!(await pathExists(resolvedKeyPath))) {
-                throw new Error(`Key file not found: ${resolvedKeyPath}`);
-              }
+              // Verify the cert path resolves; the cert contents aren't consumed
+              // here, only its presence is validated for early operator feedback.
               if (!(await pathExists(resolvedCertPath))) {
                 throw new Error(`Certificate file not found: ${resolvedCertPath}`);
               }
-
-              privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+              try {
+                // Read the key directly — readFile surfaces ENOENT with the path.
+                privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+              } catch (err) {
+                if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+                  throw new Error(`Key file not found: ${resolvedKeyPath}`);
+                }
+                throw err;
+              }
               logger.debug(
                 `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
               );

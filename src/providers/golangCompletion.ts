@@ -1,5 +1,4 @@
 import { execFile } from 'child_process';
-import * as fsSync from 'fs';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -9,6 +8,7 @@ import { getCache, isCacheEnabled } from '../cache';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
+import { pathExists } from '../util/file';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 
@@ -53,10 +53,10 @@ export class GolangProvider implements ApiProvider {
     return `golang:${this.scriptPath}:${this.functionName || 'default'}`;
   }
 
-  private findModuleRoot(startPath: string): string {
+  private async findModuleRoot(startPath: string): Promise<string> {
     let currentPath = startPath;
     while (currentPath !== path.dirname(currentPath)) {
-      if (fsSync.existsSync(path.join(currentPath, 'go.mod'))) {
+      if (await pathExists(path.join(currentPath, 'go.mod'))) {
         return currentPath;
       }
       currentPath = path.dirname(currentPath);
@@ -70,7 +70,7 @@ export class GolangProvider implements ApiProvider {
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
     const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
-    const moduleRoot = this.findModuleRoot(path.dirname(absPath));
+    const moduleRoot = await this.findModuleRoot(path.dirname(absPath));
     logger.debug(`Found module root at ${moduleRoot}`);
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
