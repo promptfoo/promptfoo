@@ -112,6 +112,16 @@ If you run Promptfoo in higher-risk contexts (CI, shared machines, third-party c
 - Use a reverse proxy with authentication if you need remote access to the web UI or MCP server
 - If you need cross-domain access to the local server, set `PROMPTFOO_CSRF_ALLOWED_ORIGINS` to a comma-separated list of trusted origins
 
+### Migration guidance for exposed or cross-origin local interfaces
+
+If you intentionally expose the web UI, MCP HTTP transport, helper pages, or local API outside the default local-browser flow, prefer an explicit deployment shape rather than relying on wildcard CORS or default bind behavior:
+
+1. For local-only usage, bind the service to a loopback address and open it from the same machine.
+2. For remote access, put Promptfoo behind a reverse proxy that provides authentication, network restrictions, and a single browser origin for the UI and API when possible.
+3. If the browser UI, an internal dashboard, a browser extension, or another trusted web app must call Promptfoo from a different origin, add the exact trusted origins to `PROMPTFOO_CSRF_ALLOWED_ORIGINS` (including scheme, host, and port).
+4. Avoid wildcard origins for deployments that can read configs, reports, traces, provider settings, or generated helper pages.
+5. When tightening CORS or bind defaults during an upgrade, test the browser `Origin` values used by your deployment and either route traffic through the same origin or add the exact origins to the allowlist before rolling out the stricter version.
+
 ## Supported Versions
 
 | Version                               | Supported        |
