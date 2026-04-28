@@ -31,6 +31,7 @@ import {
 } from '../../util/cloud';
 import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
+import { pathExists } from '../../util/file';
 import { getCustomPolicies } from '../../util/generation';
 import { printBorder, setupEnv } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -104,13 +105,6 @@ function handleFailedPlugins(failedPlugins: FailedPluginInfo[], strict: boolean)
       `Continuing with partial results. Use ${chalk.bold('--strict')} flag to fail on plugin generation errors.`,
     ),
   );
-}
-
-async function pathExists(filePath: string): Promise<boolean> {
-  return fs
-    .access(filePath)
-    .then(() => true)
-    .catch(() => false);
 }
 
 async function getConfigHash(configPath: string): Promise<string> {

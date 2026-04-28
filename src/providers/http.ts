@@ -13,7 +13,11 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
+import {
+  maybeLoadConfigFromExternalFile,
+  maybeLoadFromExternalFile,
+  pathExists,
+} from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
@@ -311,18 +315,6 @@ function isBase64(str: string): boolean {
   return str.length % 4 === 0 && base64Regex.test(str) && str.length > 100;
 }
 
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return false;
-    }
-    throw err;
-  }
-}
-
 /**
  * Generate signature using different certificate types
  */
@@ -555,10 +547,10 @@ export async function generateSignature(
               );
 
               // Read the private key directly from the key file
-              if (!(await fileExists(resolvedKeyPath))) {
+              if (!(await pathExists(resolvedKeyPath))) {
                 throw new Error(`Key file not found: ${resolvedKeyPath}`);
               }
-              if (!(await fileExists(resolvedCertPath))) {
+              if (!(await pathExists(resolvedCertPath))) {
                 throw new Error(`Certificate file not found: ${resolvedCertPath}`);
               }
 

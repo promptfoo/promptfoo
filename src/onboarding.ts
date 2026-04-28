@@ -10,6 +10,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { redteamInit } from './redteam/commands/init';
 import telemetry, { type EventProperties } from './telemetry';
+import { pathExists } from './util/file';
 import { promptfooCommand } from './util/promptfooCommand';
 import { getNunjucksEngine } from './util/templates';
 
@@ -327,9 +328,7 @@ async function askForPermissionToOverwrite({
   relativePath: string;
   required: boolean;
 }): Promise<boolean> {
-  try {
-    await fs.access(absolutePath);
-  } catch {
+  if (!(await pathExists(absolutePath))) {
     return true;
   }
 
