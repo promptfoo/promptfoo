@@ -412,7 +412,7 @@ export async function doEval(
       );
     }
     const filterRange = resumeEval
-      ? (persistedFilterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange)
+      ? persistedFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const shouldApplyRangeToImplicitDefaultTest =
       filterRange !== undefined && !hasScenarios && !testSuite.tests?.length;

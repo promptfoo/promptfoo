@@ -652,6 +652,50 @@ describe('evaluateOptions behavior', () => {
       }
     });
 
+    it('should ignore newly configured filterRange defaults when resuming without one persisted', async () => {
+      const resumeEval = new Eval(
+        {
+          providers: ['echo'],
+          prompts: ['Hello {{name}}'],
+          tests: [
+            { vars: { name: 'Alice' } },
+            { vars: { name: 'Bob' } },
+            { vars: { name: 'Carol' } },
+          ],
+        },
+        {
+          id: 'eval-resume-without-filter-range',
+          persisted: true,
+          runtimeOptions: {
+            cache: true,
+            maxConcurrency: 1,
+            repeat: 1,
+          },
+        },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval(
+          {
+            table: false,
+            resume: 'eval-resume-without-filter-range',
+          } as any,
+          {},
+          undefined,
+          {
+            filterRange: '1:2',
+          },
+        );
+
+        expect(evaluateMock).toHaveBeenCalled();
+        const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+        expect(options.filterRange).toBeUndefined();
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
     it('should warn and ignore CLI --filter-range when resuming with a different persisted range', async () => {
       const resumeEval = new Eval(
         {
