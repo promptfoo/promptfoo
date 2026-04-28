@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const fs = require('fs');
+const fsPromises = require('fs/promises');
 const path = require('path');
 const https = require('https');
 // Load environment variables from .env file
@@ -121,7 +122,7 @@ async function downloadImage(url, filepath) {
         });
       })
       .on('error', (error) => {
-        fs.unlink(filepath, () => {}); // Delete the file on error
+        fsPromises.unlink(filepath).catch(() => {}); // Delete the file on error
         reject(error);
       });
   });
@@ -134,7 +135,7 @@ async function main() {
       // If we get base64 data, save it directly
       const outputPath = path.join(__dirname, '..', 'site', 'static', 'img', outputDir, filename);
       const buffer = Buffer.from(imageData.b64_json, 'base64');
-      fs.writeFileSync(outputPath, buffer);
+      await fsPromises.writeFile(outputPath, buffer);
       console.log(`Image saved to: ${outputPath}`);
     } else if (imageData.url) {
       // If we get a URL, download the image

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const fs = require('fs');
+const fsPromises = require('fs/promises');
 const path = require('path');
 const https = require('https');
 const { execSync } = require('child_process');
@@ -449,7 +450,7 @@ async function downloadImage(url, filepath) {
         });
       })
       .on('error', (error) => {
-        fs.unlink(filepath, () => {});
+        fsPromises.unlink(filepath).catch(() => {});
         reject(error);
       });
   });
@@ -466,7 +467,7 @@ async function processEvent(event) {
 
     if (imageData.b64_json) {
       const buffer = Buffer.from(imageData.b64_json, 'base64');
-      fs.writeFileSync(pngPath, buffer);
+      await fsPromises.writeFile(pngPath, buffer);
       console.log(`[${event.filename}] PNG saved`);
     } else if (imageData.url) {
       await downloadImage(imageData.url, pngPath);
@@ -481,14 +482,14 @@ async function processEvent(event) {
       console.log(`[${event.filename}] Converted to JPEG`);
 
       // Remove PNG after successful conversion
-      fs.unlinkSync(pngPath);
+      await fsPromises.unlink(pngPath);
       console.log(`[${event.filename}] Cleaned up PNG`);
     } catch (_convertError) {
       // Try ImageMagick as fallback
       try {
         execSync(`convert "${pngPath}" -quality 85 "${jpgPath}"`, { stdio: 'pipe' });
         console.log(`[${event.filename}] Converted to JPEG (ImageMagick)`);
-        fs.unlinkSync(pngPath);
+        await fsPromises.unlink(pngPath);
       } catch {
         console.log(`[${event.filename}] Could not convert to JPEG, keeping PNG`);
       }
