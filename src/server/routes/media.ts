@@ -21,28 +21,18 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
   try {
     const storage = getMediaStorage();
 
-    // LocalFileSystemProvider has a getStats method
-    if ('getStats' in storage && typeof storage.getStats === 'function') {
-      const stats = await storage.getStats();
-      res.json(
-        MediaSchemas.Stats.Response.parse({
-          success: true,
-          data: {
-            providerId: storage.providerId,
-            ...stats,
-          },
-        }),
-      );
-    } else {
-      res.json(
-        MediaSchemas.Stats.Response.parse({
-          success: true,
-          data: {
-            providerId: storage.providerId,
-          },
-        }),
-      );
-    }
+    // Only LocalFileSystemProvider exposes getStats; other providers report providerId only.
+    const extraStats =
+      'getStats' in storage && typeof storage.getStats === 'function'
+        ? await storage.getStats()
+        : {};
+
+    res.json(
+      MediaSchemas.Stats.Response.parse({
+        success: true,
+        data: { providerId: storage.providerId, ...extraStats },
+      }),
+    );
   } catch (error) {
     logger.error('[Media API] Error getting storage stats', { error });
     res.status(500).json({ error: 'Failed to get storage stats' });

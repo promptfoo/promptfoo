@@ -49,7 +49,7 @@ userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
 userRouter.post('/email', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = UserSchemas.Update.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    replyValidationError(res, bodyResult.error);
     return;
   }
 
@@ -115,7 +115,7 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = UserSchemas.Login.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    replyValidationError(res, bodyResult.error);
     return;
   }
 

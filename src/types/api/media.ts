@@ -41,7 +41,6 @@ export type MediaInfoResponse = z.infer<typeof MediaInfoResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const MediaSchemas = {
-  Params: MediaParamsSchema,
   Stats: {
     Response: MediaStatsResponseSchema,
   },
