@@ -12,66 +12,53 @@ prompts:
       "issues": [{"id": "stable-id", "severity": "high|medium|low"}]
     }
 
+# YAML anchor for the review-output schema. Both providers must enforce the
+# same shape so the JS assertion can compare issue ids without per-provider
+# parsing branches.
+x-review-schema: &reviewSchema
+  type: object
+  required: [summary, issues]
+  additionalProperties: false
+  properties:
+    summary:
+      type: string
+    issues:
+      type: array
+      items:
+        type: object
+        required: [id, severity]
+        additionalProperties: false
+        properties:
+          id:
+            type: string
+          severity:
+            type: string
+            enum: [high, medium, low]
+
+# YAML anchor for the shared Codex config. Each provider overrides
+# `working_dir` so v1/v2 read different `SKILL.md` files but everything else
+# (model, sandbox, schema) stays identical.
+x-codex-config: &codexConfig
+  model: gpt-5.2
+  skip_git_repo_check: true
+  sandbox_mode: read-only
+  enable_streaming: true
+  output_schema: *reviewSchema
+  cli_env:
+    CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
+
 providers:
   - id: openai:codex-sdk
     label: review-standards-v1
     config:
-      model: gpt-5.2
+      <<: *codexConfig
       working_dir: '{{ env.CODEX_SKILL_COMPARE_V1_DIR | default("./fixtures/v1") }}'
-      skip_git_repo_check: true
-      sandbox_mode: read-only
-      enable_streaming: true
-      output_schema:
-        type: object
-        required: [summary, issues]
-        additionalProperties: false
-        properties:
-          summary:
-            type: string
-          issues:
-            type: array
-            items:
-              type: object
-              required: [id, severity]
-              additionalProperties: false
-              properties:
-                id:
-                  type: string
-                severity:
-                  type: string
-                  enum: [high, medium, low]
-      cli_env:
-        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
 
   - id: openai:codex-sdk
     label: review-standards-v2
     config:
-      model: gpt-5.2
+      <<: *codexConfig
       working_dir: '{{ env.CODEX_SKILL_COMPARE_V2_DIR | default("./fixtures/v2") }}'
-      skip_git_repo_check: true
-      sandbox_mode: read-only
-      enable_streaming: true
-      output_schema:
-        type: object
-        required: [summary, issues]
-        additionalProperties: false
-        properties:
-          summary:
-            type: string
-          issues:
-            type: array
-            items:
-              type: object
-              required: [id, severity]
-              additionalProperties: false
-              properties:
-                id:
-                  type: string
-                severity:
-                  type: string
-                  enum: [high, medium, low]
-      cli_env:
-        CODEX_HOME: '{{ env.CODEX_HOME_OVERRIDE | default("./sample-codex-home") }}'
 
 defaultTest:
   assert:
@@ -79,11 +66,12 @@ defaultTest:
       value: review-standards
       weight: 2
 
-    - type: is-json
-
     - type: javascript
       threshold: 0.7
       value: |
+        // expectedIssues is a comma-separated string rather than a YAML list to
+        // avoid Promptfoo's matrix expansion of string-array vars
+        // (src/evaluator.ts:generateVarCombinations).
         const result = JSON.parse(output);
         const expected = context.vars.expectedIssues.split(',');
         const found = (result.issues || []).map((issue) => issue.id);
@@ -112,7 +100,6 @@ defaultTest:
         weights:
           javascript: 4
           skill-used: 2
-          is-json: 1
           cost: 0.5
           latency: 0.5
 

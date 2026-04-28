@@ -75,15 +75,14 @@ tests:
   - description: Finds password handling issues
     vars:
       request: Review src/auth.ts for password handling security issues.
-      expectedIssues:
-        - weak-password-hash
-        - timing-unsafe-compare
+      # comma-separated rather than a YAML list — Promptfoo expands string-array
+      # vars into a matrix of test cases, which would split each test in two.
+      expectedIssues: weak-password-hash,timing-unsafe-compare
 
   - description: Finds the most important issue
     vars:
       request: Review src/auth.ts and report only the highest-risk auth issue.
-      expectedIssues:
-        - weak-password-hash
+      expectedIssues: weak-password-hash
 ```
 
 The first case asks for a broad review. The second is narrower, which helps catch a skill that finds the right problems but ignores the user's requested scope.
@@ -118,7 +117,7 @@ defaultTest:
       threshold: 0.7
       value: |
         const result = typeof output === 'string' ? JSON.parse(output) : output;
-        const expected = context.vars.expectedIssues;
+        const expected = context.vars.expectedIssues.split(',');
         const found = (result.issues || []).map((issue) => issue.id);
         const hits = expected.filter((id) => found.includes(id));
         const recall = hits.length / expected.length;
@@ -172,9 +171,10 @@ To run the same comparison with [OpenAI Codex SDK](/docs/providers/openai-codex-
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.2
+  - id: openai:codex-sdk
     label: review-standards-v1
     config:
+      model: gpt-5.2
       working_dir: ./fixtures/v1
       skip_git_repo_check: true
       sandbox_mode: read-only
@@ -182,9 +182,10 @@ providers:
       cli_env:
         CODEX_HOME: ./codex-home
 
-  - id: openai:codex-sdk:gpt-5.2
+  - id: openai:codex-sdk
     label: review-standards-v2
     config:
+      model: gpt-5.2
       working_dir: ./fixtures/v2
       skip_git_repo_check: true
       sandbox_mode: read-only
@@ -195,7 +196,7 @@ providers:
 
 Codex discovers project skills from `.agents/skills/` under each `working_dir`. Its `skill-used` signal is inferred from successful reads of the matching `SKILL.md`, so keep `enable_streaming: true` while developing the eval if you want Promptfoo to collect that evidence.
 
-For a runnable Codex-only version of this setup, see the [`skill-comparison` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skill-comparison).
+If you'd rather enforce the JSON shape at the provider level instead of asserting on it, set [`output_schema`](/docs/providers/openai-codex-sdk#structured-output) on each Codex provider. The runnable [`skill-comparison` example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skill-comparison) uses this approach (and a YAML anchor to share the schema between v1 and v2).
 
 ## Add Trace Evidence When Needed
 
@@ -213,8 +214,9 @@ For Codex SDK, trace evidence can be useful when you want to see the workflow be
 
 ```yaml
 providers:
-  - id: openai:codex-sdk:gpt-5.2
+  - id: openai:codex-sdk
     config:
+      model: gpt-5.2
       working_dir: ./fixtures/v2
       skip_git_repo_check: true
       sandbox_mode: read-only

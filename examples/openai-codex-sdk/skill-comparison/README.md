@@ -13,7 +13,8 @@ This example compares two versions of the same Codex skill against identical rev
 
 - `fixtures/v1` contains a narrower `review-standards` skill that only calls out weak password hashing.
 - `fixtures/v2` contains a stronger version that also checks timing-safe secret comparison.
-- The eval verifies `skill-used`, scores issue recall, and uses `max-score` to select the best output for each test case.
+- Both providers share an `output_schema` (declared once via a YAML anchor) so each response is guaranteed to match the review JSON shape.
+- The eval verifies `skill-used`, scores issue recall and precision, and uses `max-score` to select the best output for each test case.
 
 Run it from this directory with:
 
