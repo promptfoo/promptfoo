@@ -49,7 +49,7 @@ const MediaItemContextSchema = z.object({
 });
 
 const MediaItemSchema = z.object({
-  hash: z.string(),
+  hash: z.string().regex(BLOB_HASH_REGEX, 'Invalid blob hash'),
   mimeType: z.string(),
   sizeBytes: z.number(),
   kind: z.enum(['image', 'video', 'audio', 'other']),

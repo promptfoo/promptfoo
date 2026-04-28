@@ -42,6 +42,14 @@ vi.mock('fs', async () => {
   };
 });
 
+vi.mock('fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  return {
+    ...actual,
+    access: vi.fn(actual.access),
+  };
+});
+
 vi.mock('glob', () => ({
   globSync: vi.fn(),
   hasMagic: vi.fn((path: string) => {
@@ -1857,6 +1865,14 @@ describe('file utilities', () => {
       const file = path.join(tmpRoot, 'a.txt');
       await fsp.writeFile(file, 'x');
       await expect(pathExists(path.join(file, 'nested'))).resolves.toBe(false);
+    });
+
+    it('rethrows access errors other than missing paths', async () => {
+      const fsp = await import('fs/promises');
+      const accessError = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+      vi.mocked(fsp.access).mockRejectedValueOnce(accessError);
+
+      await expect(pathExists(path.join(tmpRoot, 'locked.txt'))).rejects.toBe(accessError);
     });
   });
 });

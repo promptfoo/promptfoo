@@ -187,7 +187,7 @@ describe('createTransformRequest', () => {
 
   it('should handle async function-based transform', async () => {
     const transform = await createTransformRequest(async (prompt: string) => {
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await Promise.resolve();
       return { transformed: prompt.toUpperCase() };
     });
     const result = await transform('hello', {} as any);
