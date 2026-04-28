@@ -468,12 +468,11 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   try {
     const presigned = await getBlobUrl(hash);
     if (presigned) {
-      res.redirect(302, BlobsSchemas.Get.RedirectResponse.parse(presigned));
+      res.redirect(302, presigned);
       return;
     }
 
     const blob = await getBlobByHash(hash);
-    const data = BlobsSchemas.Get.BinaryResponse.parse(blob.data);
 
     // Validate MIME type before setting header to prevent injection attacks
     const mimeType = blob.metadata.mimeType || asset.mimeType;
@@ -486,7 +485,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.setHeader('Accept-Ranges', 'none');
-    res.send(data);
+    res.send(blob.data);
   } catch (error) {
     logger.error('[BlobRoute] Failed to serve blob', { error, hash });
     res.status(404).json({ error: 'Blob not found' });

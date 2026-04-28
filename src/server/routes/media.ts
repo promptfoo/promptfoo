@@ -105,7 +105,7 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
       return;
     }
 
-    const data = MediaSchemas.Get.BinaryResponse.parse(await retrieveMedia(key));
+    const data = await retrieveMedia(key);
 
     // Determine content type from filename
     const extension = filename.split('.').pop()?.toLowerCase() || '';
