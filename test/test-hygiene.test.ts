@@ -147,6 +147,7 @@ const legacySleepPromiseFiles = new Set<string>([
 ]);
 
 const legacyModuleScopePersistentMockFiles = new Set<string>([
+  'assertions/runAssertion.test.ts',
   'assertions/runAssertions.test.ts',
   'assertions/similar.test.ts',
   'cache.test.ts',
@@ -158,9 +159,11 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'commands/modelScan.test.ts',
   'commands/view.test.ts',
   'evaluator.integration.realTransforms.test.ts',
+  'evaluatorHelpers.test.ts',
   'external/assertions.test.ts',
   'external/conversationRelevancy.test.ts',
   'globalConfig.test.ts',
+  'googleSheets.test.ts',
   'index.test.ts',
   'integration/envPath.test.ts',
   'migrate.test.ts',
@@ -172,6 +175,8 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/bedrock/knowledgeBase.test.ts',
   'providers/bedrock/luma-ray.test.ts',
   'providers/bedrock/nova-reel.test.ts',
+  'providers/bedrock/nova-sonic.test.ts',
+  'providers/browser.test.ts',
   'providers/cloudflare-ai.test.ts',
   'providers/cloudflare-gateway.test.ts',
   'providers/functionCallbackUtils.test.ts',
@@ -189,7 +194,9 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/google/video.test.ts',
   'providers/http-tls.test.ts',
   'providers/huggingface.test.ts',
+  'providers/index.test.ts',
   'providers/mcp/authProvider.test.ts',
+  'providers/openai-codex-sdk.test.ts',
   'providers/openai/chatkit-pool.test.ts',
   'providers/openai/chatkit.test.ts',
   'providers/pythonCompletion.cliState.test.ts',
@@ -199,6 +206,7 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/simulatedUser.test.ts',
   'providers/watsonx.test.ts',
   'redteam/commands/crossSessionLeakGenerate.test.ts',
+  'redteam/commands/generate.test.ts',
   'redteam/commands/report.test.ts',
   'redteam/extraction/entities.test.ts',
   'redteam/extraction/purpose.test.ts',
@@ -206,11 +214,13 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/plugins/base.test.ts',
   'redteam/plugins/canGenerateRemote.test.ts',
   'redteam/plugins/codingAgent.test.ts',
+  'redteam/plugins/index.test.ts',
   'redteam/plugins/intent.test.ts',
   'redteam/plugins/pliny.test.ts',
   'redteam/plugins/unsafebench.test.ts',
   'redteam/providers/authoritativeMarkupInjection.test.ts',
   'redteam/providers/bestOfN.test.ts',
+  'redteam/providers/crescendo/index.test.ts',
   'redteam/providers/goat.test.ts',
   'redteam/providers/hydra/index.test.ts',
   'redteam/providers/indirectWebPwn.test.ts',
@@ -223,13 +233,18 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/strategies/simpleVideo.test.ts',
   'sagemaker.test.ts',
   'server/findStaticDir.test.ts',
+  'server/server.test.ts',
+  'telemetry.test.ts',
   'tracing/evaluatorTracing.test.ts',
+  'tracing/integration.test.ts',
   'util/agent/fsOperations.test.ts',
+  'util/config/load.test.ts',
   'util/jsonExport.test.ts',
   'util/jsonlOutput.test.ts',
   'util/sanitizer.test.ts',
   'util/testCaseReader.test.ts',
   'util/transform.test.ts',
+  'validators/testProvider.test.ts',
 ]);
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;
@@ -244,12 +259,14 @@ const persistentMockImplementationPattern = new RegExp(
   `\\.(?:${persistentMockMethods.join('|')})\\s*\\(`,
 );
 const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
-// Only the global reset helpers (vi.resetAllMocks/vi.restoreAllMocks) are
-// trusted as a file-level signal that every mock is reset between tests.
+// Only `vi.resetAllMocks()` is trusted as a file-level signal that every
+// `vi.fn()`-style mock has its persistent implementation reset between tests.
 // Per-mock helpers (.mockReset()/.mockRestore()) only reset the specific mock
-// they are called on, so a single .mockReset() in a file does not protect
-// other module-scope persistent setters from leaking across random-order tests.
-const globalMockResetPattern = /\bvi\.(?:resetAllMocks|restoreAllMocks)\s*\(/;
+// they are called on, and `vi.restoreAllMocks()` is documented as targeting
+// `vi.spyOn` mocks specifically — relying on it to reset module-scope
+// `vi.fn().mockReturnValue(...)` defaults is fragile, so it does not count.
+// See https://vitest.dev/api/vi#vi-restoreallmocks.
+const globalMockResetPattern = /\bvi\.resetAllMocks\s*\(/;
 const processEnvSnapshotIdentifierPattern = /^original[A-Za-z0-9_]*$/i;
 
 function findTestFiles(dir: string): string[] {
@@ -285,9 +302,10 @@ function hasHoistedPersistentMockWithoutReset(source: string) {
 }
 
 // Boundaries beyond which a synchronous module-load traversal must not pass.
-// Constructors and class static blocks are included because they only run when
-// the class is instantiated (constructors) or first referenced (static blocks),
-// not when the module is loaded — mocks declared inside them are deferred.
+// Constructors are included because they only run when the class is
+// instantiated. Class static blocks are NOT included: they execute when the
+// class declaration is evaluated (i.e. at module load), so mock setters
+// inside them DO leak across tests if not reset.
 function isFunctionLikeNode(node: ts.Node): boolean {
   return (
     ts.isArrowFunction(node) ||
@@ -296,8 +314,7 @@ function isFunctionLikeNode(node: ts.Node): boolean {
     ts.isMethodDeclaration(node) ||
     ts.isGetAccessorDeclaration(node) ||
     ts.isSetAccessorDeclaration(node) ||
-    ts.isConstructorDeclaration(node) ||
-    ts.isClassStaticBlockDeclaration(node)
+    ts.isConstructorDeclaration(node)
   );
 }
 
@@ -412,15 +429,43 @@ function hasModuleScopePersistentMockWithoutReset(source: string) {
   }
   const sourceFile = ts.createSourceFile('fixture.test.ts', source, ts.ScriptTarget.Latest, true);
 
+  // Build a lookup for module-scope variable / function declarations whose
+  // value is a function literal, so that `vi.mock('x', factory)` with a
+  // factory passed by identifier can be resolved back to its body and scanned.
+  const moduleFactoryByName = new Map<string, ts.Node>();
+  for (const stmt of sourceFile.statements) {
+    if (ts.isVariableStatement(stmt)) {
+      for (const decl of stmt.declarationList.declarations) {
+        if (
+          ts.isIdentifier(decl.name) &&
+          decl.initializer &&
+          (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer))
+        ) {
+          moduleFactoryByName.set(decl.name.text, decl.initializer);
+        }
+      }
+    } else if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+      moduleFactoryByName.set(stmt.name.text, stmt);
+    }
+  }
+
+  function resolveViMockFactoryArg(arg: ts.Expression): ts.Node {
+    if (ts.isIdentifier(arg) && moduleFactoryByName.has(arg.text)) {
+      return moduleFactoryByName.get(arg.text) as ts.Node;
+    }
+    return arg;
+  }
+
   for (const stmt of sourceFile.statements) {
     if (ts.isExpressionStatement(stmt)) {
       if (ts.isCallExpression(stmt.expression) && isViMockCall(stmt.expression)) {
-        // vi.mock(path, factory): traverse the factory body, which runs at module load.
-        if (
-          stmt.expression.arguments.length >= 2 &&
-          evaluatesPersistentMockSetter(stmt.expression.arguments[1], { enterRootFunction: true })
-        ) {
-          return true;
+        // vi.mock(path, factory): the factory body runs at module load. Resolve
+        // identifier-style factories back to their declaration first.
+        if (stmt.expression.arguments.length >= 2) {
+          const factoryNode = resolveViMockFactoryArg(stmt.expression.arguments[1]);
+          if (evaluatesPersistentMockSetter(factoryNode, { enterRootFunction: true })) {
+            return true;
+          }
         }
         continue;
       }
@@ -435,6 +480,18 @@ function hasModuleScopePersistentMockWithoutReset(source: string) {
       )
     ) {
       return true;
+    }
+    // Class declarations: static blocks execute at module load when the class
+    // is evaluated, so any persistent setter inside one leaks across tests.
+    if (ts.isClassDeclaration(stmt)) {
+      for (const member of stmt.members) {
+        if (
+          ts.isClassStaticBlockDeclaration(member) &&
+          evaluatesPersistentMockSetter(member.body)
+        ) {
+          return true;
+        }
+      }
     }
   }
 
@@ -988,6 +1045,34 @@ describe('root test hygiene', () => {
     ],
     ['const baseClient = vi.fn().mockReturnValue({ id: "default" });'],
     ['vi.mocked(client).mockResolvedValue({ ok: true });'],
+    // Static blocks execute when the class declaration is evaluated (module
+    // load), so persistent setters inside them DO leak across tests.
+    [
+      [
+        'class Helper {',
+        '  static fn: ReturnType<typeof vi.fn>;',
+        '  static {',
+        '    Helper.fn = vi.fn().mockReturnValue("x");',
+        '  }',
+        '}',
+      ].join('\n'),
+    ],
+    // vi.mock(path, factory) where the factory is passed by identifier — the
+    // factory body still runs at module load and must be scanned.
+    [
+      [
+        "const factory = () => ({ fn: vi.fn().mockReturnValue('default') });",
+        "vi.mock('foo', factory);",
+      ].join('\n'),
+    ],
+    [
+      [
+        'function makeMockModule() {',
+        "  return { fn: vi.fn().mockReturnValue('default') };",
+        '}',
+        "vi.mock('foo', makeMockModule);",
+      ].join('\n'),
+    ],
   ])('detects module-scope persistent mock implementations without reset in %#', (source) => {
     expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(true);
   });
@@ -1031,36 +1116,33 @@ describe('root test hygiene', () => {
         '\n',
       ),
     ],
-    // Setters inside class constructor / static block do not run at module load.
+    // Setters inside a class constructor do not run at module load — they
+    // only fire when the class is instantiated.
     [
       [
         'class Helper {',
+        '  fn: ReturnType<typeof vi.fn>;',
         '  constructor() {',
         '    this.fn = vi.fn().mockReturnValue("x");',
         '  }',
         '}',
       ].join('\n'),
     ],
-    [
-      [
-        'class Helper {',
-        '  static {',
-        '    Helper.fn = vi.fn().mockReturnValue("x");',
-        '  }',
-        '}',
-      ].join('\n'),
-    ],
-    // vi.restoreAllMocks() is also a global reset.
-    [
-      [
-        "vi.mock('foo', () => ({ bar: vi.fn().mockReturnValue('default') }));",
-        'afterEach(() => {',
-        '  vi.restoreAllMocks();',
-        '});',
-      ].join('\n'),
-    ],
   ])('allows module-scope persistent mocks when paired with reset or scoped per-test in %#', (source) => {
     expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('treats vi.restoreAllMocks() as insufficient for module-scope vi.fn() defaults', () => {
+    // vi.restoreAllMocks() is documented as targeting vi.spyOn mocks; relying
+    // on it to reset persistent vi.fn().mockReturnValue(...) defaults is
+    // fragile, so the file should still be flagged.
+    const source = [
+      "vi.mock('foo', () => ({ bar: vi.fn().mockReturnValue('default') }));",
+      'afterEach(() => {',
+      '  vi.restoreAllMocks();',
+      '});',
+    ].join('\n');
+    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(true);
   });
 
   it('treats per-mock .mockReset() as insufficient at file level', () => {
