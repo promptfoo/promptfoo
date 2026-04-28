@@ -41,7 +41,6 @@ describe('Eval Routes - Zod Validation', () => {
   });
 
   beforeEach(() => {
-    app = createApp();
     vi.resetAllMocks();
 
     // Setup mock methods

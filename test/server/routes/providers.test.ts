@@ -28,6 +28,7 @@ describe('Providers Routes', () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
+    vi.resetAllMocks();
     app = createApp();
   });
 
@@ -36,10 +37,6 @@ describe('Providers Routes', () => {
   });
 
   describe('GET /providers/config-status', () => {
-    beforeEach(() => {
-      vi.resetAllMocks();
-    });
-
     it('should return hasCustomConfig: false when no custom config exists', async () => {
       // getAvailableProviders returns empty array when no config
       mockedGetAvailableProviders.mockReturnValue([]);
@@ -86,8 +83,6 @@ describe('Providers Routes', () => {
     let mockProvider: ApiProvider;
 
     beforeEach(() => {
-      vi.resetAllMocks();
-
       // Setup mock provider
       mockProvider = {
         id: vi.fn(() => 'test-provider'),
@@ -424,10 +419,6 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/http-generator validation', () => {
-    beforeEach(() => {
-      vi.resetAllMocks();
-    });
-
     it('should return 400 for empty body', async () => {
       const response = await request(app).post('/api/providers/http-generator').send({});
 
@@ -456,10 +447,6 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/test-session validation', () => {
-    beforeEach(() => {
-      vi.resetAllMocks();
-    });
-
     it('should return 400 for empty body', async () => {
       const response = await request(app).post('/api/providers/test-session').send({});
 
@@ -536,10 +523,6 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/discover validation', () => {
-    beforeEach(() => {
-      vi.resetAllMocks();
-    });
-
     it('should return 400 for empty body (missing id)', async () => {
       const response = await request(app).post('/api/providers/discover').send({});
 
