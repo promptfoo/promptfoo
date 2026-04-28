@@ -19,6 +19,7 @@ import shlex
 import shutil
 import subprocess
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -219,7 +220,7 @@ def _resolve_log_root(config: dict, base_path: Path) -> Path:
 def _new_log_dir(log_root: Path, app: str) -> Path:
     safe_app = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in app)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    path = log_root / f"{stamp}-{safe_app}-{os.getpid()}"
+    path = log_root / f"{stamp}-{safe_app}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     path.mkdir(parents=True, exist_ok=False)
     return path
 
@@ -227,10 +228,20 @@ def _new_log_dir(log_root: Path, app: str) -> Path:
 def _limit_for_task_index(task_index: Any) -> str:
     if task_index in (None, ""):
         return "1"
-    try:
-        index = int(task_index)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("task_index must be an integer starting at 0") from exc
+
+    if isinstance(task_index, bool):
+        raise ValueError("task_index must be an integer starting at 0")
+
+    if isinstance(task_index, int):
+        index = task_index
+    elif isinstance(task_index, str):
+        try:
+            index = int(task_index.strip())
+        except ValueError as exc:
+            raise ValueError("task_index must be an integer starting at 0") from exc
+    else:
+        raise ValueError("task_index must be an integer starting at 0")
+
     if index < 0:
         raise ValueError("task_index must be >= 0")
     one_based = index + 1

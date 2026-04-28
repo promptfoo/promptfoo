@@ -1,3 +1,4 @@
+import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -29,6 +30,115 @@ describe('integration-inspect-osworld example provider', () => {
   function pythonExecutable(): string {
     return process.env.PROMPTFOO_PYTHON || process.env.PYTHON || process.env.PYTHON3 || 'python3';
   }
+
+  it('creates unique log dirs for repeated same-app calls in one timestamp', () => {
+    const tempDir = makeTempDir();
+    const providerDir = path.join(tempDir, 'example');
+    fs.mkdirSync(providerDir, { recursive: true });
+    const providerPath = path.join(providerDir, 'provider.py');
+    fs.copyFileSync(
+      path.join(process.cwd(), 'examples', 'integration-inspect-osworld', 'provider.py'),
+      providerPath,
+    );
+
+    const checkPath = path.join(tempDir, 'check_log_dirs.py');
+    fs.writeFileSync(
+      checkPath,
+      `
+import importlib.util
+import json
+import sys
+from datetime import datetime
+from pathlib import Path
+
+provider_path = Path(sys.argv[1])
+log_root = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("provider", provider_path)
+provider = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(provider)
+
+class FrozenDateTime:
+    @staticmethod
+    def now(tz=None):
+        return datetime(2026, 1, 2, 3, 4, 5, tzinfo=tz)
+
+provider.datetime = FrozenDateTime
+first = provider._new_log_dir(log_root, "libreoffice_calc")
+second = provider._new_log_dir(log_root, "libreoffice_calc")
+print(json.dumps({
+    "first": first.name,
+    "second": second.name,
+    "count": len([path for path in log_root.iterdir() if path.name.startswith("20260102T030405Z-")]),
+}))
+`,
+    );
+
+    const result = spawnSync(pythonExecutable(), [checkPath, providerPath, tempDir], {
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.first).not.toBe(parsed.second);
+    expect(parsed.first).toMatch(/^20260102T030405Z-libreoffice_calc-\d+-[0-9a-f]{8}$/);
+    expect(parsed.second).toMatch(/^20260102T030405Z-libreoffice_calc-\d+-[0-9a-f]{8}$/);
+    expect(parsed.count).toBe(2);
+  });
+
+  it('rejects non-integer task indexes', () => {
+    const tempDir = makeTempDir();
+    const providerDir = path.join(tempDir, 'example');
+    fs.mkdirSync(providerDir, { recursive: true });
+    const providerPath = path.join(providerDir, 'provider.py');
+    fs.copyFileSync(
+      path.join(process.cwd(), 'examples', 'integration-inspect-osworld', 'provider.py'),
+      providerPath,
+    );
+
+    const checkPath = path.join(tempDir, 'check_task_index.py');
+    fs.writeFileSync(
+      checkPath,
+      `
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+provider_path = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("provider", provider_path)
+provider = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(provider)
+
+bad_values = [1.5, True, False]
+errors = []
+for value in bad_values:
+    try:
+        provider._limit_for_task_index(value)
+    except ValueError as exc:
+        errors.append(str(exc))
+    else:
+        raise AssertionError(f"accepted invalid task_index: {value!r}")
+
+print(json.dumps({
+    "valid": provider._limit_for_task_index("2"),
+    "errors": errors,
+}))
+`,
+    );
+
+    const result = spawnSync(pythonExecutable(), [checkPath, providerPath], {
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.valid).toBe('3-3');
+    expect(parsed.errors).toEqual([
+      'task_index must be an integer starting at 0',
+      'task_index must be an integer starting at 0',
+      'task_index must be an integer starting at 0',
+    ]);
+  });
 
   it('finds Inspect logs when promptfoo passes a relative basePath', async () => {
     const tempDir = makeTempDir();

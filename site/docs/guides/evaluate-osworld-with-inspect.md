@@ -90,7 +90,7 @@ promptfoo eval -c promptfooconfig.yaml --no-cache --var model=openai/gpt-5-nano
 
 The provider config sets two timeouts because there are two execution layers:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: file://provider.py
     label: OSWorld via Inspect
