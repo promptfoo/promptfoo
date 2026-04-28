@@ -345,7 +345,9 @@ function documentedRouteKeys() {
   const document = createServerOpenApiDocument();
   return Object.entries(document.paths ?? {}).flatMap(([path, pathItem]) =>
     HTTP_METHODS.flatMap((method) => {
-      const operation = pathItem?.[method];
+      const operation = (pathItem as Partial<Record<(typeof HTTP_METHODS)[number], unknown>>)?.[
+        method
+      ];
       return operation ? [`${method.toUpperCase()} ${path}`] : [];
     }),
   );

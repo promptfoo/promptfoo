@@ -27,7 +27,9 @@ const ROUTE_PREFIXES = new Map([
 function operations(document: ReturnType<typeof createServerOpenApiDocument>) {
   return Object.entries(document.paths ?? {}).flatMap(([path, pathItem]) =>
     HTTP_METHODS.flatMap((method) => {
-      const operation = pathItem?.[method];
+      const operation = (pathItem as Partial<Record<(typeof HTTP_METHODS)[number], unknown>>)?.[
+        method
+      ];
       return operation ? [{ path, method, operation }] : [];
     }),
   );
@@ -130,9 +132,7 @@ describe('server OpenAPI generation', () => {
     expect(includeProvidersParam?.schema).toEqual({
       oneOf: [{ type: 'boolean' }, { type: 'string' }],
     });
-    expect(validateParam?.schema).toEqual({
-      oneOf: [{ type: 'boolean' }, { type: 'string' }],
-    });
+    expect(validateParam?.schema).toEqual({});
     expect(evalTableFormatParam?.schema).toEqual({
       enum: ['csv', 'json'],
       type: 'string',

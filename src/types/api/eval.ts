@@ -349,6 +349,7 @@ export const EvalSchemas = {
     Params: EvalIdParamSchema,
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
+    JsonExportResponse: EvalTableJsonExportResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,
