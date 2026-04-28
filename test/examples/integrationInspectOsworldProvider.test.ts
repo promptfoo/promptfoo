@@ -242,6 +242,190 @@ sys.exit(4)
     }
   }, 20_000);
 
+  it('selects exact OSWorld samples by sample_id without app filters', async () => {
+    const tempDir = makeTempDir();
+    const providerDir = path.join(tempDir, 'example');
+    fs.mkdirSync(providerDir, { recursive: true });
+    fs.copyFileSync(
+      path.join(process.cwd(), 'examples', 'integration-inspect-osworld', 'provider.py'),
+      path.join(providerDir, 'provider.py'),
+    );
+
+    const fakeInspectPath = path.join(tempDir, 'fake_inspect.py');
+    const recordPath = path.join(tempDir, 'inspect_eval_record.json');
+    fs.writeFileSync(
+      fakeInspectPath,
+      `
+import json
+import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+
+if args[:2] == ["log", "dump"]:
+    print(json.dumps({
+        "status": "success",
+        "samples": [{
+            "id": "exact-sample-123",
+            "scores": {"osworld_scorer": {"value": "C"}},
+            "output": {"completion": "DONE"},
+            "messages": [{"role": "assistant", "content": "DONE"}],
+        }],
+    }))
+    sys.exit(0)
+
+if args and args[0] == "eval":
+    Path(os.environ["FAKE_INSPECT_RECORD"]).write_text(json.dumps({"args": args}))
+    log_dir = Path(args[args.index("--log-dir") + 1])
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "fake.eval").write_text("fake eval")
+    sys.exit(0)
+
+sys.exit(4)
+`,
+    );
+
+    restoreEnv = mockProcessEnv({ FAKE_INSPECT_RECORD: recordPath });
+
+    const provider = new PythonProvider('file://provider.py', {
+      config: {
+        basePath: path.relative(process.cwd(), providerDir),
+        defaultModel: 'mock/model',
+        inspectCommand: [pythonExecutable(), fakeInspectPath],
+        pythonExecutable: pythonExecutable(),
+        timeout: 10_000,
+        timeoutSeconds: 10,
+      },
+    });
+
+    try {
+      const result = await provider.callApi('ignored', {
+        vars: { sample_id: 'exact-sample-123' },
+      } as any);
+
+      expect(result.error).toBeUndefined();
+      expect(result.metadata).toMatchObject({
+        app: 'sample_id',
+        requested_sample_id: 'exact-sample-123',
+        sample_id: 'exact-sample-123',
+        score: 1,
+        status: 'pass',
+      });
+
+      const record = JSON.parse(fs.readFileSync(recordPath, 'utf8'));
+      expect(record.args).toContain('--sample-id');
+      expect(record.args).toContain('exact-sample-123');
+      expect(record.args).not.toContain('--limit');
+      expect(record.args).not.toContain('-T');
+    } finally {
+      await provider.shutdown();
+    }
+  }, 20_000);
+
+  it('treats zero selected Inspect samples as provider errors', async () => {
+    const tempDir = makeTempDir();
+    const providerDir = path.join(tempDir, 'example');
+    fs.mkdirSync(providerDir, { recursive: true });
+    fs.copyFileSync(
+      path.join(process.cwd(), 'examples', 'integration-inspect-osworld', 'provider.py'),
+      path.join(providerDir, 'provider.py'),
+    );
+
+    const fakeInspectPath = path.join(tempDir, 'fake_inspect.py');
+    fs.writeFileSync(
+      fakeInspectPath,
+      `
+import json
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+
+if args[:2] == ["log", "dump"]:
+    print(json.dumps({
+        "status": "success",
+        "samples": [],
+        "results": {"scores": []},
+    }))
+    sys.exit(0)
+
+if args and args[0] == "eval":
+    log_dir = Path(args[args.index("--log-dir") + 1])
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "fake.eval").write_text("fake eval")
+    sys.exit(0)
+
+sys.exit(4)
+`,
+    );
+
+    const provider = new PythonProvider('file://provider.py', {
+      config: {
+        basePath: path.relative(process.cwd(), providerDir),
+        defaultModel: 'mock/model',
+        inspectCommand: [pythonExecutable(), fakeInspectPath],
+        pythonExecutable: pythonExecutable(),
+        timeout: 10_000,
+        timeoutSeconds: 10,
+      },
+    });
+
+    try {
+      const result = await provider.callApi('ignored', {
+        vars: { app: 'libreoffice_calc', task_index: 1 },
+      } as any);
+
+      expect(result.error).toContain('selected zero samples');
+      expect(result.metadata).toMatchObject({
+        app: 'libreoffice_calc',
+        inspect_error:
+          'Inspect completed, but selected zero samples or recorded no scorer result. Check vars.app, vars.task_index, or vars.sample_id.',
+        sample_id: 'unknown sample',
+        status: 'error',
+      });
+    } finally {
+      await provider.shutdown();
+    }
+  }, 20_000);
+
+  it('condenses long Inspect computer command failures', () => {
+    const tempDir = makeTempDir();
+    const providerDir = path.join(tempDir, 'example');
+    fs.mkdirSync(providerDir, { recursive: true });
+    const providerPath = path.join(providerDir, 'provider.py');
+    fs.copyFileSync(
+      path.join(process.cwd(), 'examples', 'integration-inspect-osworld', 'provider.py'),
+      providerPath,
+    );
+
+    const checkPath = path.join(tempDir, 'check_error_summary.py');
+    fs.writeFileSync(
+      checkPath,
+      `
+import importlib.util
+import sys
+from pathlib import Path
+
+provider_path = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("provider", provider_path)
+provider = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(provider)
+
+print(provider._summarize_inspect_error("RuntimeError('Failure executing command: $['python3', 'tool.py', '--text=' + 'x' * 5000]')"))
+`,
+    );
+
+    const result = spawnSync(pythonExecutable(), [checkPath, providerPath], {
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(
+      'Inspect computer tool failed while executing a model-requested desktop command. See the Inspect log for the full traceback and command output.',
+    );
+  });
+
   it('surfaces Inspect log runtime errors as provider errors', async () => {
     const tempDir = makeTempDir();
     const providerDir = path.join(tempDir, 'example');

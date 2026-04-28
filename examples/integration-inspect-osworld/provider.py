@@ -35,21 +35,27 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     config = options.get("config") or {}
     vars_ = context.get("vars") or {}
     app = vars_.get("app")
-    if not app:
+    requested_sample_id = vars_.get("sample_id")
+    if not app and not requested_sample_id:
         return {
-            "error": "OSWorld app is required. Set vars.app, for example 'libreoffice_calc'."
+            "error": (
+                "OSWorld app or sample_id is required. Set vars.app, for example "
+                "'libreoffice_calc', or vars.sample_id for an exact OSWorld sample."
+            )
         }
 
     model = vars_.get("model") or config.get("defaultModel") or DEFAULT_MODEL
     timeout_seconds = _int_config(config.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS)
     base_path = _resolve_base_path(config)
     log_root = _resolve_log_root(config, base_path)
-    log_dir = _new_log_dir(log_root, str(app))
+    log_dir = _new_log_dir(log_root, str(app or requested_sample_id))
     inspect_cmd = _inspect_command(config)
 
     task_index = vars_.get("task_index")
+    if requested_sample_id and task_index not in (None, ""):
+        return {"error": "sample_id and task_index are mutually exclusive."}
     try:
-        limit = _limit_for_task_index(task_index)
+        limit = _limit_for_task_index(task_index) if not requested_sample_id else None
     except ValueError as exc:
         return {"error": str(exc)}
     task = config.get("task") or DEFAULT_TASK
@@ -60,13 +66,13 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         task,
         "--model",
         str(model),
-        "--limit",
-        limit,
-        "-T",
-        f"include_apps={app}",
         "--log-dir",
         str(log_dir),
     ]
+    if requested_sample_id:
+        eval_cmd.extend(["--sample-id", str(requested_sample_id)])
+    else:
+        eval_cmd.extend(["--limit", str(limit), "-T", f"include_apps={app}"])
 
     started = time.monotonic()
     try:
@@ -160,8 +166,10 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         "num_messages": parsed.get("num_messages", 0),
         "duration_seconds": round(duration, 3),
         "task": task,
-        "app": str(app),
+        "app": str(app or "sample_id"),
     }
+    if requested_sample_id:
+        metadata["requested_sample_id"] = str(requested_sample_id)
     token_usage = parsed.get("token_usage")
 
     inspect_error = _inspect_log_error(parsed)
@@ -184,7 +192,8 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         parsed.get("final_answer") or "(no final assistant text found in Inspect log)"
     )
     output = (
-        f"Sample {sample_id} on app {app}: score={score if score is not None else 'unknown'} "
+        f"Sample {sample_id} on app {app or 'sample_id'}: "
+        f"score={score if score is not None else 'unknown'} "
         f"status={status}\n\nFinal answer: {final_answer}"
     )
 
@@ -358,14 +367,31 @@ def _inspect_log_error(parsed: dict[str, Any]) -> str | None:
     if isinstance(sample_error, dict):
         message = sample_error.get("message") or sample_error.get("traceback")
         if message:
-            return _tail(str(message), 1000)
+            return _summarize_inspect_error(str(message))
     elif sample_error:
-        return _tail(str(sample_error), 1000)
+        return _summarize_inspect_error(str(sample_error))
 
     if parsed.get("inspect_status") == "error":
         return "Inspect log status is error and no scorer result was recorded."
 
+    if parsed.get("score") is None and not parsed.get("sample_id"):
+        return (
+            "Inspect completed, but selected zero samples or recorded no scorer result. "
+            "Check vars.app, vars.task_index, or vars.sample_id."
+        )
+
     return None
+
+
+def _summarize_inspect_error(message: str) -> str:
+    if "Failure executing command:" in message:
+        return (
+            "Inspect computer tool failed while executing a model-requested desktop "
+            "command. See the Inspect log for the full traceback and command output."
+        )
+
+    first_line = message.strip().splitlines()[0] if message.strip() else message
+    return _tail(first_line, 1000)
 
 
 def _int_config(value: Any, default: int) -> int:
@@ -391,7 +417,12 @@ def _humanize_inspect_failure(
     tail = _tail(result.stderr) or _tail(result.stdout) or "(no output)"
     hint = ""
     lowered = tail.lower()
-    if "docker compose" in lowered or "compose" in lowered:
+    if "specified dataset is empty" in lowered or "no samples" in lowered:
+        hint = (
+            " Check vars.app or vars.sample_id. Inspect selected no OSWorld samples "
+            "for this filter."
+        )
+    elif "docker compose" in lowered or "compose" in lowered:
         hint = " Check that Docker Compose V2 is installed and available as `docker compose`."
     elif "docker" in lowered:
         hint = " Check that Docker is installed, running, and usable by your user."

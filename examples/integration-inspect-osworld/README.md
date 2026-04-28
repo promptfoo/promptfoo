@@ -36,24 +36,48 @@ From the repository root:
 npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
 ```
 
+To run the same GPT-5.5 sample with Promptfoo tracing enabled:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.tracing.yaml --no-cache
+```
+
 Or, after copying the example with `npx promptfoo@latest init --example integration-inspect-osworld`, run:
 
 ```bash
 promptfoo eval -c promptfooconfig.yaml --no-cache
 ```
 
-The active test runs the first supported `libreoffice_calc` sample. To select a different Inspect model for one test, add `model` under `vars`:
+Or with tracing enabled:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.tracing.yaml --no-cache
+```
+
+The active test runs a pinned `libreoffice_calc` sample with GPT-5.5. To make the model explicit for one test, add `model` under `vars`:
 
 ```yaml
 vars:
   app: libreoffice_calc
-  model: openai/gpt-5-nano
+  sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
+  model: openai/gpt-5.5
+```
+
+To run an exact OSWorld sample, set `sample_id` under `vars`. This is the most
+reliable selector for larger comparisons because it maps directly to Inspect's
+`--sample-id` flag:
+
+```yaml
+vars:
+  sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
 
 To run the Nth task within an app subset, add zero-based `task_index`. The provider maps `task_index: 2` to Inspect `--limit 3-3`.
 
-Inspect filters by OSWorld `related_apps` ids. For example, VS Code is
-`vscode`, not `vs_code`.
+Inspect filters by OSWorld app ids, and multi-app tasks use `multi_apps`.
+For example, VS Code is `vscode`, not `vs_code`.
 
 The example config sets two timeouts because both layers need enough time:
 
@@ -88,17 +112,30 @@ It also returns metadata for the promptfoo UI and assertions:
 
 The Python assertion passes when `metadata.score >= 1.0` or `metadata.status == "pass"`.
 
+## Reference GPT-5.5 run
+
+A local traced run of all 21 `osworld_small` samples with exact `sample_id`
+selectors and `--max-concurrency 6` completed in 20m 9s. GPT-5.5 passed 13
+samples, failed 7 scored samples, and hit 1 Inspect computer-tool runtime error.
+Promptfoo recorded 21 trace records and 21 wrapper-level Python provider spans.
+
 ## Inspect logs and traces
 
 Inspect writes `.eval` files under `examples/integration-inspect-osworld/inspect_logs/`. They are ignored by git because they can include screenshots, trajectories, tool calls, model outputs, and other large run artifacts.
 
-For trace-level visibility, use Inspect's viewer instead of promptfoo OTLP tracing:
+For trace-level visibility into the OSWorld desktop trajectory, use Inspect's
+viewer:
 
 ```bash
 inspect view --log-dir examples/integration-inspect-osworld/inspect_logs
 ```
 
-Bridging Inspect's internal spans into promptfoo traces would require non-trivial trace translation, so this example keeps the integration at the orchestration and scoring layer.
+The optional `promptfooconfig.tracing.yaml` also enables Promptfoo
+OpenTelemetry tracing. Set `PROMPTFOO_ENABLE_OTEL=true` for Python provider
+spans. This records the wrapper-level Python provider call and links it to the
+eval result, but it does not translate Inspect's internal screenshots, mouse
+moves, keyboard actions, or scorer events into Promptfoo trajectory spans.
+Inspect's `.eval` log remains the source of truth for those steps.
 
 ## Smoke test without model spend
 

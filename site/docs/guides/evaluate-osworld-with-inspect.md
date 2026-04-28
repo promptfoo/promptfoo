@@ -14,7 +14,7 @@ The `integration-inspect-osworld` example runs OSWorld through [Inspect](https:/
 
 ## What runs
 
-The example uses Inspect's `inspect_evals/osworld_small` task, a smaller OSWorld corpus packaged for Inspect. The active promptfoo test filters that corpus to `libreoffice_calc` and runs the first matching sample.
+The example uses Inspect's `inspect_evals/osworld_small` task, a smaller OSWorld corpus packaged for Inspect. The active promptfoo test runs a pinned `libreoffice_calc` sample by OSWorld sample id.
 
 In the sample shown above, OSWorld opens `NetIncome.xlsx` in LibreOffice Calc and asks the agent to compute totals for the `Revenue` and `Total Expenses` columns on a new sheet. Inspect provides the Ubuntu desktop sandbox, screenshots, computer tool, model loop, and scorer.
 
@@ -80,10 +80,17 @@ To run it from the promptfoo repository source tree:
 npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
 ```
 
-To test a lower-cost Inspect model for one run:
+To run the same GPT-5.5 sample with Promptfoo tracing enabled:
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml --no-cache --var model=openai/gpt-5-nano
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.tracing.yaml --no-cache
+```
+
+To make the GPT-5.5 model selection explicit for one run:
+
+```bash
+promptfoo eval -c promptfooconfig.yaml --no-cache --var model=openai/gpt-5.5
 ```
 
 ## Configuration
@@ -107,12 +114,22 @@ tests:
   - description: libreoffice_calc - first supported sample
     vars:
       app: libreoffice_calc
+      sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
     assert:
       - type: python
         value: file://assertion.py
 ```
 
-Inspect filters by OSWorld `related_apps` ids. For example, VS Code samples use `vscode`, not `vs_code`.
+Inspect filters by OSWorld app ids. For example, VS Code samples use `vscode`,
+not `vs_code`, and multi-app tasks use `multi_apps`.
+
+For exact runs, prefer `sample_id`. The provider passes it to Inspect's
+`--sample-id` flag and skips app/index filtering:
+
+```yaml
+vars:
+  sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
+```
 
 To run a later sample from the selected app subset, add zero-based `task_index`:
 
@@ -124,6 +141,24 @@ vars:
 
 The provider maps `task_index: 2` to Inspect `--limit 3-3`.
 
+For Promptfoo tracing, use the companion config:
+
+```yaml
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: 127.0.0.1
+      acceptFormats:
+        - json
+        - protobuf
+```
+
+The traced config also sets `metadata.tracingEnabled: true` and a stable
+`testCaseId` on the active test so the trace can be correlated with the result.
+
 ## Read the results
 
 The provider returns the OSWorld sample id, score, status, final assistant text, token usage, and path to the Inspect log:
@@ -134,7 +169,7 @@ The provider returns the OSWorld sample id, score, status, final assistant text,
   "score": 0.0,
   "status": "fail",
   "sample_id": "42e0a640-4f19-4b28-973d-729602b5a4a7",
-  "model": "openai/gpt-5-nano",
+  "model": "openai/gpt-5.5",
   "num_messages": 58,
   "duration_seconds": 617.32,
   "task": "inspect_evals/osworld_small",
@@ -143,6 +178,34 @@ The provider returns the OSWorld sample id, score, status, final assistant text,
 ```
 
 A failed score is still a valid eval result when Inspect completed and the OSWorld scorer returned `0.0`. Treat provider errors differently: those indicate setup, Docker, model SDK, timeout, or log parsing failures before a scored sample was produced.
+
+## Reference GPT-5.5 run
+
+As a larger smoke test, we ran all 21 `osworld_small` samples with exact
+`sample_id` selectors, GPT-5.5, Promptfoo tracing enabled, and
+`--max-concurrency 6`. This is not a stable leaderboard number; it is a concrete
+example of the shape and cost of a real run on one local machine.
+
+| Metric                          |                         Result |
+| ------------------------------- | -----------------------------: |
+| Eval id                         | `eval-7hQ-2026-04-28T02:52:18` |
+| Samples                         |                             21 |
+| Concurrency                     |                              6 |
+| Wall time                       |                         20m 9s |
+| Passed                          |                        13 / 21 |
+| Scored failures                 |                         7 / 21 |
+| Provider errors                 |                         1 / 21 |
+| Promptfoo trace records         |                             21 |
+| Promptfoo Python provider spans |                             21 |
+| Total token counter             |                      3,602,231 |
+
+The strongest app clusters in that run were `gimp` and `libreoffice_calc`
+at 100% pass rate. `vscode` passed 2 of 3. The hardest cases were mixed
+desktop workflows, one OS administration task, the VLC conversion task, and one
+near-miss LibreOffice Writer task that scored `0.9615` but did not meet the
+strict `score >= 1.0` assertion. The single provider error was an Inspect
+computer-tool runtime failure while executing a model-requested desktop command;
+the Inspect `.eval` log contains the full traceback and trajectory.
 
 ## Inspect logs
 
@@ -156,11 +219,26 @@ The viewer shows screenshots, intermediate model messages, tool calls, files, sc
 
 ## Tracing
 
-This example does not enable Promptfoo OpenTelemetry tracing. The config has no `tracing:` block, and the wrapper does not translate Inspect's internal trajectory into Promptfoo trace spans.
+The default config does not enable Promptfoo OpenTelemetry tracing. Use
+`promptfooconfig.tracing.yaml` when you want a Promptfoo trace record for the
+wrapper run.
 
-Trace-level visibility still exists in Inspect: every run writes a `.eval` log, and `inspect view` displays the desktop trajectory. Promptfoo receives only the wrapper-level result: output text, score, token usage, sample id, status, and `inspect_log_path`.
+The traced config starts Promptfoo's local OTLP receiver and passes a W3C
+`traceparent` into the Python provider. Set `PROMPTFOO_ENABLE_OTEL=true` so the
+Python provider wrapper initializes OpenTelemetry. When Python OpenTelemetry
+packages are installed, the wrapper records a child span with the prompt,
+response, token usage, status, eval id, and test case id.
 
-To make this Promptfoo-native tracing, the wrapper would need to translate Inspect events into OpenTelemetry spans or expose a Promptfoo trace object. Without that bridge, Promptfoo trace assertions such as `trajectory:tool-used` cannot see the OSWorld mouse, keyboard, or screenshot steps.
+Trace-level visibility into OSWorld itself still lives in Inspect: every run
+writes a `.eval` log, and `inspect view` displays the desktop trajectory.
+Promptfoo receives wrapper-level telemetry plus result metadata: output text,
+score, token usage, sample id, status, and `inspect_log_path`.
+
+To make the desktop actions Promptfoo-native tracing, the wrapper would need to
+translate Inspect events into OpenTelemetry spans or expose a Promptfoo trace
+object. Without that bridge, Promptfoo trace assertions such as
+`trajectory:tool-used` cannot see the OSWorld mouse, keyboard, or screenshot
+steps.
 
 ## When to use this pattern
 

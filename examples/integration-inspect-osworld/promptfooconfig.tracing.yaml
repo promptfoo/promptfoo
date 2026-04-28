@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OSWorld via Inspect wrapper
+description: OSWorld via Inspect wrapper with tracing
 prompts:
   - 'Run OSWorld sample on app {{app}}'
 providers:
@@ -12,21 +12,23 @@ providers:
       # Inspect subprocess timeout, in seconds.
       timeoutSeconds: 1800
 tests:
-  - description: libreoffice_calc — first supported sample
+  - description: libreoffice_calc — first supported sample with tracing
     vars:
       app: libreoffice_calc
       sample_id: 42e0a640-4f19-4b28-973d-729602b5a4a7
+    metadata:
+      testCaseId: osworld-libreoffice-calc-gpt55
+      tracingEnabled: true
     assert:
       - type: python
         value: file://assertion.py
-
-  # Uncomment to run another expensive OSWorld sample. Each sample can take
-  # 5-15 minutes, build an ~8GB Docker image on first use, and consume
-  # non-trivial model tokens.
-  # - description: vscode — first supported sample
-  #   vars:
-  #     app: vscode
-  #     sample_id: 0ed39f63-6049-43d4-ba4d-5fa2fe04a951
-  #   assert:
-  #     - type: python
-  #       value: file://assertion.py
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: 127.0.0.1
+      acceptFormats:
+        - json
+        - protobuf
