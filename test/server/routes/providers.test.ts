@@ -11,10 +11,13 @@ import type { ProviderTestResult } from '../../../src/validators/testProvider';
 vi.mock('../../../src/providers/index');
 vi.mock('../../../src/validators/testProvider');
 vi.mock('../../../src/server/config/serverConfig');
+vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
+import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
+import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
 import {
   testProviderConnectivity,
@@ -22,6 +25,8 @@ import {
 } from '../../../src/validators/testProvider';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
+const mockedDoTargetPurposeDiscovery = vi.mocked(doTargetPurposeDiscovery);
+const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
 const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 const mockedTestProviderSession = vi.mocked(testProviderSession);
@@ -531,6 +536,35 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/discover validation', () => {
+    it('should return discovered target metadata for valid provider options', async () => {
+      const mockProvider = {
+        id: vi.fn(() => 'test-provider'),
+        callApi: vi.fn(),
+        config: {},
+      } as any;
+      const discoveryResult = {
+        purpose: 'Help users',
+        limitations: 'No medical advice',
+        user: 'Support agents',
+        tools: [
+          {
+            name: 'lookup',
+            description: 'Fetch account details',
+            arguments: [{ name: 'id', description: 'Account id', type: 'string' }],
+          },
+        ],
+      };
+
+      mockedNeverGenerateRemote.mockReturnValue(false);
+      mockedLoadApiProvider.mockResolvedValue(mockProvider);
+      mockedDoTargetPurposeDiscovery.mockResolvedValue(discoveryResult);
+
+      const response = await api.post('/api/providers/discover').send({ id: 'echo' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(discoveryResult);
+    });
+
     it('should return 400 for empty body (missing id)', async () => {
       const response = await api.post('/api/providers/discover').send({});
 
