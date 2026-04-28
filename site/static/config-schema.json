@@ -425,6 +425,9 @@
         "PROMPTFOO_CA_CERT_PATH": {
           "type": "string"
         },
+        "PROMPTFOO_MCP_HOST": {
+          "type": "string"
+        },
         "PROMPTFOO_PFX_CERT_PATH": {
           "type": "string"
         },
@@ -441,6 +444,9 @@
           "type": "string"
         },
         "PROMPTFOO_INSECURE_SSL": {
+          "type": "string"
+        },
+        "PROMPTFOO_SERVER_HOST": {
           "type": "string"
         },
         "QUIVERAI_API_KEY": {
@@ -1847,6 +1853,9 @@
                     "PROMPTFOO_CA_CERT_PATH": {
                       "type": "string"
                     },
+                    "PROMPTFOO_MCP_HOST": {
+                      "type": "string"
+                    },
                     "PROMPTFOO_PFX_CERT_PATH": {
                       "type": "string"
                     },
@@ -1863,6 +1872,9 @@
                       "type": "string"
                     },
                     "PROMPTFOO_INSECURE_SSL": {
+                      "type": "string"
+                    },
+                    "PROMPTFOO_SERVER_HOST": {
                       "type": "string"
                     },
                     "QUIVERAI_API_KEY": {
