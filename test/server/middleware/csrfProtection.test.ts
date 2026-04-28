@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { csrfProtection } from '../../../src/server/middleware/csrfProtection';
+import {
+  corsOptionsDelegate,
+  csrfProtection,
+  isAllowedBrowserOrigin,
+  isAllowedSocketIoCorsOrigin,
+} from '../../../src/server/middleware/csrfProtection';
 import type { NextFunction, Request, Response } from 'express';
 
 vi.mock('../../../src/logger', () => ({
@@ -225,6 +230,68 @@ describe('csrfProtection', () => {
       // x-forwarded-host matches origin. The header is attacker-controllable.
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
+    });
+  });
+
+  describe('browser CORS origin checks', () => {
+    it('allows localhost aliases used by the web UI and dev server', () => {
+      expect(isAllowedBrowserOrigin('http://127.0.0.1:5173', 'localhost:15500')).toBe(true);
+      expect(isAllowedBrowserOrigin('http://local.promptfoo.app:5173', 'localhost:15500')).toBe(
+        true,
+      );
+    });
+
+    it('allows origins listed in PROMPTFOO_CSRF_ALLOWED_ORIGINS', () => {
+      vi.mocked(getEnvString).mockImplementation((_key: string, defaultValue?: string) => {
+        if (_key === 'PROMPTFOO_CSRF_ALLOWED_ORIGINS') {
+          return 'https://trusted.example';
+        }
+        return defaultValue ?? '';
+      });
+
+      expect(isAllowedBrowserOrigin('https://trusted.example', 'localhost:15500')).toBe(true);
+    });
+
+    it('does not emit CORS headers for untrusted cross-origin browser reads', () => {
+      const callback = vi.fn();
+      corsOptionsDelegate(
+        mockReq({
+          method: 'GET',
+          headers: { origin: 'https://evil.example', host: 'localhost:15500' },
+        }),
+        callback,
+      );
+
+      expect(callback).toHaveBeenCalledWith(null, { origin: false });
+    });
+
+    it('emits CORS headers for trusted localhost aliases', () => {
+      const callback = vi.fn();
+      corsOptionsDelegate(
+        mockReq({
+          method: 'GET',
+          headers: { origin: 'http://127.0.0.1:5173', host: 'localhost:15500' },
+        }),
+        callback,
+      );
+
+      expect(callback).toHaveBeenCalledWith(null, { origin: 'http://127.0.0.1:5173' });
+    });
+
+    it('keeps no-origin clients out of CORS handling', () => {
+      const callback = vi.fn();
+      corsOptionsDelegate(
+        mockReq({ method: 'GET', headers: { host: 'localhost:15500' } }),
+        callback,
+      );
+
+      expect(callback).toHaveBeenCalledWith(null, { origin: false });
+    });
+
+    it('restricts Socket.IO CORS to no-origin, local-origin, or allowlisted callers', () => {
+      expect(isAllowedSocketIoCorsOrigin(undefined)).toBe(true);
+      expect(isAllowedSocketIoCorsOrigin('http://localhost:5173')).toBe(true);
+      expect(isAllowedSocketIoCorsOrigin('https://evil.example')).toBe(false);
     });
   });
 });

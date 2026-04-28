@@ -31,7 +31,11 @@ import {
   readResult,
 } from '../util/database';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
-import { csrfProtection } from './middleware/csrfProtection';
+import {
+  corsOptionsDelegate,
+  csrfProtection,
+  socketIoCorsOrigin,
+} from './middleware/csrfProtection';
 import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
@@ -118,7 +122,7 @@ export function createApp() {
 
   const staticDir = findStaticDir();
 
-  app.use(cors());
+  app.use(cors(corsOptionsDelegate));
   app.use(csrfProtection);
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
@@ -357,7 +361,7 @@ export async function startServer(
   const httpServer = http.createServer(app);
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: '*',
+      origin: socketIoCorsOrigin,
     },
   });
 

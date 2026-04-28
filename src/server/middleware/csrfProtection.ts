@@ -1,5 +1,6 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import type { CorsOptionsDelegate } from 'cors';
 import type { NextFunction, Request, Response } from 'express';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -50,6 +51,54 @@ function isAllowedCrossSite(origin: string, host: string): boolean {
   return getAllowedOrigins().has(origin);
 }
 
+function isSameHostname(origin: string, host: string): boolean {
+  try {
+    const originHostname = new URL(origin).hostname;
+    const targetHostname = stripPort(host);
+    return originHostname === targetHostname;
+  } catch {
+    return false;
+  }
+}
+
+export function isAllowedBrowserOrigin(origin: string, host: string): boolean {
+  return isSameHostname(origin, host) || isAllowedCrossSite(origin, host);
+}
+
+export const corsOptionsDelegate: CorsOptionsDelegate<Request> = (req, callback): void => {
+  const origin = req.headers.origin;
+  if (!origin) {
+    callback(null, { origin: false });
+    return;
+  }
+
+  callback(null, {
+    origin: isAllowedBrowserOrigin(origin, req.headers.host || '') ? origin : false,
+  });
+};
+
+export function isAllowedSocketIoCorsOrigin(origin: string | undefined): boolean {
+  if (!origin) {
+    return true;
+  }
+  if (getAllowedOrigins().has(origin)) {
+    return true;
+  }
+
+  try {
+    return isLocalHost(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
+export function socketIoCorsOrigin(
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void,
+): void {
+  callback(null, isAllowedSocketIoCorsOrigin(origin));
+}
+
 export function csrfProtection(req: Request, res: Response, next: NextFunction): void {
   if (SAFE_METHODS.has(req.method)) {
     return next();
@@ -88,17 +137,8 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
 
   // Path 2: No Sec-Fetch-Site but Origin present (older browser)
   if (origin) {
-    try {
-      const originHostname = new URL(origin).hostname;
-      const targetHostname = stripPort(host);
-      if (originHostname === targetHostname) {
-        return next();
-      }
-      if (isAllowedCrossSite(origin, host)) {
-        return next();
-      }
-    } catch {
-      // Malformed Origin header — fall through to block
+    if (isAllowedBrowserOrigin(origin, host)) {
+      return next();
     }
     logger.warn('[CSRF] Blocked cross-origin request', {
       method: req.method,
