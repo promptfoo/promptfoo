@@ -1,10 +1,10 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: OSWorld via inspect_evals wrapper PoC
+description: OSWorld via Inspect wrapper
 prompts:
   - 'Run OSWorld sample on app {{app}}'
 providers:
   - id: file://provider.py
-    label: OSWorld (inspect wrapper)
+    label: OSWorld via Inspect
     config:
       defaultModel: openai/gpt-5.5
       # Promptfoo's Python worker timeout, in milliseconds.

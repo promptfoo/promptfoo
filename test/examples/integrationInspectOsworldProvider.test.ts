@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { mockProcessEnv } from '../util/utils';
 
-describe('osworld-via-inspect example provider', () => {
+describe('integration-inspect-osworld example provider', () => {
   const tempDirs: string[] = [];
   let restoreEnv: (() => void) | undefined;
 
@@ -35,7 +35,7 @@ describe('osworld-via-inspect example provider', () => {
     const providerDir = path.join(tempDir, 'example');
     fs.mkdirSync(providerDir, { recursive: true });
     fs.copyFileSync(
-      path.join(process.cwd(), 'examples', 'osworld-via-inspect', 'provider.py'),
+      path.join(process.cwd(), 'examples', 'integration-inspect-osworld', 'provider.py'),
       path.join(providerDir, 'provider.py'),
     );
 
@@ -137,7 +137,7 @@ sys.exit(4)
     const providerDir = path.join(tempDir, 'example');
     fs.mkdirSync(providerDir, { recursive: true });
     fs.copyFileSync(
-      path.join(process.cwd(), 'examples', 'osworld-via-inspect', 'provider.py'),
+      path.join(process.cwd(), 'examples', 'integration-inspect-osworld', 'provider.py'),
       path.join(providerDir, 'provider.py'),
     );
 

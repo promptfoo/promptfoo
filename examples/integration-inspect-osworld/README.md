@@ -1,4 +1,4 @@
-# osworld-via-inspect (OSWorld via Inspect)
+# integration-inspect-osworld (OSWorld via Inspect)
 
 This example runs a real [OSWorld](https://github.com/xlang-ai/OSWorld) task through promptfoo by wrapping the Inspect-native implementation in [`inspect_evals/osworld`](https://github.com/UKGovernmentBEIS/inspect_evals/tree/main/src/inspect_evals/osworld). OSWorld is a multimodal computer-use benchmark where an agent observes an Ubuntu desktop via screenshots, acts with mouse and keyboard tools, and is graded by task-specific checks against VM state. The benchmark is described in [OSWorld: Benchmarking Multimodal Agents for Open-Ended Tasks in Real Computer Environments](https://arxiv.org/abs/2404.07972).
 
@@ -33,10 +33,10 @@ This proof of concept uses `inspect_evals/osworld_small`, the smaller OSWorld co
 From the repository root:
 
 ```bash
-npm run local -- eval -c examples/osworld-via-inspect/promptfooconfig.yaml --no-cache
+npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
 ```
 
-Or, after copying the example with `npx promptfoo@latest init --example osworld-via-inspect`, run:
+Or, after copying the example with `npx promptfoo@latest init --example integration-inspect-osworld`, run:
 
 ```bash
 promptfoo eval -c promptfooconfig.yaml --no-cache
@@ -76,7 +76,7 @@ It also returns metadata for the promptfoo UI and assertions:
 
 ```json
 {
-  "inspect_log_path": "/absolute/path/to/examples/osworld-via-inspect/inspect_logs/.../*.eval",
+  "inspect_log_path": "/absolute/path/to/examples/integration-inspect-osworld/inspect_logs/.../*.eval",
   "score": 1.0,
   "status": "pass",
   "sample_id": "...",
@@ -90,12 +90,12 @@ The Python assertion passes when `metadata.score >= 1.0` or `metadata.status == 
 
 ## Inspect logs and traces
 
-Inspect writes `.eval` files under `examples/osworld-via-inspect/inspect_logs/`. They are ignored by git because they can include screenshots, trajectories, tool calls, model outputs, and other large run artifacts.
+Inspect writes `.eval` files under `examples/integration-inspect-osworld/inspect_logs/`. They are ignored by git because they can include screenshots, trajectories, tool calls, model outputs, and other large run artifacts.
 
 For trace-level visibility, use Inspect's viewer instead of promptfoo OTLP tracing:
 
 ```bash
-inspect view --log-dir examples/osworld-via-inspect/inspect_logs
+inspect view --log-dir examples/integration-inspect-osworld/inspect_logs
 ```
 
 Bridging Inspect's internal spans into promptfoo traces would require non-trivial trace translation, so this example keeps the integration at the orchestration and scoring layer.

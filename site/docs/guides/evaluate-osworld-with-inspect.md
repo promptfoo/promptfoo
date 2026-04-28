@@ -8,9 +8,9 @@ sidebar_position: 66
 
 OSWorld is a [computer-use benchmark](https://arxiv.org/abs/2404.07972) for agents that operate a real desktop. A task may ask the model to edit a spreadsheet, use a browser, modify a document, or configure an app. The agent receives screenshots, uses mouse and keyboard tools, and is graded against the final VM state.
 
-The `osworld-via-inspect` example runs OSWorld through [Inspect](https://inspect.aisi.org.uk/) and reports the score back to Promptfoo. This is useful when you want Promptfoo's config, assertions, result table, and CI workflow around a benchmark that already has a mature desktop harness.
+The `integration-inspect-osworld` example runs OSWorld through [Inspect](https://inspect.aisi.org.uk/) and reports the score back to Promptfoo. This is useful when you want Promptfoo's config, assertions, result table, and CI workflow around a benchmark that already has a mature desktop harness.
 
-![OSWorld LibreOffice Calc task](/img/docs/osworld-via-inspect/osworld-libreoffice-start.png)
+![OSWorld LibreOffice Calc task](/img/docs/evaluate-osworld-with-inspect/osworld-libreoffice-start.png)
 
 ## What runs
 
@@ -38,7 +38,7 @@ The example is intentionally thin:
 
 This means Promptfoo owns orchestration and reporting. Inspect owns the agent runtime and OSWorld grading.
 
-![Inspect OSWorld trajectory screenshot](/img/docs/osworld-via-inspect/osworld-inspect-trajectory.png)
+![Inspect OSWorld trajectory screenshot](/img/docs/evaluate-osworld-with-inspect/osworld-inspect-trajectory.png)
 
 ## Prerequisites
 
@@ -64,8 +64,8 @@ The first run can build an OSWorld Docker image of roughly 8GB. A single sample 
 Create the example:
 
 ```bash
-npx promptfoo@latest init --example osworld-via-inspect
-cd osworld-via-inspect
+npx promptfoo@latest init --example integration-inspect-osworld
+cd integration-inspect-osworld
 ```
 
 Run the active LibreOffice Calc sample:
@@ -77,7 +77,7 @@ promptfoo eval -c promptfooconfig.yaml --no-cache
 To run it from the promptfoo repository source tree:
 
 ```bash
-npm run local -- eval -c examples/osworld-via-inspect/promptfooconfig.yaml --no-cache
+npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
 ```
 
 To test a lower-cost Inspect model for one run:
@@ -93,7 +93,7 @@ The provider config sets two timeouts because there are two execution layers:
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: file://provider.py
-    label: OSWorld (inspect wrapper)
+    label: OSWorld via Inspect
     config:
       defaultModel: openai/gpt-5.5
       timeout: 1800000 # Promptfoo Python worker timeout, in ms
