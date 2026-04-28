@@ -30,6 +30,17 @@ const { mockExistsSync, mockReadFileSync } = vi.hoisted(() => ({
   mockReadFileSync: vi.fn(),
 }));
 
+const mockReadFile = vi.hoisted(() =>
+  vi.fn((filePath: string, ...args: unknown[]) => {
+    if (!mockExistsSync(filePath)) {
+      throw Object.assign(new Error(`ENOENT: no such file or directory, open '${filePath}'`), {
+        code: 'ENOENT',
+      });
+    }
+    return mockReadFileSync(filePath, ...args);
+  }),
+);
+
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
@@ -38,6 +49,13 @@ vi.mock('fs', async (importOriginal) => {
     readFileSync: mockReadFileSync,
   };
 });
+
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: mockReadFile,
+  },
+  readFile: mockReadFile,
+}));
 
 const Grader = new TestGrader();
 

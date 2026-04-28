@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from 'fs/promises';
 import http from 'http';
 import https from 'https';
 import path from 'path';
@@ -13,7 +13,11 @@ import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
+import {
+  maybeLoadConfigFromExternalFile,
+  maybeLoadFromExternalFile,
+  pathExists,
+} from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import { renderVarsInObject } from '../util/index';
@@ -40,7 +44,12 @@ import {
   createTransformResponse,
   type TransformResponseContext,
 } from './httpTransforms';
-import { REQUEST_TIMEOUT_MS, type ToolFormat, transformToolChoice, transformTools } from './shared';
+import {
+  getRequestTimeoutMs,
+  type ToolFormat,
+  transformToolChoice,
+  transformTools,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -335,7 +344,7 @@ export async function generateSignature(
       case 'pem': {
         if (signatureAuth.privateKeyPath) {
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.privateKeyPath);
-          privateKey = fs.readFileSync(resolvedPath, 'utf8');
+          privateKey = await fs.readFile(resolvedPath, 'utf8');
         } else if (signatureAuth.privateKey) {
           privateKey = signatureAuth.privateKey;
         } else if (signatureAuth.certificateContent) {
@@ -379,7 +388,7 @@ export async function generateSignature(
         } else if (signatureAuth.keystorePath) {
           // Use file path (existing behavior)
           const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.keystorePath);
-          keystoreData = fs.readFileSync(resolvedPath);
+          keystoreData = await fs.readFile(resolvedPath);
         } else {
           throw new Error(
             'JKS keystore content or path is required. Provide keystoreContent/certificateContent or keystorePath',
@@ -475,7 +484,7 @@ export async function generateSignature(
               const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
               logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
               try {
-                const stat = await fs.promises.stat(resolvedPath);
+                const stat = await fs.stat(resolvedPath);
                 logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
               } catch (e) {
                 logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
@@ -537,15 +546,20 @@ export async function generateSignature(
                 `[Signature Auth] Loading separate CRT and KEY files: ${resolvedCertPath}, ${resolvedKeyPath}`,
               );
 
-              // Read the private key directly from the key file
-              if (!fs.existsSync(resolvedKeyPath)) {
-                throw new Error(`Key file not found: ${resolvedKeyPath}`);
-              }
-              if (!fs.existsSync(resolvedCertPath)) {
+              // Verify the cert path resolves; the cert contents aren't consumed
+              // here, only its presence is validated for early operator feedback.
+              if (!(await pathExists(resolvedCertPath))) {
                 throw new Error(`Certificate file not found: ${resolvedCertPath}`);
               }
-
-              privateKey = fs.readFileSync(resolvedKeyPath, 'utf8');
+              try {
+                // Read the key directly — readFile surfaces ENOENT with the path.
+                privateKey = await fs.readFile(resolvedKeyPath, 'utf8');
+              } catch (err) {
+                if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+                  throw new Error(`Key file not found: ${resolvedKeyPath}`);
+                }
+                throw err;
+              }
               logger.debug(
                 `[Signature Auth][PFX] Loaded key file characters: ${privateKey.length}`,
               );
@@ -1364,7 +1378,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     tlsOptions.ca = tlsConfig.ca;
   } else if (tlsConfig.caPath) {
     const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.caPath);
-    tlsOptions.ca = fs.readFileSync(resolvedPath, 'utf8');
+    tlsOptions.ca = await fs.readFile(resolvedPath, 'utf8');
     logger.debug(`[HTTP Provider] Loaded CA certificate from ${resolvedPath}`);
   }
 
@@ -1398,7 +1412,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
         // Use file path
         const resolvedPath = safeResolve(cliState.basePath || '', (tlsConfig as any).jksPath);
         logger.debug(`[HTTP Provider] Loading JKS from file for TLS: ${resolvedPath}`);
-        keystoreData = fs.readFileSync(resolvedPath);
+        keystoreData = await fs.readFile(resolvedPath);
       } else {
         throw new Error('JKS content or path is required');
       }
@@ -1447,7 +1461,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       tlsOptions.cert = tlsConfig.cert;
     } else if (tlsConfig.certPath) {
       const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.certPath);
-      tlsOptions.cert = fs.readFileSync(resolvedPath, 'utf8');
+      tlsOptions.cert = await fs.readFile(resolvedPath, 'utf8');
       logger.debug(`[HTTP Provider] Loaded client certificate from ${resolvedPath}`);
     }
 
@@ -1456,7 +1470,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
       tlsOptions.key = tlsConfig.key;
     } else if (tlsConfig.keyPath) {
       const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.keyPath);
-      tlsOptions.key = fs.readFileSync(resolvedPath, 'utf8');
+      tlsOptions.key = await fs.readFile(resolvedPath, 'utf8');
       logger.debug(`[HTTP Provider] Loaded private key from ${resolvedPath}`);
     }
   }
@@ -1481,7 +1495,7 @@ async function createHttpsAgent(tlsConfig: z.infer<typeof TlsCertificateSchema>)
     }
   } else if (tlsConfig.pfxPath) {
     const resolvedPath = safeResolve(cliState.basePath || '', tlsConfig.pfxPath);
-    tlsOptions.pfx = fs.readFileSync(resolvedPath);
+    tlsOptions.pfx = await fs.readFile(resolvedPath);
     logger.debug(`[HTTP Provider] Loaded PFX certificate from ${resolvedPath}`);
   }
 
@@ -1728,7 +1742,7 @@ export class HttpProvider implements ApiProvider {
       const response = await fetchWithCache(
         oauthConfig.tokenUrl,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         true, // Always bust cache for token requests
         0, // No retries for token requests
@@ -2026,7 +2040,7 @@ export class HttpProvider implements ApiProvider {
     const response = await fetchWithCache(
       url,
       fetchOptions,
-      REQUEST_TIMEOUT_MS,
+      getRequestTimeoutMs(),
       'text',
       true, // Always bust cache for session requests
       this.config.maxRetries,
@@ -2465,7 +2479,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         multipartBody ? true : (context?.bustCache ?? context?.debug),
         this.config.maxRetries,
@@ -2696,7 +2710,7 @@ export class HttpProvider implements ApiProvider {
       } = await fetchWithCache(
         url,
         fetchOptions,
-        REQUEST_TIMEOUT_MS,
+        getRequestTimeoutMs(),
         'text',
         context?.bustCache ?? context?.debug,
         this.config.maxRetries,

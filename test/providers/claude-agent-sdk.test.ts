@@ -27,11 +27,28 @@ import type { EnvOverrides } from '../../src/types/env';
 import type { CallApiContextParams } from '../../src/types/index';
 
 const testBasePath = path.resolve('/test/basePath');
+const fsMocks = vi.hoisted(() => ({
+  statSync: vi.fn(),
+  mkdtempSync: vi.fn(),
+  rmSync: vi.fn(),
+  readdirSync: vi.fn(),
+}));
 
 vi.mock('../../src/cliState', () => ({
   default: { basePath: '/test/basePath' },
   basePath: '/test/basePath',
 }));
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      ...fsMocks,
+    },
+    ...fsMocks,
+  };
+});
 vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -47,6 +64,32 @@ vi.mock('node:module', async (importOriginal) => {
     createRequire: vi.fn(() => ({
       resolve: vi.fn(() => '@anthropic-ai/claude-agent-sdk'),
     })),
+  };
+});
+
+vi.mock('node:fs/promises', () => {
+  const fsPromisesMock = {
+    stat: vi.fn((filePath: any) => fsMocks.statSync(filePath)),
+    mkdtemp: vi.fn((prefix: string) => fsMocks.mkdtempSync(prefix)),
+    rm: vi.fn((filePath: any, options?: any) => fsMocks.rmSync(filePath, options)),
+    readdir: vi.fn((filePath: any, options?: any) => fsMocks.readdirSync(filePath, options)),
+  };
+  return {
+    default: fsPromisesMock,
+    ...fsPromisesMock,
+  };
+});
+
+vi.mock('fs/promises', () => {
+  const fsPromisesMock = {
+    stat: vi.fn((filePath: any) => fsMocks.statSync(filePath)),
+    mkdtemp: vi.fn((prefix: string) => fsMocks.mkdtempSync(prefix)),
+    rm: vi.fn((filePath: any, options?: any) => fsMocks.rmSync(filePath, options)),
+    readdir: vi.fn((filePath: any, options?: any) => fsMocks.readdirSync(filePath, options)),
+  };
+  return {
+    default: fsPromisesMock,
+    ...fsPromisesMock,
   };
 });
 
@@ -196,6 +239,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    Object.values(fsMocks).forEach((mock) => mock.mockReset());
 
     // Setup importModule to return our mockQuery
     vi.mocked(importModule).mockResolvedValue({ query: mockQuery });
@@ -2289,6 +2333,107 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               agentProgressSummaries: true,
+            }),
+          });
+        });
+
+        it("with skills set to 'all'", async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              skills: 'all',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              skills: 'all',
+            }),
+          });
+        });
+
+        it('with skills as a name list', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              skills: ['code-review', 'pdf'],
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              skills: ['code-review', 'pdf'],
+            }),
+          });
+        });
+
+        it('with forward_subagent_text configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              forward_subagent_text: true,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              forwardSubagentText: true,
+            }),
+          });
+        });
+
+        it('with managed_settings configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              managed_settings: {
+                sandbox: { network: { allowManagedDomainsOnly: true } },
+              },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              managedSettings: {
+                sandbox: { network: { allowManagedDomainsOnly: true } },
+              },
+            }),
+          });
+        });
+
+        it('with plan_mode_instructions configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'plan',
+              plan_mode_instructions: 'Outline a step-by-step migration plan only.',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'plan',
+              planModeInstructions: 'Outline a step-by-step migration plan only.',
             }),
           });
         });
