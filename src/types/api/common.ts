@@ -3,7 +3,10 @@ import { z } from 'zod';
 /** Standard email validation schema. */
 export const EmailSchema = z.string().email();
 
-/** Response containing a single message field. */
+/**
+ * Response containing only a `message` field. Closed shape — extra properties are stripped.
+ * For responses that may carry endpoint-specific metadata, use `SuccessResponseSchema` (passthrough).
+ */
 export const MessageResponseSchema = z.object({
   message: z.string(),
 });
@@ -32,6 +35,12 @@ export const ErrorResponseSchema = z
 
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
+/**
+ * Express query strings arrive as `string | undefined`. This schema treats only the literal
+ * string `'true'` (or boolean `true`) as truthy; every other value — including `'1'`, `'yes'`,
+ * and `undefined` — resolves to `false`. Tests that depend on tri-state semantics should use
+ * a different schema.
+ */
 export const BooleanQueryParamSchema = z
   .union([z.boolean(), z.string()])
   .optional()

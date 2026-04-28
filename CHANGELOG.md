@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.121.9](https://github.com/promptfoo/promptfoo/compare/0.121.8...0.121.9) (2026-04-27)
+
+### Features
+
+- **providers:** add gpt-5.5 model support ([#8884](https://github.com/promptfoo/promptfoo/issues/8884)) ([8c5dc92](https://github.com/promptfoo/promptfoo/commit/8c5dc929a15e3f9c859f930cc71a6f7093bf666e))
+
+### Bug Fixes
+
+- **cli:** align command-line reference with CLI ([#8900](https://github.com/promptfoo/promptfoo/issues/8900)) ([c4ce0d4](https://github.com/promptfoo/promptfoo/commit/c4ce0d40632bac198660c0b2992197fd58d33517))
+- **deps:** update openai packages ([544d1c6](https://github.com/promptfoo/promptfoo/commit/544d1c647a7171613bac0da46ba645e9891fa72b))
+- **telemetry:** mirror person properties on every event ([#8902](https://github.com/promptfoo/promptfoo/issues/8902)) ([95ad451](https://github.com/promptfoo/promptfoo/commit/95ad4510963d18b0bdd139372005e0ecf6489da6))
+- prevent report table header icon overlap ([#8880](https://github.com/promptfoo/promptfoo/issues/8880)) ([ad87060](https://github.com/promptfoo/promptfoo/commit/ad8706077867f3c5deff4594d93955b1334df09b))
+- trailing slashes on internal routes, Docusaurus Link for internal hrefs, and test hygiene ([#8903](https://github.com/promptfoo/promptfoo/issues/8903)) ([0828ff7](https://github.com/promptfoo/promptfoo/commit/0828ff77785f861410c8fdb3ee4cfd99abcc45b6))
+
 ## [0.121.8](https://github.com/promptfoo/promptfoo/compare/0.121.7...0.121.8) (2026-04-24)
 
 ### Features
