@@ -6,6 +6,7 @@
  */
 import crypto from 'crypto';
 import fs from 'fs';
+import fsPromises from 'fs/promises';
 import path from 'path';
 
 import logger from '../../logger';
@@ -98,12 +99,8 @@ export async function checkVideoCache(
 ): Promise<string | null> {
   const mappingPath = getCacheMappingPath(cacheKey);
 
-  if (!fs.existsSync(mappingPath)) {
-    return null;
-  }
-
   try {
-    const mappingData = fs.readFileSync(mappingPath, 'utf8');
+    const mappingData = await fsPromises.readFile(mappingPath, 'utf8');
     const mapping: VideoCacheMapping = JSON.parse(mappingData);
     // Verify the referenced video file still exists in storage
     if (mapping.videoKey) {
@@ -113,6 +110,9 @@ export async function checkVideoCache(
       }
     }
   } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null;
+    }
     // Mapping file corrupted, treat as cache miss
     logger.debug(`[${providerName}] Cache mapping read failed: ${err}`);
   }

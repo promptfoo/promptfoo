@@ -101,22 +101,30 @@ export const EvalTableQuerySchema = z.object({
 
 export type EvalTableQuery = z.infer<typeof EvalTableQuerySchema>;
 
+const ShallowEvaluateTableSchema = z
+  .object({
+    head: z
+      .unknown()
+      .refine((value) => value !== null && typeof value === 'object', 'Expected table head object'),
+    body: z.unknown().refine(Array.isArray, 'Expected table body array'),
+  })
+  .passthrough();
+
 export const EvalTableResponseSchema = z
   .object({
-    table: z.lazy(() => EvaluateTableSchema),
+    table: ShallowEvaluateTableSchema,
     totalCount: z.number(),
     filteredCount: z.number(),
     filteredMetrics: z.array(z.unknown()).nullable(),
     config: z.record(z.string(), z.unknown()),
     author: z.string().nullable(),
-    version: z.union([z.string(), z.number()]),
+    version: z.number(),
     id: z.string(),
     stats: z.unknown(),
   })
   .passthrough();
 
 export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
-
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
 // POST /api/eval/job
@@ -251,7 +259,7 @@ export const SubmitRatingRequestSchema = z
   })
   .passthrough();
 
-export const SubmitRatingResponseSchema = z.object({}).passthrough();
+export const SubmitRatingResponseSchema = MessageResponseSchema;
 
 export type SubmitRatingParams = z.infer<typeof SubmitRatingParamsSchema>;
 export type SubmitRatingRequest = z.infer<typeof SubmitRatingRequestSchema>;
@@ -341,7 +349,6 @@ export const EvalSchemas = {
     Params: EvalIdParamSchema,
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
-    JsonExportResponse: EvalTableJsonExportResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,

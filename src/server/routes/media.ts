@@ -5,10 +5,10 @@
  */
 
 import express from 'express';
-import { z } from 'zod';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 import { MediaSchemas } from '../../types/api/media';
+import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
@@ -21,28 +21,18 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
   try {
     const storage = getMediaStorage();
 
-    // LocalFileSystemProvider has a getStats method
-    if ('getStats' in storage && typeof storage.getStats === 'function') {
-      const stats = await storage.getStats();
-      res.json(
-        MediaSchemas.Stats.Response.parse({
-          success: true,
-          data: {
-            providerId: storage.providerId,
-            ...stats,
-          },
-        }),
-      );
-    } else {
-      res.json(
-        MediaSchemas.Stats.Response.parse({
-          success: true,
-          data: {
-            providerId: storage.providerId,
-          },
-        }),
-      );
-    }
+    // Only LocalFileSystemProvider exposes getStats; other providers report providerId only.
+    const extraStats =
+      'getStats' in storage && typeof storage.getStats === 'function'
+        ? await storage.getStats()
+        : {};
+
+    res.json(
+      MediaSchemas.Stats.Response.parse({
+        success: true,
+        data: { providerId: storage.providerId, ...extraStats },
+      }),
+    );
   } catch (error) {
     logger.error('[Media API] Error getting storage stats', { error });
     res.status(500).json({ error: 'Failed to get storage stats' });
@@ -56,7 +46,7 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = MediaSchemas.Info.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
 
@@ -99,7 +89,7 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = MediaSchemas.Get.Params.safeParse(req.params);
   if (!paramsResult.success) {
-    res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+    replyValidationError(res, paramsResult.error);
     return;
   }
 
@@ -115,7 +105,7 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
       return;
     }
 
-    const data = MediaSchemas.Get.BinaryResponse.parse(await retrieveMedia(key));
+    const data = await retrieveMedia(key);
 
     // Determine content type from filename
     const extension = filename.split('.').pop()?.toLowerCase() || '';

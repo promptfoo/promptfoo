@@ -9,10 +9,6 @@ export const MediaParamsSchema = z.object({
 
 export type MediaParams = z.infer<typeof MediaParamsSchema>;
 
-export const MediaBinaryResponseSchema = z.instanceof(Uint8Array);
-
-export type MediaBinaryResponse = z.infer<typeof MediaBinaryResponseSchema>;
-
 // GET /api/media/stats
 
 export const MediaStatsResponseSchema = z.object({
@@ -41,7 +37,6 @@ export type MediaInfoResponse = z.infer<typeof MediaInfoResponseSchema>;
 
 /** Grouped schemas for server-side validation. */
 export const MediaSchemas = {
-  Params: MediaParamsSchema,
   Stats: {
     Response: MediaStatsResponseSchema,
   },
@@ -51,6 +46,5 @@ export const MediaSchemas = {
   },
   Get: {
     Params: MediaParamsSchema,
-    BinaryResponse: MediaBinaryResponseSchema,
   },
 } as const;

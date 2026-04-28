@@ -98,13 +98,13 @@ See [Configuring Inference](/docs/red-team/troubleshooting/inference-limit/) for
 
 ## Telemetry
 
-Promptfoo collects anonymous usage telemetry:
+Promptfoo collects usage telemetry:
 
 - Commands run (`redteam generate`, `redteam run`, etc.)
 - Plugin and strategy types used (not content)
 - Assertion types
 
-No prompt content, responses, or personally identifiable information is included.
+Hosted telemetry may include package version, CI status, promptfoo user ID, email address, cloud login status, and authentication method when those values are present in the local promptfoo config. Prompt content, model responses, generated test cases, provider API keys, and full configuration files are not included.
 
 To disable:
 

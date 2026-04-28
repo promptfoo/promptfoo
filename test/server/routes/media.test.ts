@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { MediaStorageProvider } from '../../../src/storage/types';
@@ -15,10 +17,25 @@ const mockedMediaExists = vi.mocked(mediaExists);
 const mockedRetrieveMedia = vi.mocked(retrieveMedia);
 
 describe('Media Routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let api: ReturnType<typeof request.agent>;
+  let server: Server;
 
-  beforeEach(() => {
-    app = createApp();
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+    api = request.agent(server);
+  });
+
+  afterAll(async () => {
+    if (!server.listening) {
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
   });
 
   afterEach(() => {
@@ -37,7 +54,7 @@ describe('Media Routes', () => {
 
       mockedGetMediaStorage.mockReturnValue(mockStorage);
 
-      const response = await request(app).get('/api/media/stats');
+      const response = await api.get('/api/media/stats');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -59,7 +76,7 @@ describe('Media Routes', () => {
 
       mockedGetMediaStorage.mockReturnValue(mockStorage);
 
-      const response = await request(app).get('/api/media/stats');
+      const response = await api.get('/api/media/stats');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -77,7 +94,7 @@ describe('Media Routes', () => {
         throw new Error('Storage initialization failed');
       });
 
-      const response = await request(app).get('/api/media/stats');
+      const response = await api.get('/api/media/stats');
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({
@@ -92,7 +109,7 @@ describe('Media Routes', () => {
     });
 
     it('should return 400 for invalid type', async () => {
-      const response = await request(app).get('/api/media/info/document/abcdef123456.pdf');
+      const response = await api.get('/api/media/info/document/abcdef123456.pdf');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -101,7 +118,7 @@ describe('Media Routes', () => {
 
     it('should return 400 when path segments resolve to invalid type and filename', async () => {
       // Express resolves ../../ before routing, so params become { type: 'etc', filename: 'passwd' }
-      const response = await request(app).get('/api/media/info/audio/../../etc/passwd');
+      const response = await api.get('/api/media/info/audio/../../etc/passwd');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -109,7 +126,7 @@ describe('Media Routes', () => {
     });
 
     it('should return 400 for filename without hex prefix', async () => {
-      const response = await request(app).get('/api/media/info/audio/malicious.mp3');
+      const response = await api.get('/api/media/info/audio/malicious.mp3');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -117,7 +134,7 @@ describe('Media Routes', () => {
     });
 
     it('should return 400 for filename with wrong hex length', async () => {
-      const response = await request(app).get('/api/media/info/audio/abc123.mp3');
+      const response = await api.get('/api/media/info/audio/abc123.mp3');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -127,7 +144,7 @@ describe('Media Routes', () => {
     it('should return 404 when media file does not exist', async () => {
       mockedMediaExists.mockResolvedValue(false);
 
-      const response = await request(app).get('/api/media/info/audio/abcdef123456.mp3');
+      const response = await api.get('/api/media/info/audio/abcdef123456.mp3');
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({
@@ -145,7 +162,7 @@ describe('Media Routes', () => {
       mockedMediaExists.mockResolvedValue(true);
       mockedGetMediaStorage.mockReturnValue(mockStorage);
 
-      const response = await request(app).get('/api/media/info/audio/abcdef123456.mp3');
+      const response = await api.get('/api/media/info/audio/abcdef123456.mp3');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -169,7 +186,7 @@ describe('Media Routes', () => {
       mockedMediaExists.mockResolvedValue(true);
       mockedGetMediaStorage.mockReturnValue(mockStorage);
 
-      const response = await request(app).get('/api/media/info/audio/abcdef123456.mp3');
+      const response = await api.get('/api/media/info/audio/abcdef123456.mp3');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
@@ -194,7 +211,7 @@ describe('Media Routes', () => {
       mockedMediaExists.mockResolvedValue(true);
       mockedGetMediaStorage.mockReturnValue(mockStorage);
 
-      const response = await request(app).get(`/api/media/info/${type}/abcdef123456.${ext}`);
+      const response = await api.get(`/api/media/info/${type}/abcdef123456.${ext}`);
 
       expect(response.status).toBe(200);
       expect(response.body.data.key).toBe(`${type}/abcdef123456.${ext}`);
@@ -203,7 +220,7 @@ describe('Media Routes', () => {
     it('should return 500 when mediaExists throws error', async () => {
       mockedMediaExists.mockRejectedValue(new Error('Database connection failed'));
 
-      const response = await request(app).get('/api/media/info/audio/abcdef123456.mp3');
+      const response = await api.get('/api/media/info/audio/abcdef123456.mp3');
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({
@@ -218,7 +235,7 @@ describe('Media Routes', () => {
     });
 
     it('should return 400 for invalid type', async () => {
-      const response = await request(app).get('/api/media/text/abcdef123456.txt');
+      const response = await api.get('/api/media/text/abcdef123456.txt');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -227,7 +244,7 @@ describe('Media Routes', () => {
 
     it('should return 400 for invalid filename', async () => {
       // Filename must be exactly 12 hex characters + extension
-      const response = await request(app).get('/api/media/audio/invalid-name.mp3');
+      const response = await api.get('/api/media/audio/invalid-name.mp3');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -237,7 +254,7 @@ describe('Media Routes', () => {
     it('should return 404 when media not found', async () => {
       mockedMediaExists.mockResolvedValue(false);
 
-      const response = await request(app).get('/api/media/audio/abcdef123456.mp3');
+      const response = await api.get('/api/media/audio/abcdef123456.mp3');
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({
@@ -252,7 +269,7 @@ describe('Media Routes', () => {
       mockedMediaExists.mockResolvedValue(true);
       mockedRetrieveMedia.mockResolvedValue(mockData);
 
-      const response = await request(app).get('/api/media/audio/abcdef123456.wav');
+      const response = await api.get('/api/media/audio/abcdef123456.wav');
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toBe('audio/wav');
@@ -279,7 +296,7 @@ describe('Media Routes', () => {
       mockedMediaExists.mockResolvedValue(true);
       mockedRetrieveMedia.mockResolvedValue(mockData);
 
-      const response = await request(app).get(`/api/media/${type}/abcdef123456.${ext}`);
+      const response = await api.get(`/api/media/${type}/abcdef123456.${ext}`);
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toBe(expectedContentType);
@@ -291,7 +308,7 @@ describe('Media Routes', () => {
       mockedMediaExists.mockResolvedValue(true);
       mockedRetrieveMedia.mockResolvedValue(mockData);
 
-      const response = await request(app).get('/api/media/audio/abcdef123456.xyz');
+      const response = await api.get('/api/media/audio/abcdef123456.xyz');
 
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toBe('application/octet-stream');
@@ -301,7 +318,7 @@ describe('Media Routes', () => {
       mockedMediaExists.mockResolvedValue(true);
       mockedRetrieveMedia.mockRejectedValue(new Error('Disk read error'));
 
-      const response = await request(app).get('/api/media/audio/abcdef123456.mp3');
+      const response = await api.get('/api/media/audio/abcdef123456.mp3');
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({
@@ -318,7 +335,7 @@ describe('Media Routes', () => {
       mockedMediaExists.mockResolvedValue(true);
       mockedRetrieveMedia.mockResolvedValue(mockData);
 
-      const response = await request(app).get(`/api/media/audio/${hex}.mp3`);
+      const response = await api.get(`/api/media/audio/${hex}.mp3`);
 
       expect(response.status).toBe(200);
       expect(mockedRetrieveMedia).toHaveBeenCalledWith(`audio/${hex}.mp3`);

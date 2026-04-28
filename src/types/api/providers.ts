@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { ProviderOptionsSchema } from '../../validators/providers';
-
-const OpenObjectSchema = z.record(z.string(), z.unknown());
+import { ErrorResponseSchema, JsonObjectSchema } from './common';
 
 // Refined ProviderOptionsSchema that requires id as a non-empty string at runtime.
 // The base ProviderOptionsSchema uses z.custom<ProviderId>().optional() which provides
@@ -37,10 +36,7 @@ export const ConfigStatusResponseSchema = z.union([
       hasCustomConfig: z.boolean(),
     }),
   }),
-  z.object({
-    success: z.literal(false),
-    error: z.string(),
-  }),
+  ErrorResponseSchema,
 ]);
 
 export const TestProviderResponseSchema = z
@@ -91,8 +87,28 @@ export const HttpGeneratorRequestSchema = z.object({
   responseExample: z.string().optional(),
 });
 
-export const DiscoverResponseSchema = OpenObjectSchema;
-export const HttpGeneratorResponseSchema = z.unknown();
+export const DiscoverResponseSchema = z.object({
+  purpose: z.string().nullable(),
+  limitations: z.string().nullable(),
+  user: z.string().nullable(),
+  tools: z.array(
+    z
+      .object({
+        name: z.string(),
+        description: z.string(),
+        arguments: z.array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+            type: z.string(),
+          }),
+        ),
+      })
+      .nullable(),
+  ),
+});
+
+export const HttpGeneratorResponseSchema = JsonObjectSchema;
 
 export type HttpGeneratorRequest = z.infer<typeof HttpGeneratorRequestSchema>;
 
