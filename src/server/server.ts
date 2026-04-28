@@ -362,7 +362,7 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
-  host = getEnvString('PROMPTFOO_SERVER_HOST', '127.0.0.1'),
+  host = getEnvString('PROMPTFOO_SERVER_HOST') || '127.0.0.1',
 ) {
   const app = createApp();
 
@@ -411,7 +411,7 @@ export async function startServer(
             'Server is listening on all network interfaces. Use only on trusted networks.',
           );
         }
-        openBrowser(browserBehavior, port).catch((error) => {
+        openBrowser(browserBehavior, port, host).catch((error) => {
           logger.error(
             `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
           );

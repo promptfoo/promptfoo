@@ -87,7 +87,7 @@ export async function createMcpServer() {
  */
 export async function startHttpMcpServer(
   port: number,
-  host = getEnvString('PROMPTFOO_MCP_HOST', '127.0.0.1'),
+  host = getEnvString('PROMPTFOO_MCP_HOST') || '127.0.0.1',
 ): Promise<void> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`Invalid port number: ${port}. Port must be an integer between 1 and 65535.`);
@@ -142,7 +142,6 @@ export async function startHttpMcpServer(
         feature: 'mcp_server_started',
         transport: 'http',
         port,
-        host,
       });
       // Don't resolve - server runs until shutdown signal
     });

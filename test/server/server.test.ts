@@ -41,6 +41,7 @@ import { setupSignalWatcher } from '../../src/database/signal';
 import logger from '../../src/logger';
 // Import after mocks are set up
 import { handleServerError, startServer } from '../../src/server/server';
+import { openBrowser } from '../../src/util/server';
 
 describe('server', () => {
   describe('handleServerError', () => {
@@ -138,6 +139,7 @@ describe('server', () => {
 
     afterEach(() => {
       http.createServer = originalCreateServer;
+      vi.unstubAllEnvs();
       vi.restoreAllMocks();
     });
 
@@ -171,6 +173,22 @@ describe('server', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       expect(mockHttpServer.listen).toHaveBeenCalledWith(0, '127.0.0.1', expect.any(Function));
+      await vi.waitFor(() => {
+        expect(openBrowser).toHaveBeenCalledWith(expect.any(Number), 0, '127.0.0.1');
+      });
+
+      triggerSignal('SIGINT');
+      await serverPromise;
+    });
+
+    it('should fall back to loopback when the host env var is empty', async () => {
+      vi.stubEnv('PROMPTFOO_SERVER_HOST', '');
+
+      const serverPromise = startServer(0);
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockHttpServer.listen).toHaveBeenCalledWith(0, '127.0.0.1', expect.any(Function));
 
       triggerSignal('SIGINT');
       await serverPromise;
@@ -182,6 +200,9 @@ describe('server', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       expect(mockHttpServer.listen).toHaveBeenCalledWith(0, '0.0.0.0', expect.any(Function));
+      await vi.waitFor(() => {
+        expect(openBrowser).toHaveBeenCalledWith(expect.any(Number), 0, '0.0.0.0');
+      });
 
       triggerSignal('SIGINT');
       await serverPromise;

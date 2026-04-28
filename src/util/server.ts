@@ -118,8 +118,15 @@ export async function checkServerRunning(port = getDefaultPort()): Promise<boole
 export async function openBrowser(
   browserBehavior: BrowserBehavior,
   port = getDefaultPort(),
+  host = 'localhost',
 ): Promise<void> {
-  const baseUrl = `http://localhost:${port}`;
+  const browserHost =
+    host === '0.0.0.0' || host === '::'
+      ? 'localhost'
+      : host.includes(':') && !host.startsWith('[')
+        ? `[${host}]`
+        : host || 'localhost';
+  const baseUrl = `http://${browserHost}:${port}`;
   let url = baseUrl;
   if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
     url = `${baseUrl}/report`;
