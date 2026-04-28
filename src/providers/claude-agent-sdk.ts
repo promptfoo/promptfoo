@@ -317,6 +317,15 @@ export interface ClaudeCodeOptions {
   permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk' | 'auto';
 
   /**
+   * Custom workflow instructions for plan mode. Only takes effect when
+   * `permission_mode` is `'plan'`; the string replaces the default
+   * code-implementation workflow body in the plan-mode system reminder.
+   * The CLI still wraps it with the read-only enforcement preamble and the
+   * ExitPlanMode protocol footer.
+   */
+  plan_mode_instructions?: string;
+
+  /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
    */
   custom_system_prompt?: string;
@@ -359,6 +368,39 @@ export interface ClaudeCodeOptions {
    * Each plugin must be a directory containing .claude-plugin/plugin.json manifest
    */
   plugins?: Array<{ type: 'local'; path: string }>;
+
+  /**
+   * Filters which Skills are loaded into the main session.
+   *
+   * - omitted: no SDK-side filtering — the CLI's own defaults still apply
+   *   (this is **not** "skills off")
+   * - `'all'`: enable every discovered skill
+   * - `string[]`: enable only the listed skills, matched by SKILL.md `name` /
+   *   directory name, or `plugin:skill` for plugin-qualified skills
+   *
+   * When set, the SDK auto-allows the `Skill` tool for the session — you do
+   * not need to add it to `append_allowed_tools` / `custom_allowed_tools`.
+   *
+   * This is a context filter, not a sandbox: unlisted skills are hidden from
+   * the model's listing and rejected by the Skill tool, but their files
+   * remain on disk and are reachable via Read/Bash. Do not store secrets in
+   * skill files.
+   *
+   * Skills are discovered from the directories enabled by `setting_sources`
+   * and from `plugins`; this option only narrows the set, it does not
+   * discover new skills.
+   *
+   * @example
+   * ```yaml
+   * skills: all
+   * skills:
+   *   - pdf
+   *   - docx
+   * ```
+   *
+   * @see https://platform.claude.com/docs/en/agent-sdk/skills
+   */
+  skills?: string[] | 'all';
 
   /**
    * Maximum budget in USD for this session. When exceeded, the SDK will stop with error_max_budget_usd.
@@ -420,6 +462,17 @@ export interface ClaudeCodeOptions {
   include_partial_messages?: boolean;
 
   /**
+   * When true, forwards subagent text and thinking blocks as assistant/user
+   * messages with `parent_tool_use_id` set. By default the SDK only emits
+   * tool_use/tool_result blocks from subagents (enough for a heartbeat
+   * counter). Enable this if you want a complete subagent transcript in
+   * `metadata.toolCalls` / OTel spans.
+   *
+   * @default false
+   */
+  forward_subagent_text?: boolean;
+
+  /**
    * When true, includes hook lifecycle events (hook_started, hook_progress, hook_response)
    * in the output stream. SessionStart and Setup hook events are always emitted regardless.
    *
@@ -476,6 +529,27 @@ export interface ClaudeCodeOptions {
    * ```
    */
   settings?: string | Settings;
+
+  /**
+   * Policy-tier settings supplied by the embedding parent. Loaded into the
+   * managed-settings layer (above HKCU, below IT-controlled sources), so
+   * user/project settings cannot widen restrictions set here. Use this when
+   * promptfoo runs inside an app that derives lockdown configuration from
+   * its own enterprise policy and needs to enforce it on the SDK subprocess
+   * without writing root-owned files.
+   *
+   * Differs from `settings` (flag layer, user-controllable) — prefer
+   * `managed_settings` for fields like `sandbox.network.allowManagedDomainsOnly`.
+   *
+   * @example
+   * ```yaml
+   * managed_settings:
+   *   sandbox:
+   *     network:
+   *       allowManagedDomainsOnly: true
+   * ```
+   */
+  managed_settings?: Settings;
 
   /**
    * Callback for handling MCP elicitation requests.
@@ -1054,6 +1128,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
       permissionMode: config.permission_mode,
+      planModeInstructions: config.plan_mode_instructions,
       systemPrompt: config.custom_system_prompt
         ? config.custom_system_prompt
         : {
@@ -1069,6 +1144,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         ...plugin,
         path: safeResolve(basePath, plugin.path),
       })),
+      skills: config.skills,
       maxBudgetUsd: config.max_budget_usd,
       additionalDirectories: config.additional_directories?.map((dir) =>
         safeResolve(basePath, dir),
@@ -1082,6 +1158,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
       includeHookEvents: config.include_hook_events,
+      forwardSubagentText: config.forward_subagent_text,
       toolConfig: config.tool_config,
       promptSuggestions: config.prompt_suggestions,
       agentProgressSummaries: config.agent_progress_summaries,
@@ -1089,10 +1166,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
         typeof config.settings === 'string' && config.settings
           ? safeResolve(basePath, config.settings)
           : config.settings,
+      managedSettings: config.managed_settings,
       betas: config.betas,
       thinking: config.thinking,
-      // The SDK runtime accepts `xhigh` for newer models before the bundled d.ts does.
-      effort: config.effort as QueryOptions['effort'],
+      effort: config.effort,
       agent: config.agent,
       sessionId: config.session_id,
       debug: config.debug,
