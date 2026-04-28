@@ -11,7 +11,7 @@ import {
 } from 'vitest';
 import * as envars from '../src/envars';
 import { getUserAuthInfo } from '../src/globalConfig/accounts';
-import { Telemetry } from '../src/telemetry';
+import { TELEMETRY_EVENTS, Telemetry, TelemetryEventSchema } from '../src/telemetry';
 import { fetchWithProxy, fetchWithTimeout } from '../src/util/fetch/index';
 import { mockProcessEnv } from './util/utils';
 
@@ -141,6 +141,21 @@ describe('Telemetry', () => {
     const _telemetry = new Telemetry();
     _telemetry.record('eval_ran', { foo: 'bar' });
     expect(sendEventSpy).not.toHaveBeenCalledWith('eval_ran', expect.anything());
+  });
+
+  it('re-exports telemetry DTO helpers for deep import compatibility', () => {
+    expect(TELEMETRY_EVENTS).toContain('webui_api');
+
+    expect(
+      TelemetryEventSchema.parse({
+        event: 'webui_api',
+        properties: { route: '/api/results', ok: true, count: 1, tags: ['api'] },
+      }),
+    ).toEqual({
+      event: 'webui_api',
+      packageVersion: '1.0.0',
+      properties: { route: '/api/results', ok: true, count: 1, tags: ['api'] },
+    });
   });
 
   it('should include version in telemetry events', () => {
