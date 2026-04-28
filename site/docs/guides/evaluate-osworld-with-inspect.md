@@ -1,6 +1,6 @@
 ---
 title: Evaluate OSWorld with Inspect
-description: Run OSWorld computer-use benchmark tasks in Promptfoo with Inspect, Docker desktop sandboxes, screenshots, scorer output, eval logs, and tracing.
+description: Run OSWorld computer-use benchmark evals in Promptfoo with Inspect, GPT-5.5, Docker-backed desktop sandboxes, scorer output, eval logs, and local traces.
 sidebar_position: 66
 ---
 
@@ -8,7 +8,7 @@ sidebar_position: 66
 
 OSWorld is a [computer-use benchmark](https://arxiv.org/abs/2404.07972) for agents that operate a real desktop. A task may ask the model to edit a spreadsheet, use a browser, modify a document, or configure an app. The agent receives screenshots, uses mouse and keyboard tools, and is graded against the final VM state.
 
-The `integration-inspect-osworld` example runs OSWorld through [Inspect](https://inspect.aisi.org.uk/) and reports the score back to Promptfoo. This is useful when you want Promptfoo's config, assertions, result table, and CI workflow around a benchmark that already has a mature desktop harness.
+The `integration-inspect-osworld` example runs an OSWorld eval through [Inspect](https://inspect.aisi.org.uk/) and reports the score back to Promptfoo. Use this pattern when the benchmark already has a mature desktop harness and you want Promptfoo to own the config, assertions, result table, traces, and CI gate around it.
 
 ![OSWorld LibreOffice Calc task](/img/docs/evaluate-osworld-with-inspect/osworld-libreoffice-start.png)
 
@@ -25,7 +25,7 @@ Use a simple pass-through prompt such as `{{prompt}}` for Promptfoo's row label;
 The example is intentionally thin:
 
 1. Promptfoo calls `provider.py` once for each test case.
-2. The provider starts `inspect eval inspect_evals/osworld_small`.
+2. The provider starts `inspect eval inspect_evals/osworld_small` with either `--sample-id <id>` or an app filter plus `--limit`.
 3. Inspect runs the desktop sandbox and agent loop.
 4. Inspect writes a `.eval` log with screenshots, model messages, tool calls, files, scores, and metadata.
 5. The provider runs `inspect log dump`, parses the sample score, and returns normal Promptfoo output and metadata.
@@ -33,7 +33,33 @@ The example is intentionally thin:
 
 This means Promptfoo owns orchestration and reporting. Inspect owns the agent runtime and OSWorld grading.
 
+For the pinned LibreOffice Calc row, the provider effectively runs:
+
+```bash
+inspect eval inspect_evals/osworld_small \
+  --model openai/gpt-5.5 \
+  --sample-id 42e0a640-4f19-4b28-973d-729602b5a4a7 \
+  --log-dir /absolute/path/to/inspect_logs/<run>
+
+inspect log dump /absolute/path/to/inspect_logs/<run>/<file>.eval
+```
+
 ![Inspect OSWorld trajectory screenshot](/img/docs/evaluate-osworld-with-inspect/osworld-inspect-trajectory.png)
+
+## Implementation map
+
+The example has four moving parts:
+
+- `promptfooconfig.yaml` is the Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and defines one OSWorld row.
+- `provider.py` is a file provider with `call_api(prompt, options, context)`. It resolves paths to absolute locations, runs Inspect, dumps the `.eval` file to JSON, and returns Promptfoo output plus metadata.
+- `assertion.py` reads `context.providerResponse.metadata.score` and turns the OSWorld scorer result into a normal Promptfoo pass or fail.
+- `inspect_logs/` is gitignored run state. Inspect stores screenshots, model messages, tool calls, files, scorer output, and token usage there.
+
+The provider treats three states differently:
+
+- `score >= 1.0`: Inspect completed and OSWorld scored the task as correct.
+- `score < 1.0`: Inspect completed and OSWorld scored the task as incorrect.
+- provider `error`: setup, Docker, model SDK, timeout, tool execution, or log parsing failed before a scored sample was produced.
 
 ## Prerequisites
 
@@ -67,14 +93,15 @@ Run the traced LibreOffice Calc sample:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  promptfoo eval -c promptfooconfig.yaml --no-cache
+  promptfoo eval -c promptfooconfig.yaml --no-cache -o osworld-results.json
 ```
 
 To run it from the promptfoo repository source tree:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache
+  npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache \
+    -o osworld-results.json
 ```
 
 To make the GPT-5.5 model selection explicit for one run:
@@ -178,6 +205,33 @@ OSWorld scorer returned `0.0`. Treat provider errors differently: those
 indicate setup, Docker, model SDK, timeout, Inspect tool execution, or log
 parsing failures before a scored sample was produced.
 
+Inspect the exported Promptfoo JSON first:
+
+```bash
+jq '.results.results[] | {
+  success,
+  score,
+  error,
+  metadata: .response.metadata,
+  tokenUsage: .response.tokenUsage
+}' osworld-results.json
+```
+
+Then dump the underlying Inspect log for the row you care about:
+
+```bash
+inspect log dump "$(jq -r '.results.results[0].response.metadata.inspect_log_path' osworld-results.json)" \
+  > inspect-log.json
+
+jq '{
+  status,
+  sample_id: .samples[0].id,
+  score: (.samples[0].scores | to_entries[0].value.value),
+  final_answer: .samples[0].output.completion,
+  model_usage: .stats.model_usage
+}' inspect-log.json
+```
+
 For benchmark reporting, rerun provider-error samples by exact `sample_id` with
 `--max-concurrency 1` before publishing a pass rate. If the rerun produces a
 score, count it as a normal pass or fail. If it errors again, inspect the
@@ -194,6 +248,16 @@ than an infrastructure error.
 
 This is not a stable leaderboard number; it is a concrete example of the shape,
 cost, and follow-up workflow for a real run on one local machine.
+
+For a comparable run, generate a config with one test case per OSWorld
+`sample_id`, keep the same provider and assertion blocks, and export the
+results:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.full.yaml --no-cache --max-concurrency 6 \
+    -o osworld-full-results.json
+```
 
 | Metric                          |                         Result |
 | ------------------------------- | -----------------------------: |
@@ -257,11 +321,29 @@ writes a `.eval` log, and `inspect view` displays the desktop trajectory.
 Promptfoo receives wrapper-level telemetry plus result metadata: output text,
 score, token usage, sample id, status, and `inspect_log_path`.
 
+You can verify that Promptfoo stored wrapper-level traces by checking the
+result's trace in the Promptfoo UI, or by asserting on raw provider spans in a
+separate trace-focused config. The real desktop trajectory remains in Inspect
+unless you build a bridge from Inspect events to OpenTelemetry spans.
+
 To make the desktop actions Promptfoo-native tracing, the wrapper would need to
 translate Inspect events into OpenTelemetry spans or expose a Promptfoo trace
 object. Without that bridge, Promptfoo trace assertions such as
 `trajectory:tool-used` cannot see the OSWorld mouse, keyboard, or screenshot
 steps.
+
+## Reimplementation checklist
+
+To reimplement the wrapper in another repo:
+
+1. Create a Promptfoo file provider with `call_api(prompt, options, context)`.
+2. Read `vars.sample_id` for exact runs, or `vars.app` plus optional zero-based `vars.task_index` for app subsets.
+3. Resolve `basePath`, `logRoot`, and `--log-dir` to absolute paths before invoking Inspect.
+4. Run `inspect eval inspect_evals/osworld_small --model <model> --sample-id <id> --log-dir <dir>` for exact samples.
+5. Run `inspect log dump <file.eval>` and parse `samples[0].scores[*].value`, falling back to `results.scores[*].metrics.accuracy.value`.
+6. Return Promptfoo `output`, `metadata.score`, `metadata.status`, `metadata.sample_id`, `metadata.inspect_log_path`, and `tokenUsage`.
+7. Make assertion pass/fail depend on the OSWorld score, not the provider's final text.
+8. Keep Inspect `.eval` logs out of git and inspect them when scores or provider errors look surprising.
 
 ## When to use this pattern
 
