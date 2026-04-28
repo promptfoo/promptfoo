@@ -31,6 +31,76 @@ describe('integration-inspect-osworld example provider', () => {
     return process.env.PROMPTFOO_PYTHON || process.env.PYTHON || process.env.PYTHON3 || 'python3';
   }
 
+  it('generates the pinned osworld_small sample suite', () => {
+    const tempDir = makeTempDir();
+    const testsPath = path.join(
+      process.cwd(),
+      'examples',
+      'integration-inspect-osworld',
+      'osworld_tests.py',
+    );
+    const checkPath = path.join(tempDir, 'check_osworld_tests.py');
+    fs.writeFileSync(
+      checkPath,
+      `
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+tests_path = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("osworld_tests", tests_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+tests = module.generate_tests()
+calc_tests = module.generate_tests({"include_apps": ["libreoffice_calc"]})
+print(json.dumps({
+    "count": len(tests),
+    "apps": sorted({test["vars"]["app"] for test in tests}),
+    "calc_count": len(calc_tests),
+    "first": tests[0],
+    "has_rerun_sample": any(
+        test["vars"]["sample_id"] == "eb303e01-261e-4972-8c07-c9b4e7a4922a"
+        for test in tests
+    ),
+}))
+`,
+    );
+
+    const result = spawnSync(pythonExecutable(), [checkPath, testsPath], {
+      encoding: 'utf8',
+    });
+
+    expect(result.status).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.count).toBe(21);
+    expect(parsed.apps).toEqual([
+      'gimp',
+      'libreoffice_calc',
+      'libreoffice_impress',
+      'libreoffice_writer',
+      'multi_apps',
+      'os',
+      'vlc',
+      'vscode',
+    ]);
+    expect(parsed.calc_count).toBe(3);
+    expect(parsed.has_rerun_sample).toBe(true);
+    expect(parsed.first).toMatchObject({
+      description: 'gimp - lower image brightness',
+      vars: {
+        app: 'gimp',
+        sample_id: '7a4deb26-d57d-4ea9-9a73-630f66a7b568',
+      },
+      metadata: {
+        app: 'gimp',
+        sample_id: '7a4deb26-d57d-4ea9-9a73-630f66a7b568',
+        testCaseId: 'osworld-gimp-7a4deb26',
+      },
+    });
+  });
+
   it('creates unique log dirs for repeated same-app calls in one timestamp', () => {
     const tempDir = makeTempDir();
     const providerDir = path.join(tempDir, 'example');

@@ -14,9 +14,9 @@ The `integration-inspect-osworld` example runs an OSWorld eval through [Inspect]
 
 ## What runs
 
-The example uses Inspect's `inspect_evals/osworld_small` task, a smaller OSWorld corpus packaged for Inspect. The active promptfoo test runs a pinned `libreoffice_calc` sample by OSWorld sample id.
+The example uses Inspect's `inspect_evals/osworld_small` task, a smaller OSWorld corpus packaged for Inspect. A Python test loader generates one Promptfoo test case for each of the 21 pinned OSWorld sample ids.
 
-In the sample shown above, OSWorld opens `NetIncome.xlsx` in LibreOffice Calc and asks the agent to compute totals for the `Revenue` and `Total Expenses` columns on a new sheet. Inspect provides the Ubuntu desktop sandbox, screenshots, computer tool, model loop, and scorer.
+In the sample shown above, OSWorld opens `NetIncome.xlsx` in LibreOffice Calc and asks the agent to compute totals for the `Revenue` and `Total Expenses` columns on a new sheet. That is one generated row in the full suite. Inspect provides the Ubuntu desktop sandbox, screenshots, computer tool, model loop, and scorer.
 
 Use a simple pass-through prompt such as `{{prompt}}` for Promptfoo's row label; Inspect reads the actual task instruction from the OSWorld dataset.
 
@@ -33,7 +33,7 @@ The example is intentionally thin:
 
 This means Promptfoo owns orchestration and reporting. Inspect owns the agent runtime and OSWorld grading.
 
-For the pinned LibreOffice Calc row, the provider effectively runs:
+For each generated row, the provider effectively runs:
 
 ```bash
 inspect eval inspect_evals/osworld_small \
@@ -48,9 +48,10 @@ inspect log dump /absolute/path/to/inspect_logs/<run>/<file>.eval
 
 ## Implementation map
 
-The example has four moving parts:
+The example has five moving parts:
 
-- `promptfooconfig.yaml` is the Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and loads OSWorld rows from `osworld-tests.csv`.
+- `promptfooconfig.yaml` is the Promptfoo entrypoint. It selects GPT-5.5, sets both timeouts, enables tracing, and loads OSWorld rows from `osworld_tests.py`.
+- `osworld_tests.py` returns one Promptfoo test case for each pinned `osworld_small` sample id, with app and sample metadata for filtering.
 - `provider.py` is a file provider with `call_api(prompt, options, context)`. It resolves paths to absolute locations, runs Inspect, dumps the `.eval` file to JSON, and returns Promptfoo output plus metadata.
 - `assertion.py` reads `context.providerResponse.metadata.score` and turns the OSWorld scorer result into a normal Promptfoo pass or fail.
 - `inspect_logs/` is gitignored run state. Inspect stores screenshots, model messages, tool calls, files, scorer output, and token usage there.
@@ -89,11 +90,12 @@ npx promptfoo@latest init --example integration-inspect-osworld
 cd integration-inspect-osworld
 ```
 
-Run the traced LibreOffice Calc sample:
+Run the full traced `osworld_small` suite:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  promptfoo eval -c promptfooconfig.yaml --no-cache -o osworld-results.json
+  promptfoo eval -c promptfooconfig.yaml --no-cache --max-concurrency 6 \
+    -o osworld-results.json
 ```
 
 To run it from the promptfoo repository source tree:
@@ -101,7 +103,7 @@ To run it from the promptfoo repository source tree:
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
   npm run local -- eval -c examples/integration-inspect-osworld/promptfooconfig.yaml --no-cache \
-    -o osworld-results.json
+    --max-concurrency 6 -o osworld-results.json
 ```
 
 To make the GPT-5.5 model selection explicit for one run:
@@ -109,6 +111,13 @@ To make the GPT-5.5 model selection explicit for one run:
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
   promptfoo eval -c promptfooconfig.yaml --no-cache --var model=openai/gpt-5.5
+```
+
+When iterating, run one app before spending on the full suite:
+
+```bash
+PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
+  promptfoo eval -c promptfooconfig.yaml --no-cache --filter-metadata app=libreoffice_calc
 ```
 
 ## Configuration
@@ -126,9 +135,8 @@ providers:
 ```
 
 Keep the `tests` block to one line. Put the shared assertion and trace metadata
-in `defaultTest`, then load one CSV row per OSWorld run. This is the standard
-[`defaultTest` plus CSV](/docs/configuration/test-cases#csv-with-defaulttest)
-pattern:
+in `defaultTest`, then load the OSWorld sample list with the standard
+[Python test generator](/docs/configuration/test-cases#python) pattern:
 
 ```yaml
 defaultTest:
@@ -138,45 +146,46 @@ defaultTest:
     - type: python
       value: file://assertion.py
 
-tests: file://osworld-tests.csv
+tests: file://osworld_tests.py:generate_tests
 ```
 
-```csv title="osworld-tests.csv"
-__description,prompt,app,sample_id,__metadata:testCaseId
-libreoffice_calc - first supported sample with tracing,Run the pinned LibreOffice Calc OSWorld sample,libreoffice_calc,42e0a640-4f19-4b28-973d-729602b5a4a7,osworld-libreoffice-calc-gpt55
+`osworld_tests.py` keeps the dataset list compact and returns normal Promptfoo
+test cases:
+
+```python title="osworld_tests.py"
+def generate_tests(config=None):
+    return [
+        {
+            "description": f"{sample['app']} - {sample['task']}",
+            "vars": {
+                "prompt": f"Run OSWorld sample {sample['sample_id']}",
+                "app": sample["app"],
+                "sample_id": sample["sample_id"],
+            },
+            "metadata": {
+                "app": sample["app"],
+                "sample_id": sample["sample_id"],
+                "testCaseId": f"osworld-{sample['app'].replace('_', '-')}-{sample['sample_id'][:8]}",
+            },
+        }
+        for sample in OSWORLD_SMALL_SAMPLES
+    ]
 ```
 
-Promptfoo maps normal CSV columns into `vars`, so `app`, `sample_id`,
-`task_index`, and optional per-row `model` values arrive in `provider.py` under
-`context["vars"]`. The `__description` and `__metadata:*` columns set Promptfoo
-test case fields without repeating YAML.
+Those generated `vars` arrive in `provider.py` as `context["vars"]["app"]` and
+`context["vars"]["sample_id"]`. The metadata fields are filterable, so you can
+run subsets without editing the dataset:
 
-To add another OSWorld sample, append one row under the same header:
-
-```csv
-vscode - first supported sample with tracing,Run the pinned VS Code OSWorld sample,vscode,0ed39f63-6049-43d4-ba4d-5fa2fe04a951,osworld-vscode-gpt55
+```bash
+promptfoo eval -c promptfooconfig.yaml --filter-metadata app=vscode
+promptfoo eval -c promptfooconfig.yaml \
+  --filter-metadata sample_id=42e0a640-4f19-4b28-973d-729602b5a4a7
 ```
-
-Inspect filters by OSWorld app ids. For example, VS Code samples use `vscode`,
-not `vs_code`, and multi-app tasks use `multi_apps`.
 
 For exact runs, prefer `sample_id`. The provider passes it to Inspect's
-`--sample-id` flag and skips app/index filtering. Keep `app` when you want the
-result grouped by OSWorld application:
-
-```csv
-prompt,app,sample_id
-Run the pinned LibreOffice Calc OSWorld sample,libreoffice_calc,42e0a640-4f19-4b28-973d-729602b5a4a7
-```
-
-To run a later sample from the selected app subset, add zero-based `task_index`:
-
-```csv
-prompt,app,task_index
-Run the third LibreOffice Calc OSWorld sample,libreoffice_calc,2
-```
-
-The provider maps `task_index: 2` to Inspect `--limit 3-3`.
+`--sample-id` flag and skips app/index filtering. Keep `app` in the generated
+vars so results can still be grouped by OSWorld application. Inspect app ids use
+`vscode`, not `vs_code`, and multi-app tasks use `multi_apps`.
 
 The example enables Promptfoo tracing directly:
 
@@ -193,8 +202,8 @@ tracing:
         - protobuf
 ```
 
-`defaultTest.metadata.tracingEnabled: true` enables tracing for every loaded row.
-The CSV's `__metadata:testCaseId` column gives each row a stable id so the trace
+`defaultTest.metadata.tracingEnabled: true` enables tracing for every generated
+row. The loader's `metadata.testCaseId` gives each row a stable id so the trace
 can be correlated with the result.
 
 ## Read the results
@@ -264,12 +273,12 @@ than an infrastructure error.
 This is not a stable leaderboard number; it is a concrete example of the shape,
 cost, and follow-up workflow for a real run on one local machine.
 
-For a comparable run, put one row per OSWorld `sample_id` in a CSV, keep the
-same provider and `defaultTest` assertion block, and export the results:
+For a comparable run, use the checked-in Python loader, keep the same provider
+and `defaultTest` assertion block, and export the results:
 
 ```bash
 PROMPTFOO_ENABLE_OTEL=true OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 \
-  promptfoo eval -c promptfooconfig.full.yaml --no-cache --max-concurrency 6 \
+  promptfoo eval -c promptfooconfig.yaml --no-cache --max-concurrency 6 \
     -o osworld-full-results.json
 ```
 
@@ -351,8 +360,8 @@ steps.
 To reimplement the wrapper in another repo:
 
 1. Create a Promptfoo file provider with `call_api(prompt, options, context)`.
-2. Put shared assertions and trace metadata in `defaultTest`, then load sample rows with `tests: file://osworld-tests.csv`.
-3. Read `vars.sample_id` for exact runs, or `vars.app` plus optional zero-based `vars.task_index` for app subsets.
+2. Put shared assertions and trace metadata in `defaultTest`, then load generated rows with `tests: file://osworld_tests.py:generate_tests`.
+3. Read `vars.sample_id` for exact runs, and keep `vars.app` for filtering and result grouping.
 4. Resolve `basePath`, `logRoot`, and `--log-dir` to absolute paths before invoking Inspect.
 5. Run `inspect eval inspect_evals/osworld_small --model <model> --sample-id <id> --log-dir <dir>` for exact samples.
 6. Run `inspect log dump <file.eval>` and parse `samples[0].scores[*].value`, falling back to `results.scores[*].metrics.accuracy.value`.
@@ -370,4 +379,4 @@ Use this wrapper when you want to:
 - Use Inspect's viewer for detailed trajectory review.
 - Add Promptfoo assertions or CI gates around Inspect's scorer output.
 
-Avoid treating this as a cheap smoke test. OSWorld samples are slow, stateful, and token-heavy. Start with one app and one `task_index`, inspect the `.eval` log, then expand the sample set once the model and environment are stable.
+Avoid treating this as a cheap smoke test. OSWorld samples are slow, stateful, and token-heavy. Start with one app or one exact `sample_id`, inspect the `.eval` log, then expand the sample set once the model and environment are stable.

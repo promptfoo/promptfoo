@@ -17,7 +17,7 @@ defaultTest:
   assert:
     - type: python
       value: file://assertion.py
-tests: file://osworld-tests.csv
+tests: file://osworld_tests.py:generate_tests
 tracing:
   enabled: true
   otlp:
