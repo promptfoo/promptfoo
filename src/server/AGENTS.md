@@ -36,16 +36,17 @@ See `docs/logging.md` - use logger with object context (auto-sanitized).
 
 ## Error Handling
 
-Use the `sendError` helper from `src/server/utils/errors.ts` for error responses:
+Use the helpers in `src/server/utils/errors.ts` for error responses:
 
 ```typescript
-import { sendError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 
 // Logs the internal error, returns generic message to client
 sendError(res, 500, 'Failed to process request', error);
 
-// For 400 validation errors, use z.prettifyError directly
-res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+// For 400 validation errors, prefer the helper — it formats via z.prettifyError
+// and parses through ErrorResponseSchema so the wire shape is enforced.
+replyValidationError(res, bodyResult.error);
 ```
 
 **Never expose internal error details** (`String(error)`, `error.message`) to clients.
@@ -73,7 +74,7 @@ Route schemas are defined in `src/types/api/`. Follow these patterns:
 // Request validation - use .safeParse() and return validated data
 const bodyResult = EvalSchemas.Update.Request.safeParse(req.body);
 if (!bodyResult.success) {
-  res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+  replyValidationError(res, bodyResult.error);
   return;
 }
 const { field } = bodyResult.data; // Use validated data, not req.body

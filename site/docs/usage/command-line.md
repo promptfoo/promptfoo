@@ -108,6 +108,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-failing-only <path or id>` | Filter tests that had assertion failures in a previous eval, excluding errors                            |
 | `--filter-errors-only <path or id>`  | Filter tests that resulted in errors in a previous eval                                                  |
 | `-n, --filter-first-n <number>`      | Only run the first N tests                                                                               |
+| `--filter-range <start:end>`         | Only run tests whose zero-based index is in the range. The end index is exclusive.                       |
 | `--filter-sample <number>`           | Only run a random sample of N tests                                                                      |
 | `--filter-metadata <key=value>`      | Only run tests whose metadata matches the key=value pair. Can be specified multiple times for AND logic. |
 | `--filter-pattern <pattern>`         | Only run tests whose description matches the regex pattern                                               |
@@ -140,6 +141,19 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                          |
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                   |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                             |
+
+Use `--filter-range` to shard or rerun a stable slice of test cases by index. The first test has index `0`, the `start` index is included, and the `end` index is excluded:
+
+```sh
+promptfoo eval --filter-range 0:100   # tests 0 through 99
+promptfoo eval --filter-range 100:200 # tests 100 through 199
+promptfoo eval --filter-range 200:    # tests 200 through the end
+promptfoo eval --filter-range :50     # first 50 tests
+```
+
+Range is applied before `--repeat` expansion, so `--filter-range 0:5 --repeat 3` runs 15 evaluations across the same 5 tests. When combined with other filters (`--filter-pattern`, `--filter-metadata`, etc.), range slices the post-filter list.
+
+When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable. A `--filter-range` flag passed on resume is ignored (with a warning) and other transient filters from the original run are not restored, so resume is most predictable when range was the only selection filter.
 
 The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 

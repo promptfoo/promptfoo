@@ -62,10 +62,10 @@
           "$ref": "#/definitions/__schema41"
         },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema42"
+          "$ref": "#/definitions/__schema43"
         },
         "targets": {
-          "$ref": "#/definitions/__schema43"
+          "$ref": "#/definitions/__schema44"
         }
       },
       "required": ["prompts"],
@@ -3114,11 +3114,17 @@
         },
         "silent": {
           "type": "boolean"
+        },
+        "filterRange": {
+          "$ref": "#/definitions/__schema42"
         }
       },
       "additionalProperties": false
     },
     "__schema42": {
+      "type": "string"
+    },
+    "__schema43": {
       "type": "object",
       "properties": {
         "description": {
@@ -3243,6 +3249,13 @@
         "filterProviders": {
           "type": "string"
         },
+        "filterRange": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/__schema42"
+            }
+          ]
+        },
         "filterSample": {
           "type": "integer",
           "exclusiveMinimum": 0,
@@ -3294,7 +3307,7 @@
       },
       "additionalProperties": false
     },
-    "__schema43": {
+    "__schema44": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"

@@ -10,7 +10,6 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { z } from 'zod';
 import { getDefaultPort, VERSION } from '../constants';
 import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -43,6 +42,7 @@ import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
+import { replyValidationError, sendError } from './utils/errors';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
@@ -124,7 +124,8 @@ export function createApp() {
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
   app.get('/health', (_req, res) => {
-    res.status(200).json(ServerSchemas.Health.Response.parse({ status: 'OK', version: VERSION }));
+    // Health probes must never 500 from a self-imposed schema check.
+    res.status(200).json({ status: 'OK', version: VERSION });
   });
 
   app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
@@ -158,9 +159,9 @@ export function createApp() {
       >,
       res: Response,
     ): Promise<void> => {
-      const queryResult = ServerSchemas.Results.Query.safeParse(req.query);
+      const queryResult = ServerSchemas.ResultList.Query.safeParse(req.query);
       if (!queryResult.success) {
-        res.status(400).json({ error: z.prettifyError(queryResult.error) });
+        replyValidationError(res, queryResult.error);
         return;
       }
       const previousResults = await getEvalSummaries(
@@ -168,14 +169,14 @@ export function createApp() {
         queryResult.data.type,
         queryResult.data.includeProviders,
       );
-      res.json(ServerSchemas.Results.Response.parse({ data: previousResults }));
+      res.json(ServerSchemas.ResultList.Response.parse({ data: previousResults }));
     },
   );
 
   app.get('/api/results/:id', async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ServerSchemas.Result.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
     const { id } = paramsResult.data;
@@ -197,7 +198,7 @@ export function createApp() {
   app.get('/api/history', async (req: Request, res: Response): Promise<void> => {
     const queryResult = ServerSchemas.History.Query.safeParse(req.query);
     if (!queryResult.success) {
-      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      replyValidationError(res, queryResult.error);
       return;
     }
     const { tagName, tagValue, description } = queryResult.data;
@@ -212,7 +213,7 @@ export function createApp() {
   app.get('/api/prompts/:sha256hash', async (req: Request, res: Response): Promise<void> => {
     const paramsResult = ServerSchemas.Prompt.Params.safeParse(req.params);
     if (!paramsResult.success) {
-      res.status(400).json({ error: z.prettifyError(paramsResult.error) });
+      replyValidationError(res, paramsResult.error);
       return;
     }
     const { sha256hash } = paramsResult.data;
@@ -227,15 +228,18 @@ export function createApp() {
   app.get('/api/results/share/check-domain', async (req: Request, res: Response): Promise<void> => {
     const queryResult = ServerSchemas.ShareCheckDomain.Query.safeParse(req.query);
     if (!queryResult.success) {
-      logger.warn(`Missing or invalid id parameter in ${req.method} ${req.path}`);
-      res.status(400).json({ error: z.prettifyError(queryResult.error) });
+      logger.warn('Missing or invalid id parameter on share check-domain', {
+        method: req.method,
+        path: req.path,
+      });
+      replyValidationError(res, queryResult.error);
       return;
     }
     const { id } = queryResult.data;
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
-      logger.warn(`Eval not found for id: ${id}`);
+      logger.warn('Eval not found for share check-domain', { id });
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
@@ -245,11 +249,14 @@ export function createApp() {
     res.json(ServerSchemas.ShareCheckDomain.Response.parse({ domain, isCloudEnabled }));
   });
 
-  // Local server routes intentionally do not use route throttling; see src/server/AGENTS.md.
+  // Share URL creation is intentionally unthrottled for local-server workflows. UI and CLI
+  // actions can legitimately burst through this route, and a per-IP limiter would block the
+  // operator without changing the local trust boundary. See src/server/AGENTS.md for the
+  // codified policy; CodeQL js/missing-rate-limiting is an accepted exception here.
   app.post('/api/results/share', async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ServerSchemas.Share.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
     const { id } = bodyResult.data;
@@ -257,7 +264,7 @@ export function createApp() {
 
     const result = await readResult(id);
     if (!result) {
-      logger.warn('Result not found for share request', { id });
+      logger.warn('Eval not found for share request', { id, source: 'result' });
       res.status(404).json({ error: 'Eval not found' });
       return;
     }
@@ -273,15 +280,14 @@ export function createApp() {
       logger.debug('Generated share URL for eval', { id, url: stripAuthFromUrl(url || '') });
       res.json(ServerSchemas.Share.Response.parse({ url }));
     } catch (error) {
-      logger.error('Failed to generate share URL for eval', { error, id });
-      res.status(500).json({ error: 'Failed to generate share URL' });
+      sendError(res, 500, 'Failed to generate share URL', error);
     }
   });
 
   app.post('/api/dataset/generate', async (req: Request, res: Response): Promise<void> => {
     const bodyResult = ServerSchemas.DatasetGenerate.Request.safeParse(req.body);
     if (!bodyResult.success) {
-      res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+      replyValidationError(res, bodyResult.error);
       return;
     }
     const prompts = bodyResult.data.prompts.map((prompt): Prompt => {
@@ -314,9 +320,7 @@ export function createApp() {
     const result = ServerSchemas.Telemetry.Request.safeParse(req.body);
 
     if (!result.success) {
-      res
-        .status(400)
-        .json({ error: 'Invalid request body', details: z.prettifyError(result.error) });
+      replyValidationError(res, result.error);
       return;
     }
 
@@ -325,10 +329,7 @@ export function createApp() {
       await telemetry.record(event, properties);
       res.status(200).json(ServerSchemas.Telemetry.Response.parse({ success: true }));
     } catch (error) {
-      logger.error(
-        `Error processing telemetry request: ${error instanceof Error ? error.message : error}`,
-      );
-      res.status(500).json({ error: 'Failed to process telemetry request' });
+      sendError(res, 500, 'Failed to process telemetry request', error);
     }
   });
 

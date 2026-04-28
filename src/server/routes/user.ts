@@ -12,6 +12,7 @@ import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { UserSchemas } from '../../types/api/user';
+import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const userRouter = Router();
@@ -48,7 +49,7 @@ userRouter.get('/id', async (_req: Request, res: Response): Promise<void> => {
 userRouter.post('/email', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = UserSchemas.Update.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    replyValidationError(res, bodyResult.error);
     return;
   }
 
@@ -88,12 +89,11 @@ userRouter.put('/email/clear', async (_req: Request, res: Response): Promise<voi
 userRouter.get('/email/status', async (req: Request, res: Response): Promise<void> => {
   const queryResult = UserSchemas.EmailStatus.Query.safeParse(req.query);
   if (!queryResult.success) {
-    res.status(400).json({ error: z.prettifyError(queryResult.error) });
+    replyValidationError(res, queryResult.error);
     return;
   }
 
   try {
-    // Schema uses z.unknown() for backward compat — accepts any shape, coerces to boolean
     const { validate } = queryResult.data;
     const result = await checkEmailStatus({ validate });
 
@@ -115,7 +115,7 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
 userRouter.post('/login', async (req: Request, res: Response): Promise<void> => {
   const bodyResult = UserSchemas.Login.Request.safeParse(req.body);
   if (!bodyResult.success) {
-    res.status(400).json({ error: z.prettifyError(bodyResult.error) });
+    replyValidationError(res, bodyResult.error);
     return;
   }
 
