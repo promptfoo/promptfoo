@@ -48,6 +48,13 @@ vi.mock('fs', async () => {
   };
 });
 
+vi.mock('fs/promises', () => ({
+  default: {
+    readFile: fsMocks.readFileSync,
+  },
+  readFile: fsMocks.readFileSync,
+}));
+
 vi.mock('path', async () => {
   const actual = await vi.importActual<typeof import('path')>('path');
   return {

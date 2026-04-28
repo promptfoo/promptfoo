@@ -6,9 +6,11 @@ import yaml from 'js-yaml';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { doEval } from '../../../src/commands/eval';
 import * as evaluatorModule from '../../../src/evaluator';
+import logger from '../../../src/logger';
+import Eval from '../../../src/models/eval';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, EvaluateOptions } from '../../../src/types/index';
+import type { CommandLineOptions, EvaluateOptions, TestSuite } from '../../../src/types/index';
 
 vi.mock('../../../src/evaluator', async (importOriginal) => {
   return {
@@ -485,6 +487,217 @@ describe('evaluateOptions behavior', () => {
       });
 
       expect(options.generateSuggestions).toBe(true);
+    });
+
+    it('should persist CLI filterRange without applying it twice for regular test suites', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-range.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterRange: '1:2',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(evalRecord.runtimeOptions?.filterRange).toBe('1:2');
+      expect(options.filterRange).toBeUndefined();
+    });
+
+    it('should use evaluateOptions.filterRange when command-line defaults do not set it', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-evaluate-options-filter-range.yaml', {
+        evaluateOptions: {
+          filterRange: '1:2',
+        },
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        tests: [
+          { vars: { input: 'one' } },
+          { vars: { input: 'two' } },
+          { vars: { input: 'three' } },
+        ],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.tests?.map((test) => test.vars?.input)).toEqual(['two']);
+      expect(evalRecord.runtimeOptions?.filterRange).toBe('1:2');
+      expect(options.filterRange).toBeUndefined();
+    });
+
+    it('should apply filterRange to the implicit default test', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-default.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterRange: '0:1',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.tests).toHaveLength(1);
+      expect(evalRecord.runtimeOptions?.filterRange).toBe('0:1');
+      expect(options.filterRange).toBeUndefined();
+    });
+
+    it('should preserve empty filterRange slices for the implicit default test', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-filter-range-implicit-empty.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+      });
+
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [tempConfig],
+          filterRange: '0:0',
+        },
+        {},
+        undefined,
+        {},
+      );
+
+      expect(evaluateMock).toHaveBeenCalled();
+      const testSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+      expect(testSuite.tests).toHaveLength(0);
+      expect(testSuite.scenarios).toEqual([]);
+      expect(evalRecord.runtimeOptions?.filterRange).toBe('0:0');
+      expect(options.filterRange).toBeUndefined();
+    });
+
+    it('should restore persisted filterRange when resuming scenario evals', async () => {
+      const resumeEval = new Eval(
+        {
+          providers: ['echo'],
+          prompts: ['Hello {{name}}'],
+          scenarios: [
+            {
+              config: [{}],
+              tests: [{ vars: { name: 'Alice' } }, { vars: { name: 'Bob' } }],
+            },
+          ],
+        },
+        {
+          id: 'eval-resume-filter-range',
+          persisted: true,
+          runtimeOptions: {
+            cache: true,
+            filterRange: '1:2',
+            maxConcurrency: 1,
+            repeat: 1,
+          },
+        },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval(
+          {
+            table: false,
+            resume: 'eval-resume-filter-range',
+          } as any,
+          {},
+          undefined,
+          {},
+        );
+
+        expect(evaluateMock).toHaveBeenCalled();
+        const options = evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions;
+        expect(options.filterRange).toBe('1:2');
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+
+    it('should warn and ignore CLI --filter-range when resuming with a different persisted range', async () => {
+      const resumeEval = new Eval(
+        {
+          providers: ['echo'],
+          prompts: ['Hello {{name}}'],
+          tests: [
+            { vars: { name: 'Alice' } },
+            { vars: { name: 'Bob' } },
+            { vars: { name: 'Carol' } },
+          ],
+        },
+        {
+          id: 'eval-resume-filter-range-conflict',
+          persisted: true,
+          runtimeOptions: {
+            cache: true,
+            filterRange: '0:1',
+            maxConcurrency: 1,
+            repeat: 1,
+          },
+        },
+      );
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+      const warnMock = vi.mocked(logger.warn);
+      warnMock.mockClear();
+
+      try {
+        await doEval(
+          {
+            table: false,
+            resume: 'eval-resume-filter-range-conflict',
+            filterRange: '1:3',
+          } as any,
+          {},
+          undefined,
+          {},
+        );
+
+        expect(warnMock).toHaveBeenCalledWith(
+          expect.stringContaining('Ignoring --filter-range 1:3'),
+        );
+        const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        expect(evalRecord.runtimeOptions?.filterRange).toBe('0:1');
+      } finally {
+        findByIdSpy.mockRestore();
+      }
     });
 
     it('should prioritize CLI --suggest-prompts over commandLineOptions.generateSuggestions', async () => {

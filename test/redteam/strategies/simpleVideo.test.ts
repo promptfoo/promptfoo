@@ -4,7 +4,7 @@
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
 
-import fs from 'fs';
+import fsPromises from 'fs/promises';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
@@ -44,6 +44,7 @@ vi.mock('../../../src/cliState', () => ({
 }));
 
 const mockWriteFileSync = vi.hoisted(() => vi.fn());
+const mockWriteFile = vi.hoisted(() => vi.fn());
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
   return {
@@ -53,6 +54,17 @@ vi.mock('fs', async (importOriginal) => {
       writeFileSync: mockWriteFileSync,
     },
     writeFileSync: mockWriteFileSync,
+  };
+});
+vi.mock('fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs/promises')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      writeFile: mockWriteFile,
+    },
+    writeFile: mockWriteFile,
   };
 });
 
@@ -123,6 +135,7 @@ describe('simpleVideo strategy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockWriteFileSync.mockReset();
+    mockWriteFile.mockReset();
     mockVideoGenerator.mockClear();
   });
 
@@ -174,15 +187,13 @@ describe('simpleVideo strategy', () => {
     it('writes a base64 video to a file', async () => {
       await writeVideoFile(DUMMY_VIDEO_BASE64, 'test.mp4');
 
-      expect(fs.writeFileSync).toHaveBeenCalledWith('test.mp4', expect.any(Buffer));
+      expect(fsPromises.writeFile).toHaveBeenCalledWith('test.mp4', expect.any(Buffer));
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Video file written to'));
     });
 
     it('throws an error if writing fails', async () => {
       const mockError = new Error('Write failed');
-      vi.mocked(fs.writeFileSync).mockImplementationOnce(function () {
-        throw mockError;
-      });
+      vi.mocked(fsPromises.writeFile).mockRejectedValueOnce(mockError);
 
       await expect(writeVideoFile(DUMMY_VIDEO_BASE64, 'test.mp4')).rejects.toThrow('Write failed');
       expect(logger.error).toHaveBeenCalledWith(
