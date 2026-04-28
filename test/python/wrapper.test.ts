@@ -72,6 +72,7 @@ describe('wrapper', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.values(fsMock).forEach((mock) => mock.mockReset());
     vi.mocked(validatePythonPath).mockImplementation(
       (pythonPath: string, _isExplicit: boolean): Promise<string> => {
         state.cachedPythonPath = pythonPath;

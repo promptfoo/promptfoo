@@ -239,6 +239,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    Object.values(fsMocks).forEach((mock) => mock.mockReset());
 
     // Setup importModule to return our mockQuery
     vi.mocked(importModule).mockResolvedValue({ query: mockQuery });
